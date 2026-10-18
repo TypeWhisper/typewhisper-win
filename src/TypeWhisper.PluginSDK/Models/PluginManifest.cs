@@ -29,6 +29,28 @@ public sealed record PluginManifest
     /// <summary>Category identifiers for plugins that expose multiple capabilities.</summary>
     public IReadOnlyList<string>? Categories { get; init; }
 
+    /// <summary>A single category identifier, as manifests declared it before <see cref="Categories"/>.</summary>
+    public string? Category { get; init; }
+
+    /// <summary>
+    /// The declared categories, falling back to <see cref="Category"/>, with blank entries removed and the names older
+    /// manifests used mapped to the current ones. Null when the manifest declares none.
+    /// </summary>
+    [JsonIgnore]
+    public IReadOnlyList<string>? ResolvedCategories
+    {
+        get
+        {
+            var declared = Categories ?? (Category is null ? null : new[] { Category });
+            return declared?.Where(value => !string.IsNullOrWhiteSpace(value)).Select(value => value.Trim() switch
+            {
+                "integration" => "integrations",
+                "post-processor" => "post-processing",
+                var other => other
+            }).ToArray();
+        }
+    }
+
     /// <summary>Whether this is a local (on-device) or cloud-based plugin. Kept for hosts that predate <see cref="Locality"/>.</summary>
     public bool IsLocal { get; init; }
 

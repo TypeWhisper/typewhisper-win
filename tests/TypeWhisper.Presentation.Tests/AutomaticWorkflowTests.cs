@@ -9,6 +9,16 @@ namespace TypeWhisper.Presentation.Tests;
 
 public sealed class AutomaticWorkflowTests
 {
+    [Fact]
+    public async Task PolicyRefusalBecomesTheWorkflowError()
+    {
+        var pipeline = await DictationTextPipeline.ProcessAsync("retained transcript", new(), "en",
+            workflow: (_, _) => Task.FromException<string>(new ManagedPolicyDeniedException("llm", "Cloud text processing is turned off by your organization.")));
+
+        Assert.Equal("retained transcript", pipeline.Text);
+        Assert.Equal("Cloud text processing is turned off by your organization.", pipeline.WorkflowError);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

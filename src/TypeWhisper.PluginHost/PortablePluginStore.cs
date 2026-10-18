@@ -65,6 +65,9 @@ public sealed class PortablePluginStore
                     PortableCatalogEntry.ValidateId(id);
                     PackagePath(receipt.Directory);
                     if (receipt.PendingDirectory is not { } pending) continue;
+                    // An update the policy refuses by now stays staged: the previous version keeps running until the
+                    // policy allows updates again.
+                    if (UpdateRefused(id)) continue;
                     try
                     {
                         ValidatePackage(PackagePath(pending), id, receipt.PendingVersion!);
@@ -101,7 +104,7 @@ public sealed class PortablePluginStore
             }
             Commit(next);
             _initialized = true;
-            var keep = next.Values.Select(r => r.Directory).ToHashSet(StringComparer.Ordinal);
+            var keep = next.Values.SelectMany(r => new[] { r.Directory, r.PendingDirectory }).OfType<string>().ToHashSet(StringComparer.Ordinal);
             foreach (var dir in Directory.GetDirectories(Path.Combine(Root, "packages")))
                 if (!keep.Contains(Path.GetFileName(dir))) TryDelete(dir);
         }
@@ -208,7 +211,8 @@ public sealed class PortablePluginStore
             Dictionary<string, Receipt> next;
             lock (_sync) next = new(_installed, StringComparer.Ordinal);
             progress?.Report(new("Running plugin cleanup…"));
-            if (next.TryGetValue(id, out var previous) && _services is not null)
+            // A package the policy refuses is removed without running its code: the hook would load the assembly.
+            if (next.TryGetValue(id, out var previous) && _services is not null && !RefusedForExecution(id, PackagePath(previous.Directory)))
                 await PortablePluginPackage.RunInstallationHookAsync(PackagePath(previous.Directory), _services(id), _host, previous.Version, uninstall: true, ct, progress);
             ct.ThrowIfCancellationRequested();
             if (!next.Remove(id)) throw new InvalidOperationException("This plugin is not installed.");
@@ -216,6 +220,19 @@ public sealed class PortablePluginStore
         }
         finally { _operation.Release(); }
     }
+
+    // Whether policy refuses running this installed package's code, judged by its manifest on disk. A package whose
+    // manifest cannot be read is judged by the allowlist alone.
+    private bool RefusedForExecution(string pluginId, string directory)
+    {
+        var policy = _policy?.Invoke() ?? TypeWhisper.Core.Models.ManagedProviderPolicy.None;
+        var manifest = PortablePluginInventory.Inspect(directory, _host).Manifest;
+        return (manifest is null ? policy.PluginRefusal(pluginId)
+            : policy.PackageRefusal(pluginId, PluginLocalityMap.ToContentLocality(manifest.ResolvedLocality), manifest.ResolvedCategories)) is not null;
+    }
+
+    // Whether policy refuses installing or updating this package right now.
+    private bool UpdateRefused(string pluginId) => _policy?.Invoke() is { } policy && (policy.PluginDownloadRefusal() ?? policy.PluginRefusal(pluginId)) is not null;
 
     private void ValidatePackage(string directory, string id, string version)
     {

@@ -48,7 +48,7 @@ public sealed partial class PluginsView : UserControl
             // A package policy refuses cannot be enabled; the page names the reason instead of offering the switch.
             var locality = TypeWhisper.PluginHost.PluginLocalityMap.ToContentLocality(manifest?.ResolvedLocality ?? TypeWhisper.PluginSDK.Models.PluginLocality.Unknown);
             var refusal = manifest is null ? null
-                : TypeWhisper.Core.Models.ManagedProviderPolicy.From(WinUIManagedPolicy.Current).PackageRefusal(manifest.Id, locality, manifest.Categories);
+                : TypeWhisper.Core.Models.ManagedProviderPolicy.From(WinUIManagedPolicy.Current).PackageRefusal(manifest.Id, locality, manifest.ResolvedCategories);
             _plugins.Add(new(package.Directory, manifest?.Name ?? Path.GetFileName(package.Directory), manifest?.Description ?? Loc.T("An installed plugin package could not be read."),
                 "plugin", "", "", manifest?.Version ?? "Unknown", manifest?.MinHostVersion ?? "0.0.0")
             {

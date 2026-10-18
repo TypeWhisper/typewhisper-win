@@ -20,14 +20,14 @@ public sealed partial class PortablePluginRuntimeRegistryTests
         pluginDownloads, modelDownloads, NoKeys);
 
     // Like Store(), but with the fixture package declaring a locality through the manifest.
-    private async Task<PortablePluginStore> LocalityStore(string locality, string[]? categories = null)
+    private async Task<PortablePluginStore> LocalityStore(string locality, string[]? categories = null, string? category = null)
     {
         var bundles = Path.Combine(_root, "bundles");
         var folder = Path.Combine(bundles, Id); Directory.CreateDirectory(folder);
         File.Copy(typeof(RuntimeProbePlugin).Assembly.Location, Path.Combine(folder, "fixture.dll"), overwrite: true);
         File.WriteAllText(Path.Combine(folder, "manifest.json"), JsonSerializer.Serialize(new PluginManifest
         {
-            Id = Id, Name = "Runtime fixture", Version = "1.0.0", Locality = locality, Categories = categories, AssemblyName = "fixture.dll", PluginClass = typeof(RuntimeProbePlugin).FullName!
+            Id = Id, Name = "Runtime fixture", Version = "1.0.0", Locality = locality, Categories = categories, Category = category, AssemblyName = "fixture.dll", PluginClass = typeof(RuntimeProbePlugin).FullName!
         }));
         var store = new PortablePluginStore(Path.Combine(_root, "store"), Version, _http);
         await store.InitializeAsync(bundles);
@@ -133,6 +133,21 @@ public sealed partial class PortablePluginRuntimeRegistryTests
         Assert.Contains("cloud", await registry.SetEnabledAsync(Id, true));
         Assert.Contains("cloud", registry.PackageRefusal(Id));
         Assert.Empty(registry.TranscriptionProviders);
+    }
+
+    [Fact]
+    public async Task LegacySingularCategoryCountsForPackagePolicy()
+    {
+        var store = await LocalityStore("cloud", category: "llm");
+        Host(Id).SetSetting("Enabled", true);
+        await using var registry = PolicyRegistry(store, () => Policy(cloudText: false));
+
+        await registry.InitializeAsync();
+
+        var state = Assert.Single(registry.Snapshot());
+        Assert.False(state.Enabled);
+        Assert.Contains("cloud", state.Error);
+        Assert.Equal(0, Host(Id).GetSetting<int>("activations"));
     }
 
     [Fact]

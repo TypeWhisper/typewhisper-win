@@ -198,7 +198,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             if (package.Manifest is not { } manifest) continue;
             if (ownsPlugin?.Invoke(manifest.Id) == false) continue;
             // A package policy does not allow is never loaded; its slot only carries the reason.
-            var refused = Policy.PackageRefusal(manifest.Id, PluginLocalityMap.ToContentLocality(manifest.ResolvedLocality), manifest.Categories);
+            var refused = Policy.PackageRefusal(manifest.Id, PluginLocalityMap.ToContentLocality(manifest.ResolvedLocality), manifest.ResolvedCategories);
             Slot slot;
             lock (_sync)
             {
@@ -206,7 +206,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
                 if (!_slots.TryGetValue(manifest.Id, out slot!))
                     _slots.Add(manifest.Id, slot = new(manifest.Id, new RuntimePluginHostServices(createServices(manifest.Id), QueueRefresh)));
                 slot.Locality = PluginLocalityMap.ToContentLocality(manifest.ResolvedLocality);
-                slot.Categories = manifest.Categories ?? [];
+                slot.Categories = manifest.ResolvedCategories ?? [];
                 slot.Error = package.Error ?? refused;
                 slot.PolicyRefused = package.Error is null && refused is not null;
             }
@@ -272,7 +272,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             // the wait for the gate may have outlasted a policy change. A package still held from an earlier
             // activation is released rather than kept beside the refusal.
             var locality = PluginLocalityMap.ToContentLocality(inspection.Manifest.ResolvedLocality);
-            var categories = inspection.Manifest.Categories ?? [];
+            var categories = inspection.Manifest.ResolvedCategories ?? [];
             lock (_sync) { slot.Locality = locality; slot.Categories = categories; }
             if (Policy.PackageRefusal(pluginId, locality, categories) is { } refusedPackage)
             {
@@ -374,8 +374,11 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
     private void CancelRefusedRoles()
     {
         var policy = Policy;
+        // A transcription may carry dictionary terms as a prompt, so the text rule cancels a running one as well.
         foreach (var (selectionId, role) in _index.Transcription)
-            if (policy.TranscriptionRefusal(selectionId, role.Owner.Id, role.Owner.Locality) is not null) CancelRequest(role.Owner);
+            if (policy.TranscriptionRefusal(selectionId, role.Owner.Id, role.Owner.Locality) is not null
+                || policy.TextTransferRefusal(role.Owner.Id, role.Owner.Locality) is not null)
+                CancelRequest(role.Owner);
         foreach (var (selectionId, role) in _index.Llm)
             if (policy.LlmRefusal(selectionId, role.Owner.Id, role.Owner.Locality) is not null) CancelRequest(role.Owner);
         foreach (var slot in _slots.Values)

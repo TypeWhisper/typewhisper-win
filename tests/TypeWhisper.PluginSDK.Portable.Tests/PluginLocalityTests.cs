@@ -24,6 +24,19 @@ public sealed class PluginLocalityTests
         Assert.Equal(expected, manifest.ResolvedLocality);
     }
 
+    [Theory]
+    [InlineData("\"categories\":[\"transcription\",\"llm\"]", "transcription,llm")]
+    [InlineData("\"category\":\"llm\"", "llm")]
+    [InlineData("\"category\":\"post-processor\"", "post-processing")]
+    [InlineData("\"categories\":[\" integration \",null,\"\"],\"category\":\"llm\"", "integrations")]
+    [InlineData("", null)]
+    public void ManifestCategories_FallBackToTheSingularFieldAndNormalizeLegacyNames(string extra, string? expected)
+    {
+        var manifest = Manifest("{" + Required + (extra.Length == 0 ? "" : "," + extra) + "}");
+
+        Assert.Equal(expected, manifest.ResolvedCategories is null ? null : string.Join(",", manifest.ResolvedCategories));
+    }
+
     [Fact]
     public void ManifestLocality_IsNotSerializedBack()
     {
