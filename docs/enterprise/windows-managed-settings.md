@@ -20,7 +20,9 @@ keys and notices changes while running (registry notification plus a 30-second
 fallback). Booleans are `REG_DWORD` 0 or 1, enumerations are `REG_DWORD`, text is
 `REG_SZ`. Lists are a subkey with numbered `REG_SZ` values (`1`, `2`, …) next to a
 `<Name>Configured` `REG_DWORD`: marker absent or 0 leaves the list unrestricted,
-marker 1 with an empty list denies everything.
+marker 1 with an empty list denies everything. An entry that matches nothing, such as
+`none`, denies everything as well; Group Policy needs that form because its editor
+does not save an enabled list without entries.
 
 An invalid enforced value blocks its setting until it is corrected; it never relaxes
 anything. An unreadable policy key keeps the last known values and blocks managed
@@ -36,7 +38,7 @@ any problems; the support report contains the same section.
 | `LlmProviderId`, `LlmModelId` | `REG_SZ` pair | enforced or recommended | Same rules for the text model used by workflows, translation and text processing, including the default workflow LLM. The pair does not enable optional processing by itself. |
 | `UpdateMode` | `REG_DWORD` 0–2 | enforced | 0 = External: no update checks, downloads or installations; the app points to the organization's deployment. 1 = CheckOnly: the app checks and announces versions but never installs. 2 = UserInitiated: users install explicitly; nothing installs unattended. Unset keeps the release behavior. |
 | `UpdateChannel` | `REG_DWORD` 0–2 | enforced or recommended | 0 = Stable, 1 = Daily, 2 = ReleaseCandidate. Enforced fixes the channel; recommended is the default for profiles without an explicit choice. The separate Daily installation only receives Daily builds. |
-| `AllowedUpdateChannels` | list | enforced | Entries `stable`, `daily`, `release-candidate`. Checks and installations run only on an allowed channel. An empty configured list turns app updates off. An enforced channel outside the list is an error that blocks updates; the app never switches channels on its own. |
+| `AllowedUpdateChannels` | list | enforced | Entries `stable`, `daily`, `release-candidate`. Checks and installations run only on an allowed channel. An empty configured list, or the single entry `none`, turns app updates off. An enforced channel outside the list is an error that blocks updates; the app never switches channels on its own. |
 | `LaunchAtLogin` | `REG_DWORD` 0/1 | enforced or recommended | Enforced sets the app-owned startup registration and locks the setting; the user's earlier choice is restored when the value is removed. Recommended applies only to a new profile that has not completed setup and has no explicit choice. Windows can still disable startup in Settings > Apps > Startup. |
 | `SkipOnboardingWhenReady` | `REG_DWORD` 0/1 | enforced | 1 keeps the initial setup closed when a dictation shortcut, a ready transcription model and a microphone are available. Otherwise setup opens as usual. Nothing is marked as completed. 0 follows the normal rules. |
 | `SuppressOptionalPrompts` | `REG_DWORD` 0/1 | enforced or recommended | 1 hides the Premium purchase prompt on the Premium page. Required setup, permission requests, policy problems, license errors and operational errors stay visible. |
@@ -141,9 +143,10 @@ Known limits of this release:
    Recommended settings are in the subfolder "Recommended settings (users can change)".
 3. Enabled, Disabled and Not Configured map to the registry contract: booleans write
    1 or 0; text, enumeration and list policies write their values when enabled and
-   remove them when disabled or not configured; an enabled list with no entries sets
-   the `<Name>Configured` marker and denies everything. Replacing a list removes the
-   old numbered entries.
+   remove them when disabled or not configured. The editor refuses to save an enabled
+   list policy without entries, so a list that denies everything carries the single
+   entry `none`, which matches no channel, package or provider. Replacing a list
+   removes the old numbered entries.
 
 The policy applies at the next policy refresh (`gpupdate /target:computer`) and the
 running app notices it within seconds.

@@ -27,15 +27,15 @@ Das Paar aktiviert keine optionale Verarbeitung, installiert den Anbieter nicht 
 
 Deaktiviert oder Nicht konfiguriert: Das Paar wird entfernt, und die eigene Auswahl der Benutzer gilt wieder.</string>
       <string id="AllowedTranscriptionProviders">Erlaubte Transkriptionsanbieter</string>
-      <string id="AllowedTranscriptionProviders_Explain">Aktiviert: Nur die aufgeführten Transkriptions-Auswahl-IDs dürfen Audio empfangen, an jedem Einstiegspunkt einschließlich Workflow- und HTTP-API-Overrides. Die lokale Parakeet-Engine ist com.typewhisper.sherpa-onnx; Cloud-Plugins verwenden ihre Paket-ID. Eine aktivierte Richtlinie mit leerer Liste blockiert jede Transkription.
+      <string id="AllowedTranscriptionProviders_Explain">Aktiviert: Nur die aufgeführten Transkriptions-Auswahl-IDs dürfen Audio empfangen, an jedem Einstiegspunkt einschließlich Workflow- und HTTP-API-Overrides. Die lokale Parakeet-Engine ist com.typewhisper.sherpa-onnx; Cloud-Plugins verwenden ihre Paket-ID. Um jeden Anbieter zu sperren, tragen Sie als einzigen Eintrag none ein; der Editor speichert keine aktivierte Richtlinie ohne Einträge.
 
 Deaktiviert oder Nicht konfiguriert: keine Einschränkung.</string>
       <string id="AllowedLlmProviders">Erlaubte Textmodell-Anbieter</string>
-      <string id="AllowedLlmProviders_Explain">Aktiviert: Nur die aufgeführten LLM-Auswahl-IDs dürfen Text empfangen, einschließlich Workflows, Übersetzung und Alias-Vorschlägen. Eine aktivierte Richtlinie mit leerer Liste blockiert jede LLM-Verarbeitung.
+      <string id="AllowedLlmProviders_Explain">Aktiviert: Nur die aufgeführten LLM-Auswahl-IDs dürfen Text empfangen, einschließlich Workflows, Übersetzung und Alias-Vorschlägen. Um jeden Anbieter zu sperren, tragen Sie als einzigen Eintrag none ein; der Editor speichert keine aktivierte Richtlinie ohne Einträge.
 
 Deaktiviert oder Nicht konfiguriert: keine Einschränkung.</string>
       <string id="AllowedPlugins">Erlaubte Plugins</string>
-      <string id="AllowedPlugins_Explain">Aktiviert: Nur die aufgeführten Paket-IDs (zum Beispiel com.typewhisper.sherpa-onnx) dürfen installiert, geladen, aktiviert und ausgeführt werden. Pakete außerhalb der Liste werden nie geladen; Plugin-Seite und Marketplace zeigen den Grund. Eine aktivierte Richtlinie mit leerer Liste blockiert jedes Plugin.
+      <string id="AllowedPlugins_Explain">Aktiviert: Nur die aufgeführten Paket-IDs (zum Beispiel com.typewhisper.sherpa-onnx) dürfen installiert, geladen, aktiviert und ausgeführt werden. Pakete außerhalb der Liste werden nie geladen; Plugin-Seite und Marketplace zeigen den Grund. Um jedes Plugin zu sperren, tragen Sie als einzigen Eintrag none ein; der Editor speichert keine aktivierte Richtlinie ohne Einträge.
 
 Deaktiviert oder Nicht konfiguriert: keine Einschränkung.</string>
 
@@ -71,7 +71,7 @@ Deaktiviert oder Nicht konfiguriert: Benutzer wählen den Kanal.</string>
       <string id="UpdateChannel_Daily">Daily</string>
       <string id="UpdateChannel_ReleaseCandidate">Release Candidate</string>
       <string id="AllowedUpdateChannels">Erlaubte Update-Kanäle</string>
-      <string id="AllowedUpdateChannels_Explain">Aktiviert: Update-Prüfungen und Installationen laufen nur auf den aufgeführten Kanälen. Einträge: stable, daily, release-candidate. Eine aktivierte Richtlinie mit leerer Liste schaltet App-Updates ab. Ein erzwungener Kanal außerhalb der Liste blockiert Updates; die App wechselt den Kanal nie eigenständig.
+      <string id="AllowedUpdateChannels_Explain">Aktiviert: Update-Prüfungen und Installationen laufen nur auf den aufgeführten Kanälen. Einträge: stable, daily, release-candidate. Um App-Updates abzuschalten, tragen Sie als einzigen Eintrag none ein; der Editor speichert keine aktivierte Richtlinie ohne Einträge. Ein erzwungener Kanal außerhalb der Liste blockiert Updates; die App wechselt den Kanal nie eigenständig.
 
 Deaktiviert oder Nicht konfiguriert: keine Einschränkung.</string>
 

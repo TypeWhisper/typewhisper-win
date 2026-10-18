@@ -27,15 +27,15 @@ The pair does not enable optional processing by itself, does not install the pro
 
 Disabled or Not Configured: the pair is removed and the users' own selections apply again.</string>
       <string id="AllowedTranscriptionProviders">Allowed transcription providers</string>
-      <string id="AllowedTranscriptionProviders_Explain">Enabled: only the listed transcription selection IDs may receive audio, at every entry point including workflow and HTTP API overrides. The local Parakeet engine is com.typewhisper.sherpa-onnx; cloud plugins use their package ID. An enabled policy with an empty list blocks all transcription.
+      <string id="AllowedTranscriptionProviders_Explain">Enabled: only the listed transcription selection IDs may receive audio, at every entry point including workflow and HTTP API overrides. The local Parakeet engine is com.typewhisper.sherpa-onnx; cloud plugins use their package ID. To block every provider, enter the single entry none; the editor does not save an enabled policy without entries.
 
 Disabled or Not Configured: no restriction.</string>
       <string id="AllowedLlmProviders">Allowed text model providers</string>
-      <string id="AllowedLlmProviders_Explain">Enabled: only the listed LLM selection IDs may receive text, including workflows, translation and alias suggestions. An enabled policy with an empty list blocks all LLM processing.
+      <string id="AllowedLlmProviders_Explain">Enabled: only the listed LLM selection IDs may receive text, including workflows, translation and alias suggestions. To block every provider, enter the single entry none; the editor does not save an enabled policy without entries.
 
 Disabled or Not Configured: no restriction.</string>
       <string id="AllowedPlugins">Allowed plugins</string>
-      <string id="AllowedPlugins_Explain">Enabled: only the listed package IDs (for example com.typewhisper.sherpa-onnx) may be installed, loaded, enabled and executed. Packages outside the list are never loaded; the plugin page and the Marketplace show the reason. An enabled policy with an empty list blocks every plugin.
+      <string id="AllowedPlugins_Explain">Enabled: only the listed package IDs (for example com.typewhisper.sherpa-onnx) may be installed, loaded, enabled and executed. Packages outside the list are never loaded; the plugin page and the Marketplace show the reason. To block every plugin, enter the single entry none; the editor does not save an enabled policy without entries.
 
 Disabled or Not Configured: no restriction.</string>
 
@@ -71,7 +71,7 @@ Disabled or Not Configured: users choose the channel.</string>
       <string id="UpdateChannel_Daily">Daily</string>
       <string id="UpdateChannel_ReleaseCandidate">Release Candidate</string>
       <string id="AllowedUpdateChannels">Allowed update channels</string>
-      <string id="AllowedUpdateChannels_Explain">Enabled: update checks and installations run only on the listed channels. Entries: stable, daily, release-candidate. An enabled policy with an empty list turns app updates off. An enforced channel outside the list blocks updates; the app never switches channels on its own.
+      <string id="AllowedUpdateChannels_Explain">Enabled: update checks and installations run only on the listed channels. Entries: stable, daily, release-candidate. To turn app updates off, enter the single entry none; the editor does not save an enabled policy without entries. An enforced channel outside the list blocks updates; the app never switches channels on its own.
 
 Disabled or Not Configured: no restriction.</string>
 
