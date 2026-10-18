@@ -64,11 +64,16 @@ internal sealed partial class WinUIHttpApi
             }
             // A workflow model loads at the start, so only other starts need the selected model to be ready.
             if (workflow?.TranscriptionModel is null && !session.CanTranscribeFile) return Error(409, "Finish the current operation before starting dictation.");
+            // A provider the policy refuses answers 403, the documented policy contract, not a conflict.
+            if (workflow?.TranscriptionModel is null && session.TranscriptionPolicyRefusal() is { } refusedByPolicy)
+                throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("transcription", refusedByPolicy);
             _startingDictation = true;
             try
             {
                 LocalApiDictationSession? started = null;
                 var rejection = await session.StartForApiAsync(workflow, generation => started = _dictations.Register(generation));
+                if (started is null && rejection is not null && rejection == session.TranscriptionPolicyRefusal())
+                    throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("transcription", rejection);
                 if (started is null) return Error(409, rejection ?? "Dictation could not start. Check the microphone and selected model.");
                 // Capture may already be processing or complete after slow provider startup.
                 // Its ID was registered before any silence stop could run.

@@ -13,8 +13,9 @@ internal sealed partial class LocalDictationSession
         var selection = RegistrySelectionId(_providerId);
         var dictionary = _dictionarySnapshot is null ? null : await _dictionarySnapshot;
         var terms = PromptTermsFor(selection, dictionary?.EnabledTerms);
+        // Judged again under the lease: the wait for the gate may have outlasted a text-policy change.
         var canStream = await PluginRuntime.UseTranscriptionAsync(selection, (engine, _) =>
-            Task.FromResult(engine.SupportsStreamingForPrompt(LanguageHintTranscription.CreateDictionaryPrompt(engine, terms))), _operationCancellation.Token);
+            Task.FromResult(engine.SupportsStreamingForPrompt(LanguageHintTranscription.CreateDictionaryPrompt(engine, PromptTermsFor(selection, terms)))), _operationCancellation.Token);
         if (!canStream) return;
         var languages = _languageAtStart != "auto" ? new[] { _languageAtStart }
             : ActiveRegistryProvider.SupportsLanguageHints

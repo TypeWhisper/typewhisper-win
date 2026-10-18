@@ -30,6 +30,7 @@ public sealed record PluginManifest
     public IReadOnlyList<string>? Categories { get; init; }
 
     /// <summary>A single category identifier, as manifests declared it before <see cref="Categories"/>.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Category { get; init; }
 
     /// <summary>
