@@ -123,6 +123,7 @@ def main() -> None:
     excluded = set(args.exclude_id)
     entries = {key: value for key, value in existing_entries.items() if key not in excluded}
     changed = []
+    refreshed = []  # Entries kept at their published version whose metadata the manifest updated.
     projects = discover_projects(source, set(args.plugin_id))
     for portable, manifest in projects:
         manifest_path = portable.parent / "manifest.json"
@@ -139,8 +140,10 @@ def main() -> None:
             if published_version == version:
                 # Metadata the catalog gained later is refreshed from the manifest without a rebuild; an entry
                 # without a locality resolves to unknown, which restrictive policies refuse even for local plugins.
+                # The publisher applies such refreshes to the live feed alongside the next plugin release.
                 if entries[plugin_id].get("locality") != entry_locality(manifest):
                     entries[plugin_id]["locality"] = entry_locality(manifest)
+                    refreshed.append(entries[plugin_id])
                     print(f"KEEP  {plugin_id} {version} (locality refreshed)", flush=True)
                 else:
                     print(f"KEEP  {plugin_id} {version}", flush=True)
@@ -224,7 +227,7 @@ def main() -> None:
     (output / "plugins-v2.json").write_text(json.dumps(feed, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     (output / "summary.json").write_text(json.dumps({"source": str(source), "sourceCommit": source_commit,
         "tag": args.tag, "excludedIds": sorted(excluded), "entryCount": len(entries),
-        "archiveCount": len(list(archives.glob("*.zip"))), "changedPlugins": changed,
+        "archiveCount": len(list(archives.glob("*.zip"))), "changedPlugins": changed, "refreshedPlugins": refreshed,
         "selectedIds": sorted(m["id"] for _, m in projects if m["id"] not in excluded),
         "testsRequired": args.test}, indent=2) + "\n", encoding="utf-8")
     print(f"DONE {len(entries)} entries, {len(list(archives.glob('*.zip')))} archives", flush=True)

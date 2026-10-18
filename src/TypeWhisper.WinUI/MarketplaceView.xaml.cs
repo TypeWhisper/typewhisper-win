@@ -167,7 +167,8 @@ public sealed partial class MarketplaceView : UserControl
         var update = HasUpdate(item);
         var pending = _runtime.Packages.Store.PendingRestart(item.Plugin.Id);
         var busy = _installation is not null || _runtime.Packages.Updates.Busy;
-        var refusal = installed ? null : Refusal(item);
+        // An installed package with an update is judged like a new install: the update is a download.
+        var refusal = installed && !update ? null : Refusal(item);
         MarketTitle.Text = item.Title;
         MarketSummary.Text = Loc.T("Discover");
         MarketDescription.Text = item.Description;

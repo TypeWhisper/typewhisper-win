@@ -81,6 +81,29 @@ def merge_feed(document, changes):
     return {**document, "plugins": values} if isinstance(document, dict) else values
 
 
+# Catalog fields a refresh may change for an entry whose package stays as published.
+REFRESHABLE_FIELDS = ("locality",)
+
+
+def refresh_feed(document, refreshed):
+    """Applies metadata-only refreshes to entries whose published package is unchanged.
+
+    An entry that is not live at the staged version is skipped; a refresh that would change the package itself
+    (version, archive, hash or size) is rejected, since published versions are immutable.
+    """
+    entries = builder.catalog_entries(document)
+    for entry in refreshed:
+        old = entries.get(entry["id"])
+        if not old or old["version"] != entry["version"]:
+            continue
+        for key in ("downloadUrl", "sha256", "size"):
+            if old.get(key) != entry.get(key):
+                raise ValueError(f"A metadata refresh must not change the package: {entry['id']}")
+        entries[entry["id"]] = {**old, **{key: entry[key] for key in REFRESHABLE_FIELDS if key in entry}}
+    values = sorted(entries.values(), key=lambda e: (e["name"].casefold(), e["id"]))
+    return {**document, "plugins": values} if isinstance(document, dict) else values
+
+
 def validate_stage(stage):
     summary = json.loads((stage / "summary.json").read_text(encoding="utf-8"))
     if not summary.get("testsRequired") or summary.get("excludedIds"):
@@ -91,6 +114,10 @@ def validate_stage(stage):
         raise ValueError("Expected a full source commit")
     changes = summary["changedPlugins"]
     builder.catalog_entries(changes)
+    refreshed = summary.get("refreshedPlugins", [])
+    builder.catalog_entries(refreshed)
+    if {entry["id"] for entry in refreshed} & {entry["id"] for entry in changes}:
+        raise ValueError("A plugin is either rebuilt or refreshed, not both")
     # One plugin version per release, under its canonical tag, whichever entry
     # point staged the output.
     if len(changes) > 1:
@@ -228,10 +255,10 @@ def ensure_release(stage, summary):
         verify_download(entry)
 
 
-def update_feed(changes):
+def update_feed(changes, refreshed=()):
     for attempt in range(4):
         sha, current = snapshot()
-        updated = merge_feed(current, changes)
+        updated = refresh_feed(merge_feed(current, changes), refreshed)
         if updated == current:
             return
         validate_catalog(updated)
@@ -262,6 +289,7 @@ def main():
     stage = args.stage.resolve(strict=True)
     summary = validate_stage(stage)
     changes = summary["changedPlugins"]
+    refreshed = summary.get("refreshedPlugins", [])
     if args.verify_live:
         expected = changes
         if not expected:
@@ -273,7 +301,7 @@ def main():
         print("Public catalog verified.")
         return
     _, current = snapshot()
-    validate_catalog(merge_feed(current, changes))  # Fail before creating a release on known conflicts.
+    validate_catalog(refresh_feed(merge_feed(current, changes), refreshed))  # Fail before creating a release on known conflicts.
     print(f"Validated {len(changes)} changed package(s) from {summary['sourceCommit']}", flush=True)
     if not args.publish:
         print("No remote changes made.")
@@ -300,7 +328,7 @@ def main():
     if comparison["status"] not in ("ahead", "identical"):
         raise ValueError("Release source is not on main")
     ensure_release(stage, summary)
-    update_feed(changes)
+    update_feed(changes, refreshed)
     # GITHUB_TOKEN commits do not start a Pages build automatically.
     api("pages/builds", method="POST")
     print("Release assets verified; catalog committed and Pages build requested.", flush=True)

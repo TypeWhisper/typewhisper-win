@@ -50,6 +50,23 @@ class CatalogTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             publish.merge_feed([entry()], [replacement])
 
+    def test_metadata_refresh_updates_only_the_refreshable_fields_of_live_entries(self):
+        current = {"schema": 1, "plugins": [entry(), entry("com.typewhisper.other", "9.0.0")]}
+        refreshed = [entry() | {"locality": "local", "name": "renamed"},
+                     entry("com.typewhisper.other", "8.0.0") | {"locality": "cloud"},
+                     entry("com.typewhisper.missing") | {"locality": "cloud"}]
+        updated = publish.refresh_feed(current, refreshed)
+        plugins = {item["id"]: item for item in updated["plugins"]}
+        self.assertEqual("local", plugins["com.typewhisper.example"]["locality"])
+        self.assertEqual("com.typewhisper.example", plugins["com.typewhisper.example"]["name"])
+        self.assertNotIn("locality", plugins["com.typewhisper.other"])
+        self.assertNotIn("com.typewhisper.missing", plugins)
+        self.assertEqual(current["plugins"][0].get("locality"), None)
+
+    def test_metadata_refresh_rejects_package_changes(self):
+        with self.assertRaises(ValueError):
+            publish.refresh_feed([entry()], [entry() | {"sha256": "different", "locality": "local"}])
+
     def test_duplicate_ids_rejected(self):
         with self.assertRaises(ValueError):
             builder.catalog_entries([entry(), entry()])

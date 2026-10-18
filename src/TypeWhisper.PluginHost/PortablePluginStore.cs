@@ -65,11 +65,11 @@ public sealed class PortablePluginStore
                     PortableCatalogEntry.ValidateId(id);
                     PackagePath(receipt.Directory);
                     if (receipt.PendingDirectory is not { } pending) continue;
-                    // An update the policy refuses by now stays staged: the previous version keeps running until the
-                    // policy allows updates again.
-                    if (UpdateRefused(id)) continue;
                     try
                     {
+                        // An update the policy refuses by now stays staged, judged by the staged package's own
+                        // manifest: the previous version keeps running until the policy allows the update.
+                        if (UpdateRefused(id) || RefusedForExecution(id, PackagePath(pending))) continue;
                         ValidatePackage(PackagePath(pending), id, receipt.PendingVersion!);
                         next[id] = new(pending, receipt.PendingVersion!);
                     }
