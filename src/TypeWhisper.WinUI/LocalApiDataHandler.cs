@@ -91,7 +91,8 @@ internal sealed class LocalApiDataHandler(string dictionaryPath, string workflow
             var key = RequiredString(root, terms ? "term" : "original");
             if (!isRegex) key = key.Trim();
             if (key.Length == 0) return Error(400, "The phrase cannot be empty.");
-            deleted = current.RemoveAll(entry => entry.EntryType == kind && entry.IsRegex == isRegex && entry.Original.Equals(key,
+            deleted = current.RemoveAll(entry => entry.EntryType == kind &&
+                (kind != DictionaryEntryType.Correction || entry.IsRegex == isRegex) && entry.Original.Equals(key,
                 isRegex ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase)) > 0;
         }
         else if (terms)

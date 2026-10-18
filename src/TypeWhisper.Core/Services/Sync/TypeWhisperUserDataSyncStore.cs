@@ -98,7 +98,7 @@ public sealed class TypeWhisperUserDataSyncStore : IUserDataSyncStore
                 entry.CreatedAt,
                 entry.UpdatedAt,
                 entry.Source,
-                entry.IsRegex, entry.CtcMinSimilarity))
+                entry.EntryType == DictionaryEntryType.Correction && entry.IsRegex, entry.CtcMinSimilarity))
             .ToList();
 
     private IReadOnlyList<UserDataSyncSnippet> FallbackSnippetSnapshot() =>
@@ -139,7 +139,7 @@ public sealed class TypeWhisperUserDataSyncStore : IUserDataSyncStore
             entry.EntryType == targetType &&
             UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original, entry.IsRegex) == targetId);
         if (existing is null && targetType == DictionaryEntryType.Correction && !synced.IsRegexFieldPresent)
-            existing = _dictionary.Entries.FirstOrDefault(entry => entry.IsRegex &&
+            existing = _dictionary.Entries.FirstOrDefault(entry => entry.EntryType == DictionaryEntryType.Correction && entry.IsRegex &&
                 string.Equals(entry.Original, synced.Original, StringComparison.Ordinal));
         var replacement = targetType == DictionaryEntryType.Correction ? synced.Replacement ?? string.Empty : null;
 
@@ -150,7 +150,7 @@ public sealed class TypeWhisperUserDataSyncStore : IUserDataSyncStore
                 Original = synced.Original,
                 Replacement = replacement,
                 CaseSensitive = synced.CaseSensitive,
-                IsRegex = synced.IsRegexFieldPresent ? synced.IsRegex : existing.IsRegex,
+                IsRegex = targetType == DictionaryEntryType.Correction && (synced.IsRegexFieldPresent ? synced.IsRegex : existing.IsRegex),
                 CtcMinSimilarity = synced.CtcMinSimilarity,
                 IsEnabled = synced.IsEnabled,
                 Source = synced.Source,
@@ -166,7 +166,7 @@ public sealed class TypeWhisperUserDataSyncStore : IUserDataSyncStore
             Original = synced.Original,
             Replacement = replacement,
             CaseSensitive = synced.CaseSensitive,
-            IsRegex = synced.IsRegex,
+            IsRegex = targetType == DictionaryEntryType.Correction && synced.IsRegex,
             CtcMinSimilarity = synced.CtcMinSimilarity,
             IsEnabled = synced.IsEnabled,
             Source = synced.Source,

@@ -42,6 +42,19 @@ public sealed class LexiconTransferTests : IDisposable
         Assert.NotEqual(entries[0].Id, entries[1].Id);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ImportedTermsIgnoreRegexFlag(bool macFormat)
+    {
+        var json = macFormat ? """[{"type":"term","original":"[","isRegex":true}]"""
+            : LexiconTransfer.WriteDictionary([Word("term", "[") with { IsRegex = true }]);
+        var term = Assert.Single(LexiconTransfer.ReadDictionary(json));
+        Assert.Equal(DictionaryEntryType.Term, term.EntryType);
+        Assert.Equal("[", term.Original);
+        Assert.False(term.IsRegex);
+    }
+
     [Fact]
     public void RegexPatternsStayDistinctThroughImportAndEditing()
     {

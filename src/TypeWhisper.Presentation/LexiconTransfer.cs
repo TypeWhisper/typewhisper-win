@@ -33,7 +33,8 @@ public static class LexiconTransfer
                 node.Remove("type"); node["EntryType"] = type; node["Id"] = Guid.NewGuid().ToString();
             }
             ValidateSource(node);
-            return node.Deserialize<DictionaryEntry>(Options) ?? throw new JsonException(Loc.T("Invalid dictionary entry."));
+            var entry = node.Deserialize<DictionaryEntry>(Options) ?? throw new JsonException(Loc.T("Invalid dictionary entry."));
+            return entry with { IsRegex = entry.EntryType == DictionaryEntryType.Correction && entry.IsRegex };
         }).ToArray();
         ValidateDictionary(entries, allowPackEntries);
         return entries;
@@ -114,7 +115,7 @@ public static class LexiconTransfer
                 throw new JsonException(Loc.T("Term entries cannot contain replacement text."));
             if (entry.CtcMinSimilarity is { } similarity && (!float.IsFinite(similarity) || similarity < .4f || similarity > .95f))
                 throw new JsonException(Loc.T("CTC similarity must be between 0.4 and 0.95."));
-            if (entry.IsRegex)
+            if (entry.EntryType == DictionaryEntryType.Correction && entry.IsRegex)
                 try { _ = new Regex(entry.Original, RegexOptions.None, TimeSpan.FromSeconds(1)); }
                 catch (ArgumentException) { throw new JsonException(Loc.T("Invalid dictionary regular expression.")); }
         }

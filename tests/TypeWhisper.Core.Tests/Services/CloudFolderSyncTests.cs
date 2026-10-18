@@ -1147,6 +1147,28 @@ public sealed class CloudFolderSyncTests : IDisposable
     }
 
     [Fact]
+    public async Task StrayTermRegexFlagDoesNotPromoteCorrectionsOrHideLegacyDeletes()
+    {
+        var term = DictionaryEntry("word", Date(10)) with { IsRegex = true };
+        var correction = DictionaryEntry("word", Date(20), UserDataSyncDictionaryEntryType.Correction, "replacement")
+            with { IsRegexFieldPresent = false };
+        var folder = Path.Combine(CloudFolderSyncEngine.PackagePath(_tempDir), "ops", "legacy");
+        Directory.CreateDirectory(folder);
+        var upsert = CloudFolderSyncOperation.UpsertDictionary(correction, "dictionary:correction:word", "legacy");
+        File.WriteAllText(Path.Combine(folder, "correction.json"), CloudFolderSyncJson.Serialize(upsert));
+        var store = new InMemoryUserDataSyncStore(dictionaryEntries: [term]);
+        var state = new CloudFolderSyncState { DeviceId = "windows" };
+        var entitlement = new PaidEntitlements(true);
+        await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(25));
+        Assert.Equal(term, Assert.Single(store.DictionaryEntries, entry => entry.EntryType == UserDataSyncDictionaryEntryType.Term));
+        Assert.False(Assert.Single(store.DictionaryEntries, entry => entry.EntryType == UserDataSyncDictionaryEntryType.Correction).IsRegex);
+        var delete = CloudFolderSyncOperation.Delete(UserDataSyncCollection.Dictionary, "dictionary:term:word", "legacy", Date(30));
+        File.WriteAllText(Path.Combine(folder, "delete.json"), CloudFolderSyncJson.Serialize(delete));
+        await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(35));
+        Assert.Equal(UserDataSyncDictionaryEntryType.Correction, Assert.Single(store.DictionaryEntries).EntryType);
+    }
+
+    [Fact]
     public async Task UnencodedLegacyUpdateDoesNotStealCoexistingLiteral()
     {
         var regex = DictionaryEntry(@"\d", Date(10), UserDataSyncDictionaryEntryType.Correction, "regex") with { IsRegex = true };

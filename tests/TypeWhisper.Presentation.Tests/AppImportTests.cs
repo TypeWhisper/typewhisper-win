@@ -32,6 +32,21 @@ public sealed class AppImportTests : IDisposable
         Assert.Contains(entries, e => e.Original == "übermorgen");
     }
 
+    [Theory]
+    [InlineData("TypeWhisper")]
+    [InlineData("[")]
+    public void WisprTermMatchesExistingTermWithStrayRegexFlag(string word)
+    {
+        var term = new DictionaryEntry { Id = "term", EntryType = DictionaryEntryType.Term, Original = word, IsRegex = true };
+        var batch = LexiconAppImport.MapWispr([new(word, null, false, false)], false);
+        var review = LexiconAppImport.Review(batch, false, LexiconTransfer.WriteDictionary([term]));
+        Assert.Equal(0, review.Additions);
+        Assert.Equal(AppImportOutcome.Duplicate, Assert.Single(review.Lines).Outcome);
+        var retained = Assert.Single(LexiconTransfer.ReadDictionary(review.Json));
+        Assert.Equal(term.Id, retained.Id);
+        Assert.False(retained.IsRegex);
+    }
+
     [Fact]
     public void WisprLiteralCorrectionCanCoexistWithRegexAndReimportIsIdempotent()
     {

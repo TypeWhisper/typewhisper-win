@@ -667,7 +667,7 @@ public sealed class DictionaryService : IDictionaryService
                 entry.CreatedAt,
                 entry.UpdatedAt,
                 entry.Source,
-                entry.IsRegex, entry.CtcMinSimilarity))
+                entry.EntryType == DictionaryEntryType.Correction && entry.IsRegex, entry.CtcMinSimilarity))
             .ToList();
     }
 
@@ -712,7 +712,7 @@ public sealed class DictionaryService : IDictionaryService
             IsUserAuthored(entry) &&
             UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original, entry.IsRegex) == targetId);
         if (idx < 0 && targetType == DictionaryEntryType.Correction && !synced.IsRegexFieldPresent)
-            idx = _cache.FindIndex(entry => IsUserAuthored(entry) && entry.IsRegex &&
+            idx = _cache.FindIndex(entry => IsUserAuthored(entry) && entry.EntryType == DictionaryEntryType.Correction && entry.IsRegex &&
                 string.Equals(entry.Original, synced.Original, StringComparison.Ordinal));
 
         if (idx >= 0)
@@ -723,7 +723,7 @@ public sealed class DictionaryService : IDictionaryService
                 Original = synced.Original,
                 Replacement = replacement,
                 CaseSensitive = synced.CaseSensitive,
-                IsRegex = synced.IsRegexFieldPresent ? synced.IsRegex : existing.IsRegex,
+                IsRegex = targetType == DictionaryEntryType.Correction && (synced.IsRegexFieldPresent ? synced.IsRegex : existing.IsRegex),
                 CtcMinSimilarity = synced.CtcMinSimilarity,
                 IsEnabled = synced.IsEnabled,
                 Source = synced.Source,
@@ -739,7 +739,7 @@ public sealed class DictionaryService : IDictionaryService
             Original = synced.Original,
             Replacement = replacement,
             CaseSensitive = synced.CaseSensitive,
-            IsRegex = synced.IsRegex,
+            IsRegex = targetType == DictionaryEntryType.Correction && synced.IsRegex,
             CtcMinSimilarity = synced.CtcMinSimilarity,
             IsEnabled = synced.IsEnabled,
             Source = synced.Source,

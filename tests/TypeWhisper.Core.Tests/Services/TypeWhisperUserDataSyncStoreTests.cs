@@ -116,6 +116,37 @@ public sealed class TypeWhisperUserDataSyncStoreTests : IDisposable
         Assert.Equal("Text: Beispiel", target.ApplyCorrections("Text Doppelpunkt Beispiel"));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void StrayTermRegexFlagDoesNotChangeCorrectionMode(bool fallback)
+    {
+        var dictionary = new DictionaryService(_dictionaryPath);
+        dictionary.AddEntry(new DictionaryEntry { Id = "term", EntryType = DictionaryEntryType.Term,
+            Original = "word", IsRegex = true, UsageCount = 7 });
+        var term = Assert.Single(dictionary.Entries);
+        var adapter = new Moq.Mock<TypeWhisper.Core.Interfaces.IDictionaryService>();
+        adapter.SetupGet(value => value.Entries).Returns(() => dictionary.Entries);
+        adapter.Setup(value => value.AddEntry(Moq.It.IsAny<DictionaryEntry>())).Callback<DictionaryEntry>(dictionary.AddEntry);
+        adapter.Setup(value => value.UpdateEntry(Moq.It.IsAny<DictionaryEntry>())).Callback<DictionaryEntry>(dictionary.UpdateEntry);
+        var store = new TypeWhisperUserDataSyncStore(fallback ? adapter.Object : dictionary, new SnippetService(_snippetsPath));
+        var now = DateTime.UtcNow;
+        var correction = new UserDataSyncDictionaryEntry(UserDataSyncDictionaryEntryType.Correction,
+            "word", "replacement", false, true, now, now) { IsRegexFieldPresent = false };
+        store.Apply([new UserDataSyncMutation.UpsertDictionary(correction)]);
+        Assert.Equal(term, Assert.Single(dictionary.Entries, entry => entry.EntryType == DictionaryEntryType.Term));
+        var literal = Assert.Single(dictionary.Entries, entry => entry.EntryType == DictionaryEntryType.Correction);
+        Assert.False(literal.IsRegex);
+        Assert.Equal("replacement", literal.Replacement);
+        Assert.False(Assert.Single(store.Snapshot().DictionaryEntries, entry => entry.EntryType == UserDataSyncDictionaryEntryType.Term).IsRegex);
+        var incoming = new UserDataSyncDictionaryEntry(UserDataSyncDictionaryEntryType.Term,
+            "word", null, true, true, now, now, IsRegex: true);
+        store.Apply([new UserDataSyncMutation.UpsertDictionary(incoming),
+            new UserDataSyncMutation.UpsertDictionary(incoming with { Original = "[" })]);
+        Assert.All(dictionary.Entries.Where(entry => entry.EntryType == DictionaryEntryType.Term), entry => Assert.False(entry.IsRegex));
+        Assert.Equal(literal, Assert.Single(dictionary.Entries, entry => entry.EntryType == DictionaryEntryType.Correction));
+    }
+
     [Fact]
     public void LegacySyncEntryDefaultsToManual()
     {

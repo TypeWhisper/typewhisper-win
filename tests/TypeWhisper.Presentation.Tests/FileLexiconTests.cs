@@ -69,6 +69,26 @@ public sealed class FileLexiconTests : IDisposable
         Assert.Equal(2, new Lexicon(DictionaryPath, SnippetPath).Entries.Count);
     }
 
+    [Theory]
+    [InlineData(false, "")]
+    [InlineData(true, "")]
+    [InlineData(false, " ")]
+    [InlineData(true, " ")]
+    public void ImportedDeletionCorrectionRemainsEditable(bool regex, string replacement)
+    {
+        var store = new Lexicon(DictionaryPath, SnippetPath);
+        var json = JsonSerializer.Serialize(new[] { new DictionaryEntry { Id = "correction",
+            EntryType = DictionaryEntryType.Correction, Original = "filler", Replacement = replacement, IsRegex = regex } });
+        Assert.Null(store.Import(json, snippets: false, replace: false));
+        var entry = Assert.Single(store.Entries);
+        Assert.Null(store.Save(entry with { Key = "other" }));
+        var saved = Assert.Single(new Lexicon(DictionaryPath, SnippetPath).Entries);
+        Assert.Equal("other", saved.Key);
+        Assert.Equal(replacement, saved.Value);
+        Assert.Equal(regex, saved.IsRegex);
+        Assert.NotNull(store.Save(new(Guid.NewGuid(), LexiconKind.Snippet, ";empty", replacement)));
+    }
+
     [Fact]
     public void InvalidRegexEditPreservesStoredRuleAndRemainsLoadable()
     {

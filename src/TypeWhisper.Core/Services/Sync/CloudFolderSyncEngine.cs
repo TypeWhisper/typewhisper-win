@@ -524,7 +524,7 @@ public static class CloudFolderSyncEngine
         void Remember(CloudFolderSyncRecord record)
         {
             // Folded legacy tombstones cannot identify which regex was deleted.
-            if (record.Dictionary?.IsRegex == true) return;
+            if (record.Dictionary is { EntryType: UserDataSyncDictionaryEntryType.Correction, IsRegex: true }) return;
             var legacy = record.Dictionary is { } d ? $"dictionary:{UserDataSyncIdentity.JsonName(d.EntryType)}:{UserDataSyncIdentity.NormalizedKey(d.Original)}"
                 : record.Snippet is { } n ? "snippet:" + UserDataSyncIdentity.NormalizedKey(n.Trigger) : record.ItemId;
             aliases[legacy] = record.ItemId;
@@ -539,7 +539,8 @@ public static class CloudFolderSyncEngine
                 operation.Dictionary is { EntryType: UserDataSyncDictionaryEntryType.Correction, IsRegexFieldPresent: false } legacy &&
                 !string.IsNullOrEmpty(legacy.Original) &&
                 !local.ContainsKey(UserDataSyncIdentity.DictionaryItemId(legacy.EntryType, legacy.Original)) && local.Values.Any(record =>
-                    record.Dictionary?.IsRegex == true && string.Equals(record.Dictionary.Original, legacy.Original, StringComparison.Ordinal)))
+                    record.Dictionary is { EntryType: UserDataSyncDictionaryEntryType.Correction, IsRegex: true } known &&
+                    string.Equals(known.Original, legacy.Original, StringComparison.Ordinal)))
                 return operation with { Dictionary = legacy with { IsRegex = true } };
             return operation;
         }

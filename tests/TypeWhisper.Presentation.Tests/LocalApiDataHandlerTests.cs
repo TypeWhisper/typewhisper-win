@@ -19,6 +19,18 @@ public sealed class LocalApiDataHandlerTests : IDisposable
             Encoding.UTF8.GetBytes(body ?? ""), body is null ? null : "application/json", query ?? new Dictionary<string, string?>()))!;
     private DictionaryEntry[] Read() => LexiconTransfer.ReadDictionary(File.ReadAllText(DictionaryPath), allowPackEntries: true);
 
+    [Theory]
+    [InlineData("TypeWhisper")]
+    [InlineData("[")]
+    public void TermDeletionIgnoresStrayRegexFlag(string word)
+    {
+        File.WriteAllText(DictionaryPath, LexiconTransfer.WriteDictionary([new DictionaryEntry
+        { Id = "term", EntryType = DictionaryEntryType.Term, Original = word, IsRegex = true }]));
+        var response = Call("DELETE", "/v1/dictionary/terms", JsonSerializer.Serialize(new { term = word }));
+        Assert.Equal(200, response.StatusCode);
+        Assert.Empty(Read());
+    }
+
     [Fact]
     public void RegexModeIsExplicitAndDeletingOnePatternPreservesOtherModes()
     {
