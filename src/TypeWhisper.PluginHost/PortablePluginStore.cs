@@ -119,7 +119,15 @@ public sealed class PortablePluginStore
                     CopyTree(package.Directory, target);
                     ValidatePackage(target, manifest.Id, manifest.Version);
                     if (_services is not null)
-                        await PortablePluginPackage.RunInstallationHookAsync(target, _services(manifest.Id), _host, null, uninstall: false, ct);
+                    {
+                        // Registered like an installation, so a policy pass cancels the hook once the policy refuses
+                        // the bundle; a cancelled bundle is left out and its copy removed.
+                        using var policyLinked = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                        lock (_sync) { _activeOperation = policyLinked; _activeRefusal = () => ExecutionRefusal(manifest.Id, target); }
+                        try { await PortablePluginPackage.RunInstallationHookAsync(target, _services(manifest.Id), _host, null, uninstall: false, policyLinked.Token); }
+                        catch (OperationCanceledException) when (!ct.IsCancellationRequested) { TryDelete(target); continue; }
+                        finally { lock (_sync) { _activeOperation = null; _activeRefusal = null; } }
+                    }
                     next.Add(manifest.Id, new(token, manifest.Version));
                 }
                 // Judged once more before the index is written: a policy that changed during the hooks keeps a

@@ -240,6 +240,13 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
             }
             catch
             {
+                // A package the policy refuses by now is released instead of rolled back: the rollback would run its code.
+                if (PackageRefusal?.Invoke() is { } refusedDuringSwitch)
+                {
+                    await ReleaseAsync();
+                    _policyRefused = true; Error = refusedDuringSwitch; Feedback = null;
+                    throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("plugin", refusedDuringSwitch);
+                }
                 _host.SetSetting(AccelerationSetting, previous.ToString());
                 engine.SetAccelerationPreference(previous);
                 try { await engine.LoadModelAsync(model, CancellationToken.None); ActiveModelId = model; }

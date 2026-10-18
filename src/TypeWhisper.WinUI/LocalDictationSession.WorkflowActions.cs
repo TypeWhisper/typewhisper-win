@@ -13,7 +13,11 @@ internal sealed partial class LocalDictationSession
     private async Task<IReadOnlyList<string>> RecallMemoryAsync(PortableMemoryProvider? source, string id, string query, CancellationToken ct)
     {
         if (source is null || source.PluginId != id)
+        {
+            // A package the policy unloaded reads as missing; the policy reason is reported instead.
+            if (PluginRuntime.PackageRefusal(id) is { } refusedSource) throw new ManagedPolicyDeniedException("memory", refusedSource);
             throw new InvalidOperationException(Loc.T("The selected memory source is unavailable. Enable its plugin or turn memory context off."));
+        }
         ct.ThrowIfCancellationRequested();
         await LocalLlmDownload.CancelAndDrainAsync();
         return await PluginRuntime.SearchMemoryAsync(source, query, ct);

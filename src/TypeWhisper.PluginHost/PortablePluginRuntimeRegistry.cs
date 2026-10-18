@@ -487,11 +487,14 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
         }
         // Checked before queuing and again once the lease is held, so a policy that arrived meanwhile still wins.
         DenyTranscriptionIfRefused(selectionId, owner);
-        return UseAsync(owner, token =>
+        return UseAsync(owner, async token =>
         {
             DenyTranscriptionIfRefused(selectionId, owner);
-            return _index.Transcription.TryGetValue(selectionId, out var current) && current.Owner == owner
-                ? use(current.Engine, token) : throw new InvalidOperationException("Transcription provider changed.");
+            if (!_index.Transcription.TryGetValue(selectionId, out var current) || current.Owner != owner)
+                throw new InvalidOperationException("Transcription provider changed.");
+            try { return await use(current.Engine, token).ConfigureAwait(false); }
+            // A cancellation the policy pass caused is reported as the refusal, not as a plain cancellation.
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) { DenyTranscriptionIfRefused(selectionId, owner); throw; }
         }, cancellationToken);
     }
 
@@ -542,6 +545,8 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
                 throw new InvalidOperationException("Choose a local LLM for alias suggestions.");
             await RestoreLocalLlmAsync(owner, current.Provider, token).ConfigureAwait(false);
             try { return await use(current.Provider, token).ConfigureAwait(false); }
+            // A cancellation the policy pass caused is reported as the refusal, not as a plain cancellation.
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) { DenyLlmIfRefused(selectionId, owner); throw; }
             finally { if (owner.Package?.Plugin is ILocalLlmModelManagement local) TouchLocalLlm(owner, local); }
         }, cancellationToken);
     }
