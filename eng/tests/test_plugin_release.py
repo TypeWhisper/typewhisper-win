@@ -441,10 +441,11 @@ class StageTests(unittest.TestCase):
         with patch('sys.argv', ['publish', '--stage', str(self.stage), '--publish']), \
              patch.object(publish, "snapshot", return_value=("old", {"plugins": [entry()]})), \
              patch.object(publish, "verify_live", side_effect=ValueError("stale")), \
-             patch.object(publish, "wait_for_live") as wait, patch.object(publish, "api") as api, \
+             patch.object(publish, "wait_for_live") as wait, \
+             patch.object(publish, "api", side_effect=lambda path, *args, **kwargs: {"status": "identical"} if path.startswith("compare/") else {}) as api, \
              patch.object(publish, "ensure_release") as release:
             publish.main()
-        api.assert_called_once_with("pages/builds", method="POST")
+        api.assert_any_call("pages/builds", method="POST")
         wait.assert_called_once_with([entry()])
         release.assert_not_called()
 
