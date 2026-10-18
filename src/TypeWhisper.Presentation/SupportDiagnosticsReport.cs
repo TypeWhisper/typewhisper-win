@@ -140,7 +140,17 @@ public sealed record SupportDiagnosticsReport(
         snapshot.Status.ToString(), snapshot.Revision, watching,
         PolicyValues(snapshot.EnforcedValues), PolicyValues(snapshot.RecommendedValues),
         snapshot.InvalidEnforcedKeys.Order(StringComparer.Ordinal).ToArray(),
-        snapshot.Issues.Select(issue => new PolicyIssueInfo(issue.Key, issue.Scope?.ToString(), issue.Message)).ToArray());
+        snapshot.Issues.Select(ExportIssue).ToArray());
+
+    // Findings name keys, never values. A finding about an unknown registry name carries that name, which comes from
+    // outside the schema and may be private text: only a technical identifier survives, in the key and the message.
+    private static PolicyIssueInfo ExportIssue(ManagedPolicyIssue issue)
+    {
+        if (issue.Key is null || ManagedPolicyKeys.Find(issue.Key) is not null)
+            return new(issue.Key, issue.Scope?.ToString(), issue.Message);
+        var key = Identifier(issue.Key)!;
+        return new(key, issue.Scope?.ToString(), issue.Message.Replace(issue.Key, key, StringComparison.Ordinal));
+    }
 
     private static PolicyValueInfo[] PolicyValues(IReadOnlyDictionary<string, ManagedPolicyValue> values) =>
         values.OrderBy(entry => entry.Key, StringComparer.Ordinal).Select(entry =>

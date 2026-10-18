@@ -19,9 +19,14 @@ public sealed class SupportDiagnosticsReportTests
                 KeyValuePair.Create("TranscriptionModelId", ManagedPolicyRawValue.FromText(@"C:\models\private.bin")),
                 KeyValuePair.Create("AllowCloudTranscription", ManagedPolicyRawValue.FromNumber(0)),
                 KeyValuePair.Create("AllowedPluginsConfigured", ManagedPolicyRawValue.FromNumber(1)),
-                KeyValuePair.Create("UpdateMode", ManagedPolicyRawValue.FromNumber(9))
+                KeyValuePair.Create("UpdateMode", ManagedPolicyRawValue.FromNumber(9)),
+                KeyValuePair.Create("CustomMarker", ManagedPolicyRawValue.FromNumber(1)),
+                KeyValuePair.Create(@"C:\notes\private note", ManagedPolicyRawValue.FromText("x"))
             ],
-            [KeyValuePair.Create("AllowedPlugins", new ManagedPolicyRawList(["com.typewhisper.sherpa-onnx", "not an id"]))]),
+            [
+                KeyValuePair.Create("AllowedPlugins", new ManagedPolicyRawList(["com.typewhisper.sherpa-onnx", "not an id"])),
+                KeyValuePair.Create("Customer Secret", new ManagedPolicyRawList(["a"]))
+            ]),
             ManagedPolicyRawSection.Missing);
         var snapshot = ManagedPolicyValidator.Validate(reading, 4, DateTimeOffset.UtcNow);
 
@@ -38,15 +43,19 @@ public sealed class SupportDiagnosticsReportTests
         Assert.Equal("com.typewhisper.sherpa-onnx", policy.Enforced[3].Value);
         Assert.Empty(policy.Recommended);
         Assert.Equal(["UpdateMode"], policy.InvalidEnforced);
-        var issue = Assert.Single(policy.Issues);
-        Assert.Equal("UpdateMode", issue.Key);
+        var issue = Assert.Single(policy.Issues, item => item.Key == "UpdateMode");
         Assert.Equal("Enforced", issue.Scope);
+        // Unknown registry names reach the report only as technical identifiers.
+        Assert.Contains(policy.Issues, item => item.Key == "CustomMarker" && item.Message.Contains("CustomMarker"));
+        Assert.Equal(2, policy.Issues.Count(item => item.Key == "[omitted]" && item.Message.Contains("[omitted]")));
 
         var json = (Empty() with { Policy = policy }).ToJson();
         Assert.Contains("\"schemaVersion\": 3", json);
         Assert.Contains("\"policy\"", json);
         Assert.DoesNotContain("private.bin", json);
         Assert.DoesNotContain("not an id", json);
+        Assert.DoesNotContain("private note", json);
+        Assert.DoesNotContain("Customer Secret", json);
     }
 
     [Fact]

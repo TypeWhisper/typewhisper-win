@@ -417,6 +417,32 @@ public class ManagedPolicyValidatorTests
     }
 
     [Fact]
+    public void WrongRegistryShape_BlocksTheSupportedKeyInsteadOfIgnoringIt()
+    {
+        // A scalar written as a subkey and a list written as a plain value.
+        var snapshot = Validate(Section(
+            [("AllowedPlugins", Text("com.typewhisper.sherpa-onnx")), ("UpdateMode", Number(1))],
+            [("AllowCloudTranscription", new ManagedPolicyRawList(["0"]))]));
+
+        Assert.True(snapshot.IsBlocked("AllowCloudTranscription"));
+        Assert.True(snapshot.IsBlocked("AllowedPlugins"));
+        Assert.False(snapshot.IsBlocked("UpdateMode"));
+        Assert.Equal(1, snapshot.Enforced("UpdateMode")!.Number);
+        Assert.Null(snapshot.Enforced("AllowCloudTranscription"));
+        Assert.Null(snapshot.Enforced("AllowedPlugins"));
+        Assert.Contains(snapshot.Issues, issue => issue.Key == "AllowCloudTranscription" && issue.Message.Contains("must be a value"));
+        Assert.Contains(snapshot.Issues, issue => issue.Key == "AllowedPlugins" && issue.Message.Contains("must be a subkey"));
+        Assert.DoesNotContain(snapshot.Issues, issue => issue.Message.StartsWith("Unknown", StringComparison.Ordinal));
+
+        // The same shapes under Recommended are reported but block nothing.
+        var recommended = Validate(recommended: Section(
+            [("TranscriptionProviderId", Text("x"))],
+            [("UpdateChannel", new ManagedPolicyRawList(["0"]))]));
+        Assert.False(recommended.IsBlocked("UpdateChannel"));
+        Assert.Contains(recommended.Issues, issue => issue.Key == "UpdateChannel" && issue.Message.Contains("must be a value"));
+    }
+
+    [Fact]
     public void ContentEquals_IgnoresRevisionAndReadTime()
     {
         var section = Section((ManagedPolicyKeys.AllowModelDownloads, Number(0)));

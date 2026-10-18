@@ -67,7 +67,18 @@ public static class ManagedPolicyValidator
             var name = definition.Name;
             string? problem;
             ManagedPolicyValue? value;
-            if (definition.Kind == ManagedPolicyValueKind.List)
+            // A supported name in the wrong registry shape (a scalar written as a subkey, a list written as a value) is a
+            // malformed enforced policy, not an unknown one: it blocks its setting like any other invalid value.
+            var isList = definition.Kind == ManagedPolicyValueKind.List;
+            if (isList ? rawValues.ContainsKey(name) : rawLists.ContainsKey(name))
+            {
+                (isList ? consumedValues : consumedLists).Add(name);
+                invalid.Add(name);
+                issues.Add(new(name, scope, isList
+                    ? $"{name} must be a subkey of numbered values next to {definition.ConfiguredMarkerName}, not a value; the setting stays blocked."
+                    : $"{name} must be a value, not a subkey; the setting stays blocked."));
+            }
+            if (isList)
             {
                 var marker = definition.ConfiguredMarkerName;
                 consumedValues.Add(marker);
