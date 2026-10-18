@@ -379,7 +379,8 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
         foreach (var (selectionId, role) in _index.Llm)
             if (policy.LlmRefusal(selectionId, role.Owner.Id, role.Owner.Locality) is not null) CancelRequest(role.Owner);
         foreach (var slot in _slots.Values)
-            if (slot.Package is not null && slot.Categories?.Any(category => !category.Equals("transcription", StringComparison.OrdinalIgnoreCase)) == true
+            if (slot.Package is not null
+                && slot.Categories?.Any(category => !string.IsNullOrWhiteSpace(category) && !category.Trim().Equals("transcription", StringComparison.OrdinalIgnoreCase)) == true
                 && policy.TextTransferRefusal(slot.Id, slot.Locality) is not null)
                 CancelRequest(slot);
     }

@@ -25,7 +25,7 @@ public sealed partial class ObsidianPlugin : IActionPlugin, IPluginTextSettings
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.0.0";
+    public string PluginVersion => "1.0.1";
 
     /// <summary>
     /// Gets the action id.

@@ -173,6 +173,9 @@ public sealed class PortablePluginStore
             await Task.Run(() => Extract(archive, package, ct), ct);
             ValidatePackage(package, entry.Id, entry.Version);
             ct.ThrowIfCancellationRequested();
+            // Judged once more after the download: a policy that changed meanwhile wins before the installation hook
+            // runs any package code and before the index records the package.
+            if (InstallRefusal(entry) is { } refusedLate) throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("plugin-download", refusedLate);
             Dictionary<string, Receipt> next;
             lock (_sync) next = new(_installed, StringComparer.Ordinal);
             var update = next.TryGetValue(entry.Id, out var previous);

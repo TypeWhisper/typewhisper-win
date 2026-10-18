@@ -177,8 +177,10 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
             try
             {
                 ObjectDisposedException.ThrowIf(_disposed, this);
+                // Judged again under the gate: a policy that relaxed during the wait keeps the engine loaded.
+                if (PackageRefusal?.Invoke() is not { } refusedNow) return false;
                 await ReleaseAsync();
-                _policyRefused = true; Error = refused; Feedback = null;
+                _policyRefused = true; Error = refusedNow; Feedback = null;
             }
             finally { Busy = false; _operations.Release(); Changed?.Invoke(); }
             return true;
