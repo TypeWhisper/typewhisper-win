@@ -33,7 +33,9 @@ public sealed class OnboardingPolicyTests
 
         Assert.True(OnboardingPolicy.SuppressOptionalPrompts(unreadable));
         Assert.False(OnboardingPolicy.SuppressOptionalPrompts(Unreadable()));
-        Assert.False(OnboardingPolicy.SuppressOptionalPrompts(Build(enforced: [Number(ManagedPolicyKeys.SuppressOptionalPrompts, 7)])));
+        // An invalid enforced value fails closed: prompts stay hidden until the value is corrected or removed.
+        Assert.True(OnboardingPolicy.SuppressOptionalPrompts(Build(enforced: [Number(ManagedPolicyKeys.SuppressOptionalPrompts, 7)])));
+        Assert.False(OnboardingPolicy.SuppressOptionalPrompts(Build(enforced: [Number(ManagedPolicyKeys.SuppressOptionalPrompts, 0)])));
     }
 
     [Fact]

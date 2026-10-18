@@ -9,7 +9,15 @@ public sealed partial class MainWindow
     private IStartupRegistration StartupRegistration => _startupRegistration ??= WindowsStartupRegistration.Create();
     private StartupPolicyReconciler StartupPolicy => _startupPolicy ??=
         new(StartupRegistration, new StartupPolicyStore(WinUIProfile.DataPath("startup-policy.json")));
-    private static bool SetupCompleted => new SetupPreferencesStore(WinUIProfile.DataPath("setup.json")).Current.Completed;
+    // An unreadable setup state is not a new profile: recommendations meant for new profiles stay off until it is readable.
+    private static bool SetupCompleted
+    {
+        get
+        {
+            var store = new SetupPreferencesStore(WinUIProfile.DataPath("setup.json"));
+            return store.Error is not null || store.Current.Completed;
+        }
+    }
     private readonly SemaphoreSlim _startupPolicyGate = new(1, 1);
 
     /// <summary>Set by the app when policy kept an unfinished setup closed; a policy that no longer allows it reopens setup.</summary>

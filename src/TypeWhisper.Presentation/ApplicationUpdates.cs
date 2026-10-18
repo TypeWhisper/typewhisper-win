@@ -26,8 +26,13 @@ public sealed class AppUpdatePreferences
     public string? Error { get; private set; }
     /// <summary>Whether the user chose a channel explicitly; only then does it outrank an administrator recommendation.</summary>
     public bool HasExplicitChoice { get; private set; }
-    /// <summary>The explicit choice, or null when the channel is only inferred from the installed build.</summary>
-    public AppUpdateChannel? ExplicitChannel => HasExplicitChoice ? Channel : null;
+    /// <summary>Whether a saved choice exists but could not be read; it then counts as unknown, not as absent.</summary>
+    public bool ChoiceUnknown => !HasExplicitChoice && Error is not null;
+    /// <summary>
+    /// The explicit choice, or null when the channel is only inferred from the installed build. An unreadable saved
+    /// choice keeps the installed track in its place so a recommendation cannot replace what the user may have chosen.
+    /// </summary>
+    public AppUpdateChannel? ExplicitChannel => HasExplicitChoice ? Channel : ChoiceUnknown ? InstalledChannel : null;
     /// <summary>Loads an explicit preference or infers the installed track without writing.</summary>
     public AppUpdatePreferences(string path, string version)
     {

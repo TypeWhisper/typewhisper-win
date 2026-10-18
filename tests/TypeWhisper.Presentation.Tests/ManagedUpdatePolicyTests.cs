@@ -235,6 +235,25 @@ public sealed class ManagedUpdatePolicyTests : IDisposable
     }
 
     [Fact]
+    public void AnUnreadableSavedChannelIsNotReplacedByARecommendation()
+    {
+        Directory.CreateDirectory(_root);
+        File.WriteAllText(Path.Combine(_root, "updates.json"), "not json");
+        var preferences = Preferences();
+        Assert.NotNull(preferences.Error);
+        Assert.False(preferences.HasExplicitChoice);
+        Assert.True(preferences.ChoiceUnknown);
+        var policy = new ManagedUpdatePolicy(null, null, AppUpdateChannel.Daily, null, false);
+        var controller = Controller(preferences, new Backend(), () => policy);
+
+        Assert.Equal(preferences.InstalledChannel, controller.EffectiveChannel);
+
+        // Enforcement still wins over the unknown choice.
+        policy = new ManagedUpdatePolicy(null, AppUpdateChannel.Daily, null, null, false);
+        Assert.Equal(AppUpdateChannel.Daily, controller.EffectiveChannel);
+    }
+
+    [Fact]
     public async Task PolicyChangedKeepsTheOfferWhenTheUpdatePolicyIsUnchanged()
     {
         var policy = new ManagedUpdatePolicy(null, null, null, new HashSet<AppUpdateChannel> { AppUpdateChannel.Stable }, false);
