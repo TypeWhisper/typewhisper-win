@@ -3211,5 +3211,8 @@
   "The selection policy state could not be loaded.": "選択ポリシーの状態を読み込めませんでした。",
   "The selection policy state could not be saved.": "選択ポリシーの状態を保存できませんでした。",
   "The model {0} is not offered by {1}.": "モデル {0} は {1} では提供されていません。",
-  "The text model provider {0} is not installed or enabled.": "テキストモデルのプロバイダー {0} はインストールされていないか、有効になっていません。"
+  "The text model provider {0} is not installed or enabled.": "テキストモデルのプロバイダー {0} はインストールされていないか、有効になっていません。",
+  "Setting": "設定",
+  "Scope": "適用範囲",
+  "Value": "値"
 }

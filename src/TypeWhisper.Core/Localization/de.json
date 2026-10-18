@@ -3211,5 +3211,8 @@
   "The selection policy state could not be loaded.": "Der Zustand der Auswahlrichtlinie konnte nicht geladen werden.",
   "The selection policy state could not be saved.": "Der Zustand der Auswahlrichtlinie konnte nicht gespeichert werden.",
   "The model {0} is not offered by {1}.": "Das Modell {0} wird von {1} nicht angeboten.",
-  "The text model provider {0} is not installed or enabled.": "Der Textmodell-Anbieter {0} ist nicht installiert oder nicht aktiviert."
+  "The text model provider {0} is not installed or enabled.": "Der Textmodell-Anbieter {0} ist nicht installiert oder nicht aktiviert.",
+  "Setting": "Einstellung",
+  "Scope": "Geltung",
+  "Value": "Wert"
 }
