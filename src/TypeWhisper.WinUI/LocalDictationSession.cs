@@ -250,8 +250,12 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         try
         {
             SetStatus(Loc.T("Loading model… Wait until the model is ready before dictating."), DictationPhase.LoadingModel);
+            // The local provider the policy refuses for transcription is not selected; judged again after the load,
+            // before the selection is saved.
+            DenyLocalTranscriptionIfRefused();
             await _livePreview.StopAsync();
             await Models.ActivateAsync(modelId);
+            DenyLocalTranscriptionIfRefused();
             _selection.SetSetting("Provider", "local");
             _selection.SetSetting("ProviderPluginId", LocalTranscriptionPlugin.PluginId);
             _providerId = "local";

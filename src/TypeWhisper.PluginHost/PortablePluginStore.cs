@@ -228,6 +228,10 @@ public sealed class PortablePluginStore
             progress?.Report(new("Extracting package…"));
             await Task.Run(() => Extract(archive, package, ct), ct);
             ValidatePackage(package, entry.Id, entry.Version);
+            // From here the policy pass judges the extracted manifest as well, so a package that declares more than
+            // its catalog entry is cancelled during its hook once the policy refuses it.
+            var extracted = package;
+            lock (_sync) _activeRefusal = () => InstallRefusal(entry) ?? ExecutionRefusal(entry.Id, extracted);
             ct.ThrowIfCancellationRequested();
             // Judged once more after the download, now also by the extracted manifest rather than the catalog entry
             // alone: a policy that changed meanwhile, or a package that declares more than its entry, is refused
@@ -246,6 +250,8 @@ public sealed class PortablePluginStore
             if ((InstallRefusal(entry) ?? ExecutionRefusal(entry.Id, package)) is { } refusedAfterHook)
                 throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("plugin-download", refusedAfterHook);
             next[entry.Id] = update ? previous! with { PendingDirectory = token, PendingVersion = entry.Version, UpdateWarning = null } : new(token, entry.Version);
+            // A policy pass that cancelled the operation since the last check keeps the receipt out of the index.
+            ct.ThrowIfCancellationRequested();
             Commit(next);
             package = null;
             return update;
