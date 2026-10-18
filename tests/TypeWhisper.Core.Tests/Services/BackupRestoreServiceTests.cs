@@ -29,6 +29,27 @@ public sealed class BackupRestoreServiceTests : IDisposable
         Assert.Contains(destination.Dictionary.Entries, entry => entry.Original == " ");
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task BackupRegexCaseSensitivityIsAConflictNotANewIdentity(bool localCaseSensitive)
+    {
+        var source = CreateProfile("case-source");
+        source.Dictionary.AddEntry(new DictionaryEntry { Id = "incoming", EntryType = DictionaryEntryType.Correction,
+            Original = "teh", Replacement = "the", IsRegex = true, CaseSensitive = !localCaseSensitive });
+        var json = await source.Backup.ExportAsync(new BackupExportOptions { Categories = BackupCategory.Dictionary });
+        var destination = CreateProfile("case-target");
+        destination.Dictionary.AddEntry(new DictionaryEntry { Id = "local", EntryType = DictionaryEntryType.Correction,
+            Original = "teh", Replacement = "the", IsRegex = true, CaseSensitive = localCaseSensitive });
+        var result = await destination.Backup.ImportAsync(json);
+        Assert.True(result.Success);
+        Assert.Equal(0, result.Categories[BackupCategory.Dictionary].Imported);
+        Assert.Equal(1, result.Categories[BackupCategory.Dictionary].Conflicts);
+        var retained = Assert.Single(destination.Dictionary.Entries);
+        Assert.Equal("local", retained.Id);
+        Assert.Equal(localCaseSensitive, retained.CaseSensitive);
+    }
+
     [Fact]
     public async Task RegexFlagDoesNotAllowWhitespaceOnlyBackupTerms()
     {

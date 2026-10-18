@@ -19,7 +19,7 @@ internal static class LearnedCorrectionStore
         // a second, lenient read could see a locked file as empty and replace the dictionary with only these corrections.
         var baseline = ReviewedCatalogTransaction.Read(path);
         var entries = baseline is null ? [] : LexiconTransfer.ReadDictionary(baseline, allowPackEntries: true).ToList();
-        var originals = entries.Where(e => e.EntryType == DictionaryEntryType.Correction).Select(e => e.Original).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var originals = entries.Where(e => e.EntryType == DictionaryEntryType.Correction && !e.IsRegex).Select(e => e.Original).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var learned = new List<LearnedDictionaryCorrection>();
         foreach (var suggestion in suggestions)
         {

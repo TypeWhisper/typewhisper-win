@@ -55,6 +55,21 @@ public sealed class FileLexiconTests : IDisposable
     }
 
     [Fact]
+    public void FileBackedLearningCreatesALiteralBesideRegex()
+    {
+        var store = new Lexicon(DictionaryPath, SnippetPath);
+        Assert.Null(store.Save(new(Guid.NewGuid(), LexiconKind.Correction, "teh", "regex") { IsRegex = true }));
+        var learned = Assert.Single(LearnedCorrectionStore.Save(DictionaryPath, [new("teh", "the")]));
+        var reloaded = new Lexicon(DictionaryPath, SnippetPath);
+        Assert.Null(reloaded.LastError);
+        Assert.Equal(2, reloaded.Entries.Count);
+        Assert.Contains(reloaded.Entries, entry => entry.IsRegex && entry.Value == "regex");
+        Assert.Contains(reloaded.Entries, entry => !entry.IsRegex && entry.Value == "the" && entry.Key == learned.Original);
+        Assert.Empty(LearnedCorrectionStore.Save(DictionaryPath, [new("TEH", "other")]));
+        Assert.Equal(2, new Lexicon(DictionaryPath, SnippetPath).Entries.Count);
+    }
+
+    [Fact]
     public void InvalidRegexEditPreservesStoredRuleAndRemainsLoadable()
     {
         var store = new Lexicon(DictionaryPath, SnippetPath);

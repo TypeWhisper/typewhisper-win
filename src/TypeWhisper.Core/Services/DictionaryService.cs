@@ -407,7 +407,7 @@ public sealed class DictionaryService : IDictionaryService
         using var mutation = ProfileMutationCoordinator.Enter();
         if (!TryBeginMutation(out var rollback)) return;
         var existing = _cache.FirstOrDefault(e =>
-            e.EntryType == DictionaryEntryType.Correction &&
+            e.EntryType == DictionaryEntryType.Correction && !e.IsRegex &&
             e.Original.Equals(original, StringComparison.OrdinalIgnoreCase));
 
         if (existing is not null)
@@ -451,7 +451,7 @@ public sealed class DictionaryService : IDictionaryService
         using var mutation = ProfileMutationCoordinator.Enter();
         if (!TryBeginMutation(out var rollback)) return false;
         var removed = _cache.RemoveAll(e =>
-            e.EntryType == DictionaryEntryType.Correction &&
+            e.EntryType == DictionaryEntryType.Correction && !e.IsRegex &&
             e.Original.Equals(original, StringComparison.OrdinalIgnoreCase));
 
         if (removed == 0)

@@ -737,6 +737,34 @@ public sealed class CloudFolderSyncTests : IDisposable
     }
 
     [Theory]
+    [InlineData(10000)]
+    [InlineData(10001)]
+    public async Task PreviouslyAppliedLongReplacementDoesNotBlockUpgrade(int length)
+    {
+        var entry = DictionaryEntry("teh", Date(10), UserDataSyncDictionaryEntryType.Correction, new string('x', length));
+        var snippet = Snippet(";sig", "Signature", Date(10));
+        var oldId = UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original);
+        var snippetId = UserDataSyncIdentity.SnippetItemId(snippet.Trigger);
+        var current = CloudFolderSyncOperation.UpsertDictionary(entry, oldId, "mac", "mac-literal") with { SchemaVersion = 1 };
+        var folder = Path.Combine(CloudFolderSyncEngine.PackagePath(_tempDir), "ops", "mac");
+        Directory.CreateDirectory(folder);
+        File.WriteAllText(Path.Combine(folder, current.OperationId + ".json"), CloudFolderSyncJson.Serialize(current));
+        var store = new InMemoryUserDataSyncStore(dictionaryEntries: [entry], snippets: [snippet with { Replacement = "Changed", UpdatedAt = Date(20) }]);
+        var state = new CloudFolderSyncState
+        {
+            DeviceId = "windows", KnownLocalItemIds = [oldId, snippetId],
+            ExportedItemVersions = new() { [oldId] = "2023-11-14T22:13:30.000Z", [snippetId] = "2023-11-14T22:13:30.000Z" },
+            AppliedOperationIds = [current.OperationId]
+        };
+        var entitlement = new PaidEntitlements(true);
+        await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(30));
+        Assert.Equal(entry, Assert.Single(store.DictionaryEntries));
+        for (var i = 1; i < 3; i++)
+            Assert.Equal(0, (await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(30 + i))).OperationsWritten);
+        Assert.Contains(OperationFiles("windows").Select(path => CloudFolderSyncJson.Deserialize<CloudFolderSyncOperation>(File.ReadAllText(path))!), operation => operation.Snippet?.Replacement == "Changed");
+    }
+
+    [Theory]
     [InlineData("missing", false)]
     [InlineData("empty", false)]
     [InlineData("replaced", false)]

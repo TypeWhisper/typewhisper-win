@@ -569,14 +569,23 @@ public static class CloudFolderSyncEngine
     {
         // The exported version records the local synchronized state even if a peer's
         // clock gave an older operation or tombstone a later timestamp.
-        var matching = operations.Where(operation => operation.SchemaVersion == 1 &&
-            operation.Kind == CloudFolderSyncOperationKind.Upsert && IsValidOperation(operation) &&
-            state.AppliedOperationIds.Contains(operation.OperationId) &&
-            operation.Dictionary is { EntryType: UserDataSyncDictionaryEntryType.Correction } entry &&
-            state.KnownLocalItemIds.Contains(UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original)) &&
-            state.ExportedItemVersions.TryGetValue(UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original), out var version) &&
-            (version == VersionString(entry.UpdatedAt) || version == "dictionary-v2|" + VersionString(entry.UpdatedAt)));
-        return LegacyWinningOperations(matching.ToArray());
+        // Already-applied history is evidence of the old state, not a new import.
+        // Current catalog limits must not make a readable old version disappear.
+        var known = new Dictionary<string, CloudFolderSyncOperation>(StringComparer.Ordinal);
+        foreach (var operation in operations)
+        {
+            if (operation.SchemaVersion != 1 || operation.Collection != UserDataSyncCollection.Dictionary ||
+                operation.Kind != CloudFolderSyncOperationKind.Upsert || operation.UpdatedAt == default ||
+                string.IsNullOrWhiteSpace(operation.OperationId) || string.IsNullOrWhiteSpace(operation.DeviceId) ||
+                string.IsNullOrWhiteSpace(operation.ItemId) || !state.AppliedOperationIds.Contains(operation.OperationId) ||
+                operation.Dictionary is not { EntryType: UserDataSyncDictionaryEntryType.Correction } entry ||
+                string.IsNullOrEmpty(entry.Original)) continue;
+            var id = UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original);
+            if (!state.KnownLocalItemIds.Contains(id) || !state.ExportedItemVersions.TryGetValue(id, out var version) ||
+                version != VersionString(entry.UpdatedAt) && version != "dictionary-v2|" + VersionString(entry.UpdatedAt)) continue;
+            if (!known.TryGetValue(id, out var existing) || Prefers(operation, existing)) known[id] = operation;
+        }
+        return known;
     }
 
     private static bool LegacyCorrectionHistoryIsComplete(

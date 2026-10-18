@@ -1131,11 +1131,13 @@ public sealed class BackupRestoreService : IBackupRestoreService
     private static string DictionaryKey(DictionaryEntryType entryType, string original, bool caseSensitive, bool isRegex)
     {
         isRegex &= entryType == DictionaryEntryType.Correction;
+        caseSensitive &= !isRegex;
         return $"{entryType}\u001f{(isRegex ? original : original.Trim().ToUpperInvariant())}\u001f{caseSensitive}\u001f{isRegex}";
     }
 
     private static bool DictionaryValuesEqual(DictionaryEntry existing, BackupDictionaryEntry incoming) =>
         string.Equals(existing.Replacement ?? "", incoming.Replacement ?? "", StringComparison.Ordinal)
+        && existing.CaseSensitive == incoming.CaseSensitive
         && existing.IsEnabled == incoming.IsEnabled
         && existing.CtcMinSimilarity == incoming.CtcMinSimilarity
         && existing.Source == incoming.Source;

@@ -39,6 +39,25 @@ public class DictionaryServiceTests : IDisposable
         Assert.Single(reloaded.Entries, entry => !entry.IsRegex);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void LiteralCrudPreservesRegexWithSameOriginal(bool hasLiteral)
+    {
+        var regex = new DictionaryEntry { Id = "regex", EntryType = DictionaryEntryType.Correction,
+            Original = "teh", Replacement = "regex", IsRegex = true, CaseSensitive = true };
+        _sut.AddEntry(regex);
+        regex = Assert.Single(_sut.Entries);
+        if (hasLiteral) _sut.AddEntry(new DictionaryEntry { Id = "literal", EntryType = DictionaryEntryType.Correction,
+            Original = "teh", Replacement = "old" });
+        _sut.UpsertCorrection("TEH", "The", caseSensitive: false);
+        Assert.Equal(regex, Assert.Single(_sut.Entries, entry => entry.IsRegex));
+        Assert.Equal("The", Assert.Single(_sut.Entries, entry => !entry.IsRegex).Replacement);
+        Assert.True(_sut.DeleteCorrection("teh"));
+        Assert.Equal(regex, Assert.Single(new DictionaryService(_filePath).Entries));
+        Assert.False(_sut.DeleteCorrection("teh"));
+    }
+
     [Fact]
     public void AddEntry_AppearsInEntries()
     {
