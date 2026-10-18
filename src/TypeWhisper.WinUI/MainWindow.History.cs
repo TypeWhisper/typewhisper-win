@@ -14,7 +14,8 @@ public sealed partial class MainWindow
 
     internal void ShowHistoryFromTray() => OpenHistory();
 
-    private void OpenHistory()
+    // With a record id, History opens on that entry.
+    private void OpenHistory(string? recordId = null)
     {
         if (_closing || _profileRestoreClosing || _historyService is null) return;
         SuppressStartupWhatsNew();
@@ -39,5 +40,6 @@ public sealed partial class MainWindow
             window.ShowOn(ResolveInvocationDisplayArea());
         }
         else _historyWindow.BringToFront();
+        if (recordId is not null) _historyWindow?.Reveal(recordId);
     }
 }
