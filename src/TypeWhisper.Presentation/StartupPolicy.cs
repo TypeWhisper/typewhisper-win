@@ -76,8 +76,11 @@ public sealed class StartupPolicyReconciler(IStartupRegistration registration, S
 
         if (snapshot.Enforced(ManagedPolicyKeys.LaunchAtLogin) is { } enforced)
         {
-            if (store.Current.RetainedBeforeEnforcement is null && !state.Unknown)
-                store.Save(store.Current with { RetainedBeforeEnforcement = state.IsEnabled });
+            // The pre-enforcement value must be on disk before the registration changes; otherwise a restart under
+            // the same policy would retain the enforced state and a later removal could not restore the user's choice.
+            if (store.Current.RetainedBeforeEnforcement is null && !state.Unknown
+                && !store.Save(store.Current with { RetainedBeforeEnforcement = state.IsEnabled }))
+                return new(state, true, store.Error ?? Loc.T("Managed by your organization"));
             if (state.CanChange && state.IsEnabled != enforced.IsTrue)
                 state = await registration.SetEnabledAsync(enforced.IsTrue);
             return new(state, true, Loc.T("Managed by your organization"));
@@ -85,10 +88,12 @@ public sealed class StartupPolicyReconciler(IStartupRegistration registration, S
 
         if (store.Current.RetainedBeforeEnforcement is { } retained)
         {
-            // Confirmed removal restores the registration the user had before enforcement, once.
+            // Confirmed removal restores the registration the user had before enforcement. The retained value is
+            // cleared only once the registration matches it, so a temporary restriction keeps it for a later pass.
             if (state.CanChange && state.IsEnabled != retained)
                 state = await registration.SetEnabledAsync(retained);
-            store.Save(store.Current with { RetainedBeforeEnforcement = null });
+            if (!state.Unknown && state.IsEnabled == retained)
+                store.Save(store.Current with { RetainedBeforeEnforcement = null });
             return new(state, false, null);
         }
 

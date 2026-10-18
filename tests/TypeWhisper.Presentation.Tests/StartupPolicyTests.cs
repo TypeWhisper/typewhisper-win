@@ -121,6 +121,43 @@ public sealed class StartupPolicyTests : IDisposable
         Assert.True(new StartupPolicyStore(path).Current.UserChoice);
     }
 
+    [Fact]
+    public async Task RetainedChoiceSurvivesARestoreThatCannotHappenYet()
+    {
+        var registration = new Registration { Enabled = true };
+        var reconciler = new StartupPolicyReconciler(registration, Store());
+        await reconciler.ApplyAsync(Build(enforced: [Number(ManagedPolicyKeys.LaunchAtLogin, 0)]), setupCompleted: true);
+        Assert.False(registration.Enabled);
+
+        // Windows refuses the change for now: the retained choice stays for a later pass.
+        registration.CanChange = false;
+        var blocked = await reconciler.ApplyAsync(Build(), setupCompleted: true);
+        Assert.False(blocked.Locked);
+        Assert.False(registration.Enabled);
+        Assert.True(Store().Current.RetainedBeforeEnforcement);
+
+        registration.CanChange = true;
+        await reconciler.ApplyAsync(Build(), setupCompleted: true);
+        Assert.True(registration.Enabled);
+        Assert.Null(Store().Current.RetainedBeforeEnforcement);
+    }
+
+    [Fact]
+    public async Task EnforcementWaitsUntilThePreviousStateIsSaved()
+    {
+        // A directory in place of the state file makes every save fail.
+        Directory.CreateDirectory(Path.Combine(_root, "startup-policy.json"));
+        var registration = new Registration { Enabled = true };
+        var reconciler = new StartupPolicyReconciler(registration, Store());
+
+        var outcome = await reconciler.ApplyAsync(Build(enforced: [Number(ManagedPolicyKeys.LaunchAtLogin, 0)]), setupCompleted: true);
+
+        Assert.True(outcome.Locked);
+        Assert.True(registration.Enabled);
+        Assert.Equal(0, registration.Writes);
+        Assert.NotNull(reconciler.Store.Error);
+    }
+
     private sealed class Registration : IStartupRegistration
     {
         public bool Enabled { get; set; }

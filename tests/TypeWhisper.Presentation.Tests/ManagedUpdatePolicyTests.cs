@@ -232,12 +232,51 @@ public sealed class ManagedUpdatePolicyTests : IDisposable
         Assert.Equal(AppUpdateChannel.Stable, Preferences("1.2.0").ExplicitChannel);
     }
 
+    [Fact]
+    public async Task CheckDiscardsTheResultWhenPolicyChangesDuringTheCheck()
+    {
+        var policy = ManagedUpdatePolicy.None;
+        var backend = new Backend();
+        var controller = Controller(Preferences(), backend, () => policy);
+        backend.OnCheck = () => policy = new ManagedUpdatePolicy(AppUpdateMode.External, null, null, null, false);
+
+        await controller.CheckAsync();
+
+        Assert.Equal(["check"], backend.Calls);
+        Assert.Null(controller.Offer);
+        Assert.False(controller.CanInstall);
+        Assert.DoesNotContain("available", controller.Status);
+    }
+
+    [Fact]
+    public async Task ApplyRereadsPolicyAtTheApplyPoint()
+    {
+        var policy = ManagedUpdatePolicy.None;
+        var backend = new Backend();
+        // The host drains work before it runs the apply action; policy becomes check-only meanwhile.
+        var controller = new AppUpdateController(Preferences(), backend, apply =>
+        {
+            policy = new ManagedUpdatePolicy(AppUpdateMode.CheckOnly, null, null, null, false);
+            apply();
+            return Task.FromResult<string?>(null);
+        }, () => policy);
+        await controller.CheckAsync();
+        Assert.True(controller.CanInstall);
+
+        await controller.InstallAsync();
+
+        Assert.Equal(["check", "download"], backend.Calls);
+        Assert.Contains("only checks", controller.Status);
+        Assert.Null(controller.Offer);
+    }
+
     private sealed class Backend : IAppUpdateBackend
     {
         public List<string> Calls { get; } = [];
         public AppUpdateChannel? CheckedChannel { get; private set; }
         public bool AllowedDowngrade { get; private set; }
         public Action? OnDownload { get; set; }
+        public Action? OnCheck { get; set; }
         public AppUpdateOffer Offer { get; init; } = new("2.0.0", false);
         public string? UnavailableReason => null;
 
@@ -246,6 +285,7 @@ public sealed class ManagedUpdatePolicyTests : IDisposable
             Calls.Add("check");
             CheckedChannel = channel;
             AllowedDowngrade = allowDowngrade;
+            OnCheck?.Invoke();
             return Task.FromResult(new AppUpdateCheck(true, Offer));
         }
 

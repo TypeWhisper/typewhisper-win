@@ -97,6 +97,7 @@ public sealed partial class MainWindow : Window
             // Policy that appears or changes while running is applied without a restart: license key, updates, startup.
             // Registered before the fallible startup below so a failed dictation start does not leave changes unhandled.
             WinUIManagedPolicy.Changed += _ => DispatcherQueue.TryEnqueue(ApplyManagedPolicyChange);
+            _ = ApplyStartupPolicyAsync();
             // A dictation can start while the model loads below, so Esc and Enter must already be handled then.
             InitializeEscapeCancel();
             await _dictation.InitializeAsync();
@@ -119,7 +120,6 @@ public sealed partial class MainWindow : Window
             // License and account checks can wait up to 30 s on the network. They run side by side
             // and no longer hold up activations such as --settings; sync still starts after them.
             _ = StartCloudSyncAfterAccessChecksAsync(Task.WhenAll(WinUILicensing.ValidateAsync(), WinUIPremiumAccount.RefreshAsync()));
-            _ = ApplyStartupPolicyAsync();
             if ((hotkeyError ?? cancelError) is { } notice && !_closing) ShowNotice(new AppNotice(notice));
             _ = UpdatePluginsAutomaticallyAsync();
             _ = CheckApplicationUpdatesAutomaticallyAsync();

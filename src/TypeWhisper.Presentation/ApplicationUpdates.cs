@@ -180,6 +180,13 @@ public sealed class AppUpdateController(AppUpdatePreferences preferences, IAppUp
         try
         {
             var result = await backend.CheckAsync(channel, AllowsDowngrade);
+            // Policy that changed during the request wins over its result: nothing from a now-refused channel is announced.
+            if (EffectiveChannel != channel || Policy.CheckRefusal(channel) is not null)
+            {
+                Offer = null; _offerChannel = null;
+                Status = Policy.CheckRefusal(EffectiveChannel) ?? Loc.T("The update policy changed. Check for updates again.");
+                return;
+            }
             Offer = result.Offer; _offerChannel = Offer is null ? null : channel;
             Status = !result.ChannelPublished ? Loc.T("No compatible WinUI release is available on this channel yet.")
                 : Offer is null ? Loc.T("You are up to date on this channel.")
@@ -203,7 +210,15 @@ public sealed class AppUpdateController(AppUpdatePreferences preferences, IAppUp
             // A policy that arrived during the download still wins; the downloaded package stays unused.
             if (Refusal() is { } lateRefusal) { Status = lateRefusal; Offer = null; _offerChannel = null; return; }
             Status = Loc.T("Finishing work and restarting…"); Changed?.Invoke();
-            Status = await shutdownAndApply(() => backend.Apply(offer)) ?? Loc.T("Restart requested.");
+            // The host drains work before it runs this action, so policy is read once more at the actual apply point.
+            string? refusedAtApply = null;
+            var outcome = await shutdownAndApply(() =>
+            {
+                refusedAtApply = Refusal();
+                if (refusedAtApply is null) backend.Apply(offer);
+            });
+            if (refusedAtApply is not null) { Offer = null; _offerChannel = null; }
+            Status = refusedAtApply ?? outcome ?? Loc.T("Restart requested.");
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { Status = Loc.T("Update installation failed: {0}", ex.Message); }
         finally { Busy = false; Changed?.Invoke(); }

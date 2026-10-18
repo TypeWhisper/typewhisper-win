@@ -234,8 +234,17 @@ public partial class App : Application
         var setupPending = presentation == TypeWhisper.Presentation.StartupPresentation.Setup;
         var skipWhenReady = setupPending && TypeWhisper.Presentation.OnboardingPolicy.SkipSetupWhenReady(WinUIManagedPolicy.Current);
         if (setupPending && !skipWhenReady) _window.OpenSetup(returnToTray: true);
+        if (skipWhenReady)
+        {
+            // The bounded wait covers initialization itself: a slow or hanging plugin or model load must not leave
+            // an incomplete profile without its setup window.
+            var budget = TimeSpan.FromSeconds(20);
+            var started = System.Diagnostics.Stopwatch.StartNew();
+            var initialized = await Task.WhenAny(initialization, Task.Delay(budget)) == initialization;
+            var remaining = budget - started.Elapsed;
+            if (!initialized || remaining <= TimeSpan.Zero || !await _window.IsSetupReadyAsync(remaining)) _window.OpenSetup(returnToTray: true);
+        }
         await initialization;
-        if (skipWhenReady && !await _window.IsSetupReadyAsync(TimeSpan.FromSeconds(20))) _window.OpenSetup(returnToTray: true);
         UpdateTrayActions();
         _window.ShowMigrationNotice();
 #if DEBUG

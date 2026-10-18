@@ -3170,5 +3170,6 @@
   "Your organization's policy could not be read. Managed settings keep their last known values.": "Die Richtlinie deiner Organisation konnte nicht gelesen werden. Verwaltete Einstellungen behalten ihre zuletzt bekannten Werte.",
   "Your organization's policy could not be read. This setting waits until it is readable.": "Die Richtlinie deiner Organisation konnte nicht gelesen werden. Diese Einstellung wartet, bis sie lesbar ist.",
   "Your organization's update policy could not be read. App updates wait until it is readable.": "Die Update-Richtlinie deiner Organisation konnte nicht gelesen werden. App-Updates warten, bis sie lesbar ist.",
-  "Version {0} is older than your installed version.": "Version {0} ist älter als deine installierte Version."
+  "Version {0} is older than your installed version.": "Version {0} ist älter als deine installierte Version.",
+  "The update policy changed. Check for updates again.": "Die Update-Richtlinie hat sich geändert. Suche erneut nach Updates."
 }

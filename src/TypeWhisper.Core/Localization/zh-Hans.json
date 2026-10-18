@@ -3170,5 +3170,6 @@
   "Your organization's policy could not be read. Managed settings keep their last known values.": "无法读取你的组织的策略。托管设置保留其最近已知的值。",
   "Your organization's policy could not be read. This setting waits until it is readable.": "无法读取你的组织的策略。此设置将等待策略可读后再生效。",
   "Your organization's update policy could not be read. App updates wait until it is readable.": "无法读取你的组织的更新策略。应用更新将等待策略可读后再进行。",
-  "Version {0} is older than your installed version.": "版本 {0} 比已安装的版本旧。"
+  "Version {0} is older than your installed version.": "版本 {0} 比已安装的版本旧。",
+  "The update policy changed. Check for updates again.": "更新策略已更改。请再次检查更新。"
 }

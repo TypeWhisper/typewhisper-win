@@ -3170,5 +3170,6 @@
   "Your organization's policy could not be read. Managed settings keep their last known values.": "組織のポリシーを読み取れませんでした。管理対象の設定は最後に確認した値のままです。",
   "Your organization's policy could not be read. This setting waits until it is readable.": "組織のポリシーを読み取れませんでした。この設定は読み取れるようになるまで保留されます。",
   "Your organization's update policy could not be read. App updates wait until it is readable.": "組織の更新ポリシーを読み取れませんでした。アプリの更新は読み取れるようになるまで保留されます。",
-  "Version {0} is older than your installed version.": "バージョン {0} はインストール済みのバージョンより古いです。"
+  "Version {0} is older than your installed version.": "バージョン {0} はインストール済みのバージョンより古いです。",
+  "The update policy changed. Check for updates again.": "更新ポリシーが変更されました。もう一度更新を確認してください。"
 }
