@@ -12,6 +12,7 @@ public partial class App : Application
     private ProfileOperationWindow? _profileOperation;
     private readonly TypeWhisper.Presentation.ActivationInbox _activations = new();
     private bool _activationReady;
+    private int _redirectedActivationReceived;
     private readonly TaskCompletionSource<bool> _shareStartupReady = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public App()
@@ -55,6 +56,12 @@ public partial class App : Application
         var activation = AppInstance.GetCurrent().GetActivatedEventArgs();
         var share = activation.Data as global::Windows.ApplicationModel.Activation.ShareTargetActivatedEventArgs;
         var request = WindowsActivationRequest.Parse(activation, initial: true);
+#if DEBUG
+        // The development helper opens --settings. Exercise the ordinary startup path in an isolated profile.
+        if (WinUIProfile.IsTestProfile && Environment.GetEnvironmentVariable("TYPEWHISPER_WINUI_WHATS_NEW_FIXTURE") == "1"
+            && request.Route == "--settings" && request.SettingsCategory is null)
+            request = TypeWhisper.Presentation.ApplicationActivationRequest.Parse([]);
+#endif
         var dispatcher = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
         _mainInstance = AppInstance.FindOrRegisterForKey(WinUIProfile.InstanceKey);
         if (!_mainInstance.IsCurrent)
@@ -81,6 +88,9 @@ public partial class App : Application
 
         _mainInstance.Activated += (_, redirected) =>
         {
+            // Latch before dispatching: a share or link arriving during initialization owns this start.
+            Interlocked.Exchange(ref _redirectedActivationReceived, 1);
+            _window?.SuppressStartupWhatsNew();
             if (redirected.Data is global::Windows.ApplicationModel.Activation.ShareTargetActivatedEventArgs shared)
             {
                 var operation = new WindowsSharedFileOperation(shared.ShareOperation);
@@ -191,7 +201,11 @@ public partial class App : Application
         var setup = new TypeWhisper.Presentation.SetupPreferencesStore(WinUIProfile.DataPath("setup.json"));
         var presentation = TypeWhisper.Presentation.StartupPresentationPolicy.Resolve(request, setup.Current.Completed);
         if (presentation == TypeWhisper.Presentation.StartupPresentation.RequestedDestination) _activations.Add(request);
-        _window = new MainWindow();
+        var news = new TypeWhisper.Presentation.WhatsNewPreferencesStore(WinUIProfile.DataPath("whats-new.json"));
+        var newsSession = new TypeWhisper.Presentation.WhatsNewSession(news, request, setup.Current.Completed, WhatsNewWindow.ContentVersion);
+        _window = new MainWindow(newsSession);
+        if (Volatile.Read(ref _redirectedActivationReceived) != 0) _window.SuppressStartupWhatsNew();
+        if (news.Error is { } newsError) AppDiagnostics.Write("whats-new.preferences.failed", newsError);
         // Keep a window alive throughout startup; closing the last window can end the XAML application.
         _profileOperation?.Dismiss();
         _profileOperation = null;
@@ -273,6 +287,7 @@ public partial class App : Application
         _shareStartupReady.TrySetResult(true);
         await initialShare;
         DrainActivations();
+        _window.QueueStartupWhatsNew();
     }
 
     private bool CanReceiveSharedActivation() => _activationReady && !_exiting && _profileOperation is null;

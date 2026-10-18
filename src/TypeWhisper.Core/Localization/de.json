@@ -3136,6 +3136,19 @@
   "JSON output": "JSON-Ausgabe",
   "Copy to clipboard": "In die Zwischenablage kopieren",
   "Installed at {0}": "Installiert unter {0}",
+  "What's new in TypeWhisper": "Neu in TypeWhisper",
+  "A quick look at the latest improvements. Your settings stay as they are.": "Die neuesten Verbesserungen auf einen Blick. Deine Einstellungen bleiben erhalten.",
+  "Find your spoken language faster": "Deine gesprochene Sprache schneller finden",
+  "Search long selection lists by typing a language name. Open Dictation in Settings to try it.": "Durchsuche lange Auswahllisten, indem du einen Sprachnamen eingibst. Probiere es in den Einstellungen unter Diktat aus.",
+  "An app icon for your overlay": "Das App-Symbol als Overlay",
+  "Choose the TypeWhisper app icon as a compact overlay widget in Appearance settings.": "Wähle das TypeWhisper-App-Symbol als kompaktes Overlay-Widget in den Einstellungen unter Darstellung.",
+  "Browser dictation within reach": "Diktieren im Browser leicht finden",
+  "Find the browser extension in Integrations, alongside Raycast and the command-line tool.": "Du findest die Browser-Erweiterung unter Integrationen, zusammen mit Raycast und dem Kommandozeilen-Tool.",
+  "Skip": "Überspringen",
+  "Got it": "Verstanden",
+  "Review the latest feature highlights.": "Sieh dir die wichtigsten Neuerungen noch einmal an.",
+  "Finish recording or processing before viewing what's new.": "Beende die Aufnahme oder Verarbeitung, bevor du die Neuerungen öffnest.",
+  "What's new could not be opened. Try again.": "Die Neuerungen konnten nicht geöffnet werden. Versuche es erneut.",
   "Your organization provides the commercial license on this device. Activation happens automatically and the key is not shown.": "Deine Organisation stellt die kommerzielle Lizenz auf diesem Gerät bereit. Die Aktivierung erfolgt automatisch, der Schlüssel wird nicht angezeigt.",
   "The organization license could not be activated. Check the network connection and contact your administrator if this continues.": "Die Organisationslizenz konnte nicht aktiviert werden. Prüfe die Netzwerkverbindung und kontaktiere bei anhaltenden Problemen deine Administration.",
   "Retry activation": "Aktivierung erneut versuchen",
@@ -3186,5 +3199,6 @@
   "Not allowed": "Nicht erlaubt",
   "Configurable": "Konfigurierbar",
   "This plugin processes content in the cloud, which your organization has turned off.": "Dieses Plugin verarbeitet Inhalte in der Cloud, was deine Organisation deaktiviert hat.",
-  "Your organization's policy does not allow installing these plugins: {0}. Their settings and models were preserved.": "Die Richtlinie deiner Organisation erlaubt die Installation dieser Plugins nicht: {0}. Ihre Einstellungen und Modelle wurden beibehalten."
+  "Your organization's policy does not allow installing these plugins: {0}. Their settings and models were preserved.": "Die Richtlinie deiner Organisation erlaubt die Installation dieser Plugins nicht: {0}. Ihre Einstellungen und Modelle wurden beibehalten.",
+  "Open in History": "Im Verlauf öffnen"
 }

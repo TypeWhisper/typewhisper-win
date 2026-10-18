@@ -3136,6 +3136,19 @@
   "JSON output": "JSON 出力",
   "Copy to clipboard": "クリップボードにコピー",
   "Installed at {0}": "インストール先: {0}",
+  "What's new in TypeWhisper": "TypeWhisperの新機能",
+  "A quick look at the latest improvements. Your settings stay as they are.": "最近の改善点を簡単にご紹介します。設定はそのまま保持されます。",
+  "Find your spoken language faster": "音声の言語をすばやく検索",
+  "Search long selection lists by typing a language name. Open Dictation in Settings to try it.": "言語名を入力して長い選択リストを検索できます。設定の「ディクテーション」でお試しください。",
+  "An app icon for your overlay": "オーバーレイにアプリアイコンを表示",
+  "Choose the TypeWhisper app icon as a compact overlay widget in Appearance settings.": "「外観」設定で、TypeWhisperのアプリアイコンをコンパクトなオーバーレイウィジェットとして選択できます。",
+  "Browser dictation within reach": "ブラウザー音声入力を見つけやすく",
+  "Find the browser extension in Integrations, alongside Raycast and the command-line tool.": "「統合」でRaycastやコマンドラインツールと一緒にブラウザー拡張機能を見つけられます。",
+  "Skip": "スキップ",
+  "Got it": "確認しました",
+  "Review the latest feature highlights.": "主な新機能をもう一度確認します。",
+  "Finish recording or processing before viewing what's new.": "新機能を表示する前に、録音または処理を終了してください。",
+  "What's new could not be opened. Try again.": "新機能を表示できませんでした。もう一度お試しください。",
   "Your organization provides the commercial license on this device. Activation happens automatically and the key is not shown.": "この端末の商用ライセンスは組織から提供されています。有効化は自動的に行われ、キーは表示されません。",
   "The organization license could not be activated. Check the network connection and contact your administrator if this continues.": "組織のライセンスを有効化できませんでした。ネットワーク接続を確認し、問題が続く場合は管理者に連絡してください。",
   "Retry activation": "有効化を再試行",
@@ -3186,5 +3199,6 @@
   "Not allowed": "許可されていません",
   "Configurable": "設定可能",
   "This plugin processes content in the cloud, which your organization has turned off.": "このプラグインはコンテンツをクラウドで処理しますが、組織によって無効化されています。",
-  "Your organization's policy does not allow installing these plugins: {0}. Their settings and models were preserved.": "組織のポリシーにより、次のプラグインはインストールできません: {0}。設定とモデルは保持されました。"
+  "Your organization's policy does not allow installing these plugins: {0}. Their settings and models were preserved.": "組織のポリシーにより、次のプラグインはインストールできません: {0}。設定とモデルは保持されました。",
+  "Open in History": "履歴で開く"
 }

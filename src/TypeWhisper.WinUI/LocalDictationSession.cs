@@ -170,6 +170,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     private bool CanStartSessionOperation => !_disposed && !_fileBusy && !_recorderReserved && !_workflowReserved && !IsRecording && _phase is not (DictationPhase.Processing or DictationPhase.Configuring or DictationPhase.LoadingModel);
     internal bool CanChangeProvider => CanStartSessionOperation && !PluginRuntime.IsBusy;
     internal bool CanStartPluginSettingsAction => CanChangeProvider && _gate.CurrentCount > 0;
+    internal bool HasActiveUserWork => _fileBusy || _recorderReserved || _workflowReserved || IsRecording || _phase == DictationPhase.Processing;
+    internal event Action? DictationRequested;
     internal event Action? RecordingStarting;
     internal bool CanSelectModel => !_disposed && !_fileBusy && !_recorderReserved && !_workflowReserved && !IsRecording && _phase is not (DictationPhase.Processing or DictationPhase.Configuring or DictationPhase.LoadingModel) && !Models.Busy && Models.Enabled && !PluginRuntime.IsBusy;
     private IntPtr _target;
@@ -644,6 +646,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     internal Task<string?> StartAsync(AutomaticWorkflowSnapshot workflow) => StartWithRejectionAsync(workflow, null);
     private async Task<string?> StartWithRejectionAsync(AutomaticWorkflowSnapshot? workflow, Action<long>? captureStarted)
     {
+        DictationRequested?.Invoke();
         string? rejection = null;
         await SetRecordingAsync(true, workflow, captureStarted, error => rejection = error);
         return rejection;
