@@ -52,7 +52,8 @@ internal sealed partial class LocalDictationSession
             // Work already inside a refused local engine is cancelled first, before any registry unload is awaited;
             // the gate is then taken once the cancelled operation has let go of it. The full transcription rule
             // applies, so a provider allowlist that excludes the local engine cancels as well.
-            if (Models.Enabled && !UsesRegistryProvider && TranscriptionPolicyRefusal() is not null)
+            if (Models.Enabled && !UsesRegistryProvider && TranscriptionPolicyRefusal() is not null
+                || CtcVocabulary.Enabled && !CtcAllowed)
             {
                 if (_audio.IsRecording || _fileBusy || _phase == DictationPhase.Processing) RequestCancel();
                 _training?.CancelDecode();
@@ -85,7 +86,8 @@ internal sealed partial class LocalDictationSession
                         var dependencyError = await CtcVocabulary.SetEnabledAsync(Models.Enabled && CtcAllowed);
                         LocalPluginError = Models.Error ?? dependencyError ?? LocalPluginError;
                     }
-                    else LocalPluginError = Models.Error ?? LocalPluginError;
+                    // A refusal that cleared without a state change must not linger: the current errors apply.
+                    else LocalPluginError = Models.Error ?? CtcVocabulary.Error;
                     if (LocalPluginError != previousError) Changed?.Invoke();
                     return;
                 }

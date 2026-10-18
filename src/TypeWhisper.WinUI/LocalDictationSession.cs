@@ -653,10 +653,9 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     {
         DictationRequested?.Invoke();
         DictationStartRejection? rejection = null;
-        // Judged at the moment of the rejection, while a workflow's own provider is still active: a policy refusal
-        // is told apart from other rejections before the regular provider is restored. The result stays with this
-        // start, so concurrent starts keep their own.
-        await SetRecordingAsync(true, workflow, captureStarted, error => rejection = new(error, error == TranscriptionPolicyRefusal()));
+        // The rejection says itself whether policy was the reason, so a workflow's own provider that was restored
+        // meanwhile changes nothing. The result stays with this start, so concurrent starts keep their own.
+        await SetRecordingAsync(true, workflow, captureStarted, (error, policy) => rejection = new(error, policy));
         return rejection;
     }
     private bool _stopPending;
@@ -713,7 +712,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     }
 
     private async Task SetRecordingAsync(bool? recording, AutomaticWorkflowSnapshot? workflow = null, Action<long>? captureStarted = null,
-        Action<string>? rejected = null, bool adoptEarlyCapture = false)
+        Action<string, bool>? rejected = null, bool adoptEarlyCapture = false)
     {
         // Shutdown stops a capture that is never adopted.
         if (_disposed) { if (adoptEarlyCapture) { _earlyCapture = false; _gate.Release(); } return; }
@@ -800,7 +799,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 if (TranscriptionPolicyRefusal() is { } denied)
                 {
                     AppDiagnostics.Write("dictation.policy-refused");
-                    rejected?.Invoke(denied);
+                    rejected?.Invoke(denied, true);
                     // The notice carries the reason; a start that never captured does not flash the overlay's error state.
                     SetStatus(denied);
                     return;

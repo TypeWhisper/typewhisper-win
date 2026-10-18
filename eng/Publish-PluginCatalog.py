@@ -331,6 +331,8 @@ def main():
                 update_feed([], refreshed)
                 committed = builder.catalog_entries(refresh_feed(current, refreshed))
                 verification = [committed.get(entry["id"], entry) for entry in verification]
+                verified = {entry["id"] for entry in verification}
+                verification += [committed[entry["id"]] for entry in refreshed if entry["id"] in committed and entry["id"] not in verified]
             changes = verification
             api("pages/builds", method="POST")
             wait_for_live(changes)

@@ -62,7 +62,7 @@ internal sealed partial class LocalDictationSession
 
     // Reports a configuration failure without treating it as cancellation:
     // a previously canceled recording may still own the operation token.
-    private bool RejectTask(string? selectedTask, TranscriptionTask globalTask, Action<string>? rejected)
+    private bool RejectTask(string? selectedTask, TranscriptionTask globalTask, Action<string, bool>? rejected)
     {
         try
         {
@@ -71,14 +71,14 @@ internal sealed partial class LocalDictationSession
         }
         catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException)
         {
-            rejected?.Invoke(ex.Message);
+            rejected?.Invoke(ex.Message, false);
             SetStatus(ex.Message, DictationPhase.Error);
             return true;
         }
     }
 
     // Rejects an explicitly requested language the active model cannot use before microphone capture.
-    private bool RejectLanguage(string? language, Action<string>? rejected)
+    private bool RejectLanguage(string? language, Action<string, bool>? rejected)
     {
         try
         {
@@ -87,7 +87,7 @@ internal sealed partial class LocalDictationSession
         }
         catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException)
         {
-            rejected?.Invoke(ex.Message);
+            rejected?.Invoke(ex.Message, false);
             SetStatus(ex.Message, DictationPhase.Error);
             return true;
         }

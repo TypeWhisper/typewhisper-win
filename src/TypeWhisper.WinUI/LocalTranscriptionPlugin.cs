@@ -146,11 +146,11 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
                 Feedback = Loc.T("Choose a downloaded model or download one below.");
                 return;
             }
-            // An activation failure keeps the package available for download/retry.
+            // An activation failure keeps the package available for download/retry; a policy refusal after the
+            // load already released the engine and recorded its reason.
             try { await ActivateCoreAsync(selected, CancellationToken.None); }
+            catch (TypeWhisper.Core.Models.ManagedPolicyDeniedException) { }
             catch (Exception ex) when (ex is not OutOfMemoryException) { Error = Loc.T("Could not load model: {0}", ex.Message); }
-            // Judged once more after the model loaded: a policy that changed during the load releases the engine.
-            if (PackageRefusal?.Invoke() is { } refusedAfterModel) { await ReleaseAsync(); _policyRefused = true; Error = refusedAfterModel; }
         }
         finally { Busy = false; _operations.Release(); Changed?.Invoke(); }
     }
@@ -201,6 +201,7 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
         if (!await _operations.WaitAsync(0, ct)) throw new InvalidOperationException(Loc.T("A model operation is already in progress."));
         Busy = true; Error = null; Feedback = null; Changed?.Invoke();
         try { ObjectDisposedException.ThrowIf(_disposed, this); await ActivateCoreAsync(modelId, ct, persistSelection); }
+        catch (TypeWhisper.Core.Models.ManagedPolicyDeniedException) { throw; }
         catch (Exception ex) when (ex is not OutOfMemoryException) { Error = Loc.T("Could not load model: {0}", ex.Message); throw; }
         finally { Busy = false; _operations.Release(); Changed?.Invoke(); }
     }
@@ -284,6 +285,14 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
             catch (Exception rollback) when (rollback is not OutOfMemoryException)
             { _host.Log(PluginLogLevel.Error, "Could not restore previous model: " + rollback.Message); }
             throw;
+        }
+        // Judged once more after the load, for every operation that loads a model: a policy that changed during the
+        // await releases the engine instead of publishing the model.
+        if (PackageRefusal?.Invoke() is { } refusedAfterLoad)
+        {
+            await ReleaseAsync();
+            _policyRefused = true; Error = refusedAfterLoad; Feedback = null;
+            throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("plugin", refusedAfterLoad);
         }
     }
 

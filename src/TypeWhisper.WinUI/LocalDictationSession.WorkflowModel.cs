@@ -23,7 +23,7 @@ internal sealed partial class LocalDictationSession
     }
 
     // Loads a dictation workflow's transcription model without saving it as the selection.
-    private async Task<bool> RejectWorkflowModelAsync(string? model, Action<string>? rejected)
+    private async Task<bool> RejectWorkflowModelAsync(string? model, Action<string, bool>? rejected)
     {
         _languageBeforeWorkflowModel = null;
         if (string.IsNullOrWhiteSpace(model)) return false;
@@ -38,8 +38,16 @@ internal sealed partial class LocalDictationSession
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             AppDiagnostics.Write("dictation.workflow-model.failed " + ex.GetType().Name);
+            // A model of a package the policy unloaded reads as missing; the policy reason is reported instead.
+            if (model.IndexOf(':') is > 0 and var separator
+                && PluginRuntime.SelectionPackageRefusal(RegistrySelectionId(model[..separator])) is { } refusedByPolicy)
+            {
+                rejected?.Invoke(refusedByPolicy, true);
+                SetStatus(refusedByPolicy);
+                return true;
+            }
             var message = Loc.T("This workflow's transcription model could not be loaded. Download or set it up in Dictation, or choose another model in the workflow.");
-            rejected?.Invoke(message);
+            rejected?.Invoke(message, false);
             SetStatus(message, DictationPhase.Error);
             return true;
         }
