@@ -99,6 +99,9 @@ public sealed class PortablePluginStore
                     if (bootstrap is not null && manifest.Id != Path.GetFileName(package.Directory))
                         throw new InvalidDataException("A selected bundle identity does not match its directory.");
                     if (manifest.IsInternalDependency) continue;
+                    // A bundle the policy refuses is not bootstrapped: no copy, no hook, no receipt. It can be
+                    // installed from the catalog once the policy allows it.
+                    if (ExecutionRefusal(manifest.Id, package.Directory) is not null) continue;
                     var token = Guid.NewGuid().ToString("N");
                     var target = PackagePath(token);
                     CopyTree(package.Directory, target);
@@ -107,6 +110,10 @@ public sealed class PortablePluginStore
                         await PortablePluginPackage.RunInstallationHookAsync(target, _services(manifest.Id), _host, null, uninstall: false, ct);
                     next.Add(manifest.Id, new(token, manifest.Version));
                 }
+                // Judged once more before the index is written: a policy that changed during the hooks keeps a
+                // refused bundle out; its directory is removed with the other orphans below.
+                foreach (var (id, receipt) in next.ToArray())
+                    if (RefusedForExecution(id, PackagePath(receipt.Directory))) next.Remove(id);
             }
             Commit(next);
             _initialized = true;

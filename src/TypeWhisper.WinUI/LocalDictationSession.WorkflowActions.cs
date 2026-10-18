@@ -47,7 +47,12 @@ internal sealed partial class LocalDictationSession
         var action = FindWorkflowAction(workflow.Output.TargetActionPluginId);
         var memory = FindWorkflowMemory(workflow.Behavior.MemoryPluginId);
         if (!string.IsNullOrWhiteSpace(workflow.Output.TargetActionPluginId) && action is null)
+        {
+            // A package the policy unloaded reads as missing; the policy reason is reported instead.
+            if (PluginRuntime.PackageRefusal(workflow.Output.TargetActionPluginId!) is { } refusedAction)
+                throw new ManagedPolicyDeniedException("action", refusedAction);
             throw new InvalidOperationException(Loc.T("The workflow action is unavailable. Enable its plugin first."));
+        }
         var text = await ManualWorkflowRunner.RunAsync(workflow, input,
             (provider, model) => LlmProviders.Any(p => p.SelectionId == provider && p.Ready && p.Models.Any(m => m.Id == model)),
             ProcessLlmAsync, ct, (id, query, token) => RecallMemoryAsync(memory, id, query, token));

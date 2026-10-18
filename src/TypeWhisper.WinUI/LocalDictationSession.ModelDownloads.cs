@@ -117,6 +117,7 @@ internal sealed partial class LocalDictationSession
             {
                 _selection.SetSetting("Provider", SessionProviderId(model.SelectionId));
                 _selection.SetSetting("ProviderPluginId", model.PluginId);
+                _selection.SetSetting("ProviderName", PluginRuntime.TranscriptionProviders.FirstOrDefault(provider => provider.SelectionId == model.SelectionId)?.Name ?? model.SelectionId);
                 _providerId = SessionProviderId(model.SelectionId);
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)

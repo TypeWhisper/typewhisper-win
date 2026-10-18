@@ -77,6 +77,7 @@ internal sealed partial class LocalDictationSession
             {
                 _selection.SetSetting("Provider", provider.Id);
                 _selection.SetSetting("ProviderPluginId", provider.PluginId);
+                _selection.SetSetting("ProviderName", provider.Name);
                 _providerId = provider.Id;
             }
             return modelId;

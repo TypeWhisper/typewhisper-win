@@ -146,15 +146,27 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     internal string ActiveChoiceId => UsesRegistryProvider ? _providerId + ":" + ActiveModelId : Models.ActiveModelId ?? "";
     internal string ActiveProviderId => _providerId;
     internal string ActiveEngineId => UsesRegistryProvider ? ActiveRegistryProvider?.EngineId ?? RegistrySelectionId(_providerId) : "sherpa-onnx";
-    internal IReadOnlyList<DictationProviderOption> DictationProviders => new DictationProviderOption[]
+    internal IReadOnlyList<DictationProviderOption> DictationProviders
     {
-        new("local", LocalTranscriptionPlugin.PluginId, "NVIDIA Parakeet", Models.Enabled, true, false,
-            Models.ActiveModelId, Models.Models.Select(model => new DictationModelOption(model.Model.Id, model.Model.DisplayName, model.Downloaded)).ToArray())
-            { Refusal = LocalTranscriptionRefusal() }
-    }.Where(provider => Packages.Store.IsInstalled(provider.PluginId)).Concat(PluginRuntime.TranscriptionProviders
-        .Select(provider => new DictationProviderOption(SessionProviderId(provider.SelectionId), provider.PluginId, provider.Name, true, provider.Ready, !PackageIsLocal(provider.PluginId),
-            provider.SelectedModelId, provider.ModelStates.Select(model => new DictationModelOption(model.ModelId, model.DisplayName,
-                model.SupportsDownload ? model.Downloaded : provider.Ready)).ToArray()) { Refusal = PluginRuntime.TranscriptionRefusal(provider.SelectionId) })).ToArray();
+        get
+        {
+            var providers = new DictationProviderOption[]
+            {
+                new("local", LocalTranscriptionPlugin.PluginId, "NVIDIA Parakeet", Models.Enabled, true, false,
+                    Models.ActiveModelId, Models.Models.Select(model => new DictationModelOption(model.Model.Id, model.Model.DisplayName, model.Downloaded)).ToArray())
+                    { Refusal = LocalTranscriptionRefusal() }
+            }.Where(provider => Packages.Store.IsInstalled(provider.PluginId)).Concat(PluginRuntime.TranscriptionProviders
+                .Select(provider => new DictationProviderOption(SessionProviderId(provider.SelectionId), provider.PluginId, provider.Name, true, provider.Ready, !PackageIsLocal(provider.PluginId),
+                    provider.SelectedModelId, provider.ModelStates.Select(model => new DictationModelOption(model.ModelId, model.DisplayName,
+                        model.SupportsDownload ? model.Downloaded : provider.Ready)).ToArray()) { Refusal = PluginRuntime.TranscriptionRefusal(provider.SelectionId) })).ToList();
+            // A saved selection whose package the policy unloaded stays listed, disabled, with the reason, instead
+            // of vanishing from the pickers.
+            if (UsesRegistryProvider && providers.All(provider => provider.Id != _providerId) && SelectedPackageRefusal() is { } refused)
+                providers.Add(new(_providerId, _selection.GetSetting<string>("ProviderPluginId") ?? RegistrySelectionId(_providerId),
+                    _selection.GetSetting<string>("ProviderName") ?? RegistrySelectionId(_providerId), false, false, true, null, []) { Refusal = refused });
+            return providers;
+        }
+    }
     internal Task<string?> SelectProviderModelAsync(string providerId, string modelId) => providerId switch
     {
         "local" => SelectModelAsync(modelId),

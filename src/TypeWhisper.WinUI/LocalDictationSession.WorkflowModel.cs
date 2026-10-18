@@ -40,7 +40,8 @@ internal sealed partial class LocalDictationSession
             AppDiagnostics.Write("dictation.workflow-model.failed " + ex.GetType().Name);
             // A model of a package the policy unloaded reads as missing; the policy reason is reported instead.
             if (model.IndexOf(':') is > 0 and var separator
-                && PluginRuntime.SelectionPackageRefusal(RegistrySelectionId(model[..separator])) is { } refusedByPolicy)
+                && (model[..separator] == "local" ? LocalTranscriptionRefusal()
+                    : PluginRuntime.SelectionPackageRefusal(RegistrySelectionId(model[..separator]))) is { } refusedByPolicy)
             {
                 rejected?.Invoke(refusedByPolicy, true);
                 SetStatus(refusedByPolicy);

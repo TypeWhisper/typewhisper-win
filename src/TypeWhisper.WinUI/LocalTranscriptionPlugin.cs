@@ -247,7 +247,15 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
                 { _host.Log(PluginLogLevel.Error, "Could not restore the previous processing device: " + rollback.Message); }
                 throw;
             }
+            // Judged once more after the load: a policy that changed during the switch releases the engine.
+            if (PackageRefusal?.Invoke() is { } refusedAfterSwitch)
+            {
+                await ReleaseAsync();
+                _policyRefused = true; Error = refusedAfterSwitch; Feedback = null;
+                throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("plugin", refusedAfterSwitch);
+            }
         }
+        catch (TypeWhisper.Core.Models.ManagedPolicyDeniedException) { throw; }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             Feedback = null;
