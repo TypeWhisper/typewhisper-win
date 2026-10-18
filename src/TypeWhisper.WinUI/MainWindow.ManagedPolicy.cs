@@ -40,11 +40,11 @@ public sealed partial class MainWindow
 
     // Reconciliations run one after another and read the policy once they hold the gate, so the last run applies
     // the newest snapshot and an older read or write can never overwrite a newer value.
-    internal async Task ApplyStartupPolicyAsync()
+    internal async Task<StartupPolicyOutcome?> ApplyStartupPolicyAsync()
     {
         await _startupPolicyGate.WaitAsync();
-        try { await StartupPolicy.ApplyAsync(WinUIManagedPolicy.Current, SetupCompleted); }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("policy.startup.apply-failed", ex); }
+        try { return await StartupPolicy.ApplyAsync(WinUIManagedPolicy.Current, SetupCompleted); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("policy.startup.apply-failed", ex); return null; }
         finally { _startupPolicyGate.Release(); }
     }
 

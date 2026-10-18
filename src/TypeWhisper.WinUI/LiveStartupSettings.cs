@@ -8,9 +8,10 @@ namespace TypeWhisper.WinUI;
 
 internal static class LiveStartupSettings
 {
-    // The reconciler applies LaunchAtLogin and remembers the user's own choice; the row follows its outcome.
+    // The reconciler applies LaunchAtLogin and remembers the user's own choice; the row follows its outcome. Policy
+    // passes run through the window's serialized entry point so the row never races the policy-change handler.
     internal static async void Configure(string category, StackPanel content, List<ChoicePicker> pickers, IStartupRegistration registration,
-        StartupPolicyReconciler policy, Func<bool> setupCompleted)
+        StartupPolicyReconciler policy, Func<Task<StartupPolicyOutcome?>> apply)
     {
         if (category != "General") return;
         var row = SettingsRow.Require(content, "AutostartEnabled").Reset(pickers);
@@ -28,7 +29,7 @@ internal static class LiveStartupSettings
             row.Status = outcome.State.Error ?? outcome.LockReason ?? outcome.Notice ?? "";
             updating = false;
         }
-        async Task ApplyPolicyAsync() => Show(await policy.ApplyAsync(WinUIManagedPolicy.Current, setupCompleted()));
+        async Task ApplyPolicyAsync() { if (await apply() is { } outcome) Show(outcome); }
         toggle.Toggled += async (_, _) =>
         {
             if (updating) return;

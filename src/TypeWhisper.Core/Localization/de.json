@@ -3172,5 +3172,6 @@
   "Your organization's update policy could not be read. App updates wait until it is readable.": "Die Update-Richtlinie deiner Organisation konnte nicht gelesen werden. App-Updates warten, bis sie lesbar ist.",
   "Version {0} is older than your installed version.": "Version {0} ist älter als deine installierte Version.",
   "The update policy changed. Check for updates again.": "Die Update-Richtlinie hat sich geändert. Suche erneut nach Updates.",
-  "Last change {0}": "Letzte Änderung {0}"
+  "Last change {0}": "Letzte Änderung {0}",
+  "Version {0} is available. Check for updates in Settings to install it.": "Version {0} ist verfügbar. Suche in den Einstellungen nach Updates, um sie zu installieren."
 }

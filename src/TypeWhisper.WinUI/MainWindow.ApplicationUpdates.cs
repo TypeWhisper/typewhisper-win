@@ -97,9 +97,13 @@ public sealed partial class MainWindow
     private void ShowApplicationUpdateNotice(AppUpdateOffer offer)
     {
         if (_closing || _profileRestoreClosing) return;
-        var installable = ApplicationUpdates.CanInstall;
+        // A policy change since the notification may have dropped the offer; only the offer the controller still
+        // holds can be installed from here, otherwise Settings runs a fresh check.
+        var current = ApplicationUpdates.Offer?.Version == offer.Version;
+        var installable = ApplicationUpdates.CanInstall && current;
         var message = installable
             ? Loc.T("Version {0} is available. You have version {1}.", offer.Version, WindowsApplicationUpdates.CurrentVersion)
+            : !current && ApplicationUpdates.CanCheck ? Loc.T("Version {0} is available. Check for updates in Settings to install it.", offer.Version)
             : Loc.T("Version {0} is available. Installation is managed by your organization.", offer.Version);
         ShowNotice(new AppNotice(message, Loc.T("Update available"), IsError: false, Duration: TimeSpan.FromMinutes(1), Actions: installable
             ? [

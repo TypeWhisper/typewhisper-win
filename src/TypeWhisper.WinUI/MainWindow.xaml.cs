@@ -506,7 +506,7 @@ public sealed partial class MainWindow : Window
             _settingsWindow.ConfigureLiveSettings = (category, content, pickers) =>
             {
                 dictationSettings.Configure(category, content, pickers);
-                LiveStartupSettings.Configure(category, content, pickers, StartupRegistration, StartupPolicy, () => SetupCompleted);
+                LiveStartupSettings.Configure(category, content, pickers, StartupRegistration, StartupPolicy, ApplyStartupPolicyAsync);
                 LiveLanguageSettings.Configure(category, content, pickers, AppLanguage.Store, RestartWhenIdleAsync);
                 LiveThemeSettings.Configure(category, content, pickers, AppTheme.Store, RestartWhenIdleAsync);
                 LiveApplicationUpdateSettings.Configure(category, content, pickers, ApplicationUpdates,

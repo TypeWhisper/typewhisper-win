@@ -159,6 +159,44 @@ public sealed class StartupPolicyTests : IDisposable
     }
 
     [Fact]
+    public void FailedSaveLeavesTheStoredStateUntouched()
+    {
+        Directory.CreateDirectory(Path.Combine(_root, "startup-policy.json"));
+        var store = Store();
+
+        Assert.False(store.Save(new(UserChoice: true, RetainedBeforeEnforcement: false)));
+
+        Assert.Equal(new StartupPolicyPreferences(), store.Current);
+        Assert.NotNull(store.Error);
+    }
+
+    [Fact]
+    public async Task RecommendationWaitsForAReadableStoreAndAKnownRegistration()
+    {
+        var snapshot = Build(recommended: [Number(ManagedPolicyKeys.LaunchAtLogin, 1)]);
+
+        // An unreadable preference file may hold the user's choice: no recommendation.
+        var path = Path.Combine(_root, "startup-policy.json");
+        Directory.CreateDirectory(_root);
+        File.WriteAllText(path, "{not json");
+        var unreadable = new Registration { Enabled = false };
+        await new StartupPolicyReconciler(unreadable, new StartupPolicyStore(path)).ApplyAsync(snapshot, setupCompleted: false);
+        Assert.False(unreadable.Enabled);
+        Assert.Equal(0, unreadable.Writes);
+
+        // A registration that could not be read is retried, not treated as the user's decision.
+        var unknown = new Registration { Enabled = false, Unknown = true };
+        var unknownStore = new StartupPolicyStore(Path.Combine(_root, "unknown", "startup-policy.json"));
+        var reconciler = new StartupPolicyReconciler(unknown, unknownStore);
+        await reconciler.ApplyAsync(snapshot, setupCompleted: false);
+        Assert.False(unknownStore.Current.RecommendationApplied);
+        unknown.Unknown = false;
+        await reconciler.ApplyAsync(snapshot, setupCompleted: false);
+        Assert.True(unknown.Enabled);
+        Assert.True(unknownStore.Current.RecommendationApplied);
+    }
+
+    [Fact]
     public async Task RecommendationIsFinalOnlyOnceItTookEffect()
     {
         var snapshot = Build(recommended: [Number(ManagedPolicyKeys.LaunchAtLogin, 1)]);
@@ -188,13 +226,15 @@ public sealed class StartupPolicyTests : IDisposable
         public bool Enabled { get; set; }
         public bool CanChange { get; set; } = true;
         public bool FailWrites { get; set; }
+        public bool Unknown { get; set; }
         public int Writes { get; private set; }
 
-        public Task<StartupRegistrationState> ReadAsync() => Task.FromResult(new StartupRegistrationState(Enabled, CanChange, null));
+        public Task<StartupRegistrationState> ReadAsync() =>
+            Task.FromResult(Unknown ? new StartupRegistrationState(false, false, "unreadable", Unknown: true) : new StartupRegistrationState(Enabled, CanChange, null));
 
         public Task<StartupRegistrationState> SetEnabledAsync(bool enabled)
         {
-            if (CanChange && !FailWrites && Enabled != enabled)
+            if (!Unknown && CanChange && !FailWrites && Enabled != enabled)
             {
                 Enabled = enabled;
                 Writes++;

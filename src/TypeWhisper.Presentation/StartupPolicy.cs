@@ -34,13 +34,13 @@ public sealed class StartupPolicyStore
         { Error = Loc.T("The startup policy state could not be loaded."); }
     }
 
-    /// <summary>Saves atomically; a failed write keeps the in-memory state for this session.</summary>
+    /// <summary>Saves atomically; <see cref="Current"/> advances only once the file holds the new state.</summary>
     public bool Save(StartupPolicyPreferences next)
     {
-        Current = next;
         try
         {
             AtomicFileWriter.WriteAllText(_path, JsonSerializer.Serialize(next));
+            Current = next;
             Error = null;
             return true;
         }
@@ -99,14 +99,17 @@ public sealed class StartupPolicyReconciler(IStartupRegistration registration, S
             return new(state, false, null);
         }
 
-        if (snapshot.Recommended(ManagedPolicyKeys.LaunchAtLogin) is { } recommended
+        // A recommendation needs a readable preference state: an unreadable file may hold the user's own choice.
+        if (snapshot.Recommended(ManagedPolicyKeys.LaunchAtLogin) is { } recommended && store.Error is null
             && store.Current.UserChoice is null && !setupCompleted && !store.Current.RecommendationApplied)
         {
             if (state.CanChange && state.IsEnabled != recommended.IsTrue)
                 state = await registration.SetEnabledAsync(recommended.IsTrue);
             // The recommendation is final once the registration matches it, or once Windows itself keeps the app from
-            // changing it (a user turned startup off in Settings); a failed write is retried on the next pass.
-            if ((state.IsEnabled == recommended.IsTrue || !state.CanChange) && !store.Save(store.Current with { RecommendationApplied = true }))
+            // changing it (a user turned startup off in Settings). An unknown registration or a failed write is
+            // retried on the next pass.
+            if ((state.IsEnabled == recommended.IsTrue || (!state.CanChange && !state.Unknown))
+                && !store.Save(store.Current with { RecommendationApplied = true }))
                 return new(state, false, null, store.Error);
         }
         return new(state, false, null);
