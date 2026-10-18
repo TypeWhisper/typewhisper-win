@@ -64,7 +64,7 @@ public sealed partial class WorkflowsView
         provider.Configure(Loc.T("Provider"), "plugin", Loc.T("Default workflow LLM provider"));
         model.Configure(Loc.T("Model"), "chip", Loc.T("Default workflow LLM model"));
         var saved = ReadDefaults();
-        provider.SetOptions(Providers.Where(p => p.Id != WorkflowLlmDefaults.Inherit).ToArray(), saved?.Provider ?? "none");
+        provider.SetOptions(ProvidersFor(saved?.Provider).Where(p => p.Id != WorkflowLlmDefaults.Inherit).ToArray(), saved?.Provider ?? "none");
         void RefreshModels(string selected) => model.SetOptions(
             _session.LlmProviders.FirstOrDefault(p => p.SelectionId == provider.SelectedId)?.Models
                 .Select(m => new Choice(m.Id, m.DisplayName, m.Id)).ToArray() ?? [], selected, Loc.T("Choose a model"));

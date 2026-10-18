@@ -332,6 +332,13 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
             if (activeModel is not null) await ActivateCoreAsync(activeModel, CancellationToken.None, persistSelection: false);
             else
             {
+                // A package the policy refuses by now restores nothing: the engine is released and the reason recorded.
+                if (PackageRefusal?.Invoke() is { } refusedBeforeRestore)
+                {
+                    await ReleaseAsync();
+                    _policyRefused = true; Error = refusedBeforeRestore; Feedback = null;
+                    throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("plugin", refusedBeforeRestore);
+                }
                 await _lease!.Engine.UnloadModelAsync();
                 ActiveModelId = null;
                 if (selectedModel is not null) await _lease.Engine.SelectModelAsync(selectedModel, CancellationToken.None);
@@ -342,6 +349,13 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
                     await ReleaseAsync();
                     _lease = await _load();
                     Generation++;
+                    // Judged once more after the reload: a policy that changed meanwhile releases the fresh package.
+                    if (PackageRefusal?.Invoke() is { } refusedAfterReload)
+                    {
+                        await ReleaseAsync();
+                        _policyRefused = true; Error = refusedAfterReload; Feedback = null;
+                        throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("plugin", refusedAfterReload);
+                    }
                     _lease.Engine.SetAccelerationPreference(Acceleration);
                     if (_lease.Engine.SelectedModelId is not null)
                         throw new InvalidOperationException("The local plugin did not restore its unselected state.");

@@ -36,6 +36,8 @@ internal sealed partial class LocalDictationSession
         }
         provider ??= ApiModelProvider(_providerId)
             ?? throw new LocalApiRequestException(409, "Choose a transcription provider first.");
+        // A provider the policy refuses answers 403, the documented policy contract, before any readiness conflict.
+        if (provider.Refusal is { } refusedProvider) throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("transcription", refusedProvider);
         if (!provider.Enabled) throw new LocalApiRequestException(409, "Enable this transcription provider first.");
         if (provider.Cloud && !provider.Configured) throw new LocalApiRequestException(409, "Configure this transcription provider first.");
         modelId ??= provider.SelectedModelId ?? provider.PreferredModelId
