@@ -896,11 +896,16 @@ public static class CloudFolderSyncEngine
                 {
                     using var document = JsonDocument.Parse(File.ReadAllText(file));
                     var envelope = document.RootElement;
+                    if (!HasReadableOperationEnvelope(envelope))
+                    {
+                        unreadableHistory = true;
+                        continue;
+                    }
                     // Valid Mac history and future schemas are not partial files.
                     if (envelope.TryGetProperty("collection", out var collection) && collection.ValueKind == JsonValueKind.String && collection.GetString() == "history" ||
                         envelope.TryGetProperty("schemaVersion", out var schema) && schema.TryGetInt32(out var version) && version > 2) continue;
                     var operation = envelope.Deserialize<CloudFolderSyncOperation>(CloudFolderSyncJson.Options);
-                    if (operation is not null && HasReadableOperationStructure(envelope, operation))
+                    if (operation is not null && HasReadableOperationStructure(operation))
                     {
                         // Keep readable old payloads as migration evidence, regardless
                         // of current import limits. Defaults from partial objects are
@@ -920,13 +925,34 @@ public static class CloudFolderSyncEngine
         return operations;
     }
 
-    private static bool HasReadableOperationStructure(JsonElement envelope, CloudFolderSyncOperation operation)
+    private static bool HasReadableOperationEnvelope(JsonElement envelope)
     {
-        foreach (var field in new[] { "schemaVersion", "operationId", "deviceId", "collection", "itemId", "kind", "updatedAt" })
-            if (!envelope.TryGetProperty(field, out _)) return false;
-        return operation.SchemaVersion is 1 or 2 && !string.IsNullOrWhiteSpace(operation.OperationId) &&
-            !string.IsNullOrWhiteSpace(operation.DeviceId) && !string.IsNullOrWhiteSpace(operation.ItemId) &&
-            operation.UpdatedAt != default && Enum.IsDefined(operation.Collection) && Enum.IsDefined(operation.Kind) &&
+        if (envelope.ValueKind != JsonValueKind.Object ||
+            !envelope.TryGetProperty("schemaVersion", out var schema) || schema.ValueKind != JsonValueKind.Number ||
+            !schema.TryGetInt32(out var version) || version < 1) return false;
+        foreach (var field in new[] { "operationId", "deviceId", "itemId" })
+            if (!envelope.TryGetProperty(field, out var value) || value.ValueKind != JsonValueKind.String ||
+                string.IsNullOrWhiteSpace(value.GetString())) return false;
+        // Future schemas may add collection/kind values. Preserve support for
+        // both string and integer enum encodings without interpreting their payloads.
+        foreach (var field in new[] { "collection", "kind" })
+        {
+            if (!envelope.TryGetProperty(field, out var value)) return false;
+            if (value.ValueKind == JsonValueKind.String)
+            {
+                if (string.IsNullOrWhiteSpace(value.GetString())) return false;
+            }
+            else if (value.ValueKind != JsonValueKind.Number || !value.TryGetInt32(out _)) return false;
+        }
+        if (version <= 2 && !Enum.IsDefined(envelope.GetProperty("kind").Deserialize<CloudFolderSyncOperationKind>(CloudFolderSyncJson.Options)))
+            return false;
+        return envelope.TryGetProperty("updatedAt", out var updatedAt) && updatedAt.ValueKind == JsonValueKind.String &&
+            updatedAt.Deserialize<DateTime>(CloudFolderSyncJson.Options) != default;
+    }
+
+    private static bool HasReadableOperationStructure(CloudFolderSyncOperation operation)
+    {
+        return operation.SchemaVersion is 1 or 2 && Enum.IsDefined(operation.Collection) && Enum.IsDefined(operation.Kind) &&
             (operation.Kind == CloudFolderSyncOperationKind.Delete ||
              operation.Collection == UserDataSyncCollection.Dictionary && operation.Dictionary is { Original: not null } d &&
                 Enum.IsDefined(d.EntryType) && d.CreatedAt != default && d.UpdatedAt != default ||

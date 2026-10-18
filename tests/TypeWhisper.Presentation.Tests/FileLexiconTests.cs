@@ -126,6 +126,48 @@ public sealed class FileLexiconTests : IDisposable
     }
 
     [Fact]
+    public async Task RegexCanBeEditedWhenPatternEqualsReplacement()
+    {
+        var store = new Lexicon(DictionaryPath, SnippetPath);
+        Assert.Null(store.Import("""[{"type":"correction","original":"a+","replacement":"a+","isRegex":true}]""", snippets: false, replace: false));
+        var entry = Assert.Single(store.Entries);
+        Assert.Null(store.Save(entry with { CaseSensitive = true, Enabled = false }));
+        var reloaded = new Lexicon(DictionaryPath, SnippetPath);
+        Assert.Null(reloaded.LastError);
+        var saved = Assert.Single(reloaded.Entries);
+        Assert.Equal(entry.Id, saved.Id);
+        Assert.True(saved.IsRegex);
+        Assert.True(saved.CaseSensitive);
+        Assert.False(saved.Enabled);
+        Assert.Equal("a+", saved.Key);
+        Assert.Equal("a+", saved.Value);
+        Assert.Equal("aaaa AAAA", (await Process(Snapshot(), "aaaa AAAA")).Text);
+        Assert.Null(reloaded.Save(saved with { Enabled = true }));
+        Assert.Equal("a+ AAAA", (await Process(Snapshot(), "aaaa AAAA")).Text);
+        Assert.Null(reloaded.Save(Assert.Single(reloaded.Entries) with { CaseSensitive = false }));
+        Assert.Equal("a+ a+", (await Process(Snapshot(), "aaaa AAAA")).Text);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void EqualPatternAndReplacementKeepsLiteralNoOpValidation(bool regex)
+    {
+        var store = new Lexicon(DictionaryPath, SnippetPath);
+        var error = store.Save(new(Guid.NewGuid(), LexiconKind.Correction, "a+", "a+") { IsRegex = regex });
+        if (regex)
+        {
+            Assert.Null(error);
+            Assert.True(Assert.Single(new Lexicon(DictionaryPath, SnippetPath).Entries).IsRegex);
+        }
+        else
+        {
+            Assert.NotNull(error);
+            Assert.Empty(new Lexicon(DictionaryPath, SnippetPath).Entries);
+        }
+    }
+
+    [Fact]
     public void InvalidRegexEditPreservesStoredRuleAndRemainsLoadable()
     {
         var store = new Lexicon(DictionaryPath, SnippetPath);

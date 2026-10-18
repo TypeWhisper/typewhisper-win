@@ -229,7 +229,7 @@ internal sealed class Lexicon
         if (draft.Kind == LexiconKind.Snippet && string.IsNullOrWhiteSpace(draft.Value)) return Loc.T("Enter the replacement text.");
         if (draft.Value.Length > 10000) return Loc.T("Keep the replacement below 10,001 characters.");
         if (draft.Tags.Length > 300) return Loc.T("Keep tags below 301 characters.");
-        if (draft.Kind == LexiconKind.Correction && key.Equals(draft.Value.Trim(), StringComparison.Ordinal)) return Loc.T("The correction must differ from the original phrase.");
+        if (draft.Kind == LexiconKind.Correction && !draft.IsRegex && key.Equals(draft.Value.Trim(), StringComparison.Ordinal)) return Loc.T("The correction must differ from the original phrase.");
         if ((draft.Kind != LexiconKind.Snippet || _snippets is null) && _entries.Any(entry => entry.Id != draft.Id && entry.Kind == draft.Kind &&
             (draft.Kind != LexiconKind.Correction || entry.IsRegex == draft.IsRegex) && entry.Key.Equals(key,
                 draft.IsRegex || entry.CaseSensitive && draft.CaseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase)))

@@ -850,7 +850,18 @@ public sealed class CloudFolderSyncTests : IDisposable
             Assert.Equal(0, (await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, now)).OperationsWritten);
     }
 
+    public static IEnumerable<object[]> IncompleteIgnoredOperationCases()
+    {
+        foreach (var category in new[] { "history", "future" })
+        foreach (var defect in new[] { "minimal", "schemaVersion", "operationId", "deviceId", "collection", "itemId", "kind", "updatedAt", "invalidDate", "blankId", "invalidKind" })
+        foreach (var deleted in new[] { false, true })
+            yield return [category + ":" + defect, deleted];
+        yield return ["history:unknownKind", false];
+        yield return ["history:unknownKind", true];
+    }
+
     [Theory]
+    [MemberData(nameof(IncompleteIgnoredOperationCases))]
     [InlineData("empty", false)]
     [InlineData("empty", true)]
     [InlineData("dictionary", false)]
@@ -867,7 +878,27 @@ public sealed class CloudFolderSyncTests : IDisposable
         Directory.CreateDirectory(folder);
         var incomplete = System.Text.Json.Nodes.JsonNode.Parse(CloudFolderSyncJson.Serialize(legacy))!.AsObject();
         incomplete["operationId"] = "unapplied-partial";
-        if (missingField == "empty") incomplete.Clear(); else incomplete.Remove(missingField);
+        var parts = missingField.Split(':');
+        if (parts.Length == 2)
+        {
+            var history = parts[0] == "history";
+            incomplete["collection"] = history ? "history" : "dictionary";
+            incomplete["schemaVersion"] = history ? 1 : 3;
+            switch (parts[1])
+            {
+                case "minimal":
+                    incomplete.Clear();
+                    if (history) incomplete["collection"] = "history"; else incomplete["schemaVersion"] = 3;
+                    break;
+                case "invalidDate": incomplete["updatedAt"] = "not-a-date"; break;
+                case "blankId": incomplete["operationId"] = " "; break;
+                case "invalidKind": incomplete["kind"] = new System.Text.Json.Nodes.JsonArray(); break;
+                case "unknownKind": incomplete["kind"] = "futureKind"; break;
+                default: incomplete.Remove(parts[1]); break;
+            }
+        }
+        else if (missingField == "empty") incomplete.Clear();
+        else incomplete.Remove(missingField);
         File.WriteAllText(Path.Combine(folder, "partial.json"), incomplete.ToJsonString());
         var store = new InMemoryUserDataSyncStore(dictionaryEntries: deleted ? [] :
             [legacy.Dictionary! with { IsRegex = false, UpdatedAt = Date(20), Replacement = "literal" }]);
@@ -893,6 +924,46 @@ public sealed class CloudFolderSyncTests : IDisposable
         Assert.DoesNotContain(store.DictionaryEntries, entry => entry.IsRegex);
         Assert.DoesNotContain("unapplied-partial", state.AppliedOperationIds);
         Assert.Equal(0, (await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(50))).OperationsWritten);
+    }
+
+    [Theory]
+    [InlineData("history")]
+    [InlineData("future")]
+    [InlineData("future-numeric")]
+    public async Task CompleteIgnoredEnvelopesDoNotBlockRecovery(string category)
+    {
+        var legacy = CloudFolderSyncJson.Deserialize<CloudFolderSyncOperation>(File.ReadAllText(
+            Path.Combine(AppContext.BaseDirectory, "Fixtures", "PremiumSync", "upsert-dictionary-regex-v1.json")))!;
+        var envelope = System.Text.Json.Nodes.JsonNode.Parse("""
+            {"schemaVersion":1,"operationId":"ignored","deviceId":"peer","collection":"history",
+             "itemId":"history:00000000-0000-0000-0000-000000000001","kind":"delete",
+             "updatedAt":"2023-11-14T22:13:25.000Z","deletedAt":"2023-11-14T22:13:25.000Z",
+             "historyPayloadVersion":1,"historyGeneration":"history-v1"}
+            """)!.AsObject();
+        if (category != "history")
+        {
+            envelope["schemaVersion"] = 3;
+            envelope["collection"] = category == "future" ? System.Text.Json.Nodes.JsonValue.Create("futureCollection") : System.Text.Json.Nodes.JsonValue.Create(17);
+            envelope["kind"] = category == "future" ? System.Text.Json.Nodes.JsonValue.Create("futureKind") : System.Text.Json.Nodes.JsonValue.Create(23);
+        }
+        var folder = Path.Combine(CloudFolderSyncEngine.PackagePath(_tempDir), "ops", "peer");
+        Directory.CreateDirectory(folder);
+        File.WriteAllText(Path.Combine(folder, "ignored.json"), envelope.ToJsonString());
+        var store = new InMemoryUserDataSyncStore(dictionaryEntries: [legacy.Dictionary!]);
+        var state = new CloudFolderSyncState
+        {
+            DeviceId = "windows", KnownLocalItemIds = [legacy.ItemId],
+            ExportedItemVersions = new() { [legacy.ItemId] = "2023-11-14T22:13:30.000Z" },
+            AppliedOperationIds = [legacy.OperationId]
+        };
+        var entitlement = new PaidEntitlements(true);
+        Assert.Equal(1, (await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(30))).OperationsWritten);
+        var published = CloudFolderSyncJson.Deserialize<CloudFolderSyncOperation>(File.ReadAllText(Assert.Single(OperationFiles("windows"))))!;
+        Assert.Equal(2, published.SchemaVersion);
+        Assert.Equal(CloudFolderSyncOperationKind.Upsert, published.Kind);
+        Assert.Equal(legacy.Dictionary, Assert.Single(store.DictionaryEntries));
+        Assert.DoesNotContain("ignored", state.AppliedOperationIds);
+        Assert.Equal(0, (await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(40))).OperationsWritten);
     }
 
     [Theory]
