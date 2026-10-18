@@ -7,6 +7,10 @@ internal sealed partial class LocalDictationSession
     internal DictationProviderOption? ApiModelProvider(string engine) => DictationProviders.FirstOrDefault(provider =>
         provider.Id == engine || provider.PluginId == engine || ApiEngineId(provider) == engine);
 
+    /// <summary>Why policy refuses the engine an API request names, or null; an unloaded package is judged through the selection it served.</summary>
+    internal string? ApiEngineRefusal(string engine) =>
+        ApiModelProvider(engine)?.Refusal ?? PluginRuntime.SelectionPackageRefusal(RegistrySelectionId(engine));
+
     private string ApiEngineId(DictationProviderOption provider) => provider.Id == "local" ? "sherpa-onnx"
         : PluginRuntime.TranscriptionProviders.FirstOrDefault(item => item.SelectionId == RegistrySelectionId(provider.Id))?.EngineId ?? provider.Id;
 

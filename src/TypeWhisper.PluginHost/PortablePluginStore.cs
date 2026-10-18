@@ -270,7 +270,12 @@ public sealed class PortablePluginStore
                 var directory = PackagePath(previous.Directory);
                 using var policyLinked = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 lock (_sync) { _activeOperation = policyLinked; _activeRefusal = () => ExecutionRefusal(id, directory); }
-                try { await PortablePluginPackage.RunInstallationHookAsync(directory, _services(id), _host, previous.Version, uninstall: true, policyLinked.Token, progress); }
+                try
+                {
+                    // Judged again once the operation is registered: a policy pass in between could not cancel it.
+                    if (ExecutionRefusal(id, directory) is null)
+                        await PortablePluginPackage.RunInstallationHookAsync(directory, _services(id), _host, previous.Version, uninstall: true, policyLinked.Token, progress);
+                }
                 catch (OperationCanceledException) when (!ct.IsCancellationRequested) { }
                 finally { lock (_sync) { _activeOperation = null; _activeRefusal = null; } }
             }

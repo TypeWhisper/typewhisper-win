@@ -307,6 +307,10 @@ def main():
     if not args.publish:
         print("No remote changes made.")
         return
+    # A release or a metadata-only publication may use an older reviewed main commit, but never unmerged branch code.
+    comparison = api(f"compare/{summary['sourceCommit']}...main")
+    if comparison["status"] not in ("ahead", "identical"):
+        raise ValueError("Release source is not on main")
     if not changes:
         selected = set(summary.get("selectedIds", []))
         verification = [entry for key, entry in builder.catalog_entries(current).items() if key in selected]
@@ -341,10 +345,6 @@ def main():
             api("pages/builds", method="POST")
             wait_for_live(changes)
             return
-    # A release may use an older reviewed main commit, but never unmerged branch code.
-    comparison = api(f"compare/{summary['sourceCommit']}...main")
-    if comparison["status"] not in ("ahead", "identical"):
-        raise ValueError("Release source is not on main")
     ensure_release(stage, summary)
     update_feed(changes, refreshed)
     # GITHUB_TOKEN commits do not start a Pages build automatically.

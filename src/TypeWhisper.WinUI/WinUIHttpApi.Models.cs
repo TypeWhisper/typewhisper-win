@@ -41,6 +41,8 @@ internal sealed partial class WinUIHttpApi
         }
         if (string.IsNullOrWhiteSpace(engine) || operation != "unload" && string.IsNullOrWhiteSpace(model))
             return Error(400, operation == "unload" ? "'engine' is required." : "Both 'engine' and 'model' are required.");
+        // A refused engine answers 403, the documented policy contract, before any not-found.
+        if (session.ApiEngineRefusal(engine) is { } refusedEngine) throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("transcription", refusedEngine);
         var provider = session.ApiModelProvider(engine);
         if (provider is null) return Error(404, "Engine not found.");
         if (operation != "unload" && !provider.Models.Any(item => item.Id == model)) return Error(404, "Model not found for this engine.");
