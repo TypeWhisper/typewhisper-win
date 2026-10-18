@@ -482,7 +482,12 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
         Slot owner;
         lock (_sync)
         {
-            if (!_index.Transcription.TryGetValue(selectionId, out var role)) throw new InvalidOperationException("Transcription provider is unavailable.");
+            if (!_index.Transcription.TryGetValue(selectionId, out var role))
+            {
+                // A selection whose package the policy unloaded meanwhile reports the policy, not a missing provider.
+                if (SelectionPackageRefusal(selectionId) is { } refusedPackage) throw new ManagedPolicyDeniedException("transcription", refusedPackage);
+                throw new InvalidOperationException("Transcription provider is unavailable.");
+            }
             owner = role.Owner;
         }
         // Checked before queuing and again once the lease is held, so a policy that arrived meanwhile still wins.
@@ -494,7 +499,13 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
                 throw new InvalidOperationException("Transcription provider changed.");
             try { return await use(current.Engine, token).ConfigureAwait(false); }
             // A cancellation the policy pass caused is reported as the refusal, not as a plain cancellation.
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) { DenyTranscriptionIfRefused(selectionId, owner); throw; }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                DenyTranscriptionIfRefused(selectionId, owner);
+                // The text rule cancels a transcription that may carry a prompt, so its reason is reported as well.
+                DenyTextTransferIfRefused(owner, "transcription-prompt");
+                throw;
+            }
         }, cancellationToken);
     }
 
@@ -561,17 +572,23 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
         {
             if (!_index.PostProcessors.TryGetValue(expected.PluginId, out var role)
                 || (role.Snapshot with { Generation = role.Owner.Generation }) != expected || !role.Owner.Accepting || role.Owner.Generation != expected.Generation)
+            {
+                // A processor whose package the policy unloaded meanwhile reports the policy, not a missing processor.
+                if (PackageRefusal(expected.PluginId) is { } refusedPackage) throw new ManagedPolicyDeniedException("text-processor", refusedPackage);
                 throw new InvalidOperationException("The captured text processor is no longer available.");
+            }
             owner = role.Owner;
         }
         DenyTextTransferIfRefused(owner, "text-processor");
-        return UseAsync(owner, token =>
+        return UseAsync(owner, async token =>
         {
             if (!_index.PostProcessors.TryGetValue(expected.PluginId, out var current)
                 || current.Owner != owner || (current.Snapshot with { Generation = owner.Generation }) != expected || owner.Generation != expected.Generation)
                 throw new InvalidOperationException("The captured text processor changed.");
             DenyTextTransferIfRefused(owner, "text-processor");
-            return current.Processor.ProcessAsync(text, context, token);
+            try { return await current.Processor.ProcessAsync(text, context, token).ConfigureAwait(false); }
+            // A cancellation the policy pass caused is reported as the refusal, so the transcript survives with the reason.
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) { DenyTextTransferIfRefused(owner, "text-processor"); throw; }
         }, cancellationToken);
     }
 
