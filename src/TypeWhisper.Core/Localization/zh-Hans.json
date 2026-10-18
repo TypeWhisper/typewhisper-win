@@ -3210,6 +3210,7 @@
   "Managed by your organization: {0} · {1} · input is sent to this provider when you run": "由你的组织管理：{0} · {1} · 运行时输入会发送给此提供商",
   "The selection policy state could not be loaded.": "无法加载选择策略状态。",
   "The selection policy state could not be saved.": "无法保存选择策略状态。",
+  "The model {0} is not downloaded.": "模型 {0} 尚未下载。",
   "The model {0} is not offered by {1}.": "{1} 不提供模型 {0}。",
   "The text model provider {0} is not installed or enabled.": "文本模型提供商 {0} 未安装或未启用。",
   "Setting": "设置",

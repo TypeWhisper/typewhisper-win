@@ -76,7 +76,7 @@ public sealed partial class WorkflowsView
         provider.SelectionChanged += _ => RefreshModels("");
         // Under an enforced pair the dialog only shows what every workflow uses.
         var enforced = _session.WorkflowDefaults.Enforced;
-        if (enforced is not null) { provider.IsEnabled = false; model.IsEnabled = false; }
+        if (enforced is not null || _session.WorkflowDefaults.Managed) { provider.IsEnabled = false; model.IsEnabled = false; }
         var help = SettingsHelp.Label(Loc.T("Default workflow LLM"), enforced is not null
             ? Loc.T("Managed by your organization") + ": " + (Providers.FirstOrDefault(p => p.Id == enforced.Provider)?.Label ?? enforced.Provider) + " · " + enforced.Model
             : Loc.T("Used by workflows set to Use default. Existing custom selections stay unchanged."));

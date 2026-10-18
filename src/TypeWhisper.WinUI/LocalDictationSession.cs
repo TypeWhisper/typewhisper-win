@@ -126,8 +126,13 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         // The registry checks the provider; the model is known only here, so an enforced pair is completed here.
         if (PluginRuntime.LlmRefusal(selectionId, model) is { } refused) throw new ManagedPolicyDeniedException("llm", refused);
         // A chat completion has no side effects, so a rate limit or server error is retried before the workflow fails.
+        // Judged again inside the lease before every attempt: a pair enforced meanwhile wins over a queued request or a retry.
         return await PluginRuntime.UseLlmAsync(selectionId, (provider, token) =>
-            PluginRequestRetry.RunAsync(provider.PluginId, attempt => provider.ProcessAsync(systemPrompt, text, model, attempt), token), ct);
+            PluginRequestRetry.RunAsync(provider.PluginId, attempt =>
+            {
+                if (PluginRuntime.LlmRefusal(selectionId, model) is { } refusedNow) throw new ManagedPolicyDeniedException("llm", refusedNow);
+                return provider.ProcessAsync(systemPrompt, text, model, attempt);
+            }, token), ct);
     }
     private string _providerId = "local";
     internal bool UsesRegistryProvider => _providerId != "local";

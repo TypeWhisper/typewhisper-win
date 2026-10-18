@@ -15,12 +15,16 @@ public sealed record WorkflowLlmSelection(string Provider, string Model);
 /// <param name="path">The JSON file holding the user's saved default.</param>
 /// <param name="enforced">The pair policy enforces, or null; evaluated on every read so policy changes apply at once.</param>
 /// <param name="recommended">The pair policy recommends as the initial default, or null.</param>
-public sealed class WorkflowLlmDefaults(string path, Func<WorkflowLlmSelection?>? enforced = null, Func<WorkflowLlmSelection?>? recommended = null)
+/// <param name="blocked">Whether policy blocks every LLM selection until it is corrected (incomplete, invalid or unreadable pair).</param>
+public sealed class WorkflowLlmDefaults(string path, Func<WorkflowLlmSelection?>? enforced = null, Func<WorkflowLlmSelection?>? recommended = null,
+    Func<bool>? blocked = null)
 {
     /// <summary>Explicit inheritance marker; absent legacy selections retain their meaning.</summary>
     public const string Inherit = "__default__";
     /// <summary>The pair every workflow must use, or null when policy does not fix the text model.</summary>
     public WorkflowLlmSelection? Enforced => enforced?.Invoke();
+    /// <summary>Whether policy fixes the text model: an enforced pair, or a pair that blocks every selection until corrected.</summary>
+    public bool Managed => Enforced is not null || blocked?.Invoke() == true;
     /// <summary>The effective default: the enforced pair, then the saved pair, then an administrator recommendation.</summary>
     public WorkflowLlmSelection? Read() => Enforced ?? ReadSaved() ?? recommended?.Invoke();
     /// <summary>Reads the persisted pair, reporting malformed data.</summary>
@@ -36,7 +40,7 @@ public sealed class WorkflowLlmDefaults(string path, Func<WorkflowLlmSelection?>
     /// <summary>Atomically replaces the default pair after validation. Refused while policy enforces the pair.</summary>
     public void Save(WorkflowLlmSelection value)
     {
-        if (Enforced is not null) throw new InvalidOperationException(Loc.T("The text model is managed by your organization."));
+        if (Managed) throw new InvalidOperationException(Loc.T("The text model is managed by your organization."));
         Validate(value);
         AtomicFileWriter.WriteAllText(path, JsonSerializer.Serialize(value));
     }

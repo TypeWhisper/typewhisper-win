@@ -648,7 +648,7 @@ public sealed partial class WorkflowsView : UserControl
     private void ConfigureModels(string modelId)
     {
         // Under an enforced pair the saved selection stays as it is but cannot be edited; the summary names the pair.
-        var enforced = _session?.WorkflowDefaults.Enforced is not null;
+        var enforced = _session?.WorkflowDefaults.Managed == true;
         ConfigProvider.IsEnabled = !enforced;
         if (ConfigProvider.SelectedId == WorkflowLlmDefaults.Inherit)
         {

@@ -3210,6 +3210,7 @@
   "Managed by your organization: {0} · {1} · input is sent to this provider when you run": "Von deiner Organisation verwaltet: {0} · {1} · die Eingabe wird beim Ausführen an diesen Anbieter gesendet",
   "The selection policy state could not be loaded.": "Der Zustand der Auswahlrichtlinie konnte nicht geladen werden.",
   "The selection policy state could not be saved.": "Der Zustand der Auswahlrichtlinie konnte nicht gespeichert werden.",
+  "The model {0} is not downloaded.": "Das Modell {0} ist nicht heruntergeladen.",
   "The model {0} is not offered by {1}.": "Das Modell {0} wird von {1} nicht angeboten.",
   "The text model provider {0} is not installed or enabled.": "Der Textmodell-Anbieter {0} ist nicht installiert oder nicht aktiviert.",
   "Setting": "Einstellung",

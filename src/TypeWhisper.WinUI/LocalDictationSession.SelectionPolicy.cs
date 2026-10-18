@@ -20,11 +20,13 @@ internal sealed partial class LocalDictationSession
 
     // Policy names providers by their stable selection ID; the session calls the local engine "local" and the
     // built-in Groq role "groq". IDs compare case-insensitively, as the registry does.
-    private static string PolicyProviderId(string selectionId) =>
+    // Other IDs resolve to the installed provider's own spelling, so session lookups that compare exactly still find it.
+    private string PolicyProviderId(string selectionId) =>
         string.Equals(selectionId, LocalTranscriptionPlugin.PluginId, StringComparison.OrdinalIgnoreCase) ? "local"
-        : string.Equals(selectionId, CloudTranscriptionPlugin.PluginId, StringComparison.OrdinalIgnoreCase) ? "groq" : selectionId;
+        : string.Equals(selectionId, CloudTranscriptionPlugin.PluginId, StringComparison.OrdinalIgnoreCase) ? "groq"
+        : PluginRuntime.TranscriptionProviders.FirstOrDefault(provider => string.Equals(provider.SelectionId, selectionId, StringComparison.OrdinalIgnoreCase))?.SelectionId ?? selectionId;
 
-    private static bool IsProviderId(string policyId, string sessionId) =>
+    private bool IsProviderId(string policyId, string sessionId) =>
         string.Equals(PolicyProviderId(policyId), sessionId, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>The model policy enforces for the active provider, or null; shown selected even before it is downloaded.</summary>
@@ -70,11 +72,15 @@ internal sealed partial class LocalDictationSession
             policy.RecommendedTranscription is { } recommended && recommended.IsProvider(LocalTranscriptionPlugin.PluginId) ? recommended.ModelId : null);
     }
 
-    private static WorkflowLlmSelection? EnforcedLlmSelection() =>
-        ProviderPolicy.EnforcedLlm is { } pair ? new(pair.ProviderId, pair.ModelId) : null;
+    // Resolved to the installed provider's own spelling: workflow availability checks compare selection IDs exactly.
+    private string PolicyLlmProviderId(string selectionId) =>
+        LlmProviders.FirstOrDefault(provider => string.Equals(provider.SelectionId, selectionId, StringComparison.OrdinalIgnoreCase))?.SelectionId ?? selectionId;
 
-    private static WorkflowLlmSelection? RecommendedLlmSelection() =>
-        ProviderPolicy.RecommendedLlm is { } pair ? new(pair.ProviderId, pair.ModelId) : null;
+    private WorkflowLlmSelection? EnforcedLlmSelection() =>
+        ProviderPolicy.EnforcedLlm is { } pair ? new(PolicyLlmProviderId(pair.ProviderId), pair.ModelId) : null;
+
+    private WorkflowLlmSelection? RecommendedLlmSelection() =>
+        ProviderPolicy.RecommendedLlm is { } pair ? new(PolicyLlmProviderId(pair.ProviderId), pair.ModelId) : null;
 
     /// <summary>Applies the enforced transcription pair after a policy change; serialized behind the dictation gate.</summary>
     internal async Task ApplySelectionPolicyAsync()
@@ -120,6 +126,10 @@ internal sealed partial class LocalDictationSession
                     var target = provider.ModelStates.FirstOrDefault(item => pair.IsModel(item.ModelId));
                     if (target is not null && (!target.SupportsDownload || target.Downloaded))
                     {
+                        // A pair that moved from another registry provider restores that provider's own model first, so
+                        // one retained selection is enough for every provider a policy replaced.
+                        if (_selectionPolicy.Current.RetainedProviderId is { } other && other != provider.SelectionId)
+                            await RestoreRetainedSelectionAsync();
                         if (_selectionPolicy.Current.RetainedProviderId is null && provider.SelectedModelId is not null)
                             _selectionPolicy.Save(new(provider.SelectionId, provider.SelectedModelId));
                         await PluginRuntime.SelectModelAsync(target, CancellationToken.None);
@@ -129,18 +139,7 @@ internal sealed partial class LocalDictationSession
                 return;
             }
             // Confirmed removal: the user's saved provider applies again and a retained registry model is selected once.
-            if (_selectionPolicy.Current is { RetainedProviderId: { } retainedProvider, RetainedModelId: { } retainedModel })
-            {
-                var provider = PluginRuntime.TranscriptionProviders.FirstOrDefault(item => item.SelectionId == retainedProvider);
-                var target = provider?.ModelStates.FirstOrDefault(item => item.ModelId == retainedModel);
-                if (provider is not null && provider.SelectedModelId != retainedModel && target is not null && (!target.SupportsDownload || target.Downloaded))
-                {
-                    await _livePreview.StopAsync();
-                    await PluginRuntime.SelectModelAsync(target, CancellationToken.None);
-                    await PluginRuntime.RefreshCapabilitiesAsync();
-                }
-                _selectionPolicy.Save(new());
-            }
+            await RestoreRetainedSelectionAsync();
             var chosen = _selection.GetSetting<string>("Provider");
             var saved = chosen is not null ? SessionProviderId(chosen)
                 : policy.RecommendedTranscription is { } suggested ? PolicyProviderId(suggested.ProviderId) : "local";
@@ -169,6 +168,24 @@ internal sealed partial class LocalDictationSession
         }
     }
 
+    // Selects the retained registry model once and forgets it only after it applied: a provider that is disabled or a
+    // model that is unavailable right now keeps the retention for a later pass. Runs with the gate held.
+    private async Task RestoreRetainedSelectionAsync()
+    {
+        if (_selectionPolicy.Current is not { RetainedProviderId: { } retainedProvider, RetainedModelId: { } retainedModel }) return;
+        var provider = PluginRuntime.TranscriptionProviders.FirstOrDefault(item => item.SelectionId == retainedProvider);
+        if (provider is null) return;
+        if (provider.SelectedModelId != retainedModel)
+        {
+            var target = provider.ModelStates.FirstOrDefault(item => item.ModelId == retainedModel);
+            if (target is null || (target.SupportsDownload && !target.Downloaded)) return;
+            await _livePreview.StopAsync();
+            await PluginRuntime.SelectModelAsync(target, CancellationToken.None);
+            await PluginRuntime.RefreshCapabilitiesAsync();
+        }
+        _selectionPolicy.Save(new());
+    }
+
     /// <summary>Conflicts between the enforced pairs and what is installed, allowed or available; for the managed settings page.</summary>
     internal IEnumerable<string> SelectionPolicyIssues()
     {
@@ -181,8 +198,12 @@ internal sealed partial class LocalDictationSession
             else
             {
                 if (provider.Refusal is { } refused) yield return ManagedPolicyKeys.TranscriptionProviderId + ": " + refused;
-                if (!provider.Models.Any(item => transcription.IsModel(item.Id)))
+                else if (!provider.Enabled || !provider.Configured)
+                    yield return ManagedPolicyKeys.TranscriptionProviderId + ": " + Loc.T("The transcription provider {0} is not installed or enabled.", transcription.ProviderId);
+                if (provider.Models.FirstOrDefault(item => transcription.IsModel(item.Id)) is not { } required)
                     yield return ManagedPolicyKeys.TranscriptionModelId + ": " + Loc.T("The model {0} is not offered by {1}.", transcription.ModelId, provider.Name);
+                else if (!required.Ready)
+                    yield return ManagedPolicyKeys.TranscriptionModelId + ": " + Loc.T("The model {0} is not downloaded.", transcription.ModelId);
             }
         }
         if (policy.EnforcedLlm is { } llm)
