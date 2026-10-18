@@ -2,7 +2,7 @@
   "id": "com.typewhisper.obsidian",
   "locality": "local",
   "name": "Obsidian",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "TypeWhisper",
   "description": "Save transcriptions as notes in Obsidian",
   "assemblyName": "TypeWhisper.Plugin.Obsidian.dll",

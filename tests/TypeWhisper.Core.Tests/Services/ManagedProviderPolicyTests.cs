@@ -125,6 +125,9 @@ public class ManagedProviderPolicyTests
         Assert.Contains("cloud", bothOff.PackageRefusal("com.typewhisper.webhook", ContentLocality.Configurable, ["action"]));
         Assert.Contains("cloud", bothOff.PackageRefusal("com.typewhisper.legacy", ContentLocality.Unknown, ["tts"]));
         Assert.Null(bothOff.PackageRefusal("com.typewhisper.obsidian", ContentLocality.Local, ["memory"]));
+        // Null or blank entries of a malformed manifest neither crash the evaluation nor count as a capability.
+        Assert.Contains("cloud", bothOff.PackageRefusal("com.typewhisper.broken", ContentLocality.Cloud, [null!, " ", "action"]));
+        Assert.Null(bothOff.PackageRefusal("com.typewhisper.broken", ContentLocality.Cloud, [null!, " "]));
 
         var allowlist = ManagedProviderPolicy.From(Allowlist(ManagedPolicyKeys.AllowedPlugins, "com.typewhisper.sherpa-onnx"));
         Assert.Contains("not allowed", allowlist.PackageRefusal("com.typewhisper.groq", ContentLocality.Local, ["transcription"]));

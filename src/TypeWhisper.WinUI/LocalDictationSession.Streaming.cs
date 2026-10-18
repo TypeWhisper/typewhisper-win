@@ -33,7 +33,7 @@ internal sealed partial class LocalDictationSession
                 if (_disposed || !ReferenceEquals(_cloudStream, stream) || !_audio.IsRecording) return;
                 LivePreviewText = Loc.T("Live connection interrupted. The full recording will be transcribed after stopping.");
                 LivePreviewChanged?.Invoke();
-            }), _operationCancellation.Token, terms);
+            }), _operationCancellation.Token, terms, promptAllowed: () => PluginRuntime.TranscriptionPromptRefusal(selection) is null);
         _cloudStream = stream;
         if (!_streamAudio.Attach(samples => stream.Append(samples)))
         {

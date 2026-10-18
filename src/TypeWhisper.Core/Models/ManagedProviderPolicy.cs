@@ -92,7 +92,8 @@ public sealed record ManagedProviderPolicy(
     {
         if (PluginRefusal(pluginId) is { } refused) return refused;
         if (locality == ContentLocality.Local) return null;
-        var ids = new HashSet<string>((categories ?? []).Select(id => id.Trim()).Where(id => id.Length > 0), StringComparer.OrdinalIgnoreCase);
+        // A manifest may carry null or blank entries; they say nothing about the package and are skipped.
+        var ids = new HashSet<string>((categories ?? []).Where(id => !string.IsNullOrWhiteSpace(id)).Select(id => id.Trim()), StringComparer.OrdinalIgnoreCase);
         if (ids.Count == 0) return null;
         var audio = ids.Contains("transcription");
         var text = ids.Any(id => !id.Equals("transcription", StringComparison.OrdinalIgnoreCase));

@@ -17,13 +17,17 @@ public sealed class StreamingDictation : IAsyncDisposable
     /// <summary>Unambiguous language reported by a finalized segment.</summary>
     public string? DetectedLanguage { get; private set; }
 
-    /// <summary>The callback must retain the provider for the entire streaming operation.</summary>
+    /// <summary>
+    /// The callback must retain the provider for the entire streaming operation. <paramref name="promptAllowed"/> is
+    /// asked under the lease, right before the stream opens: false drops the dictionary prompt for this stream.
+    /// </summary>
     public StreamingDictation(
         Func<Func<ITranscriptionEnginePlugin, CancellationToken, Task<string>>, CancellationToken, Task<string>> use,
-        IReadOnlyList<string> languages, Action<string> publish, Action failed, CancellationToken ct, IReadOnlyList<string>? dictionaryTerms = null)
+        IReadOnlyList<string> languages, Action<string> publish, Action failed, CancellationToken ct, IReadOnlyList<string>? dictionaryTerms = null,
+        Func<bool>? promptAllowed = null)
     {
         _cancel = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        _result = RunAsync(use, languages.ToArray(), publish, failed, dictionaryTerms?.ToArray());
+        _result = RunAsync(use, languages.ToArray(), publish, failed, dictionaryTerms?.ToArray(), promptAllowed);
     }
 
     /// <summary>Copies capture samples without blocking the audio thread. An overflow invalidates the entire stream.</summary>
@@ -50,13 +54,13 @@ public sealed class StreamingDictation : IAsyncDisposable
 
     private async Task<string?> RunAsync(
         Func<Func<ITranscriptionEnginePlugin, CancellationToken, Task<string>>, CancellationToken, Task<string>> use,
-        IReadOnlyList<string> languages, Action<string> publish, Action failed, IReadOnlyList<string>? dictionaryTerms)
+        IReadOnlyList<string> languages, Action<string> publish, Action failed, IReadOnlyList<string>? dictionaryTerms, Func<bool>? promptAllowed)
     {
         try
         {
             return await use(async (engine, ct) =>
             {
-                var prompt = LanguageHintTranscription.CreateDictionaryPrompt(engine, dictionaryTerms);
+                var prompt = promptAllowed?.Invoke() == false ? null : LanguageHintTranscription.CreateDictionaryPrompt(engine, dictionaryTerms);
                 if (!engine.SupportsStreaming || !engine.SupportsStreamingCompletion || !engine.SupportsStreamingForPrompt(prompt)) throw new NotSupportedException("Live transcription is unavailable.");
                 using var connect = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 connect.CancelAfter(TimeSpan.FromSeconds(15));

@@ -268,15 +268,25 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             var inspection = PortablePluginInventory.Inspect(directory, hostVersion);
             if (inspection.Error is { } invalid) throw new InvalidDataException(invalid);
             if (inspection.Manifest?.Id != pluginId) throw new InvalidDataException("Installed package identity does not match its registration.");
+            // Judged again with the manifest on disk and the policy of this moment, before any package code loads:
+            // the wait for the gate may have outlasted a policy change. A package still held from an earlier
+            // activation is released rather than kept beside the refusal.
+            var locality = PluginLocalityMap.ToContentLocality(inspection.Manifest.ResolvedLocality);
+            var categories = inspection.Manifest.Categories ?? [];
+            lock (_sync) { slot.Locality = locality; slot.Categories = categories; }
+            if (Policy.PackageRefusal(pluginId, locality, categories) is { } refusedPackage)
+            {
+                var stale = slot.Package; slot.Package = null;
+                lock (_sync) { slot.Error = refusedPackage; slot.PolicyRefused = true; }
+                if (stale is not null) { try { Publish(BuildIndex()); } finally { await ReleasePackageAsync(slot, stale); } }
+                return refusedPackage;
+            }
             var loadedHere = slot.Package is null;
             var package = slot.Package ?? await PortablePluginPackage.LoadAsync(directory, slot.Services, hostVersion);
             slot.Package = package;
             slot.Directory = directory;
             // Locality is authoritative; the legacy flag only feeds it for manifests that predate the field.
             slot.IsLocal = inspection.Manifest.ResolvedLocality == PluginLocality.Local;
-            slot.Locality = PluginLocalityMap.ToContentLocality(inspection.Manifest.ResolvedLocality);
-            slot.Categories = inspection.Manifest.Categories ?? [];
-            if (Policy.PackageRefusal(pluginId, slot.Locality, slot.Categories) is { } refusedPackage) throw new ManagedPolicyDeniedException("plugin", refusedPackage);
             try
             {
                 var next = BuildIndex();
@@ -308,10 +318,14 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
         finally { _gate.Release(); NotifyChanged(); }
     }
 
+    private string? SlotRefusal(Slot slot) => slot.Categories is null
+        ? Policy.PluginRefusal(slot.Id) : Policy.PackageRefusal(slot.Id, slot.Locality, slot.Categories);
+
     /// <summary>
-    /// Re-evaluates the package policy after it changed. A loaded package the policy now refuses is unloaded while
-    /// its saved preference stays as it is; a package whose refusal was lifted loads again when that preference
-    /// enables it. Returns the IDs whose runtime state changed.
+    /// Re-evaluates the policy after it changed. A loaded package the policy now refuses is unloaded while its saved
+    /// preference stays as it is; a package whose refusal was lifted loads again when that preference enables it.
+    /// A running operation of a role the policy now refuses is cancelled; new calls are judged at their lease. One
+    /// package that fails to unload does not stop enforcement for the others. Returns the IDs whose state changed.
     /// </summary>
     public async Task<IReadOnlyList<string>> ReapplyPolicyAsync()
     {
@@ -319,16 +333,21 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
         lock (_sync)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            slots = _slots.Values.Select(slot => (slot, slot.Categories is null
-                ? Policy.PluginRefusal(slot.Id) : Policy.PackageRefusal(slot.Id, slot.Locality, slot.Categories))).ToList();
+            slots = _slots.Values.Select(slot => (slot, SlotRefusal(slot))).ToList();
+            CancelRefusedRoles();
         }
         var changed = new List<string>();
         foreach (var (slot, refused) in slots)
         {
             if (refused is not null)
             {
-                if (await UnloadForPolicyAsync(slot, refused)) changed.Add(slot.Id);
-                else lock (_sync) if (slot.Package is null && (slot.Error is null || slot.PolicyRefused)) { slot.Error = refused; slot.PolicyRefused = true; }
+                try { if (await UnloadForPolicyAsync(slot)) changed.Add(slot.Id); }
+                catch (Exception ex) when (ex is not OutOfMemoryException)
+                {
+                    // The package is detached before its release can fail: the refusal stands and the others follow.
+                    changed.Add(slot.Id);
+                }
+                lock (_sync) if (slot.Package is null && (slot.Error is null || slot.PolicyRefused)) { slot.Error = refused; slot.PolicyRefused = true; }
                 continue;
             }
             bool reload;
@@ -349,9 +368,25 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
         return changed;
     }
 
+    // Cancels the running request of a package whose active role the policy now refuses. A package that serves
+    // several roles loses its current request even when the running role is still allowed; its next call is judged
+    // again at the lease. Callers hold _sync.
+    private void CancelRefusedRoles()
+    {
+        var policy = Policy;
+        foreach (var (selectionId, role) in _index.Transcription)
+            if (policy.TranscriptionRefusal(selectionId, role.Owner.Id, role.Owner.Locality) is not null) CancelRequest(role.Owner);
+        foreach (var (selectionId, role) in _index.Llm)
+            if (policy.LlmRefusal(selectionId, role.Owner.Id, role.Owner.Locality) is not null) CancelRequest(role.Owner);
+        foreach (var slot in _slots.Values)
+            if (slot.Package is not null && slot.Categories?.Any(category => !category.Equals("transcription", StringComparison.OrdinalIgnoreCase)) == true
+                && policy.TextTransferRefusal(slot.Id, slot.Locality) is not null)
+                CancelRequest(slot);
+    }
+
     // The disable path without the preference write: the user's choice survives the policy. False when nothing
-    // was loaded or a newer operation superseded this one.
-    private async Task<bool> UnloadForPolicyAsync(Slot slot, string refused)
+    // was loaded, a newer operation superseded this one, or the policy allowed the package again meanwhile.
+    private async Task<bool> UnloadForPolicyAsync(Slot slot)
     {
         long generation;
         lock (_sync)
@@ -364,12 +399,19 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
         await _gate.WaitAsync();
         try
         {
-            lock (_sync) if (_disposed || slot.Generation != generation) return false;
+            string? refused;
+            lock (_sync)
+            {
+                if (_disposed || slot.Generation != generation) return false;
+                // Judged again under the gate: a policy that relaxed during the wait keeps the package running.
+                refused = SlotRefusal(slot);
+                if (refused is null) { slot.Accepting = slot.Package is not null; return false; }
+                slot.Error = refused; slot.PolicyRefused = true;
+            }
             var old = slot.Package; slot.Package = null;
             try { Publish(BuildIndex()); }
             catch { Publish(new(new(StringComparer.OrdinalIgnoreCase), new(StringComparer.OrdinalIgnoreCase), [], [])); throw; }
             finally { if (old is not null) await ReleasePackageAsync(slot, old); }
-            lock (_sync) { slot.Error = refused; slot.PolicyRefused = true; }
             return true;
         }
         finally { _gate.Release(); }

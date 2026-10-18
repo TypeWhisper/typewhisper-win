@@ -21,6 +21,8 @@ internal sealed partial class LocalDictationSession
         {
             if (plugin is not ILocalLlmModelManagement local || !local.LocalModels.Any(model => model.Model.Id == modelId))
                 throw new InvalidOperationException(Loc.T("The local model provider changed."));
+            // Rechecked under the lease: a policy that changed during the wait wins before any byte is downloaded.
+            if (ModelDownloadRefusal() is { } refusedNow) throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("model-download", refusedNow);
             await local.DownloadModelAsync(modelId, progress, token);
             return true;
         }, ct, preserveCompletedResult: true));
