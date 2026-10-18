@@ -76,8 +76,8 @@ public sealed partial class MainWindow
         while (!_closing && !_dictation.CanChangeProvider && DateTimeOffset.UtcNow < deadline) await Task.Delay(500);
         if (_closing) return true;
         bool microphone;
-        // The same judgment as the wizard: a device must exist and Windows must allow the app to use it.
-        try { microphone = _dictation.GetMicrophones().Count > 0 && !SetupWizard.MicrophoneAccessBlocked; }
+        // Stricter than the wizard's step check: a device must exist and Windows must have confirmed access.
+        try { microphone = _dictation.GetMicrophones().Count > 0 && SetupWizard.MicrophoneAccessAllowed; }
         catch (Exception ex) when (ex is not OutOfMemoryException) { microphone = false; }
         var hasShortcut = !string.IsNullOrWhiteSpace(_dictation.Shortcut) && _dictation.Shortcut != "No shortcut assigned";
         return OnboardingPolicy.CanSkipSetup(WinUIManagedPolicy.Current, hasShortcut, _dictation.CanChangeProvider && _dictation.IsReady, microphone);

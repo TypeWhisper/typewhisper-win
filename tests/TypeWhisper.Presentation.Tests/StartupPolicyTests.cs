@@ -201,6 +201,14 @@ public sealed class StartupPolicyTests : IDisposable
         Assert.False(unreadable.Enabled);
         Assert.Equal(0, unreadable.Writes);
 
+        // Enforcement over an unreadable state file leaves the file alone and keeps the registration as it is.
+        var enforcedOverUnreadable = new Registration { Enabled = true };
+        var locked = await new StartupPolicyReconciler(enforcedOverUnreadable, new StartupPolicyStore(path))
+            .ApplyAsync(Build(enforced: [Number(ManagedPolicyKeys.LaunchAtLogin, 0)]), setupCompleted: false);
+        Assert.True(locked.Locked);
+        Assert.True(enforcedOverUnreadable.Enabled);
+        Assert.Equal("{not json", File.ReadAllText(path));
+
         // A registration that could not be read is retried, not treated as the user's decision.
         var unknown = new Registration { Enabled = false, Unknown = true };
         var unknownStore = new StartupPolicyStore(Path.Combine(_root, "unknown", "startup-policy.json"));

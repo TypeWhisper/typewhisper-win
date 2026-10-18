@@ -42,8 +42,11 @@ public sealed class AppUpdatePreferences
         Channel = InstalledChannel;
         try
         {
-            if (!File.Exists(path)) return;
-            var value = JsonSerializer.Deserialize<string>(File.ReadAllText(path));
+            // File.Exists answers false on access errors too; only a missing file means that no choice was saved.
+            string text;
+            try { text = File.ReadAllText(path); }
+            catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException) { return; }
+            var value = JsonSerializer.Deserialize<string>(text);
             if (!Enum.TryParse<AppUpdateChannel>(value, out var channel) || !Enum.IsDefined(channel)) throw new JsonException();
             Channel = channel; HasExplicitChoice = true;
         }

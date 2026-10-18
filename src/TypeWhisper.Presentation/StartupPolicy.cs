@@ -79,8 +79,9 @@ public sealed class StartupPolicyReconciler(IStartupRegistration registration, S
         {
             // The pre-enforcement value must be on disk before the registration changes; otherwise a restart under
             // the same policy would retain the enforced state and a later removal could not restore the user's choice.
+            // An unreadable state file may already hold the pre-enforcement value: nothing is written over it.
             if (store.Current.RetainedBeforeEnforcement is null && !state.Unknown
-                && !store.Save(store.Current with { RetainedBeforeEnforcement = state.IsEnabled }))
+                && (store.Error is not null || !store.Save(store.Current with { RetainedBeforeEnforcement = state.IsEnabled })))
                 return new(state, true, store.Error ?? Loc.T("Managed by your organization"));
             if (state.CanChange && state.IsEnabled != enforced.IsTrue)
                 state = await registration.SetEnabledAsync(enforced.IsTrue);

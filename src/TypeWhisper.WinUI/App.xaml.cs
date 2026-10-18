@@ -242,7 +242,9 @@ public partial class App : Application
             var started = System.Diagnostics.Stopwatch.StartNew();
             var initialized = await Task.WhenAny(initialization, Task.Delay(budget)) == initialization;
             var remaining = budget - started.Elapsed;
-            if (!initialized || remaining <= TimeSpan.Zero || !await _window.IsSetupReadyAsync(remaining)) _window.OpenSetup(returnToTray: true);
+            // The policy may have gone away during the wait; then setup opens instead of being marked as skipped.
+            if (!initialized || remaining <= TimeSpan.Zero || !await _window.IsSetupReadyAsync(remaining)
+                || !TypeWhisper.Presentation.OnboardingPolicy.SkipSetupWhenReady(WinUIManagedPolicy.Current)) _window.OpenSetup(returnToTray: true);
             else _window.SetupSkippedByPolicy = true;
         }
         await initialization;

@@ -107,6 +107,9 @@ public sealed partial class SetupWizard
     /// <summary>Whether Windows denies this app the microphone, regardless of connected devices.</summary>
     internal static bool MicrophoneAccessBlocked => MicrophoneAccessStatus() == "Access blocked";
 
+    /// <summary>Whether Windows confirmed microphone access; an unknown status is not confirmation.</summary>
+    internal static bool MicrophoneAccessAllowed => MicrophoneAccessStatus() == "Allowed";
+
     private static string MicrophoneAccessStatus()
     {
         try
