@@ -35,6 +35,7 @@ public sealed partial class MainWindow
     {
         var workflow = _workflowShortcuts?.Resolve(chord);
         if (workflow is null) return;
+        SuppressStartupWhatsNew();
         if (!_closing && !_profileRestoreClosing && !_workflowShortcutsStopping && !ShortcutRecorder.AnyEditing
             && ManualWorkflowStore.IsDictationShortcut(workflow) && _dictationInput?.IsRecordingOrStarting == true)
         {

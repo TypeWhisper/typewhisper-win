@@ -190,6 +190,7 @@ public sealed partial class MainWindow : Window
     }
     private Task ShutdownCoreAsync() => _shutdown.Run(async () =>
     {
+        SuppressStartupWhatsNew();
         _closing = true;
         _hotkeyRecovery?.Dispose();
         await StopWorkflowShortcutsAsync();
@@ -313,6 +314,7 @@ public sealed partial class MainWindow : Window
     internal void ShowOutputReview(TypeWhisper.Presentation.DictationOutputResult result)
     {
         if (_closing || _profileRestoreClosing || _reviewAdmissionClosed) return;
+        SuppressStartupWhatsNew();
         var review = new DictationReviewWindow(result, _dictation.PluginRuntime);
         _reviewWindows.Add(review);
         review.Closed += (_, _) => _reviewWindows.Remove(review);
@@ -327,8 +329,9 @@ public sealed partial class MainWindow : Window
         return Task.WhenAll(_reviewWindows.ToArray().Select(review => review.ShutdownAsync()));
     }
 
-    internal MainWindow()
+    internal MainWindow(TypeWhisper.Presentation.WhatsNewSession whatsNewSession)
     {
+        _whatsNewSession = whatsNewSession;
         InitializeComponent();
         Title = WinUIProfile.DisplayName;
         CorrectionLearning.CorrectionsLearned += ShowLearnedCorrections;
@@ -341,6 +344,8 @@ public sealed partial class MainWindow : Window
         LoadOverlayPreferences();
         RemoveRetiredQuickLaunchFiles();
         _services = new(WinRT.Interop.WindowNative.GetWindowHandle(this), DispatcherQueue);
+        _dictation.DictationRequested += () => SuppressStartupWhatsNew();
+        _dictation.Changed += ObserveWhatsNewActivity;
         _httpApi.DataChanged += () =>
         {
             _lexicon?.RefreshApiData();
@@ -487,6 +492,7 @@ public sealed partial class MainWindow : Window
     internal void OpenSettings()
     {
         if (_profileRestoreClosing) return;
+        SuppressStartupWhatsNew();
         if (_settingsWindow is null)
         {
             _settingsWindow = new SettingsWindow(OverlayPreferences, _settingsValues);
@@ -511,6 +517,7 @@ public sealed partial class MainWindow : Window
                 LiveThemeSettings.Configure(category, content, pickers, AppTheme.Store, RestartWhenIdleAsync);
                 LiveApplicationUpdateSettings.Configure(category, content, pickers, ApplicationUpdates,
                     _dictation.Packages.Updates, PluginAutoUpdates, () => _dictation.CanChangeProvider, RestartWhenIdleAsync);
+                if (category == "Account & about") content.Children.OfType<AccountView>().Single().OpenWhatsNew = OpenWhatsNew;
                 if (category == "Advanced")
                 {
                     AdvancedSettingsPage.Render(content, pickers, _dictation, _httpApi);
