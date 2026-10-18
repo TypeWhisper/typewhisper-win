@@ -117,9 +117,11 @@ internal sealed partial class LocalDictationSession
                 _providerId = PolicyProviderId(pair.ProviderId);
                 if (!UsesRegistryProvider)
                 {
-                    if (Models.Enabled && !Models.Busy && Models.ActiveModelId != pair.ModelId
-                        && Models.Models.Any(item => string.Equals(item.Model.Id, pair.ModelId, StringComparison.OrdinalIgnoreCase) && item.Downloaded))
-                        await Models.ActivateAsync(pair.ModelId, CancellationToken.None, persistSelection: false);
+                    // Activated under the catalog's own spelling of the required model.
+                    if (Models.Enabled && !Models.Busy
+                        && Models.Models.FirstOrDefault(item => pair.IsModel(item.Model.Id) && item.Downloaded) is { } required
+                        && Models.ActiveModelId != required.Model.Id)
+                        await Models.ActivateAsync(required.Model.Id, CancellationToken.None, persistSelection: false);
                 }
                 else if (ActiveRegistryProvider is { } provider && !pair.IsModel(provider.SelectedModelId ?? ""))
                 {

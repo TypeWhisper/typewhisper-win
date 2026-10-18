@@ -139,6 +139,8 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
             try { _host.SetSetting("Enabled", true); }
             catch { await ReleaseAsync(); throw; }
             var policy = PolicyModels?.Invoke() ?? default;
+            // Policy IDs compare case-insensitively; the engine compares exactly, so the catalog's own spelling is used.
+            policy = (Canonical(policy.Enforced), Canonical(policy.Recommended));
             var selected = policy.Enforced ?? _host.GetSetting<string>("SelectedModelId") ?? policy.Recommended ?? _lease.Engine.SelectedModelId
                 ?? Models.FirstOrDefault(model => model.Model.IsRecommended)?.Model.Id
                 ?? Models.FirstOrDefault()?.Model.Id;
@@ -166,6 +168,9 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
     /// recording a preference, and one the policy no longer refuses loads again when its preference enables it.
     /// Returns whether the engine was released or loaded.
     /// </summary>
+    private string? Canonical(string? modelId) => modelId is null ? null
+        : Models.FirstOrDefault(model => string.Equals(model.Model.Id, modelId, StringComparison.OrdinalIgnoreCase))?.Model.Id ?? modelId;
+
     internal async Task<bool> ReapplyPolicyAsync()
     {
         var refused = PackageRefusal?.Invoke();
