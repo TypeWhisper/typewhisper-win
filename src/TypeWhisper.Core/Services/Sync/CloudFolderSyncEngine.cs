@@ -355,13 +355,11 @@ public static class CloudFolderSyncEngine
         {
             // Use the version this device actually synced. Unseen remote edits cannot
             // change which exact regex a local deletion or mode change targets.
-            var previousOperations = ReadOperations(operationsPath, cancellationToken, out var incompleteRead);
-            // A partial applied file makes the last mode ambiguous. Preserve local
-            // data and migration state until the provider can supply that history.
-            if (incompleteRead && !state.AppliedOperationIds.IsSubsetOf(previousOperations.Select(operation => operation.OperationId)))
-                throw new IOException(Loc.T("Some previously synced files are not readable yet. Retry Cloud Folder Sync once your cloud provider has finished downloading them."));
+            var previousOperations = ReadOperations(operationsPath, cancellationToken);
             var known = LegacyWinningOperations(previousOperations
                 .Where(operation => state.AppliedOperationIds.Contains(operation.OperationId)).ToArray());
+            if (!LegacyCorrectionHistoryIsComplete(state, known))
+                throw new IOException(Loc.T("Some previously synced files are not readable yet. Retry Cloud Folder Sync once your cloud provider has finished downloading them."));
             foreach (var (id, operation) in known)
                 if (state.KnownLocalItemIds.Contains(id) &&
                     (!state.ExportedItemVersions.TryGetValue(id, out var version) || !version.StartsWith("dictionary-v3|", StringComparison.Ordinal)) &&
@@ -374,7 +372,7 @@ public static class CloudFolderSyncEngine
         // Keep tombstones: deleting them while old upserts remain would resurrect data on a new device.
         cancellationToken.ThrowIfCancellationRequested();
 
-        var operations = NormalizeIdentities(ReadOperations(operationsPath, cancellationToken, out _), initialRecords);
+        var operations = NormalizeIdentities(ReadOperations(operationsPath, cancellationToken), initialRecords);
         var winners = WinningOperations(operations);
         var mutations = MakeMutations(winners, initialRecords, state.DeviceId, state.AppliedOperationIds);
 
@@ -508,17 +506,26 @@ public static class CloudFolderSyncEngine
             aliases[legacy] = record.ItemId;
         }
         foreach (var record in local.Values) Remember(record);
-        var valid = operations.Where(IsValidOperation).ToArray();
+        CloudFolderSyncOperation PreserveLegacyRegexMode(CloudFolderSyncOperation operation)
+        {
+            // Resolve omitted mode before validation: a space-only pattern is valid
+            // only when it addresses an existing regex, not a new literal correction.
+            if (operation.SchemaVersion == 1 && operation.Kind == CloudFolderSyncOperationKind.Upsert &&
+                operation.Collection == UserDataSyncCollection.Dictionary &&
+                operation.Dictionary is { EntryType: UserDataSyncDictionaryEntryType.Correction, IsRegexFieldPresent: false } legacy &&
+                !string.IsNullOrEmpty(legacy.Original) &&
+                !local.ContainsKey(UserDataSyncIdentity.DictionaryItemId(legacy.EntryType, legacy.Original)) && local.Values.Any(record =>
+                    record.Dictionary?.IsRegex == true && string.Equals(record.Dictionary.Original, legacy.Original, StringComparison.Ordinal)))
+                return operation with { Dictionary = legacy with { IsRegex = true } };
+            return operation;
+        }
+        var valid = operations.Select(PreserveLegacyRegexMode).Where(IsValidOperation).ToArray();
         var legacyWinners = LegacyWinningOperations(valid);
         var canonical = valid.Where(operation => operation.SchemaVersion != 1 || operation.Dictionary?.IsRegex != true ||
             legacyWinners[UserDataSyncIdentity.DictionaryItemId(operation.Dictionary.EntryType, operation.Dictionary.Original)].OperationId == operation.OperationId)
             .Select(operation =>
         {
             if (operation.Kind != CloudFolderSyncOperationKind.Upsert) return operation;
-            if (operation.Dictionary is { EntryType: UserDataSyncDictionaryEntryType.Correction, IsRegexFieldPresent: false } legacy &&
-                !local.ContainsKey(UserDataSyncIdentity.DictionaryItemId(legacy.EntryType, legacy.Original)) && local.Values.Any(record =>
-                    record.Dictionary?.IsRegex == true && string.Equals(record.Dictionary.Original, legacy.Original, StringComparison.Ordinal)))
-                operation = operation with { Dictionary = legacy with { IsRegex = true } };
             var id = operation.Collection == UserDataSyncCollection.Dictionary
                 ? UserDataSyncIdentity.DictionaryItemId(operation.Dictionary!.EntryType, operation.Dictionary.Original, operation.Dictionary.IsRegex)
                 : UserDataSyncIdentity.SnippetItemId(operation.Snippet!.Trigger);
@@ -529,6 +536,25 @@ public static class CloudFolderSyncEngine
         return canonical.Select(operation => operation.Kind == CloudFolderSyncOperationKind.Delete &&
             !local.ContainsKey(operation.ItemId) && aliases.TryGetValue(operation.ItemId, out var id)
                 ? operation with { ItemId = id } : operation).ToArray();
+    }
+
+    private static bool LegacyCorrectionHistoryIsComplete(
+        CloudFolderSyncState state, IReadOnlyDictionary<string, CloudFolderSyncOperation> known)
+    {
+        foreach (var itemId in state.KnownLocalItemIds)
+        {
+            if (!itemId.StartsWith("dictionary:correction:", StringComparison.Ordinal) ||
+                itemId.StartsWith(UserDataSyncIdentity.RegexCorrectionPrefix, StringComparison.Ordinal) ||
+                !state.ExportedItemVersions.TryGetValue(itemId, out var version) ||
+                version.StartsWith("dictionary-v3|", StringComparison.Ordinal)) continue;
+            // Only the last exported correction version is required. Applied IDs of
+            // unrelated tombstones can legitimately outlive their pruned files.
+            if (!known.TryGetValue(itemId, out var operation) || operation.Kind != CloudFolderSyncOperationKind.Upsert ||
+                operation.Dictionary is not { EntryType: UserDataSyncDictionaryEntryType.Correction } entry) return false;
+            var timestamp = VersionString(entry.UpdatedAt);
+            if (version != timestamp && version != "dictionary-v2|" + timestamp) return false;
+        }
+        return true;
     }
 
     // Resolve v1 identities before migrating. Deleted or renamed legacy patterns
@@ -782,10 +808,8 @@ public static class CloudFolderSyncEngine
         }
     }
 
-    private static IReadOnlyList<CloudFolderSyncOperation> ReadOperations(
-        string operationsPath, CancellationToken cancellationToken, out bool incompleteRead)
+    private static IReadOnlyList<CloudFolderSyncOperation> ReadOperations(string operationsPath, CancellationToken cancellationToken)
     {
-        incompleteRead = false;
         if (!Directory.Exists(operationsPath))
             return [];
 
@@ -801,12 +825,10 @@ public static class CloudFolderSyncEngine
                     var operation = CloudFolderSyncJson.Deserialize<CloudFolderSyncOperation>(
                         File.ReadAllText(file));
                     if (operation is not null) operations.Add(operation);
-                    else incompleteRead = true;
                 }
                 catch
                 {
-                    // Cloud providers can leave transient or partial files; skip unreadable operations.
-                    incompleteRead = true;
+                    // Skip partial files and collections from other clients (such as Mac history).
                 }
             }
         }
