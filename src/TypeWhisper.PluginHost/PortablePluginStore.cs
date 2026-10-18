@@ -183,9 +183,11 @@ public sealed class PortablePluginStore
             await Task.Run(() => Extract(archive, package, ct), ct);
             ValidatePackage(package, entry.Id, entry.Version);
             ct.ThrowIfCancellationRequested();
-            // Judged once more after the download: a policy that changed meanwhile wins before the installation hook
-            // runs any package code and before the index records the package.
-            if (InstallRefusal(entry) is { } refusedLate) throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("plugin-download", refusedLate);
+            // Judged once more after the download, now also by the extracted manifest rather than the catalog entry
+            // alone: a policy that changed meanwhile, or a package that declares more than its entry, is refused
+            // before the installation hook runs any package code and before the index records the package.
+            if ((InstallRefusal(entry) ?? ExecutionRefusal(entry.Id, package)) is { } refusedLate)
+                throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("plugin-download", refusedLate);
             Dictionary<string, Receipt> next;
             lock (_sync) next = new(_installed, StringComparer.Ordinal);
             var update = next.TryGetValue(entry.Id, out var previous);
@@ -230,15 +232,17 @@ public sealed class PortablePluginStore
         finally { _operation.Release(); }
     }
 
-    // Whether policy refuses running this installed package's code, judged by its manifest on disk. A package whose
+    // Why policy refuses running this package's code, judged by its manifest on disk, or null. A package whose
     // manifest cannot be read is judged by the allowlist alone.
-    private bool RefusedForExecution(string pluginId, string directory)
+    private string? ExecutionRefusal(string pluginId, string directory)
     {
         var policy = _policy?.Invoke() ?? TypeWhisper.Core.Models.ManagedProviderPolicy.None;
         var manifest = PortablePluginInventory.Inspect(directory, _host).Manifest;
-        return (manifest is null ? policy.PluginRefusal(pluginId)
-            : policy.PackageRefusal(pluginId, PluginLocalityMap.ToContentLocality(manifest.ResolvedLocality), manifest.ResolvedCategories)) is not null;
+        return manifest is null ? policy.PluginRefusal(pluginId)
+            : policy.PackageRefusal(pluginId, PluginLocalityMap.ToContentLocality(manifest.ResolvedLocality), manifest.ResolvedCategories);
     }
+
+    private bool RefusedForExecution(string pluginId, string directory) => ExecutionRefusal(pluginId, directory) is not null;
 
     // Whether policy refuses installing or updating this package right now.
     private bool UpdateRefused(string pluginId) => _policy?.Invoke() is { } policy && (policy.PluginDownloadRefusal() ?? policy.PluginRefusal(pluginId)) is not null;

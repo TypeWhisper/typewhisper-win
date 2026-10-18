@@ -32,11 +32,18 @@ public sealed partial class MainWindow
         WinUILicensing.ApplyPolicyChange();
         _applicationUpdates?.PolicyChanged();
         _ = ApplyStartupPolicyAsync();
-        _ = _dictation.ApplyPolicyChangeAsync();
-        // A setup kept closed by policy reopens when the skip rule goes away or when the provider it relied on is
-        // refused now: a profile without a usable provider must not stay marked as skipped.
+        _ = ApplyDictationPolicyAsync();
+    }
+
+    // A setup kept closed by policy reopens when the skip rule goes away or when the provider it relied on is refused
+    // or gone now: a profile without a usable provider must not stay marked as skipped. The decision follows the
+    // dictation policy pass, since a refused package is unloaded by it and its role then reports no refusal.
+    private async Task ApplyDictationPolicyAsync()
+    {
+        await _dictation.ApplyPolicyChangeAsync();
+        if (_closing || _profileRestoreClosing) return;
         if (SetupSkippedByPolicy && !SetupCompleted
-            && (!OnboardingPolicy.SkipSetupWhenReady(WinUIManagedPolicy.Current) || _dictation.TranscriptionPolicyRefusal() is not null))
+            && (!OnboardingPolicy.SkipSetupWhenReady(WinUIManagedPolicy.Current) || !_dictation.IsReady || _dictation.TranscriptionPolicyRefusal() is not null))
         {
             SetupSkippedByPolicy = false;
             OpenSetup(returnToTray: true);

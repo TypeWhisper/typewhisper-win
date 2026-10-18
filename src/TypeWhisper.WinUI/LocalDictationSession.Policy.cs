@@ -38,6 +38,14 @@ internal sealed partial class LocalDictationSession
         try
         {
             await PluginRuntime.ReapplyPolicyAsync();
+            // Downloads that passed their check before the policy turned them off stop here; the runtime cancels its
+            // own downloads in the same pass.
+            if (ModelDownloadRefusal() is not null)
+            {
+                Models.CancelDownload();
+                await LocalLlmDownload.CancelAndDrainAsync();
+                ModelDownloadsRefused?.Invoke();
+            }
             // Work already inside a refused local engine is cancelled, as the runtime cancels refused roles; the
             // gate is then taken once the cancelled operation has let go of it. The full transcription rule applies,
             // so a provider allowlist that excludes the local engine cancels as well.

@@ -169,8 +169,13 @@ public sealed partial class PortablePluginRuntimeRegistry
             // Rechecked under the lease: a policy that changed during the wait wins before any byte is downloaded.
             if (Policy.ModelDownloadRefusal() is { } refusedNow) throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("model-download", refusedNow);
             using var reports = new ModelDownloadProgress(progress, token);
-            if (!engine.IsModelDownloaded(expected.ModelId))
-                await engine.DownloadModelAsync(expected.ModelId, reports, token).ConfigureAwait(false);
+            lock (_sync) owner.Downloading = true;
+            try
+            {
+                if (!engine.IsModelDownloaded(expected.ModelId))
+                    await engine.DownloadModelAsync(expected.ModelId, reports, token).ConfigureAwait(false);
+            }
+            finally { lock (_sync) owner.Downloading = false; }
             token.ThrowIfCancellationRequested();
             if (!engine.IsModelDownloaded(expected.ModelId))
                 throw new InvalidOperationException("The plugin did not confirm that the model was downloaded.");

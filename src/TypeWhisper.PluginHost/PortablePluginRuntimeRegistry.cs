@@ -75,6 +75,8 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
         internal bool PolicyRefused;
         // Marked for a policy unload that has not run yet: no capability rebuild touches the package meanwhile.
         internal bool Stopping;
+        // A model download of this package is running; the download policy cancels it when it turns off.
+        internal bool Downloading;
         internal bool CapabilityError;
         internal bool ApiKeyConfigured;
         internal CancellationTokenSource? Request;
@@ -263,7 +265,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
                 try { Publish(BuildIndex()); }
                 catch { Publish(new(new(StringComparer.OrdinalIgnoreCase), new(StringComparer.OrdinalIgnoreCase), [], [])); throw; }
                 finally { if (old is not null) await ReleasePackageAsync(slot, old); }
-                lock (_sync) { slot.Error = null; slot.PolicyRefused = false; }
+                lock (_sync) { slot.Error = null; slot.PolicyRefused = false; slot.Stopping = false; }
                 return null;
             }
             var directory = store.Resolve(pluginId); // Inventory paths are display identities, not loadable directories.
@@ -298,6 +300,8 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             slot.Directory = directory;
             // Locality is authoritative; the legacy flag only feeds it for manifests that predate the field.
             slot.IsLocal = inspection.Manifest.ResolvedLocality == PluginLocality.Local;
+            // A mark left by a superseded policy unload must not hide this activation from the index.
+            lock (_sync) slot.Stopping = false;
             try
             {
                 var next = BuildIndex();
@@ -410,6 +414,9 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
                 CancelRequest(role.Owner);
         foreach (var (selectionId, role) in _index.Llm)
             if (policy.LlmRefusal(selectionId, role.Owner.Id, role.Owner.Locality) is not null) CancelRequest(role.Owner);
+        // A running model download stops once the download policy refuses it.
+        if (policy.ModelDownloadRefusal() is not null)
+            foreach (var slot in _slots.Values.Where(slot => slot.Downloading)) CancelRequest(slot);
         // Text reaches processors, actions, speech and memory sources: judged by the activated plugin, since a
         // manifest need not declare categories.
         foreach (var slot in _slots.Values)
@@ -600,12 +607,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             if (!_slots.TryGetValue(pluginId, out var slot) || slot.Package is null) throw new InvalidOperationException("Enable this plugin first.");
             owner = slot;
         }
-        return UseAsync(owner, token =>
-        {
-            // Configuration runs package code: judged again under the lease, like content operations.
-            if (SlotRefusal(owner) is { } refused) throw new ManagedPolicyDeniedException("plugin", refused);
-            return use(owner.Package!.Plugin, token);
-        }, cancellationToken, preserveCompletedResult, refreshCapabilities);
+        return UseAsync(owner, token => use(owner.Package!.Plugin, token), cancellationToken, preserveCompletedResult, refreshCapabilities);
     }
 
     private async Task<T> UseAsync<T>(Slot slot, Func<CancellationToken, Task<T>> use, CancellationToken cancellationToken, bool preserveCompletedResult = false, bool refreshCapabilities = true)
@@ -624,6 +626,9 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             lock (_sync)
             {
                 if (_disposed || !slot.Accepting || generation != slot.Generation) throw new OperationCanceledException("Plugin selection changed.");
+                // Every lease runs package code: the package itself is judged again once the gate is held, before the
+                // role-specific rules of the operation.
+                if (SlotRefusal(slot) is { } refused) throw new ManagedPolicyDeniedException("plugin", refused);
                 request = slot.Request = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             }
             var result = await use(request.Token).ConfigureAwait(false);

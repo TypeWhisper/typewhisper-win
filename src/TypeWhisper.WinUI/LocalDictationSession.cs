@@ -173,6 +173,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     internal bool HasActiveUserWork => _fileBusy || _recorderReserved || _workflowReserved || IsRecording || _phase == DictationPhase.Processing;
     internal event Action? DictationRequested;
     internal event Action? RecordingStarting;
+    /// <summary>Raised when the model download policy turned downloads off; running downloads stop.</summary>
+    internal event Action? ModelDownloadsRefused;
     internal bool CanSelectModel => !_disposed && !_fileBusy && !_recorderReserved && !_workflowReserved && !IsRecording && _phase is not (DictationPhase.Processing or DictationPhase.Configuring or DictationPhase.LoadingModel) && !Models.Busy && Models.Enabled && !PluginRuntime.IsBusy;
     private IntPtr _target;
     private OriginalDictationField? _originalField;

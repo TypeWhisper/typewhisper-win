@@ -160,6 +160,8 @@ internal sealed class LiveLocalTtsModelSettings : UserControl
         _cancel.Content = download ? Loc.T("Cancel download / loading") : Loc.T("Cancel");
         void CancelForRecording() => operation.Cancel();
         _session.RecordingStarting += CancelForRecording;
+        // A download also stops when the policy turns downloads off; a model on disk loads regardless.
+        if (download && !_downloaded) _session.ModelDownloadsRefused += CancelForRecording;
         UpdateButtons();
         try
         {
@@ -180,6 +182,7 @@ internal sealed class LiveLocalTtsModelSettings : UserControl
         finally
         {
             _session.RecordingStarting -= CancelForRecording;
+            _session.ModelDownloadsRefused -= CancelForRecording;
             _operation = null; _busy = false;
             if (IsLoaded)
             { if (refresh || !ReferenceEquals(_lifetime, lifetime)) await ReadAsync(); else UpdateButtons(); }
