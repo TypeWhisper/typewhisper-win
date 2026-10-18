@@ -1,3 +1,5 @@
+using System.Collections.Frozen;
+using System.Collections.ObjectModel;
 using TypeWhisper.Core.Models;
 
 namespace TypeWhisper.Core.Services;
@@ -28,9 +30,8 @@ public static class ManagedPolicyValidator
         {
             issues.Add(new(null, null, $"The policy source could not be read ({reading.Error ?? "unknown error"})."));
             return new(revision, ManagedPolicyReadStatus.Unreadable, readAt,
-                new Dictionary<string, ManagedPolicyValue>(StringComparer.Ordinal),
-                new Dictionary<string, ManagedPolicyValue>(StringComparer.Ordinal),
-                new HashSet<string>(StringComparer.Ordinal), issues);
+                ReadOnlyDictionary<string, ManagedPolicyValue>.Empty, ReadOnlyDictionary<string, ManagedPolicyValue>.Empty,
+                FrozenSet<string>.Empty, issues.AsReadOnly());
         }
 
         var enforced = new Dictionary<string, ManagedPolicyValue>(StringComparer.Ordinal);
@@ -43,7 +44,9 @@ public static class ManagedPolicyValidator
         var status = reading.Enforced.Exists || reading.Recommended.Exists
             ? ManagedPolicyReadStatus.Present
             : ManagedPolicyReadStatus.Absent;
-        return new(revision, status, readAt, enforced, recommended, invalidEnforced, issues);
+        // The snapshot is shared process-wide and documented as immutable: publish frozen copies, not the working sets.
+        return new(revision, status, readAt, enforced.AsReadOnly(), recommended.AsReadOnly(),
+            invalidEnforced.ToFrozenSet(StringComparer.Ordinal), issues.AsReadOnly());
     }
 
     private static void ValidateScope(
@@ -121,7 +124,8 @@ public static class ManagedPolicyValidator
                 invalid.Add(name);
                 issues.Add(new(name, scope, $"{name} {problem}."));
             }
-            else if (value is not null)
+            // Windows allows a value and a subkey of the same name: a key already marked malformed stays unset.
+            else if (value is not null && !invalid.Contains(name))
             {
                 values[name] = value;
             }

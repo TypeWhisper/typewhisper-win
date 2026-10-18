@@ -194,13 +194,12 @@ public sealed record ManagedPolicyIssue(string? Key, ManagedPolicyScope? Scope, 
 /// </remarks>
 public sealed class ManagedPolicySnapshot
 {
-    private static readonly IReadOnlyDictionary<string, ManagedPolicyValue> NoValues =
-        new Dictionary<string, ManagedPolicyValue>(StringComparer.Ordinal);
-    private static readonly IReadOnlySet<string> NoKeys = new HashSet<string>(StringComparer.Ordinal);
-
     /// <summary>The state before the first read: revision 0 and no policy.</summary>
     public static ManagedPolicySnapshot Empty { get; } =
-        new(0, ManagedPolicyReadStatus.Absent, DateTimeOffset.MinValue, NoValues, NoValues, NoKeys, []);
+        new(0, ManagedPolicyReadStatus.Absent, DateTimeOffset.MinValue,
+            System.Collections.ObjectModel.ReadOnlyDictionary<string, ManagedPolicyValue>.Empty,
+            System.Collections.ObjectModel.ReadOnlyDictionary<string, ManagedPolicyValue>.Empty,
+            System.Collections.Frozen.FrozenSet<string>.Empty, []);
 
     /// <summary>Creates a snapshot. The validator and the service are the intended callers.</summary>
     public ManagedPolicySnapshot(

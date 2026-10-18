@@ -441,12 +441,36 @@ public class ManagedPolicyValidatorTests
         Assert.Contains(marker.Issues, issue => issue.Key == "AllowedPlugins" && issue.Message.Contains("AllowedPluginsConfigured must be a REG_DWORD value"));
         Assert.DoesNotContain(marker.Issues, issue => issue.Message.StartsWith("Unknown", StringComparison.Ordinal));
 
+        // A value and a subkey of the same name: the malformed shape wins and the value is not applied, in either scope.
+        var both = Validate(
+            Section([("LaunchAtLogin", Number(1))], [("LaunchAtLogin", new ManagedPolicyRawList(["1"]))]),
+            Section([("LaunchAtLogin", Number(1))], [("LaunchAtLogin", new ManagedPolicyRawList(["1"]))]));
+        Assert.True(both.IsBlocked("LaunchAtLogin"));
+        Assert.Null(both.Enforced("LaunchAtLogin"));
+        Assert.Null(both.Recommended("LaunchAtLogin"));
+        Assert.Equal(2, both.Issues.Count(issue => issue.Key == "LaunchAtLogin" && issue.Message.Contains("must be a value")));
+
         // The same shapes under Recommended are reported but block nothing.
         var recommended = Validate(recommended: Section(
             [("TranscriptionProviderId", Text("x"))],
             [("UpdateChannel", new ManagedPolicyRawList(["0"]))]));
         Assert.False(recommended.IsBlocked("UpdateChannel"));
         Assert.Contains(recommended.Issues, issue => issue.Key == "UpdateChannel" && issue.Message.Contains("must be a value"));
+    }
+
+    [Fact]
+    public void PublishedCollectionsCannotBeMutatedThroughADowncast()
+    {
+        var snapshot = Validate(Section(("AllowCloudTranscription", Number(0)), ("UpdateMode", Number(9))));
+
+        Assert.IsNotType<Dictionary<string, ManagedPolicyValue>>(snapshot.EnforcedValues);
+        Assert.IsNotType<Dictionary<string, ManagedPolicyValue>>(snapshot.RecommendedValues);
+        Assert.IsNotType<HashSet<string>>(snapshot.InvalidEnforcedKeys);
+        Assert.IsNotType<List<ManagedPolicyIssue>>(snapshot.Issues);
+        Assert.IsNotType<HashSet<string>>(ManagedPolicySnapshot.Empty.InvalidEnforcedKeys);
+        var unreadable = ManagedPolicyValidator.Validate(ManagedPolicyReading.Unreadable("IOException"), 1, ReadAt);
+        Assert.IsNotType<HashSet<string>>(unreadable.InvalidEnforcedKeys);
+        Assert.IsNotType<List<ManagedPolicyIssue>>(unreadable.Issues);
     }
 
     [Fact]
