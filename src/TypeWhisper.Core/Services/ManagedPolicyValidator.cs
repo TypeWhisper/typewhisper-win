@@ -78,6 +78,12 @@ public static class ManagedPolicyValidator
                     ? $"{name} must be a subkey of numbered values next to {definition.ConfiguredMarkerName}, not a value; the setting stays blocked."
                     : $"{name} must be a value, not a subkey; the setting stays blocked."));
             }
+            if (isList && rawLists.ContainsKey(definition.ConfiguredMarkerName))
+            {
+                consumedLists.Add(definition.ConfiguredMarkerName);
+                invalid.Add(name);
+                issues.Add(new(name, scope, $"{definition.ConfiguredMarkerName} must be a REG_DWORD value, not a subkey; {name} stays blocked."));
+            }
             if (isList)
             {
                 var marker = definition.ConfiguredMarkerName;

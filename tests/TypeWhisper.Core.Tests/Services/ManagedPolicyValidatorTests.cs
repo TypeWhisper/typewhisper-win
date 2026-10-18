@@ -434,6 +434,13 @@ public class ManagedPolicyValidatorTests
         Assert.Contains(snapshot.Issues, issue => issue.Key == "AllowedPlugins" && issue.Message.Contains("must be a subkey"));
         Assert.DoesNotContain(snapshot.Issues, issue => issue.Message.StartsWith("Unknown", StringComparison.Ordinal));
 
+        // A configured marker written as a subkey blocks its list as well.
+        var marker = Validate(Section([], [("AllowedPluginsConfigured", new ManagedPolicyRawList(["1"]))]));
+        Assert.True(marker.IsBlocked("AllowedPlugins"));
+        Assert.Null(marker.Enforced("AllowedPlugins"));
+        Assert.Contains(marker.Issues, issue => issue.Key == "AllowedPlugins" && issue.Message.Contains("AllowedPluginsConfigured must be a REG_DWORD value"));
+        Assert.DoesNotContain(marker.Issues, issue => issue.Message.StartsWith("Unknown", StringComparison.Ordinal));
+
         // The same shapes under Recommended are reported but block nothing.
         var recommended = Validate(recommended: Section(
             [("TranscriptionProviderId", Text("x"))],
