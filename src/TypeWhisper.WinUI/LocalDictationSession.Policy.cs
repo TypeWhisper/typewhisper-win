@@ -68,6 +68,8 @@ internal sealed partial class LocalDictationSession
                 ModelDownloadsRefused?.Invoke();
                 await LocalLlmDownload.CancelAndDrainAsync();
             }
+            // An installation in progress that the policy refuses now is cancelled, hook included.
+            Packages.Store.ReapplyPolicy();
             await PluginRuntime.ReapplyPolicyAsync();
             await _gate.WaitAsync();
             try

@@ -318,7 +318,9 @@ def main():
             # Metadata refreshes need no package: they are committed on their own and verified on Pages.
             if refreshed and update_feed([], refreshed):
                 api("pages/builds", method="POST")
-                committed = builder.catalog_entries(refresh_feed(current, refreshed))
+                # Verified against the feed as committed, not the snapshot read before the commit.
+                _, committed_feed = snapshot()
+                committed = builder.catalog_entries(committed_feed)
                 wait_for_live([committed[entry["id"]] for entry in refreshed if entry["id"] in committed])
                 print("Selected versions are already public; refreshed catalog metadata committed.")
                 return
@@ -329,7 +331,9 @@ def main():
             # Recover deployment even when no package needs rebuilding; refreshes ride along.
             if refreshed:
                 update_feed([], refreshed)
-                committed = builder.catalog_entries(refresh_feed(current, refreshed))
+                # Verified against the feed as committed, not the snapshot read before the commit.
+                _, committed_feed = snapshot()
+                committed = builder.catalog_entries(committed_feed)
                 verification = [committed.get(entry["id"], entry) for entry in verification]
                 verified = {entry["id"] for entry in verification}
                 verification += [committed[entry["id"]] for entry in refreshed if entry["id"] in committed and entry["id"] not in verified]

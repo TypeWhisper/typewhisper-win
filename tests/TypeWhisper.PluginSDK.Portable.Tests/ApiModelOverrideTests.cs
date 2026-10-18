@@ -34,6 +34,7 @@ namespace TypeWhisper.WinUI
         { ct.ThrowIfCancellationRequested(); Selected = model.ModelId; return Task.CompletedTask; }
         internal Task DownloadModelAsync(PortableDownloadableModel model, IProgress<double>? progress, CancellationToken ct) => throw new NotSupportedException();
         internal Task RefreshCapabilitiesAsync() => Task.CompletedTask;
+        internal string? SelectionPackageRefusal(string selectionId) => null;
     }
 }
 

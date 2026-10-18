@@ -21,12 +21,23 @@ public sealed class PortablePluginStore
     private Dictionary<string, Receipt> _installed = new(StringComparer.Ordinal);
     private bool _initialized;
     private sealed record Receipt(string Directory, string Version, string? PendingDirectory = null, string? PendingVersion = null, string? UpdateWarning = null);
+    // The installation in progress, so a policy pass can cancel it; guarded by _sync.
+    private CancellationTokenSource? _activeInstall;
+    private PortableCatalogEntry? _activeEntry;
     public string Root { get; }
     public string InventoryRoot => Path.Combine(Root, "installed");
     public bool Initialized => _initialized;
     public PortablePluginStore(string root, Version host, HttpClient http, Func<string, IPluginHostServices>? services = null,
         Func<TypeWhisper.Core.Models.ManagedProviderPolicy>? policy = null)
     { Root = Path.GetFullPath(root); _host = host; _http = http; _services = services; _policy = policy; }
+
+    /// <summary>Cancels an installation in progress that the policy refuses by now, hook included.</summary>
+    public void ReapplyPolicy()
+    {
+        CancellationTokenSource? cancel;
+        lock (_sync) cancel = _activeEntry is { } entry && InstallRefusal(entry) is not null ? _activeInstall : null;
+        try { cancel?.Cancel(); } catch (ObjectDisposedException) { }
+    }
 
     /// <summary>Why machine policy refuses installing or updating a package, or null.</summary>
     public string? InstallRefusal(string pluginId)
@@ -154,6 +165,12 @@ public sealed class PortablePluginStore
         // Policy is checked before any byte is downloaded and before installation hooks run.
         if (InstallRefusal(entry) is { } refused) throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("plugin-download", refused);
         await _operation.WaitAsync(ct);
+        // A policy pass cancels this installation through ReapplyPolicy once the policy refuses it, so a download or a
+        // slow hook does not run on after the restriction took effect.
+        var caller = ct;
+        using var policyLinked = CancellationTokenSource.CreateLinkedTokenSource(caller);
+        ct = policyLinked.Token;
+        lock (_sync) { _activeInstall = policyLinked; _activeEntry = entry; }
         string? package = null;
         var archive = Path.Combine(Root, Guid.NewGuid().ToString("N") + ".zip");
         try
@@ -219,8 +236,14 @@ public sealed class PortablePluginStore
             package = null;
             return update;
         }
+        catch (OperationCanceledException) when (!caller.IsCancellationRequested && InstallRefusal(entry) is { } refusedMeanwhile)
+        {
+            // Cancelled by the policy pass, not by the caller: the reason is the refusal.
+            throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("plugin-download", refusedMeanwhile);
+        }
         finally
         {
+            lock (_sync) { _activeInstall = null; _activeEntry = null; }
             if (package is not null) TryDelete(package);
             try { File.Delete(archive); } catch (IOException) { } catch (UnauthorizedAccessException) { }
             _operation.Release();

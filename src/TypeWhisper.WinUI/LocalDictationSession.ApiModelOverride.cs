@@ -14,7 +14,13 @@ internal sealed partial class LocalDictationSession
         ct.ThrowIfCancellationRequested();
         DictationProviderOption? provider = null;
         if (engine is { Length: > 0 })
-            provider = ApiModelProvider(engine) ?? throw new LocalApiRequestException(404, "Transcription engine not found.");
+        {
+            // An engine the policy unloaded is judged through the package that served it, before it reads as unknown.
+            provider = ApiModelProvider(engine)
+                ?? (PluginRuntime.SelectionPackageRefusal(RegistrySelectionId(engine)) is { } refusedEngine
+                    ? throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("transcription", refusedEngine)
+                    : throw new LocalApiRequestException(404, "Transcription engine not found."));
+        }
         if (modelId is { Length: > 0 })
         {
             var qualified = DictationProviders.FirstOrDefault(item => modelId.StartsWith(item.Id + ":", StringComparison.Ordinal));
