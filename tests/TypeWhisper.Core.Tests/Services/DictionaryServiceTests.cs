@@ -17,6 +17,25 @@ public class DictionaryServiceTests : IDisposable
     }
 
     [Fact]
+    public void CorrectionTiesDoNotDependOnCatalogOrder()
+    {
+        var literal = new DictionaryEntry { Id = "literal", EntryType = DictionaryEntryType.Correction, Original = "foo", Replacement = "A" };
+        var regex = literal with { Id = "regex", Replacement = "B", IsRegex = true };
+        var preceding = literal with { Id = "preceding", Original = "bar", Replacement = "foo" };
+        DictionaryEntry[][] orders = [[literal, regex, preceding], [literal, preceding, regex],
+            [regex, literal, preceding], [regex, preceding, literal],
+            [preceding, literal, regex], [preceding, regex, literal]];
+        foreach (var entries in orders)
+        {
+            Assert.Equal("A A", DictionaryService.ApplyCorrectionsSnapshot("bar foo", entries));
+            Assert.Equal("A A", DictionaryService.CompileCorrections(entries).Apply("bar foo"));
+            File.WriteAllText(_filePath, JsonSerializer.Serialize(entries));
+            Assert.Equal("A A", new DictionaryService(_filePath).ApplyCorrections("bar foo"));
+            Assert.Equal("A A", new DictionaryService(_filePath).ApplyCorrections("bar foo"));
+        }
+    }
+
+    [Fact]
     public void SyncedRegexPatternsAndLiteralModeKeepIndependentStoredEntries()
     {
         var now = DateTime.UtcNow;

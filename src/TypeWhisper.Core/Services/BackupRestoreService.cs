@@ -850,6 +850,8 @@ public sealed class BackupRestoreService : IBackupRestoreService
                 return Loc.T("A dictionary correction has no replacement.");
             if (entry.EntryType == DictionaryEntryType.Correction && entry.IsRegex)
             {
+                if (entry.Original.Contains('\r') || entry.Original.Contains('\n'))
+                    return Loc.T("A dictionary entry contains invalid text.");
                 try { _ = new Regex(entry.Original, RegexOptions.None, TimeSpan.FromMilliseconds(100)); }
                 catch (ArgumentException) { return Loc.T("A dictionary entry contains an invalid regular expression."); }
             }

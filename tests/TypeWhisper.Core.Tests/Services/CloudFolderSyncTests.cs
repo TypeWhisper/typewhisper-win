@@ -851,6 +851,51 @@ public sealed class CloudFolderSyncTests : IDisposable
     }
 
     [Theory]
+    [InlineData("empty", false)]
+    [InlineData("empty", true)]
+    [InlineData("dictionary", false)]
+    [InlineData("dictionary", true)]
+    [InlineData("kind", false)]
+    [InlineData("kind", true)]
+    [InlineData("deviceId", false)]
+    [InlineData("deviceId", true)]
+    public async Task StructurallyMalformedHistoryDoesNotTriggerPackageRecovery(string missingField, bool deleted)
+    {
+        var legacy = CloudFolderSyncJson.Deserialize<CloudFolderSyncOperation>(File.ReadAllText(
+            Path.Combine(AppContext.BaseDirectory, "Fixtures", "PremiumSync", "upsert-dictionary-regex-v1.json")))!;
+        var folder = Path.Combine(CloudFolderSyncEngine.PackagePath(_tempDir), "ops", "legacy");
+        Directory.CreateDirectory(folder);
+        var incomplete = System.Text.Json.Nodes.JsonNode.Parse(CloudFolderSyncJson.Serialize(legacy))!.AsObject();
+        incomplete["operationId"] = "unapplied-partial";
+        if (missingField == "empty") incomplete.Clear(); else incomplete.Remove(missingField);
+        File.WriteAllText(Path.Combine(folder, "partial.json"), incomplete.ToJsonString());
+        var store = new InMemoryUserDataSyncStore(dictionaryEntries: deleted ? [] :
+            [legacy.Dictionary! with { IsRegex = false, UpdatedAt = Date(20), Replacement = "literal" }]);
+        var state = new CloudFolderSyncState
+        {
+            DeviceId = "windows", KnownLocalItemIds = [legacy.ItemId],
+            ExportedItemVersions = new() { [legacy.ItemId] = "2023-11-14T22:13:30.000Z" },
+            AppliedOperationIds = [legacy.OperationId]
+        };
+        var previousState = CloudFolderSyncJson.Serialize(state);
+        var entitlement = new PaidEntitlements(true);
+        await Assert.ThrowsAsync<IOException>(() => CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(30)));
+        Assert.Equal(previousState, CloudFolderSyncJson.Serialize(state));
+        Assert.Equal(deleted ? 0 : 1, store.DictionaryEntries.Count);
+        Assert.Empty(OperationFiles("windows"));
+
+        File.WriteAllText(Path.Combine(folder, "legacy.json"), CloudFolderSyncJson.Serialize(legacy));
+        await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(40));
+        var published = OperationFiles("windows").Select(path =>
+            CloudFolderSyncJson.Deserialize<CloudFolderSyncOperation>(File.ReadAllText(path))!).ToArray();
+        Assert.Contains(published, operation => operation.SchemaVersion == 2 && operation.Kind == CloudFolderSyncOperationKind.Delete &&
+            operation.ItemId == UserDataSyncIdentity.DictionaryItemId(legacy.Dictionary!.EntryType, legacy.Dictionary.Original, true));
+        Assert.DoesNotContain(store.DictionaryEntries, entry => entry.IsRegex);
+        Assert.DoesNotContain("unapplied-partial", state.AppliedOperationIds);
+        Assert.Equal(0, (await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(50))).OperationsWritten);
+    }
+
+    [Theory]
     [InlineData(false, false, false)]
     [InlineData(true, false, false)]
     [InlineData(false, true, false)]

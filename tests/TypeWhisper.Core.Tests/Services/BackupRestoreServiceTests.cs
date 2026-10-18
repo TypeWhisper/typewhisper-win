@@ -13,6 +13,28 @@ public sealed class BackupRestoreServiceTests : IDisposable
     private readonly string _directory = Path.Combine(Path.GetTempPath(), $"typewhisper-backup-tests-{Guid.NewGuid():N}");
 
     [Fact]
+    public async Task BackupRejectsRegexPatternsWithLiteralLineBreaksBeforeChangingCatalogs()
+    {
+        var source = CreateProfile("multiline-source");
+        source.Dictionary.AddEntry(new DictionaryEntry { Id = "regex", EntryType = DictionaryEntryType.Correction,
+            Original = "word", Replacement = "#", IsRegex = true });
+        var json = JsonNode.Parse(await source.Backup.ExportAsync(new BackupExportOptions { Categories = BackupCategory.Dictionary }))!;
+        var destination = CreateProfile("multiline-target");
+        destination.Dictionary.AddEntry(new DictionaryEntry { Id = "existing", EntryType = DictionaryEntryType.Term, Original = "existing" });
+        foreach (var pattern in new[] { "\nword", "word\r", "wo\nrd", "\r\n" })
+        {
+            json["data"]!["dictionary"]!["entries"]![0]!["original"] = pattern;
+            Assert.False(destination.Backup.PreviewImport(json.ToJsonString()).IsValid);
+            Assert.False((await destination.Backup.ImportAsync(json.ToJsonString())).Success);
+            Assert.Equal("existing", Assert.Single(destination.Dictionary.Entries).Original);
+        }
+        json["data"]!["dictionary"]!["entries"]![0]!["original"] = @"\n";
+        Assert.True(destination.Backup.PreviewImport(json.ToJsonString()).IsValid);
+        Assert.True((await destination.Backup.ImportAsync(json.ToJsonString())).Success);
+        Assert.Contains(destination.Dictionary.Entries, entry => entry.IsRegex && entry.Original == @"\n");
+    }
+
+    [Fact]
     public async Task RegexPatternCaseSurvivesBackupMerge()
     {
         var source = CreateProfile("regex-source");

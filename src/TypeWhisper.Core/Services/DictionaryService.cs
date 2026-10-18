@@ -155,7 +155,7 @@ public sealed class DictionaryService : IDictionaryService
     /// <summary>Compiles the enabled corrections of a fixed snapshot once, so applying them later builds no regexes.</summary>
     public static CorrectionSet CompileCorrections(IReadOnlyList<DictionaryEntry> entries) => new(entries);
 
-    /// <summary>Enabled corrections of an entry snapshot, longest original first.</summary>
+    /// <summary>Enabled corrections, longest original first, then ordinal original and literal before regex.</summary>
     public sealed class CorrectionSet
     {
         private readonly (string Id, Regex Regex, string Replacement)[] _rules;
@@ -165,7 +165,9 @@ public sealed class DictionaryService : IDictionaryService
             var rules = new List<(string, Regex, string)>();
             foreach (var entry in entries
                 .Where(e => e.IsEnabled && e.EntryType == DictionaryEntryType.Correction && e.Replacement is not null)
-                .OrderByDescending(e => e.Original.Length))
+                .OrderByDescending(e => e.Original.Length)
+                .ThenBy(e => e.Original, StringComparer.Ordinal)
+                .ThenBy(e => e.IsRegex))
             {
                 var replacement = ExpandReplacementEscapes(entry.Replacement!);
                 var pattern = entry.IsRegex ? entry.Original : BuildCorrectionPattern(entry.Original);

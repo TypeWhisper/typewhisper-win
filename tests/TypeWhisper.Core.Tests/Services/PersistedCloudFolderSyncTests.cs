@@ -22,6 +22,69 @@ public sealed class PersistedCloudFolderSyncTests : IDisposable
     private static DictionaryEntry Word(string name, DateTime time) => new() { Id = Guid.NewGuid().ToString(), EntryType = DictionaryEntryType.Term, Original = name, CreatedAt = time, UpdatedAt = time, CtcMinSimilarity = .65f };
 
     [Fact]
+    public async Task TermRegexFlagsAreClearedAcrossPersistedSyncAndIncomingUpdates()
+    {
+        var a = Client("a"); var b = Client("b");
+        var time = DateTime.UtcNow.AddHours(-1);
+        var term = Word("[", time) with { IsRegex = true };
+        Write("a", "dictionary.json", new[] { term });
+        await a.SyncAsync(() => true);
+        Assert.False(Assert.Single(Read<DictionaryEntry[]>("a", "dictionary.json")).IsRegex);
+        var operations = Directory.GetFiles(Path.Combine(CloudFolderSyncEngine.PackagePath(Folder), "ops"), "*.json", SearchOption.AllDirectories)
+            .Select(path => CloudFolderSyncJson.Deserialize<CloudFolderSyncOperation>(File.ReadAllText(path))!).ToArray();
+        Assert.False(Assert.Single(operations).Dictionary!.IsRegex);
+        await b.SyncAsync(() => true);
+        Assert.False(Assert.Single(Read<DictionaryEntry[]>("b", "dictionary.json")).IsRegex);
+
+        var peerFolder = Path.Combine(CloudFolderSyncEngine.PackagePath(Folder), "ops", "legacy-peer");
+        Directory.CreateDirectory(peerFolder);
+        var incoming = new UserDataSyncDictionaryEntry(UserDataSyncDictionaryEntryType.Term, "[", null,
+            false, true, time, time.AddMinutes(1), IsRegex: true);
+        foreach (var original in new[] { "[", "new term" })
+            File.WriteAllText(Path.Combine(peerFolder, original == "[" ? "update.json" : "insert.json"),
+                CloudFolderSyncJson.Serialize(CloudFolderSyncOperation.UpsertDictionary(incoming with { Original = original },
+                    UserDataSyncIdentity.DictionaryItemId(incoming.EntryType, original), "legacy-peer")));
+        await b.SyncAsync(() => true);
+        var received = Read<DictionaryEntry[]>("b", "dictionary.json");
+        Assert.Equal(2, received.Length);
+        Assert.All(received, entry => Assert.False(entry.IsRegex));
+
+        Write("b", "dictionary.json", received.Select(entry => entry with { IsRegex = true }).ToArray());
+        var missingMode = incoming with { UpdatedAt = time.AddMinutes(2), IsRegexFieldPresent = false };
+        File.WriteAllText(Path.Combine(peerFolder, "missing-mode.json"), CloudFolderSyncJson.Serialize(
+            CloudFolderSyncOperation.UpsertDictionary(missingMode, UserDataSyncIdentity.DictionaryItemId(missingMode.EntryType, missingMode.Original), "legacy-peer")));
+        await b.SyncAsync(() => true);
+        Assert.All(Read<DictionaryEntry[]>("b", "dictionary.json"), entry => Assert.False(entry.IsRegex));
+        var repeated = await new PersistedCloudFolderSync(Profile("b")).SyncAsync(() => true);
+        Assert.Equal(0, repeated.OperationsWritten);
+        Assert.Equal(0, repeated.MutationsApplied);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PersistedSyncAllowsWhitespaceOriginalOnlyForRegexCorrections(bool correction)
+    {
+        var a = Client("a");
+        var entry = Word(" ", DateTime.UtcNow.AddHours(-1)) with { IsRegex = true,
+            EntryType = correction ? DictionaryEntryType.Correction : DictionaryEntryType.Term, Replacement = "-" };
+        Write("a", "dictionary.json", new[] { entry });
+        if (!correction)
+        {
+            await Assert.ThrowsAsync<JsonException>(() => a.SyncAsync(() => true));
+            Assert.False(Directory.Exists(CloudFolderSyncEngine.PackagePath(Folder)));
+            Assert.Null(a.Preferences.State!.LastSyncAt);
+            return;
+        }
+        await a.SyncAsync(() => true);
+        var b = Client("b");
+        await b.SyncAsync(() => true);
+        var received = Assert.Single(Read<DictionaryEntry[]>("b", "dictionary.json"));
+        Assert.Equal(" ", received.Original);
+        Assert.True(received.IsRegex);
+    }
+
+    [Fact]
     public async Task RegexIdentitiesSurvivePersistedSyncAndRestart()
     {
         var a = Client("a"); var b = Client("b");

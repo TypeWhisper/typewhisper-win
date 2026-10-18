@@ -881,7 +881,13 @@ public static class CloudFolderSyncEngine
                     if (envelope.TryGetProperty("collection", out var collection) && collection.ValueKind == JsonValueKind.String && collection.GetString() == "history" ||
                         envelope.TryGetProperty("schemaVersion", out var schema) && schema.TryGetInt32(out var version) && version > 2) continue;
                     var operation = envelope.Deserialize<CloudFolderSyncOperation>(CloudFolderSyncJson.Options);
-                    if (operation is not null) operations.Add(operation);
+                    if (operation is not null && HasReadableOperationStructure(envelope, operation))
+                    {
+                        // Keep readable old payloads as migration evidence, regardless
+                        // of current import limits. Defaults from partial objects are
+                        // not evidence that the old package was deliberately removed.
+                        operations.Add(operation);
+                    }
                     else unreadableHistory = true;
                 }
                 catch
@@ -893,6 +899,20 @@ public static class CloudFolderSyncEngine
         }
 
         return operations;
+    }
+
+    private static bool HasReadableOperationStructure(JsonElement envelope, CloudFolderSyncOperation operation)
+    {
+        foreach (var field in new[] { "schemaVersion", "operationId", "deviceId", "collection", "itemId", "kind", "updatedAt" })
+            if (!envelope.TryGetProperty(field, out _)) return false;
+        return operation.SchemaVersion is 1 or 2 && !string.IsNullOrWhiteSpace(operation.OperationId) &&
+            !string.IsNullOrWhiteSpace(operation.DeviceId) && !string.IsNullOrWhiteSpace(operation.ItemId) &&
+            operation.UpdatedAt != default && Enum.IsDefined(operation.Collection) && Enum.IsDefined(operation.Kind) &&
+            (operation.Kind == CloudFolderSyncOperationKind.Delete ||
+             operation.Collection == UserDataSyncCollection.Dictionary && operation.Dictionary is { Original: not null } d &&
+                Enum.IsDefined(d.EntryType) && d.CreatedAt != default && d.UpdatedAt != default ||
+             operation.Collection == UserDataSyncCollection.Snippets && operation.Snippet is { Trigger: not null, Replacement: not null } n &&
+                n.CreatedAt != default && n.UpdatedAt != default);
     }
 
     // A uniquely named temporary file avoids colliding with other writers, and the flushed move shows

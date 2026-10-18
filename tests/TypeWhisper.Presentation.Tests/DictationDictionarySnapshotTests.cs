@@ -10,6 +10,21 @@ public sealed class DictationDictionarySnapshotTests : IDisposable
     public void Dispose() => Directory.Delete(_directory, true);
 
     [Fact]
+    public void LiteralAndRegexTiesHaveTheSameOrderDuringDictation()
+    {
+        foreach (var regexFirst in new[] { false, true })
+        {
+            var path = Path.Combine(_directory, regexFirst ? "regex-first.json" : "literal-first.json");
+            var store = new Lexicon(path);
+            foreach (var isRegex in new[] { regexFirst, !regexFirst })
+                store.Save(new(Guid.NewGuid(), LexiconKind.Correction, "foo", isRegex ? "B" : "A", IsRegex: isRegex));
+            var snapshot = DictationDictionarySnapshot.Load(path);
+            Assert.Null(snapshot.Error);
+            Assert.Equal("A", snapshot.ApplyCorrections("foo"));
+        }
+    }
+
+    [Fact]
     public void PersonalWordsAndPacksFeedExistingBoostingOnlyWhenEnabled()
     {
         var store = new Lexicon(FilePath);
