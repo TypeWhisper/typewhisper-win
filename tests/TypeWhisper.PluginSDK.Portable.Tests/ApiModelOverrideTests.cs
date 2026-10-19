@@ -23,6 +23,9 @@ namespace TypeWhisper.WinUI
         internal DictationProviderOption? ApiModelProvider(string engine) => DictationProviders.FirstOrDefault(
             provider => provider.Id == engine || provider.PluginId == engine || (provider.Id == "local" && engine == "sherpa-onnx"));
         private static string RegistrySelectionId(string id) => id;
+        // The production partial consults machine policy; the test decides per call.
+        internal Func<string, string, string?>? Refusal;
+        internal string? SelectionRefusal(string providerId, string modelId) => Refusal?.Invoke(providerId, modelId);
     }
     internal sealed class TestModelRegistry
     {
@@ -105,6 +108,19 @@ public sealed class ApiModelOverrideTests : IAsyncLifetime
         { Assert.Equal("missing", _models.ActiveModelId); Assert.Equal(1, _downloads); }
         Assert.Equal("original", _models.ActiveModelId);
     }
+    [Fact]
+    public async Task PolicyRefusalAnswers403WithoutChangingTheSelection()
+    {
+        _session.Refusal = (provider, model) => model == "original" ? null : "Your organization requires the transcription model original.";
+
+        var denied = await Assert.ThrowsAsync<LocalApiRequestException>(() => _session.BeginApiModelOverrideAsync(Request("other"), default));
+
+        Assert.Equal(403, denied.StatusCode);
+        Assert.Contains("requires the transcription model", denied.Message);
+        Assert.Equal("original", _models.ActiveModelId);
+        Assert.Null(await _session.BeginApiModelOverrideAsync(Request("original"), default));
+    }
+
     [Fact]
     public async Task InvalidModelDoesNotChangeTheSelection()
     {

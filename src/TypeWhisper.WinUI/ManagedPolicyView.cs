@@ -12,10 +12,13 @@ namespace TypeWhisper.WinUI;
 internal sealed class ManagedPolicyView : UserControl
 {
     private readonly TextBlock _summary = Text(13, "TextBrush");
-    private readonly StackPanel _entries = new() { Spacing = 4 };
+    private readonly Grid _entries = new() { ColumnSpacing = 16, RowSpacing = 0 };
     private readonly TextBlock _issuesTitle = Text(13, "TextBrush");
     private readonly StackPanel _issues = new() { Spacing = 4 };
     private readonly TextBlock _meta = Text(12, "MutedBrush");
+
+    /// <summary>Set by the main window: conflicts between enforced provider/model pairs and the installed providers.</summary>
+    internal static Func<IEnumerable<string>>? RuntimeIssues { get; set; }
 
     internal ManagedPolicyView()
     {
@@ -47,21 +50,26 @@ internal sealed class ManagedPolicyView : UserControl
             _ when !snapshot.IsManaged => Loc.T("No organization policy applies to this device."),
             _ => Loc.T("Managed settings on this device:")
         };
-        _entries.Children.Clear();
+        var rows = new List<(string Key, string Scope, string Value)>();
         foreach (var definition in ManagedPolicyKeys.All)
         {
             if (snapshot.InvalidEnforcedKeys.Contains(definition.Name))
-                _entries.Children.Add(Entry(definition.Name, Loc.T("Enforced"), Loc.T("Invalid value, the setting stays blocked")));
+                rows.Add((definition.Name, Loc.T("Enforced"), Loc.T("Invalid value, the setting stays blocked")));
             else if (snapshot.Enforced(definition.Name) is { } enforced)
-                _entries.Children.Add(Entry(definition.Name, Loc.T("Enforced"), Describe(definition, enforced)));
+                rows.Add((definition.Name, Loc.T("Enforced"), Describe(definition, enforced)));
             if (snapshot.Recommended(definition.Name) is { } recommended)
-                _entries.Children.Add(Entry(definition.Name, Loc.T("Recommended"), Describe(definition, recommended)));
+                rows.Add((definition.Name, Loc.T("Recommended"), Describe(definition, recommended)));
         }
-        _entries.Visibility = _entries.Children.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+        RenderTable(rows);
         _issues.Children.Clear();
         foreach (var issue in snapshot.Issues)
             _issues.Children.Add(Text(12, "MutedBrush", issue.Message));
-        _issuesTitle.Visibility = _issues.Visibility = snapshot.Issues.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+        IEnumerable<string> runtime = [];
+        try { runtime = (RuntimeIssues?.Invoke() ?? []).ToArray(); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("policy.view.runtime-issues", ex); }
+        foreach (var issue in runtime)
+            _issues.Children.Add(Text(12, "MutedBrush", issue));
+        _issuesTitle.Visibility = _issues.Visibility = _issues.Children.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
         var watching = WinUIManagedPolicy.Watching ? Loc.T("Watching for changes") : Loc.T("Checked every 30 seconds");
         _meta.Text = snapshot.Revision == 0 ? watching
             : Loc.T("Last change {0}", snapshot.ReadAt.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)) + " · " + watching;
@@ -94,7 +102,45 @@ internal sealed class ManagedPolicyView : UserControl
         };
     }
 
-    private static TextBlock Entry(string name, string scope, string value) => Text(12, "TextBrush", name + " · " + scope + " · " + value);
+    // A three-column table: setting, scope, value. Header and rows share the column widths; rows are separated by
+    // hairlines like the settings rows around them.
+    private void RenderTable(List<(string Key, string Scope, string Value)> rows)
+    {
+        _entries.Children.Clear();
+        _entries.RowDefinitions.Clear();
+        _entries.ColumnDefinitions.Clear();
+        _entries.Visibility = rows.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+        if (rows.Count == 0) return;
+        _entries.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+        _entries.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+        _entries.ColumnDefinitions.Add(new() { Width = new GridLength(1, GridUnitType.Star) });
+        var headers = new[] { Loc.T("Setting"), Loc.T("Scope"), Loc.T("Value") };
+        AddRow(0, headers, header: true);
+        for (var i = 0; i < rows.Count; i++)
+            AddRow(i + 1, [rows[i].Key, rows[i].Scope, rows[i].Value], header: false);
+    }
+
+    private void AddRow(int row, string[] cells, bool header)
+    {
+        _entries.RowDefinitions.Add(new() { Height = GridLength.Auto });
+        for (var column = 0; column < cells.Length; column++)
+        {
+            var text = Text(12, header ? "MutedBrush" : "TextBrush", cells[column]);
+            if (header) text.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
+            if (column == 1 && !header) text.Foreground = (Brush)Application.Current.Resources["MutedBrush"];
+            // The border draws the hairline below every row; the cell keeps a little air above and below the text.
+            var cell = new Border
+            {
+                Child = text,
+                Padding = new Thickness(0, 6, 0, 6),
+                BorderThickness = new Thickness(0, 0, 0, row == 0 ? 1 : 0.5),
+                BorderBrush = (Brush)Application.Current.Resources["HairlineBrush"]
+            };
+            Grid.SetRow(cell, row);
+            Grid.SetColumn(cell, column);
+            _entries.Children.Add(cell);
+        }
+    }
 
     private static TextBlock Text(double size, string brush, string text = "") => new()
     {

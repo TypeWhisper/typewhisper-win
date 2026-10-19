@@ -80,6 +80,10 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
         internal bool CapabilityError;
         internal bool ApiKeyConfigured;
         internal CancellationTokenSource? Request;
+        // The role and model of the running transcription or LLM request, so the policy pass judges the complete pair.
+        // Read from the SDK under the lease and published under _sync.
+        internal (string SelectionId, string? Model)? RunningTranscription;
+        internal (string SelectionId, string? Model)? RunningLlm;
         internal Task CancellationCallbacks = Task.CompletedTask;
         internal string? Directory;
         // Releases this activation's idle local text model; created once a model is loaded.
@@ -134,10 +138,13 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
     }
 
     /// <summary>Why policy refuses audio for an enabled transcription role, or null. Unknown roles return null.</summary>
-    public string? TranscriptionRefusal(string selectionId)
+    public string? TranscriptionRefusal(string selectionId) => TranscriptionRefusal(selectionId, null);
+
+    /// <summary>Why audio may not be sent to a transcription role with the given model, or null for an unknown role.</summary>
+    public string? TranscriptionRefusal(string selectionId, string? modelId)
     {
         lock (_sync) return _index.Transcription.TryGetValue(selectionId, out var role)
-            ? Policy.TranscriptionRefusal(selectionId, role.Owner.Id, role.Owner.Locality) : null;
+            ? Policy.TranscriptionRefusal(selectionId, role.Owner.Id, role.Owner.Locality, modelId) : null;
     }
 
     /// <summary>
@@ -151,10 +158,13 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
     }
 
     /// <summary>Why policy refuses text for an enabled LLM role, or null. Unknown roles return null.</summary>
-    public string? LlmRefusal(string selectionId)
+    public string? LlmRefusal(string selectionId) => LlmRefusal(selectionId, null);
+
+    /// <summary>Why text may not be sent to an LLM role with the given model, or null for an unknown role.</summary>
+    public string? LlmRefusal(string selectionId, string? modelId)
     {
         lock (_sync) return _index.Llm.TryGetValue(selectionId, out var role)
-            ? Policy.LlmRefusal(selectionId, role.Owner.Id, role.Owner.Locality) : null;
+            ? Policy.LlmRefusal(selectionId, role.Owner.Id, role.Owner.Locality, modelId) : null;
     }
 
     /// <summary>Why policy refuses handing text to an enabled package, or null. Unknown packages return null.</summary>
@@ -425,12 +435,14 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
     {
         var policy = Policy;
         // A transcription may carry dictionary terms as a prompt, so the text rule cancels a running one as well.
+        // Judged with the running request's model, so a pair that moved to another model cancels it.
         foreach (var (selectionId, role) in _index.Transcription)
-            if (policy.TranscriptionRefusal(selectionId, role.Owner.Id, role.Owner.Locality) is not null
+            if (policy.TranscriptionRefusal(selectionId, role.Owner.Id, role.Owner.Locality, RunningModel(role.Owner.RunningTranscription, selectionId)) is not null
                 || policy.TextTransferRefusal(role.Owner.Id, role.Owner.Locality) is not null)
                 CancelRequest(role.Owner);
         foreach (var (selectionId, role) in _index.Llm)
-            if (policy.LlmRefusal(selectionId, role.Owner.Id, role.Owner.Locality) is not null) CancelRequest(role.Owner);
+            if (policy.LlmRefusal(selectionId, role.Owner.Id, role.Owner.Locality, RunningModel(role.Owner.RunningLlm, selectionId)) is not null)
+                CancelRequest(role.Owner);
         // A running model download stops once the download policy refuses it.
         if (policy.ModelDownloadRefusal() is not null)
             foreach (var slot in _slots.Values.Where(slot => slot.Downloading)) CancelRequest(slot);
@@ -441,6 +453,9 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
                 && policy.TextTransferRefusal(slot.Id, slot.Locality) is not null)
                 CancelRequest(slot);
     }
+
+    private static string? RunningModel((string SelectionId, string? Model)? running, string selectionId) =>
+        running is { } request && string.Equals(request.SelectionId, selectionId, StringComparison.OrdinalIgnoreCase) ? request.Model : null;
 
     // The disable path without the preference write for a slot ReapplyPolicyAsync marked: the user's choice
     // survives the policy. False when a newer operation superseded the mark or the policy allowed the package again
@@ -491,33 +506,40 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             owner = role.Owner;
         }
         // Checked before queuing and again once the lease is held, so a policy that arrived meanwhile still wins.
-        DenyTranscriptionIfRefused(selectionId, owner);
+        // Under the lease the engine's selected model is known, so an enforced pair is checked completely.
+        DenyTranscriptionIfRefused(selectionId, owner, null);
         return UseAsync(owner, async token =>
         {
-            DenyTranscriptionIfRefused(selectionId, owner);
             if (!_index.Transcription.TryGetValue(selectionId, out var current) || current.Owner != owner)
                 throw new InvalidOperationException("Transcription provider changed.");
-            try { return await use(current.Engine, token).ConfigureAwait(false); }
+            var model = current.Engine.SelectedModelId;
+            lock (_sync) owner.RunningTranscription = (selectionId, model);
+            try
+            {
+                DenyTranscriptionIfRefused(selectionId, owner, model);
+                return await use(current.Engine, token).ConfigureAwait(false);
+            }
             // A cancellation the policy pass caused is reported as the refusal, not as a plain cancellation.
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
-                DenyTranscriptionIfRefused(selectionId, owner);
+                DenyTranscriptionIfRefused(selectionId, owner, model);
                 // The text rule cancels a transcription that may carry a prompt, so its reason is reported as well.
                 DenyTextTransferIfRefused(owner, "transcription-prompt");
                 throw;
             }
+            finally { lock (_sync) owner.RunningTranscription = null; }
         }, cancellationToken);
     }
 
-    private void DenyTranscriptionIfRefused(string selectionId, Slot owner)
+    private void DenyTranscriptionIfRefused(string selectionId, Slot owner, string? modelId)
     {
-        if (Policy.TranscriptionRefusal(selectionId, owner.Id, owner.Locality) is { } refused)
+        if (Policy.TranscriptionRefusal(selectionId, owner.Id, owner.Locality, modelId) is { } refused)
             throw new ManagedPolicyDeniedException("transcription", refused);
     }
 
-    private void DenyLlmIfRefused(string selectionId, Slot owner)
+    private void DenyLlmIfRefused(string selectionId, Slot owner, string? modelId)
     {
-        if (Policy.LlmRefusal(selectionId, owner.Id, owner.Locality) is { } refused)
+        if (Policy.LlmRefusal(selectionId, owner.Id, owner.Locality, modelId) is { } refused)
             throw new ManagedPolicyDeniedException("llm", refused);
     }
 
@@ -527,18 +549,21 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             throw new ManagedPolicyDeniedException(capability, refused);
     }
 
-    /// <summary>Uses an LLM role within its owning package's serialized request lifetime.</summary>
+    /// <summary>
+    /// Uses an LLM role within its owning package's serialized request lifetime. With <paramref name="modelId"/> an
+    /// enforced pair is judged completely, before the lease and while the request runs.
+    /// </summary>
     public Task<T> UseLlmAsync<T>(string selectionId,
-        Func<ILlmProviderPlugin, CancellationToken, Task<T>> use, CancellationToken cancellationToken = default)
-        => UseLlmCoreAsync(selectionId, use, false, cancellationToken);
+        Func<ILlmProviderPlugin, CancellationToken, Task<T>> use, CancellationToken cancellationToken = default, string? modelId = null)
+        => UseLlmCoreAsync(selectionId, use, false, modelId, cancellationToken);
 
     /// <summary>Uses an LLM only when its active package declares local processing; never falls back to cloud.</summary>
     public Task<T> UseLocalLlmAsync<T>(string selectionId,
-        Func<ILlmProviderPlugin, CancellationToken, Task<T>> use, CancellationToken cancellationToken = default)
-        => UseLlmCoreAsync(selectionId, use, true, cancellationToken);
+        Func<ILlmProviderPlugin, CancellationToken, Task<T>> use, CancellationToken cancellationToken = default, string? modelId = null)
+        => UseLlmCoreAsync(selectionId, use, true, modelId, cancellationToken);
 
     private Task<T> UseLlmCoreAsync<T>(string selectionId,
-        Func<ILlmProviderPlugin, CancellationToken, Task<T>> use, bool requireLocal, CancellationToken cancellationToken)
+        Func<ILlmProviderPlugin, CancellationToken, Task<T>> use, bool requireLocal, string? modelId, CancellationToken cancellationToken)
     {
         Slot owner;
         lock (_sync)
@@ -546,19 +571,27 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             if (!_index.Llm.TryGetValue(selectionId, out var role)) throw new InvalidOperationException("LLM provider is unavailable.");
             owner = role.Owner;
         }
-        DenyLlmIfRefused(selectionId, owner);
+        DenyLlmIfRefused(selectionId, owner, modelId);
         return UseAsync(owner, async token =>
         {
             if (!_index.Llm.TryGetValue(selectionId, out var current) || current.Owner != owner)
                 throw new InvalidOperationException("LLM provider changed.");
-            DenyLlmIfRefused(selectionId, owner);
-            if (requireLocal && !owner.IsLocal)
-                throw new InvalidOperationException("Choose a local LLM for alias suggestions.");
-            await RestoreLocalLlmAsync(owner, current.Provider, token).ConfigureAwait(false);
-            try { return await use(current.Provider, token).ConfigureAwait(false); }
+            lock (_sync) owner.RunningLlm = (selectionId, modelId);
+            try
+            {
+                DenyLlmIfRefused(selectionId, owner, modelId);
+                if (requireLocal && !owner.IsLocal)
+                    throw new InvalidOperationException("Choose a local LLM for alias suggestions.");
+                await RestoreLocalLlmAsync(owner, current.Provider, token).ConfigureAwait(false);
+                return await use(current.Provider, token).ConfigureAwait(false);
+            }
             // A cancellation the policy pass caused is reported as the refusal, not as a plain cancellation.
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) { DenyLlmIfRefused(selectionId, owner); throw; }
-            finally { if (owner.Package?.Plugin is ILocalLlmModelManagement local) TouchLocalLlm(owner, local); }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) { DenyLlmIfRefused(selectionId, owner, modelId); throw; }
+            finally
+            {
+                lock (_sync) owner.RunningLlm = null;
+                if (owner.Package?.Plugin is ILocalLlmModelManagement local) TouchLocalLlm(owner, local);
+            }
         }, cancellationToken);
     }
 

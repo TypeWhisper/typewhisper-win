@@ -14,11 +14,13 @@ public sealed partial class WorkflowsView
         try { return _session?.WorkflowDefaults.Read(); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { return null; }
     }
+    // The enforced pair wins over the workflow's own selection and over the saved default.
     private (string Provider, string Model) EffectiveSelection(string provider, string model)
     {
-        if (provider != WorkflowLlmDefaults.Inherit) return (provider, model);
-        var defaults = ReadDefaults();
-        return (defaults?.Provider ?? "none", defaults?.Model ?? "");
+        WorkflowLlmSelection? effective = null;
+        try { effective = _session?.WorkflowDefaults.Effective(provider, model); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { }
+        return (effective?.Provider ?? "none", effective?.Model ?? "");
     }
     private bool EffectiveAvailable(string provider, string model)
     {
@@ -48,7 +50,9 @@ public sealed partial class WorkflowsView
         if (workflow.Template == TypeWhisper.Core.Models.WorkflowTemplate.Dictation) return Loc.T("No LLM processing") + recordingTask + destination;
         var choice = EffectiveSelection(workflow.ProviderId, workflow.ModelId);
         var provider = EffectiveConfigurationError(workflow.ProviderId, workflow.ModelId)
-            ?? (workflow.ProviderId == WorkflowLlmDefaults.Inherit
+            ?? (_session?.WorkflowDefaults.Enforced is not null
+                ? Loc.T("Managed by your organization: {0} · {1} · input is sent to this provider when you run", Providers.FirstOrDefault(p => p.Id == choice.Provider)?.Label ?? choice.Provider, choice.Model)
+                : workflow.ProviderId == WorkflowLlmDefaults.Inherit
                 ? Loc.T("Default LLM: {0} · {1} · input is sent to this provider when you run", Providers.FirstOrDefault(p => p.Id == choice.Provider)?.Label ?? choice.Provider, choice.Model)
                 : Loc.T("{0} · {1} · input is sent to this provider when you run", Providers.FirstOrDefault(p => p.Id == choice.Provider)?.Label ?? choice.Provider, choice.Model));
         var memory = string.IsNullOrWhiteSpace(workflow.MemoryPluginId) ? "" : "\n" + Loc.T("Memory context: {0} · matching saved facts are sent to this provider.",
@@ -70,14 +74,19 @@ public sealed partial class WorkflowsView
                 .Select(m => new Choice(m.Id, m.DisplayName, m.Id)).ToArray() ?? [], selected, Loc.T("Choose a model"));
         RefreshModels(saved?.Model ?? "");
         provider.SelectionChanged += _ => RefreshModels("");
-        var help = SettingsHelp.Label(Loc.T("Default workflow LLM"), Loc.T("Used by workflows set to Use default. Existing custom selections stay unchanged."));
+        // Under an enforced pair the dialog only shows what every workflow uses.
+        var enforced = _session.WorkflowDefaults.Enforced;
+        if (enforced is not null || _session.WorkflowDefaults.Managed) { provider.IsEnabled = false; model.IsEnabled = false; }
+        var help = SettingsHelp.Label(Loc.T("Default workflow LLM"), enforced is not null
+            ? Loc.T("Managed by your organization") + ": " + (Providers.FirstOrDefault(p => p.Id == enforced.Provider)?.Label ?? enforced.Provider) + " · " + enforced.Model
+            : Loc.T("Used by workflows set to Use default. Existing custom selections stay unchanged."));
         var message = new TextBlock { TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetLiveSetting(message, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
         var content = new StackPanel { Spacing = 16, MinWidth = 300 };
         content.Children.Add(help); content.Children.Add(provider); content.Children.Add(model); content.Children.Add(message);
         var dialog = _defaultsDialog = new ContentDialog
         {
-            Title = Loc.T("Default workflow LLM"), Content = content,
+            Title = Loc.T("Default workflow LLM"), Content = content, IsPrimaryButtonEnabled = enforced is null,
             PrimaryButtonText = Loc.T("Save"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Primary
         };
         dialog.PrimaryButtonClick += (_, args) =>

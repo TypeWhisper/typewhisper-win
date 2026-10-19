@@ -24,8 +24,8 @@ public sealed partial class MainWindow
     /// <summary>Set by the app when policy kept an unfinished setup closed; a policy that no longer allows it reopens setup.</summary>
     internal bool SetupSkippedByPolicy { get; set; }
 
-    // Runs on the UI thread after every policy change: the license key, cached update offers, the startup registration
-    // and a setup that policy no longer keeps closed.
+    // Runs on the UI thread after every policy change: the license key, cached update offers, the startup registration,
+    // the enforced dictation provider and model, and a setup that policy no longer keeps closed.
     internal void ApplyManagedPolicyChange()
     {
         if (_closing || _profileRestoreClosing) return;
@@ -41,6 +41,7 @@ public sealed partial class MainWindow
     private async Task ApplyDictationPolicyAsync()
     {
         await _dictation.ApplyPolicyChangeAsync();
+        await _dictation.ApplySelectionPolicyAsync();
         if (_closing || _profileRestoreClosing) return;
         if (SetupSkippedByPolicy && !SetupCompleted
             && (!OnboardingPolicy.SkipSetupWhenReady(WinUIManagedPolicy.Current) || !_dictation.IsReady || _dictation.TranscriptionPolicyRefusal() is not null))

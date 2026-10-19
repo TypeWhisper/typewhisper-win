@@ -34,6 +34,7 @@ internal sealed partial class DictationPluginServices : IAsyncDisposable
         // The local engine runs outside the registry, so its package and its downloads ask the policy through these hooks.
         LocalTranscriptionPlugin.PackageRefusal = () => TypeWhisper.Core.Models.ManagedProviderPolicy.From(WinUIManagedPolicy.Current).PluginRefusal(LocalTranscriptionPlugin.PluginId);
         LocalTranscriptionPlugin.ModelDownloadRefusal = () => TypeWhisper.Core.Models.ManagedProviderPolicy.From(WinUIManagedPolicy.Current).ModelDownloadRefusal();
+        LocalTranscriptionPlugin.PolicyModels = LocalDictationSession.LocalEnginePolicyModels;
         Runtime.Changed += () => Changed?.Invoke();
         SpeechBackend = new(Runtime, new WindowsSystemVoiceBackend());
         SpokenFeedback = new(SpeechBackend);

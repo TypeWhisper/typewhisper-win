@@ -16,10 +16,13 @@ internal sealed partial class LocalDictationSession
             return await DictionaryAliasSuggestions.GenerateAsync(word, language,
                 (prompt, input, token) => PluginRuntime.UseLocalLlmAsync(providerId, (provider, providerToken) =>
                 {
+                    // The registry judges the provider; the model is known only here, so an enforced pair is completed here.
+                    if (PluginRuntime.LlmRefusal(providerId, modelId) is { } refused)
+                        throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("llm", refused);
                     if (!provider.IsAvailable || !provider.SupportedModels.Any(model => model.Id == modelId))
                         throw new InvalidOperationException(Loc.T("The local model is no longer available. Load it in Plugins and try again."));
                     return provider.ProcessAsync(prompt, input, modelId, providerToken);
-                }, token), ct);
+                }, token, modelId), ct);
         }
         finally
         {

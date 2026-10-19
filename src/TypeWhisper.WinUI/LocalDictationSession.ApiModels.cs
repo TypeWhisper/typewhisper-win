@@ -40,6 +40,7 @@ internal sealed partial class LocalDictationSession
 
     internal async Task<string?> ApiChangeModelAsync(string operation, DictationProviderOption provider, string? modelId, CancellationToken ct)
     {
+        if (operation == "load" && SelectionRefusal(provider.Id, modelId ?? "") is { } refused) throw new LocalApiRequestException(403, refused);
         if (!CanChangeProvider || Models.Busy || !await _gate.WaitAsync(0, ct))
             throw new InvalidOperationException("Finish dictation and model operations first.");
         try
@@ -64,7 +65,7 @@ internal sealed partial class LocalDictationSession
                         throw new LocalApiRequestException(404, "Downloaded model not found.");
                     await Models.RemoveAsync(modelId!, Models.Generation, ct);
                 }
-                else await Models.ActivateAsync(modelId!, ct);
+                else await Models.ActivateAsync(modelId!, ct, persistSelection: false);
             }
             else
             {
@@ -83,6 +84,8 @@ internal sealed partial class LocalDictationSession
             if (operation == "load")
             {
                 DenyProviderIfRefused(provider);
+                DenySelectionIfRefused(provider.Id, modelId ?? "");
+                if (provider.Id == "local") Models.SaveSelectedModel(modelId!);
                 _selection.SetSetting("Provider", provider.Id);
                 _selection.SetSetting("ProviderPluginId", provider.PluginId);
                 _selection.SetSetting("ProviderName", provider.Name);

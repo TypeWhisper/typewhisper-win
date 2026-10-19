@@ -20,6 +20,18 @@ public sealed class ManagedPolicyDeniedException(string policyKey, string messag
     public string PolicyKey { get; } = policyKey;
 }
 
+/// <summary>A provider/model pair from policy: a stable selection ID and a model ID within that provider.</summary>
+/// <param name="ProviderId">The stable transcription or LLM selection ID.</param>
+/// <param name="ModelId">The model ID as the provider lists it.</param>
+public sealed record ManagedSelection(string ProviderId, string ModelId)
+{
+    /// <summary>Whether this pair names the given provider, compared like the plugin registry does.</summary>
+    public bool IsProvider(string providerId) => string.Equals(ProviderId, providerId, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Whether this pair names the given model, compared like the plugin registry does.</summary>
+    public bool IsModel(string modelId) => string.Equals(ModelId, modelId, StringComparison.OrdinalIgnoreCase);
+}
+
 /// <summary>The provider, cloud and download part of a policy snapshot, resolved to typed refusals.</summary>
 /// <remarks>
 /// Every refusal method returns null when the operation may proceed and a user-facing message otherwise.
@@ -52,10 +64,24 @@ public sealed record ManagedProviderPolicy(
     /// <summary>The keys this policy reads.</summary>
     public static IReadOnlyList<string> Keys { get; } =
     [
+        ManagedPolicyKeys.TranscriptionProviderId, ManagedPolicyKeys.TranscriptionModelId,
+        ManagedPolicyKeys.LlmProviderId, ManagedPolicyKeys.LlmModelId,
         ManagedPolicyKeys.AllowCloudTranscription, ManagedPolicyKeys.AllowCloudTextProcessing,
         ManagedPolicyKeys.AllowedTranscriptionProviders, ManagedPolicyKeys.AllowedLlmProviders, ManagedPolicyKeys.AllowedPlugins,
         ManagedPolicyKeys.AllowPluginDownloads, ManagedPolicyKeys.AllowModelDownloads
     ];
+
+    /// <summary>The transcription provider and model every entry point must use, or null.</summary>
+    public ManagedSelection? EnforcedTranscription { get; init; }
+
+    /// <summary>The transcription provider and model a profile without an explicit choice starts with, or null.</summary>
+    public ManagedSelection? RecommendedTranscription { get; init; }
+
+    /// <summary>The LLM provider and model every workflow, translation and text step must use, or null.</summary>
+    public ManagedSelection? EnforcedLlm { get; init; }
+
+    /// <summary>The LLM provider and model a profile without an explicit default starts with, or null.</summary>
+    public ManagedSelection? RecommendedLlm { get; init; }
 
     /// <summary>Reads the provider, cloud and download keys from a snapshot.</summary>
     public static ManagedProviderPolicy From(ManagedPolicySnapshot snapshot)
@@ -69,13 +95,26 @@ public sealed record ManagedProviderPolicy(
             List(snapshot, ManagedPolicyKeys.AllowedPlugins),
             Boolean(snapshot, ManagedPolicyKeys.AllowPluginDownloads),
             Boolean(snapshot, ManagedPolicyKeys.AllowModelDownloads),
-            blocked);
+            blocked)
+        {
+            EnforcedTranscription = Pair(snapshot, ManagedPolicyScope.Enforced, ManagedPolicyKeys.TranscriptionProviderId, ManagedPolicyKeys.TranscriptionModelId),
+            RecommendedTranscription = Pair(snapshot, ManagedPolicyScope.Recommended, ManagedPolicyKeys.TranscriptionProviderId, ManagedPolicyKeys.TranscriptionModelId),
+            EnforcedLlm = Pair(snapshot, ManagedPolicyScope.Enforced, ManagedPolicyKeys.LlmProviderId, ManagedPolicyKeys.LlmModelId),
+            RecommendedLlm = Pair(snapshot, ManagedPolicyScope.Recommended, ManagedPolicyKeys.LlmProviderId, ManagedPolicyKeys.LlmModelId)
+        };
     }
 
     /// <summary>Whether any provider, cloud or download policy applies.</summary>
     public bool IsManaged => CloudTranscriptionAllowed is not null || CloudTextProcessingAllowed is not null
         || AllowedTranscriptionProviders is not null || AllowedLlmProviders is not null || AllowedPlugins is not null
-        || PluginDownloadsAllowed is not null || ModelDownloadsAllowed is not null || BlockedKeys.Count > 0;
+        || PluginDownloadsAllowed is not null || ModelDownloadsAllowed is not null || BlockedKeys.Count > 0
+        || EnforcedTranscription is not null || RecommendedTranscription is not null || EnforcedLlm is not null || RecommendedLlm is not null;
+
+    /// <summary>Whether transcription waits because the enforced pair is incomplete, invalid or unreadable.</summary>
+    public bool TranscriptionSelectionBlocked => BlockedKeys.Contains(ManagedPolicyKeys.TranscriptionProviderId) || BlockedKeys.Contains(ManagedPolicyKeys.TranscriptionModelId);
+
+    /// <summary>Whether LLM processing waits because the enforced pair is incomplete, invalid or unreadable.</summary>
+    public bool LlmSelectionBlocked => BlockedKeys.Contains(ManagedPolicyKeys.LlmProviderId) || BlockedKeys.Contains(ManagedPolicyKeys.LlmModelId);
 
     /// <summary>Why a package may not be installed, loaded, enabled or executed, or null.</summary>
     public string? PluginRefusal(string pluginId) =>
@@ -105,25 +144,43 @@ public sealed record ManagedProviderPolicy(
 
     private static string CloudPackageRefusal => Loc.T("This plugin processes content in the cloud, which your organization has turned off.");
 
-    /// <summary>Why audio may not be sent to a transcription role, or null.</summary>
-    public string? TranscriptionRefusal(string selectionId, string pluginId, ContentLocality locality) =>
-        PluginRefusal(pluginId)
+    /// <summary>
+    /// Why audio may not be sent to a transcription role, or null. With a model ID the enforced pair is checked
+    /// completely; without one only its provider is, for callers that do not know the model yet.
+    /// </summary>
+    public string? TranscriptionRefusal(string selectionId, string pluginId, ContentLocality locality, string? modelId = null) =>
+        Blocked(ManagedPolicyKeys.TranscriptionProviderId)
+        ?? Blocked(ManagedPolicyKeys.TranscriptionModelId)
+        ?? PluginRefusal(pluginId)
         ?? Blocked(ManagedPolicyKeys.AllowedTranscriptionProviders)
         ?? Blocked(ManagedPolicyKeys.AllowCloudTranscription)
+        ?? (EnforcedTranscription is { } pair && !pair.IsProvider(selectionId)
+            ? Loc.T("Your organization requires the transcription provider {0}.", pair.ProviderId) : null)
         ?? (AllowedTranscriptionProviders is not null && !AllowedTranscriptionProviders.Contains(selectionId)
             ? Loc.T("The transcription provider {0} is not allowed by your organization.", selectionId) : null)
         ?? (CloudTranscriptionAllowed == false && locality != ContentLocality.Local
-            ? Loc.T("Cloud transcription is turned off by your organization. Choose a local transcription model.") : null);
+            ? Loc.T("Cloud transcription is turned off by your organization. Choose a local transcription model.") : null)
+        ?? (modelId is not null && EnforcedTranscription is { } required && !required.IsModel(modelId)
+            ? Loc.T("Your organization requires the transcription model {0}.", required.ModelId) : null);
 
-    /// <summary>Why text may not be sent to an LLM role, or null.</summary>
-    public string? LlmRefusal(string selectionId, string pluginId, ContentLocality locality) =>
-        PluginRefusal(pluginId)
+    /// <summary>
+    /// Why text may not be sent to an LLM role, or null. With a model ID the enforced pair is checked completely;
+    /// without one only its provider is.
+    /// </summary>
+    public string? LlmRefusal(string selectionId, string pluginId, ContentLocality locality, string? modelId = null) =>
+        Blocked(ManagedPolicyKeys.LlmProviderId)
+        ?? Blocked(ManagedPolicyKeys.LlmModelId)
+        ?? PluginRefusal(pluginId)
         ?? Blocked(ManagedPolicyKeys.AllowedLlmProviders)
         ?? Blocked(ManagedPolicyKeys.AllowCloudTextProcessing)
+        ?? (EnforcedLlm is { } pair && !pair.IsProvider(selectionId)
+            ? Loc.T("Your organization requires the text model provider {0}.", pair.ProviderId) : null)
         ?? (AllowedLlmProviders is not null && !AllowedLlmProviders.Contains(selectionId)
             ? Loc.T("The text model provider {0} is not allowed by your organization.", selectionId) : null)
         ?? (CloudTextProcessingAllowed == false && locality != ContentLocality.Local
-            ? Loc.T("Cloud text processing is turned off by your organization. Choose a local text model.") : null);
+            ? Loc.T("Cloud text processing is turned off by your organization. Choose a local text model.") : null)
+        ?? (modelId is not null && EnforcedLlm is { } required && !required.IsModel(modelId)
+            ? Loc.T("Your organization requires the text model {0}.", required.ModelId) : null);
 
     /// <summary>Why text may not be handed to a text processor, action, speech or memory plugin, or null.</summary>
     public string? TextTransferRefusal(string pluginId, ContentLocality locality) =>
@@ -146,6 +203,14 @@ public sealed record ManagedProviderPolicy(
         ? Loc.T("Your organization's policy could not be read. This operation waits until it is readable.") : null;
 
     private static bool? Boolean(ManagedPolicySnapshot snapshot, string key) => snapshot.Enforced(key)?.IsTrue;
+
+    // The validator only publishes a pair when both members are valid at the same scope.
+    private static ManagedSelection? Pair(ManagedPolicySnapshot snapshot, ManagedPolicyScope scope, string providerKey, string modelKey)
+    {
+        var provider = scope == ManagedPolicyScope.Enforced ? snapshot.Enforced(providerKey) : snapshot.Recommended(providerKey);
+        var model = scope == ManagedPolicyScope.Enforced ? snapshot.Enforced(modelKey) : snapshot.Recommended(modelKey);
+        return provider?.Text is { } providerId && model?.Text is { } modelId ? new(providerId, modelId) : null;
+    }
 
     private static IReadOnlySet<string>? List(ManagedPolicySnapshot snapshot, string key) =>
         snapshot.Enforced(key) is { Items: { } items } ? new HashSet<string>(items, StringComparer.OrdinalIgnoreCase) : null;

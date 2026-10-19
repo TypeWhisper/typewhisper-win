@@ -12,12 +12,13 @@ public sealed partial class PortablePluginRuntimeRegistryTests
 
     private static ManagedProviderPolicy Policy(bool? cloudTranscription = null, bool? cloudText = null,
         string[]? transcriptionProviders = null, string[]? llmProviders = null, string[]? plugins = null,
-        bool? pluginDownloads = null, bool? modelDownloads = null) => new(
+        bool? pluginDownloads = null, bool? modelDownloads = null,
+        ManagedSelection? transcription = null, ManagedSelection? llm = null) => new(
         cloudTranscription, cloudText,
         transcriptionProviders is null ? null : new HashSet<string>(transcriptionProviders, StringComparer.OrdinalIgnoreCase),
         llmProviders is null ? null : new HashSet<string>(llmProviders, StringComparer.OrdinalIgnoreCase),
         plugins is null ? null : new HashSet<string>(plugins, StringComparer.OrdinalIgnoreCase),
-        pluginDownloads, modelDownloads, NoKeys);
+        pluginDownloads, modelDownloads, NoKeys) { EnforcedTranscription = transcription, EnforcedLlm = llm };
 
     // Like Store(), but with the fixture package declaring a locality through the manifest.
     private async Task<PortablePluginStore> LocalityStore(string locality, string[]? categories = null, string? category = null)
@@ -216,6 +217,95 @@ public sealed partial class PortablePluginRuntimeRegistryTests
         Assert.Null(registry.TranscriptionRefusal(Id));
         Assert.Contains("turned off", registry.TranscriptionPromptRefusal(Id));
         Assert.Null(registry.TranscriptionPromptRefusal("unknown-selection"));
+    }
+
+    [Fact]
+    public async Task EnforcedTranscriptionPairRefusesOtherProvidersAndModelsAtTheLease()
+    {
+        var store = await LocalityStore("local");
+        var policy = Policy(transcription: new("com.typewhisper.sherpa-onnx", "parakeet-tdt-0.6b"));
+        await using var registry = PolicyRegistry(store, () => policy);
+        Assert.Null(await registry.SetEnabledAsync(Id, true));
+
+        // Another provider: refused before queuing, with the required provider in the message.
+        var denied = await Assert.ThrowsAsync<ManagedPolicyDeniedException>(() =>
+            registry.UseTranscriptionAsync(Id, (engine, _) => Task.FromResult(engine.PluginId)));
+        Assert.Contains("requires the transcription provider com.typewhisper.sherpa-onnx", denied.Message);
+        Assert.Contains("requires the transcription provider", registry.TranscriptionRefusal(Id));
+
+        // The required provider with another selected model: refused under the lease, where the model is known.
+        policy = Policy(transcription: new(Id, "other-model"));
+        Assert.Null(registry.TranscriptionRefusal(Id));
+        Assert.Contains("requires the transcription model other-model", registry.TranscriptionRefusal(Id, "transcription"));
+        denied = await Assert.ThrowsAsync<ManagedPolicyDeniedException>(() =>
+            registry.UseTranscriptionAsync(Id, (engine, _) => Task.FromResult(engine.PluginId)));
+        Assert.Contains("requires the transcription model other-model", denied.Message);
+
+        // The exact pair runs.
+        policy = Policy(transcription: new(Id, "transcription"));
+        Assert.Null(registry.TranscriptionRefusal(Id, "transcription"));
+        Assert.Equal(Id, await registry.UseTranscriptionAsync(Id, (engine, _) => Task.FromResult(engine.PluginId)));
+    }
+
+    [Fact]
+    public async Task EnforcedPairFixesTheModelSelection()
+    {
+        var store = await LocalityStore("local");
+        var policy = Policy(transcription: new(Id, "other-model"));
+        await using var registry = PolicyRegistry(store, () => policy);
+        Assert.Null(await registry.SetEnabledAsync(Id, true));
+        var provider = Assert.Single(registry.TranscriptionProviders);
+        var model = Assert.Single(provider.ModelStates);
+
+        var denied = await Assert.ThrowsAsync<ManagedPolicyDeniedException>(() => registry.SelectModelAsync(model));
+        Assert.Contains("requires the transcription model other-model", denied.Message);
+
+        policy = Policy(transcription: new(Id, model.ModelId));
+        await registry.SelectModelAsync(model);
+    }
+
+    [Fact]
+    public async Task EnforcedLlmPairRefusesOtherProvidersAndModels()
+    {
+        var store = await LocalityStore("local");
+        var policy = Policy(llm: new("com.typewhisper.other", "model-a"));
+        await using var registry = PolicyRegistry(store, () => policy);
+        Assert.Null(await registry.SetEnabledAsync(Id, true));
+
+        var denied = await Assert.ThrowsAsync<ManagedPolicyDeniedException>(() => registry.UseLlmAsync(Id, (provider, _) => Task.FromResult(provider.PluginId)));
+        Assert.Contains("requires the text model provider com.typewhisper.other", denied.Message);
+
+        policy = Policy(llm: new(Id, "model-a"));
+        Assert.Null(registry.LlmRefusal(Id));
+        Assert.Null(registry.LlmRefusal(Id, "model-a"));
+        Assert.Contains("requires the text model model-a", registry.LlmRefusal(Id, "model-b"));
+        Assert.Equal(Id, await registry.UseLlmAsync(Id, (provider, _) => Task.FromResult(provider.PluginId)));
+        // Audio is governed by the transcription pair only.
+        Assert.Null(registry.TranscriptionRefusal(Id, "transcription"));
+    }
+
+    [Fact]
+    public async Task EnforcedLlmModelChangeCancelsTheRunningRequest()
+    {
+        var store = await LocalityStore("local");
+        var policy = Policy(llm: new(Id, "model-a"));
+        await using var registry = PolicyRegistry(store, () => policy);
+        Assert.Null(await registry.SetEnabledAsync(Id, true));
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var running = registry.UseLlmAsync(Id, async (provider, token) =>
+        {
+            started.SetResult();
+            await Task.Delay(Timeout.Infinite, token);
+            return provider.PluginId;
+        }, modelId: "model-a");
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        // Same provider, another model: the running request is cancelled and reports the refusal.
+        policy = Policy(llm: new(Id, "model-b"));
+        await registry.ReapplyPolicyAsync();
+        var denied = await Assert.ThrowsAsync<ManagedPolicyDeniedException>(() => running.WaitAsync(TimeSpan.FromSeconds(10)));
+        Assert.Contains("requires the text model model-b", denied.Message);
     }
 
     [Fact]

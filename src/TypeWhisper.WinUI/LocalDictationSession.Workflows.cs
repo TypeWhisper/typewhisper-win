@@ -9,7 +9,11 @@ internal sealed partial class LocalDictationSession
     private string _languageAtStart = "auto";
     private AutomaticWorkflowSnapshot? _workflowAtStart;
     private string? _targetHostAtStart;
-    internal WorkflowLlmDefaults WorkflowDefaults { get; } = new(WinUIProfile.DataPath("workflow-llm-default.json"));
+    // Policy can fix the pair for every workflow or supply the default for a profile that has not saved one.
+    // Created on first use: the policy pairs resolve provider IDs through this session's registry.
+    private WorkflowLlmDefaults? _workflowDefaults;
+    internal WorkflowLlmDefaults WorkflowDefaults => _workflowDefaults ??= new(WinUIProfile.DataPath("workflow-llm-default.json"),
+        EnforcedLlmSelection, RecommendedLlmSelection, () => ProviderPolicy.LlmSelectionBlocked);
     // Active tabs reported by a TypeWhisper browser extension through PUT /v1/browser/context; memory only.
     internal BrowserExtensionContextStore BrowserContext { get; } = new(ForegroundProcess, Environment.ProcessId);
 
