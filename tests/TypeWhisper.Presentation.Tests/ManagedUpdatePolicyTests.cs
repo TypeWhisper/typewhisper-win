@@ -46,6 +46,29 @@ public sealed class ManagedUpdatePolicyTests : IDisposable
     }
 
     [Fact]
+    public void From_MachineWideInstallationIsExternalUnlessPolicySetsAMode()
+    {
+        var machineWide = ManagedUpdatePolicy.From(Build(), machineWide: true);
+        Assert.Equal(AppUpdateMode.External, machineWide.Mode);
+        Assert.True(machineWide.IsManaged);
+        Assert.Contains("deployment", machineWide.CheckRefusal(AppUpdateChannel.Stable));
+
+        var policyWins = ManagedUpdatePolicy.From(Build(enforced: [Number(ManagedPolicyKeys.UpdateMode, 2)]), machineWide: true);
+        Assert.Equal(AppUpdateMode.UserInitiated, policyWins.Mode);
+        Assert.Null(policyWins.InstallRefusal(AppUpdateChannel.Stable));
+    }
+
+    [Theory]
+    [InlineData(@"C:\Program Files\TypeWhisper\", @"C:\Program Files\TypeWhisper", true)]
+    [InlineData(@"c:\program files\typewhisper", @"C:\Program Files\TypeWhisper\", true)]
+    [InlineData(@"C:\Program Files\TypeWhisper", @"C:\Users\a\AppData\Local\TypeWhisper", false)]
+    [InlineData(null, @"C:\Program Files\TypeWhisper", false)]
+    [InlineData(@"C:\Program Files\TypeWhisper", null, false)]
+    [InlineData(" ", @"C:\Program Files\TypeWhisper", false)]
+    public void MachineWideInstallation_MatchesOnlyItsOwnRoot(string? registered, string? root, bool expected) =>
+        Assert.Equal(expected, MachineWideInstallation.Matches(registered, root));
+
+    [Fact]
     public void Resolve_FollowsPrecedence()
     {
         var enforced = new ManagedUpdatePolicy(null, AppUpdateChannel.Daily, AppUpdateChannel.ReleaseCandidate, null, false);

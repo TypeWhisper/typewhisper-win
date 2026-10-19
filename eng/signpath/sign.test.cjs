@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const childProcess = require('node:child_process');
 const vm = require('node:vm');
-const { actionOutput, allowedExecutable } = require('./sign.cjs');
+const { actionOutput, allowedExecutable, submitted } = require('./sign.cjs');
 
 test('workflow selects the signing environment and omits unused token inputs', () => {
   const workflow = fs.readFileSync(path.join(__dirname, '../../.github/workflows/winui-daily-candidate.yml'), 'utf8');
@@ -49,12 +49,19 @@ test('read GitHub action output delimiters and reject incomplete outputs', () =>
   assert.throws(() => actionOutput('other=123', 'artifact-id'), /Missing/);
 });
 
+test('defer only the MSI while Velopack packs', () => {
+  const files = ['a/TypeWhisper-win-x64-Setup.exe', 'a/TypeWhisper-win-x64.MSI'];
+  assert.deepEqual(submitted(files, { SIGNPATH_DEFER_MSI: '1' }), ['a/TypeWhisper-win-x64-Setup.exe']);
+  assert.deepEqual(submitted(files, {}), files);
+});
+
 test('allow application, CLI and generated helpers without signing unrelated binaries', () => {
   for (const name of ['TypeWhisper.exe', 'typewhisper.exe', 'TypeWhisper_ExecutionStub.exe',
-    'TypeWhisperDaily-win-x64-winui-daily-Setup.exe', 'Squirrel.exe', 'Update.exe']) {
+    'TypeWhisperDaily-win-x64-winui-daily-Setup.exe', 'Squirrel.exe', 'Update.exe', 'TypeWhisper-win-x64.msi',
+    'TypeWhisperDaily-win-x64-winui-daily.msi']) {
     assert.equal(allowedExecutable(name), true, name);
   }
-  for (const name of ['Microsoft.UI.Xaml.dll', 'TypeWhisper.dll', 'unrelated.exe', 'TypeWhisper.exe.ps1']) {
+  for (const name of ['Microsoft.UI.Xaml.dll', 'TypeWhisper.dll', 'unrelated.exe', 'TypeWhisper.exe.ps1', 'unrelated.msi', 'Update.msi']) {
     assert.equal(allowedExecutable(name), false, name);
   }
 });

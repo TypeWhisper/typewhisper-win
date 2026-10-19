@@ -24,7 +24,7 @@
     <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
     <PackageVersion Include="System.Speech" Version="10.0.0" />
     <!-- Packaging workflows read this version when installing the vpk tool. -->
-    <PackageVersion Include="Velopack" Version="0.0.1298" />
+    <PackageVersion Include="Velopack" Version="1.2.161" />
     <PackageVersion Include="WinUIEx" Version="2.9.3" />
   </ItemGroup>
 

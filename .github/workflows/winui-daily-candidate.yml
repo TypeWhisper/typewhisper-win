@@ -244,7 +244,7 @@ jobs:
           Copy-Item installer/* artifacts/candidate/
           # Only Daily builds the original installation separately; RC and Stable ship it as the installer.
           if (Test-Path legacy-installer) { Copy-Item legacy-installer artifacts/candidate/legacy-upgrade -Recurse }
-          Get-ChildItem artifacts/candidate -File -Recurse | Where-Object Extension -In '.exe', '.nupkg' | ForEach-Object {
+          Get-ChildItem artifacts/candidate -File -Recurse | Where-Object Extension -In '.exe', '.msi', '.nupkg' | ForEach-Object {
             (Get-FileHash $_.FullName -Algorithm SHA256).Hash | Set-Content ($_.FullName + '.sha256')
           }
           (Get-FileHash "artifacts/candidate/$name.zip" -Algorithm SHA256).Hash |
