@@ -14,11 +14,9 @@ public static class MachineWideInstallation
     public static bool Matches(string? registeredLocation, string? rootAppDirectory)
     {
         if (string.IsNullOrWhiteSpace(registeredLocation) || string.IsNullOrWhiteSpace(rootAppDirectory)) return false;
-        try
-        {
-            static string Normalize(string path) => Path.TrimEndingDirectorySeparator(Path.GetFullPath(path.Trim()));
-            return string.Equals(Normalize(registeredLocation), Normalize(rootAppDirectory), StringComparison.OrdinalIgnoreCase);
-        }
-        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException) { return false; }
+        // Windows paths, compared as text so the rule behaves the same on every test platform. The MSI writes the
+        // folder with a trailing separator; Velopack reports it without one.
+        static string Normalize(string path) => path.Trim().Replace('/', '\\').TrimEnd('\\');
+        return string.Equals(Normalize(registeredLocation), Normalize(rootAppDirectory), StringComparison.OrdinalIgnoreCase);
     }
 }
