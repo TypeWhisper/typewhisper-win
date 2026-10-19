@@ -52,8 +52,10 @@ internal static class LiveApplicationUpdateSettings
             })
                 if (channel == effective || policy.ChannelAllowed(channel)) choices.Add(new(id, title, subtitle));
             picker.SetOptions(choices, effective.ToString());
-            picker.IsEnabled = !controller.Busy && !controller.ChannelLocked;
-            channelRow.Status = controller.ChannelLocked ? Loc.T("Managed by your organization")
+            // Without app updates (external deployment or a machine-wide installation) a channel has no effect.
+            var channelManaged = controller.ChannelLocked || policy.Mode == AppUpdateMode.External;
+            picker.IsEnabled = !controller.Busy && !channelManaged;
+            channelRow.Status = channelManaged ? Loc.T("Managed by your organization")
                 : policy.AllowedChannels is not null ? Loc.T("Your organization limits the available update channels.") : "";
             // The plugin catalog can be checked even where app updates are unavailable.
             check.IsEnabled = !controller.Busy && !plugins.Checking && !plugins.Busy;

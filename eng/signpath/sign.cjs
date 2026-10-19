@@ -32,13 +32,14 @@ function actionOutput(text, name) {
   throw new Error(`Missing action output ${name}.`);
 }
 
+// Velopack submits the application executables, the setup and the per-machine MSI.
 function allowedExecutable(file) {
-  return /^(?:TypeWhisper[^\\/]*|Squirrel|Update)\.exe$/i.test(path.basename(file));
+  return /^(?:(?:TypeWhisper[^\\/]*|Squirrel|Update)\.exe|TypeWhisper[^\\/]*\.msi)$/i.test(path.basename(file));
 }
 
 function sign(files, env = process.env) {
   if (!files.length || files.some(file => !allowedExecutable(file) || !fs.statSync(file).isFile())) {
-    throw new Error('Only TypeWhisper and Velopack executables may be submitted for signing.');
+    throw new Error('Only TypeWhisper and Velopack executables and the TypeWhisper MSI may be submitted for signing.');
   }
   if (!['test-signing', 'release-signing'].includes(env.SIGNPATH_POLICY)) throw new Error('Invalid signing policy.');
   const workspace = env.GITHUB_WORKSPACE;
@@ -92,8 +93,16 @@ function sign(files, env = process.env) {
   }
 }
 
+// While Velopack packs, the MSI waits: the build adjusts it first and signs it afterwards.
+function submitted(files, env = process.env) {
+  return env.SIGNPATH_DEFER_MSI === '1' ? files.filter(file => path.extname(file).toLowerCase() !== '.msi') : files;
+}
+
 if (require.main === module) {
-  try { sign(process.argv.slice(2)); }
+  try {
+    const files = submitted(process.argv.slice(2));
+    if (files.length) sign(files);
+  }
   catch (error) { console.error(error.message); process.exitCode = 1; }
 }
-module.exports = { actionOutput, allowedExecutable, sign };
+module.exports = { actionOutput, allowedExecutable, sign, submitted };

@@ -4,7 +4,7 @@ Administrators can configure TypeWhisper for Windows through registry policies, 
 same mechanism Group Policy and Intune write. This page lists the keys the app
 understands, the Group Policy templates in [`deployment/windows`](../../deployment/windows),
 and what a deployment needs around the app: network hosts, the microphone
-permission and the Intune packaging of the per-user installer. The contract is
+permission and the packaging of the machine-wide and per-user installers. The contract is
 [#470](https://github.com/TypeWhisper/typewhisper-win/issues/470).
 
 ## Registry layout
@@ -273,6 +273,38 @@ The app needs no administrative rights, no driver and no firewall exception: it
 only makes outbound connections, and the optional HTTP API listens on the loopback
 interface only.
 
+## Machine-wide installer (MSI)
+
+Every release also ships a per-machine MSI next to the per-user setup, for example
+`TypeWhisper-win-x64.msi` on Stable. It installs the app once for all users of a
+device into `C:\Program Files\TypeWhisper` (or the folder given with
+`VELOPACK_INSTALLDIR`), adds a Start menu and a desktop shortcut for all users and
+registers under the machine's uninstall key. Each user keeps their own settings,
+models and plugins in their profile.
+
+A machine-wide installation is updated by your deployment: the app does not check,
+download or install app updates, shows "App updates are managed by your
+organization's deployment" in Settings > Account & about and locks the update
+channel. This needs no `UpdateMode` value. If you set `UpdateMode` anyway, keep it at
+0 or 1: standard users cannot write to `Program Files`, so an installation started
+from the app under 2 fails. Plugin updates are unaffected, because plugins live in
+the user's profile.
+
+| Item | Value |
+| --- | --- |
+| Prerequisite | The .NET 10 Runtime (x64). An interactive MSI installation offers to install it; a silent installation does not. Deploy it first, for example as an Intune dependency with `dotnet-runtime-10.0.<patch>-win-x64.exe /install /quiet /norestart` from [dotnet.microsoft.com](https://dotnet.microsoft.com/download/dotnet/10.0), or with `winget install Microsoft.DotNet.Runtime.10`. |
+| Source | `TypeWhisper-win-x64.msi` from the [GitHub release](https://github.com/TypeWhisper/typewhisper-win/releases) (`https://github.com/TypeWhisper/typewhisper-win/releases/latest/download/TypeWhisper-win-x64.msi`). |
+| Package | `IntuneWinAppUtil.exe -c <folder> -s TypeWhisper-win-x64.msi -o <output>` |
+| Install command | `msiexec /i TypeWhisper-win-x64.msi /qn /norestart`, optionally with `VELOPACK_INSTALLDIR="D:\Apps\TypeWhisper"` |
+| Uninstall command | `msiexec /x {<product code GUID>} /qn /norestart` with the product code of the packaged MSI, which changes with every version. The Intune portal pre-fills this command with the GUID when the package wraps an MSI; otherwise read it from the MSI's `ProductCode` property or, on an installed device, from `QuietUninstallString` under the uninstall key below. |
+| Install behavior | System |
+| Detection rule | Registry: `HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\MSI:TypeWhisper`, value `DisplayVersion`, version comparison "greater than or equal to" the packaged version (use "equals" for a Release Candidate, whose version carries a suffix). Alternatively the file `C:\Program Files\TypeWhisper\current\TypeWhisper.exe`. |
+| Upgrade | Deploy the newer MSI the same way, for example through supersedence; it replaces the installed version in place. A Release Candidate sorts below the Stable release of its version. |
+
+Remove per-user installations from the devices before you roll out the MSI.
+Otherwise users see two TypeWhisper entries, because both installations use the same
+name, and the per-user installation keeps updating itself.
+
 ## Packaging the per-user installer for Intune
 
 TypeWhisper installs per user: the setup writes to `%LocalAppData%\TypeWhisper`,
@@ -291,14 +323,14 @@ Package it as a Win32 app that installs in the user context:
 
 Under `UpdateMode` 0 the organization owns updates: deploy new installers through
 the same tooling. Under 1 the app announces new versions and shows them in
-Settings > Account & about without an install button. A machine-wide installer that
-installs for all users from the system context and implies `UpdateMode` 0 is tracked
-in [#660](https://github.com/TypeWhisper/typewhisper-win/issues/660).
+Settings > Account & about without an install button. To install for all users from
+the system context, use the [machine-wide installer](#machine-wide-installer-msi).
 
 ## Deployment notes
 
-- On shared devices each Windows user runs the installer once, or the deployment tool
-  installs it in the user's context. The policy key is device-wide and applies to
+- On shared devices use the [machine-wide installer](#machine-wide-installer-msi), or
+  let each Windows user run the per-user installer once (the deployment tool can
+  install it in the user's context). The policy key is device-wide and applies to
   every user.
 - Policy is read before plugins and background work start, so a value present at the
   first launch applies immediately. A policy that appears or changes while the app

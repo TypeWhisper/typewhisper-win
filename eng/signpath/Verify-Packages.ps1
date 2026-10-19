@@ -12,6 +12,8 @@ New-Item -ItemType Directory -Path $temporary | Out-Null
 try {
     $files = @(Get-ChildItem -LiteralPath $root -Filter '*Setup.exe' -File | Select-Object -ExpandProperty FullName)
     if ($files.Count -ne 1) { throw 'Expected exactly one setup executable.' }
+    # The per-machine MSI is signed like the setup; packages without one ship only the setup.
+    $files += @(Get-ChildItem -LiteralPath $root -Filter '*.msi' -File | Select-Object -ExpandProperty FullName)
     foreach ($pattern in @('*-Portable.zip', '*-full.nupkg')) {
         $archives = @(Get-ChildItem -LiteralPath $root -Filter $pattern -File)
         if ($archives.Count -ne 1) { throw "Expected exactly one $pattern archive." }

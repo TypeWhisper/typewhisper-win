@@ -14,7 +14,7 @@ public sealed partial class MainWindow
             if (_closing || _profileRestoreClosing || !_dictation.CanChangeProvider || _dictation.Packages.Updates.Busy || _dictation.Models.Busy)
                 return Task.FromResult<string?>(Loc.T("Finish recording, processing and plugin updates before restarting TypeWhisper."));
             return InstallApplicationUpdateAsync?.Invoke(action) ?? Task.FromResult<string?>(Loc.T("Restart is currently unavailable."));
-        }, () => ManagedUpdatePolicy.From(WinUIManagedPolicy.Current));
+        }, () => ManagedUpdatePolicy.From(WinUIManagedPolicy.Current, WindowsMachineWideInstallation.Current));
     private AppUpdateReminder? _updateReminder;
     private AppUpdateReminder UpdateReminder
     {

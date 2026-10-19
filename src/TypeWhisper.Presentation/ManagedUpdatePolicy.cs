@@ -30,12 +30,17 @@ public sealed record ManagedUpdatePolicy(
     /// <summary>No policy: the release behavior.</summary>
     public static ManagedUpdatePolicy None { get; } = new(null, null, null, null, false);
 
-    /// <summary>Reads <c>UpdateMode</c>, <c>UpdateChannel</c> and <c>AllowedUpdateChannels</c> from a snapshot.</summary>
-    public static ManagedUpdatePolicy From(ManagedPolicySnapshot snapshot)
+    /// <summary>
+    /// Reads <c>UpdateMode</c>, <c>UpdateChannel</c> and <c>AllowedUpdateChannels</c> from a snapshot. A machine-wide
+    /// installation is updated by the organization's deployment, so it behaves as <see cref="AppUpdateMode.External"/>
+    /// unless policy sets another mode.
+    /// </summary>
+    public static ManagedUpdatePolicy From(ManagedPolicySnapshot snapshot, bool machineWide = false)
     {
         var blocked = snapshot.IsBlocked(ManagedPolicyKeys.UpdateMode) || snapshot.IsBlocked(ManagedPolicyKeys.UpdateChannel)
             || snapshot.IsBlocked(ManagedPolicyKeys.AllowedUpdateChannels);
-        var mode = snapshot.Enforced(ManagedPolicyKeys.UpdateMode) is { } enforcedMode ? (AppUpdateMode?)enforcedMode.Number : null;
+        var mode = snapshot.Enforced(ManagedPolicyKeys.UpdateMode) is { } enforcedMode ? (AppUpdateMode?)enforcedMode.Number
+            : machineWide ? AppUpdateMode.External : null;
         var enforcedChannel = snapshot.Enforced(ManagedPolicyKeys.UpdateChannel) is { } channel ? (AppUpdateChannel?)channel.Number : null;
         var recommendedChannel = snapshot.Recommended(ManagedPolicyKeys.UpdateChannel) is { } recommended ? (AppUpdateChannel?)recommended.Number : null;
         HashSet<AppUpdateChannel>? allowed = null;
