@@ -53,6 +53,10 @@ function Assert-Elevated {
     }
 }
 
+# Rejected before anything is written, so a failed call leaves no partial policy change.
+if ($Recommended -and $List.Count -gt 0) {
+    throw "Lists such as $(@($List.Keys) -join ', ') are restrictions and cannot be recommended."
+}
 if ($Clear) {
     Assert-Elevated
     if (Test-Path $root) { Remove-Item -Path $root -Recurse -Force; Write-Host "Removed $root" } else { Write-Host "$root did not exist" }
@@ -71,7 +75,6 @@ if ($writes -gt 0) {
         Write-Host "$($entry.Key) = $shown (REG_SZ)"
     }
     foreach ($entry in $List.GetEnumerator()) {
-        if ($Recommended) { throw "Lists such as $($entry.Key) are restrictions and cannot be recommended." }
         $listPath = "$path\$($entry.Key)"
         if (Test-Path $listPath) { Remove-Item -Path $listPath -Recurse -Force }
         New-Item -Path $listPath -Force | Out-Null

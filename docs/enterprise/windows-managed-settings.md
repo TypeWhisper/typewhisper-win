@@ -214,7 +214,7 @@ configuration, including WPAD and PAC scripts.
 | `app.typewhisper.com` | Premium account sign-in and account status. |
 | `api.github.com`, `github.com`, `release-assets.githubusercontent.com` | App update checks and downloads (unless `UpdateMode` is 0) and plugin package downloads. |
 | `typewhisper.github.io` | The plugin catalog (`plugins-v2.json`). |
-| `huggingface.co` and the `*.hf.co` content hosts it redirects to | Model downloads of the local plugins: Parakeet (sherpa-onnx), dictionary boosting assets, whisper.cpp, local text models, local speech output. |
+| `huggingface.co` and the `*.hf.co` content hosts it redirects to (the wildcard must cover several subdomain levels, such as `us.aws.cdn.hf.co` and `cas-server.xethub.hf.co`) | Model downloads of the local plugins: Parakeet (sherpa-onnx), dictionary boosting assets, whisper.cpp, local text models, local speech output. |
 | `download.pytorch.org`, `developer.download.nvidia.com`, `api.nuget.org` | Runtime files some local plugins fetch while loading a model (Granite Speech, whisper.cpp with CUDA, ONNX runtimes). Not covered by `AllowModelDownloads`; see the known limits above. |
 | `graph.microsoft.com`, `www.googleapis.com` | Calendar access for the meeting feature, only when a user connects a calendar. |
 | `www.typewhisper.com` | Documentation links opened in the browser. |
@@ -284,7 +284,7 @@ Package it as a Win32 app that installs in the user context:
 | Source | `TypeWhisper-win-x64-Setup.exe` from the [GitHub release](https://github.com/TypeWhisper/typewhisper-win/releases) (`https://github.com/TypeWhisper/typewhisper-win/releases/latest/download/TypeWhisper-win-x64-Setup.exe`), with the `.sha256` next to it for verification. |
 | Package | `IntuneWinAppUtil.exe -c <folder> -s TypeWhisper-win-x64-Setup.exe -o <output>` |
 | Install command | `TypeWhisper-win-x64-Setup.exe --silent` |
-| Uninstall command | `"%LocalAppData%\TypeWhisper\Update.exe" --uninstall --silent` |
+| Uninstall command | `powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "& \"$env:LOCALAPPDATA\TypeWhisper\Update.exe\" --uninstall --silent"` (Intune does not expand environment variables in this command; PowerShell resolves the user's LocalAppData path) |
 | Install behavior | User |
 | Detection rule | Registry: `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Uninstall\TypeWhisper`, value `DisplayVersion`, version comparison "greater than or equal to" the packaged version. Alternatively the file `%LocalAppData%\TypeWhisper\current\TypeWhisper.exe`. |
 | Upgrade | Deploy the newer setup the same way; it upgrades in place and keeps the user's data. |
