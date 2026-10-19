@@ -455,7 +455,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
     }
 
     private static string? RunningModel((string SelectionId, string? Model)? running, string selectionId) =>
-        running is { } request && request.SelectionId == selectionId ? request.Model : null;
+        running is { } request && string.Equals(request.SelectionId, selectionId, StringComparison.OrdinalIgnoreCase) ? request.Model : null;
 
     // The disable path without the preference write for a slot ReapplyPolicyAsync marked: the user's choice
     // survives the policy. False when a newer operation superseded the mark or the policy allowed the package again
