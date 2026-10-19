@@ -296,7 +296,7 @@ the user's profile.
 | Source | `TypeWhisper-win-x64.msi` from the [GitHub release](https://github.com/TypeWhisper/typewhisper-win/releases) (`https://github.com/TypeWhisper/typewhisper-win/releases/latest/download/TypeWhisper-win-x64.msi`). |
 | Package | `IntuneWinAppUtil.exe -c <folder> -s TypeWhisper-win-x64.msi -o <output>` |
 | Install command | `msiexec /i TypeWhisper-win-x64.msi /qn /norestart`, optionally with `VELOPACK_INSTALLDIR="D:\Apps\TypeWhisper"` |
-| Uninstall command | `msiexec /x {ProductCode} /qn /norestart`. Intune fills in the product code of an MSI; it changes with every version. The uninstall key below also holds the command as `QuietUninstallString`. |
+| Uninstall command | `msiexec /x {<product code GUID>} /qn /norestart` with the product code of the packaged MSI, which changes with every version. The Intune portal pre-fills this command with the GUID when the package wraps an MSI; otherwise read it from the MSI's `ProductCode` property or, on an installed device, from `QuietUninstallString` under the uninstall key below. |
 | Install behavior | System |
 | Detection rule | Registry: `HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\MSI:TypeWhisper`, value `DisplayVersion`, version comparison "greater than or equal to" the packaged version (use "equals" for a Release Candidate, whose version carries a suffix). Alternatively the file `C:\Program Files\TypeWhisper\current\TypeWhisper.exe`. |
 | Upgrade | Deploy the newer MSI the same way, for example through supersedence; it replaces the installed version in place. A Release Candidate sorts below the Stable release of its version. |
