@@ -231,6 +231,8 @@ public sealed partial class PortablePluginRuntimeRegistry
                 || current.Owner != owner || !MatchesModelOwner(current, expected))
                 throw new OperationCanceledException("The selected model provider changed during loading.", token);
             token.ThrowIfCancellationRequested();
+            // A pair enforced during the load is judged before the plugin saves the selection.
+            DenyTranscriptionIfRefused(expected.SelectionId, owner, expected.ModelId);
             // The package lease remains held. SDK code may notify or wait for a worker that reads registry state;
             // never call it under _sync. UseAsync drains and rejects results superseded by concurrent disable.
             // Engines that persist the selection asynchronously no longer block a thread here.

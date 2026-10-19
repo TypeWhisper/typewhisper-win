@@ -126,13 +126,14 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         // The registry checks the provider; the model is known only here, so an enforced pair is completed here.
         if (PluginRuntime.LlmRefusal(selectionId, model) is { } refused) throw new ManagedPolicyDeniedException("llm", refused);
         // A chat completion has no side effects, so a rate limit or server error is retried before the workflow fails.
-        // Judged again inside the lease before every attempt: a pair enforced meanwhile wins over a queued request or a retry.
+        // Judged again inside the lease before every attempt: a pair enforced meanwhile wins over a queued request or a
+        // retry. The registry cancels the running attempt once the pair no longer allows this model.
         return await PluginRuntime.UseLlmAsync(selectionId, (provider, token) =>
             PluginRequestRetry.RunAsync(provider.PluginId, attempt =>
             {
                 if (PluginRuntime.LlmRefusal(selectionId, model) is { } refusedNow) throw new ManagedPolicyDeniedException("llm", refusedNow);
                 return provider.ProcessAsync(systemPrompt, text, model, attempt);
-            }, token), ct);
+            }, token), ct, model);
     }
     private string _providerId = "local";
     internal bool UsesRegistryProvider => _providerId != "local";
@@ -262,8 +263,10 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             // before the selection is saved.
             DenyLocalTranscriptionIfRefused();
             await _livePreview.StopAsync();
-            await Models.ActivateAsync(modelId);
+            await Models.ActivateAsync(modelId, persistSelection: false);
             DenyLocalTranscriptionIfRefused();
+            DenySelectionIfRefused("local", modelId);
+            Models.SaveSelectedModel(modelId);
             _selection.SetSetting("Provider", "local");
             _selection.SetSetting("ProviderPluginId", LocalTranscriptionPlugin.PluginId);
             _providerId = "local";
@@ -664,7 +667,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     // hotkey while one is active so it can reach that cancellation before using a provider.
     internal bool CanStartFromShortcut => CanStartShortcut(IsReady);
     // A workflow with its own model can start while the selected model is unavailable; its model loads at the start.
-    internal bool CanStartWorkflowModelShortcut(string? model) => CanStartShortcut(IsReady || !string.IsNullOrWhiteSpace(model));
+    internal bool CanStartWorkflowModelShortcut(string? model) =>
+        CanStartShortcut(IsReady || (!TranscriptionSelectionLocked && !string.IsNullOrWhiteSpace(model)));
     private bool CanStartShortcut(bool ready) => CanCaptureWhileModelLoads || CanStartSessionOperation
         && (!PluginRuntime.IsBusy || RecordingStarting is not null || SpokenFeedback.IsBusy || LocalLlmDownload.State.IsBusy) && (ready
 #if DEBUG
@@ -807,7 +811,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 }
             }
             else if (recording.HasValue && recording.Value == _audio.IsRecording) return;
-            if (!IsReady && !SwitchesWorkflowModel(workflow?.TranscriptionModel))
+            if (!IsReady && !SwitchesWorkflowModel(WorkflowTranscriptionModel(workflow)))
             {
                 // A provider the policy refuses is not ready; the attempt reports the policy reason, not a missing model.
                 if (TranscriptionPolicyRefusal() is { } deniedEarly)

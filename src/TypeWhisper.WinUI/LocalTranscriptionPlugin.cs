@@ -397,6 +397,9 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
     /// <summary>The model the user saved as their selection, independent of what policy loaded.</summary>
     internal string? SavedModelId => _host.GetSetting<string>("SelectedModelId");
 
+    /// <summary>Saves the user's model choice after a load that did not persist it.</summary>
+    internal void SaveSelectedModel(string modelId) => _host.SetSetting("SelectedModelId", modelId);
+
     internal async Task DownloadAsync(string modelId, CancellationToken ct = default, bool propagateErrors = false)
     {
         if (!await _operations.WaitAsync(0, ct)) throw new InvalidOperationException(Loc.T("A model operation is already in progress."));

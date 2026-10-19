@@ -22,7 +22,7 @@ internal sealed partial class LocalDictationSession
                     if (!provider.IsAvailable || !provider.SupportedModels.Any(model => model.Id == modelId))
                         throw new InvalidOperationException(Loc.T("The local model is no longer available. Load it in Plugins and try again."));
                     return provider.ProcessAsync(prompt, input, modelId, providerToken);
-                }, token), ct);
+                }, token, modelId), ct);
         }
         finally
         {

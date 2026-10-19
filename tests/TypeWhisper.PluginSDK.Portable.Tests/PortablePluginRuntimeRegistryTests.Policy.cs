@@ -285,6 +285,30 @@ public sealed partial class PortablePluginRuntimeRegistryTests
     }
 
     [Fact]
+    public async Task EnforcedLlmModelChangeCancelsTheRunningRequest()
+    {
+        var store = await LocalityStore("local");
+        var policy = Policy(llm: new(Id, "model-a"));
+        await using var registry = PolicyRegistry(store, () => policy);
+        Assert.Null(await registry.SetEnabledAsync(Id, true));
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var running = registry.UseLlmAsync(Id, async (provider, token) =>
+        {
+            started.SetResult();
+            await Task.Delay(Timeout.Infinite, token);
+            return provider.PluginId;
+        }, modelId: "model-a");
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        // Same provider, another model: the running request is cancelled and reports the refusal.
+        policy = Policy(llm: new(Id, "model-b"));
+        await registry.ReapplyPolicyAsync();
+        var denied = await Assert.ThrowsAsync<ManagedPolicyDeniedException>(() => running.WaitAsync(TimeSpan.FromSeconds(10)));
+        Assert.Contains("requires the text model model-b", denied.Message);
+    }
+
+    [Fact]
     public async Task CloudTextPolicyRefusesLlmProcessorAndActionOfACloudPackage()
     {
         var store = await LocalityStore("configurable");

@@ -4,9 +4,27 @@ using TypeWhisper.Core.Services;
 namespace TypeWhisper.Presentation;
 
 /// <summary>What the transcription selection policy remembers across launches.</summary>
-/// <param name="RetainedProviderId">The registry provider whose own model selection an enforced pair replaced, or null.</param>
-/// <param name="RetainedModelId">That provider's model before enforcement; selected again once the policy is removed.</param>
-public sealed record SelectionPolicyPreferences(string? RetainedProviderId = null, string? RetainedModelId = null);
+/// <param name="Retained">
+/// Per registry provider whose own model selection an enforced pair replaced: that provider's model before
+/// enforcement, selected again once no pair is enforced.
+/// </param>
+public sealed record SelectionPolicyPreferences(IReadOnlyDictionary<string, string>? Retained = null)
+{
+    /// <summary>The retained model of a provider, or null.</summary>
+    public string? RetainedModel(string providerId) => Retained?.GetValueOrDefault(providerId);
+
+    /// <summary>A copy that also retains the provider's model.</summary>
+    public SelectionPolicyPreferences With(string providerId, string modelId) =>
+        new(new Dictionary<string, string>(Retained ?? new Dictionary<string, string>()) { [providerId] = modelId });
+
+    /// <summary>A copy without the provider's retained model.</summary>
+    public SelectionPolicyPreferences Without(string providerId)
+    {
+        var next = new Dictionary<string, string>(Retained ?? new Dictionary<string, string>());
+        next.Remove(providerId);
+        return new(next.Count == 0 ? null : next);
+    }
+}
 
 /// <summary>
 /// Atomically persists <see cref="SelectionPolicyPreferences"/>; an unreadable file behaves like an empty one. The
@@ -36,13 +54,13 @@ public sealed class SelectionPolicyStore
         { Error = Loc.T("The selection policy state could not be loaded."); }
     }
 
-    /// <summary>Saves atomically; a failed write keeps the in-memory state for this session.</summary>
+    /// <summary>Saves atomically; <see cref="Current"/> changes only once the write succeeded.</summary>
     public bool Save(SelectionPolicyPreferences next)
     {
-        Current = next;
         try
         {
             AtomicFileWriter.WriteAllText(_path, JsonSerializer.Serialize(next));
+            Current = next;
             Error = null;
             return true;
         }

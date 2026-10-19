@@ -48,6 +48,12 @@ internal sealed partial class LocalDictationSession
         if (PluginRuntime.TranscriptionRefusal(selectionId) is { } refused) throw new ManagedPolicyDeniedException("transcription", refused);
     }
 
+    // The complete pair, judged after a load and before the selection is saved.
+    private void DenySelectionIfRefused(string providerId, string modelId)
+    {
+        if (SelectionRefusal(providerId, modelId) is { } refused) throw new ManagedPolicyDeniedException("transcription", refused);
+    }
+
     private void DenyProviderIfRefused(DictationProviderOption provider)
     {
         if (provider.Id == "local") DenyLocalTranscriptionIfRefused();

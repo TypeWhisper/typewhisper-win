@@ -134,13 +134,11 @@ internal sealed partial class LocalDictationSession
                     var target = provider.ModelStates.FirstOrDefault(item => pair.IsModel(item.ModelId));
                     if (target is not null && (!target.SupportsDownload || target.Downloaded))
                     {
-                        // A pair that moved from another registry provider restores that provider's own model first, so
-                        // one retained selection is enough for every provider a policy replaced.
-                        if (_selectionPolicy.Current.RetainedProviderId is { } other && other != provider.SelectionId)
-                            await RestoreRetainedSelectionAsync();
-                        // The provider is changed only once the user's own model is safely retained.
-                        if (_selectionPolicy.Current.RetainedProviderId is null && provider.SelectedModelId is not null
-                            && !_selectionPolicy.Save(new(provider.SelectionId, provider.SelectedModelId)))
+                        // The provider is changed only once the user's own model is safely retained. Each replaced
+                        // provider keeps its own entry: a pair that moves to another provider leaves the earlier
+                        // provider's model retained until no pair is enforced, since the pair refuses selecting it now.
+                        if (_selectionPolicy.Current.RetainedModel(provider.SelectionId) is null && provider.SelectedModelId is { } own
+                            && !_selectionPolicy.Save(_selectionPolicy.Current.With(provider.SelectionId, own)))
                         {
                             AppDiagnostics.Write("policy.selection.retention-failed");
                             return;
@@ -181,22 +179,26 @@ internal sealed partial class LocalDictationSession
         }
     }
 
-    // Selects the retained registry model once and forgets it only after it applied: a provider that is disabled or a
-    // model that is unavailable right now keeps the retention for a later pass. Runs with the gate held.
+    // Selects each retained registry model once and forgets it only after it applied: a provider that is disabled or
+    // refused, or a model that is unavailable right now, keeps its retention for a later pass. Runs with the gate held
+    // and only while no pair is enforced.
     private async Task RestoreRetainedSelectionAsync()
     {
-        if (_selectionPolicy.Current is not { RetainedProviderId: { } retainedProvider, RetainedModelId: { } retainedModel }) return;
-        var provider = PluginRuntime.TranscriptionProviders.FirstOrDefault(item => item.SelectionId == retainedProvider);
-        if (provider is null) return;
-        if (provider.SelectedModelId != retainedModel)
+        foreach (var (retainedProvider, retainedModel) in _selectionPolicy.Current.Retained?.ToArray() ?? [])
         {
-            var target = provider.ModelStates.FirstOrDefault(item => item.ModelId == retainedModel);
-            if (target is null || (target.SupportsDownload && !target.Downloaded)) return;
-            await _livePreview.StopAsync();
-            await PluginRuntime.SelectModelAsync(target, CancellationToken.None);
-            await PluginRuntime.RefreshCapabilitiesAsync();
+            var provider = PluginRuntime.TranscriptionProviders.FirstOrDefault(item => item.SelectionId == retainedProvider);
+            if (provider is null) continue;
+            if (provider.SelectedModelId != retainedModel)
+            {
+                var target = provider.ModelStates.FirstOrDefault(item => item.ModelId == retainedModel);
+                if (target is null || (target.SupportsDownload && !target.Downloaded)) continue;
+                await _livePreview.StopAsync();
+                try { await PluginRuntime.SelectModelAsync(target, CancellationToken.None); }
+                catch (ManagedPolicyDeniedException) { continue; }
+                await PluginRuntime.RefreshCapabilitiesAsync();
+            }
+            _selectionPolicy.Save(_selectionPolicy.Current.Without(retainedProvider));
         }
-        _selectionPolicy.Save(new());
     }
 
     /// <summary>Conflicts between the enforced pairs and what is installed, allowed or available; for the managed settings page.</summary>
