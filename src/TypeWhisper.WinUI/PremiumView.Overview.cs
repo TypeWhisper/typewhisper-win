@@ -17,8 +17,8 @@ internal sealed partial class PremiumView
     private const double WideLayout = 720;
     private static readonly Uri PricingPage = new("https://www.typewhisper.com/pricing#commercial-table");
     // Darker tones in the light theme keep the pill text and icons readable on their tinted backgrounds.
-    private Color Gold => ActualTheme == ElementTheme.Light ? Color.FromArgb(255, 158, 110, 0) : Color.FromArgb(255, 235, 188, 64);
-    private Color Green => ActualTheme == ElementTheme.Light ? Color.FromArgb(255, 30, 130, 60) : Color.FromArgb(255, 48, 209, 88);
+    private Color Gold => ActualTheme == ElementTheme.Light ? Color.FromArgb(255, 0x7A, 0x55, 0x00) : Color.FromArgb(255, 235, 188, 64);
+    private Color Green => ActualTheme == ElementTheme.Light ? Color.FromArgb(255, 0x14, 0x6C, 0x30) : Color.FromArgb(255, 48, 209, 88);
     private readonly StackPanel _overview = new() { Spacing = 20 };
     private readonly StackPanel _details = new() { Spacing = 16, Visibility = Visibility.Collapsed };
     private readonly StackPanel _accessDetails = new() { Spacing = 16 };
@@ -126,9 +126,22 @@ internal sealed partial class PremiumView
         actions.Children.Add(unlock);
         var plans = new HandCursorButton { Style = (Style)Application.Current.Resources["SecondaryButtonStyle"], Content = Loc.T("See plans"), MinHeight = 36 };
         AutomationProperties.SetHelpText(plans, PricingPage.ToString());
-        plans.Click += async (_, _) => await Launcher.LaunchUriAsync(PricingPage);
+        var plansStatus = Copy("", 12, true);
+        plansStatus.Visibility = Visibility.Collapsed;
+        AutomationProperties.SetLiveSetting(plansStatus, AutomationLiveSetting.Polite);
+        plans.Click += async (_, _) =>
+        {
+            plansStatus.Visibility = Visibility.Collapsed;
+            bool opened;
+            try { opened = await Launcher.LaunchUriAsync(PricingPage); }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { opened = false; }
+            if (opened) return;
+            plansStatus.Text = Loc.T("The browser could not be opened.");
+            plansStatus.Visibility = Visibility.Visible;
+        };
         actions.Children.Add(plans);
         pitch.Children.Add(actions);
+        pitch.Children.Add(plansStatus);
         pitch.Children.Add(Copy(Loc.T("Individual license from €5 a month or €99 once, pay what you want."), 12, true));
         if (supporter) pitch.Children.Add(Copy(Loc.T("Supporter status alone does not unlock Premium features."), 12, true));
         grid.Children.Add(pitch);
@@ -209,7 +222,11 @@ internal sealed partial class PremiumView
 
     private static TextBlock Eyebrow(string text, Color? color)
     {
-        var eyebrow = Copy(text.ToUpper(System.Globalization.CultureInfo.CurrentCulture), 12, color is null);
+        // Casing follows the interface language, not the Windows regional format (a Turkish format would dot the I).
+        System.Globalization.CultureInfo culture;
+        try { culture = System.Globalization.CultureInfo.GetCultureInfo(Loc.Language); }
+        catch (System.Globalization.CultureNotFoundException) { culture = System.Globalization.CultureInfo.InvariantCulture; }
+        var eyebrow = Copy(text.ToUpper(culture), 12, color is null);
         eyebrow.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
         eyebrow.CharacterSpacing = 90;
         if (color is { } accent) eyebrow.Foreground = new SolidColorBrush(accent);
@@ -224,22 +241,36 @@ internal sealed partial class PremiumView
         card.Add(FeatureRow(PremiumFeature.CloudSync, "devices", Loc.T("Sync Dictionary & Snippets"),
             Loc.T("Keeps your personal terms and text snippets available across your devices."),
             Loc.T("Choose a shared iCloud Drive, OneDrive or Dropbox folder."),
-            !access.Any ? (Loc.T("Premium"), (Color?)Gold) : folder is { Length: > 0 } ? (folder, (Color?)Green) : (Loc.T("Cloud folder"), (Color?)null), access.Any));
+            !access.Any ? (Loc.T("Premium"), (Color?)Gold) : folder is { Length: > 0 } ? (folder, (Color?)Green) : (Loc.T("Cloud folder"), (Color?)null), access.Any).Row);
         var learnable = access.Requirement(PremiumFeature.CorrectionLearning) == PremiumRequirement.Available;
-        var learned = DictationDictionarySnapshot.Load(DictationDictionarySnapshot.StoragePath).Entries
-            .Count(entry => entry.EntryType == DictionaryEntryType.Correction && entry.Source == DictionaryEntrySource.AutoLearned);
-        card.Add(FeatureRow(PremiumFeature.CorrectionLearning, "correction", Loc.T("Learn from Corrections"),
+        var learning = FeatureRow(PremiumFeature.CorrectionLearning, "correction", Loc.T("Learn from Corrections"),
             Loc.T("Remembers confident edits after insertion and improves future text."),
-            learnable && learned > 0 ? Loc.T("{0} corrections learned", learned) + "  ·  " + PremiumCorrectionExamples.Primary(Loc.Language) : PremiumCorrectionExamples.Line(Loc.Language),
-            !learnable ? (Loc.T("Premium"), (Color?)Gold) : CorrectionLearning.Enabled ? (Loc.T("Active"), (Color?)Green) : (Loc.T("Off"), (Color?)null), access.Any));
+            PremiumCorrectionExamples.Line(Loc.Language),
+            !learnable ? (Loc.T("Premium"), (Color?)Gold) : CorrectionLearning.Enabled ? (Loc.T("Active"), (Color?)Green) : (Loc.T("Off"), (Color?)null), access.Any);
+        card.Add(learning.Row);
+        // The dictation snapshot reads and compiles the whole dictionary, so the count is taken off the UI thread.
+        if (learnable) _ = ShowLearnedCountAsync(learning.Detail);
         card.Add(FeatureRow(PremiumFeature.CalendarMeetings, "calendar", Loc.T("Meeting Automation"),
             Loc.T("Reminds you before a scheduled meeting or starts recording automatically when you join."),
             Loc.T("Calendar integration is not connected in this Windows build yet."),
-            (Loc.T("Coming later"), null), access.Any));
+            (Loc.T("Coming later"), null), access.Any).Row);
         return card;
     }
 
-    private SettingsRow FeatureRow(PremiumFeature feature, string glyph, string title, string description, string detail, (string Text, Color? Accent) badge, bool settings)
+    private async Task ShowLearnedCountAsync(TextBlock detail)
+    {
+        try
+        {
+            var learned = await Task.Run(() => DictationDictionarySnapshot.Load(DictationDictionarySnapshot.StoragePath).Entries
+                .Count(entry => entry.EntryType == DictionaryEntryType.Correction && entry.Source == DictionaryEntrySource.AutoLearned));
+            if (learned == 0) return;
+            detail.Text = (learned == 1 ? Loc.T("1 correction learned") : Loc.T("{0} corrections learned", learned))
+                + "  ·  " + PremiumCorrectionExamples.Primary(Loc.Language);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("premium.learned-count.failed", ex); }
+    }
+
+    private (SettingsRow Row, TextBlock Detail) FeatureRow(PremiumFeature feature, string glyph, string title, string description, string detail, (string Text, Color? Accent) badge, bool settings)
     {
         var control = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, VerticalAlignment = VerticalAlignment.Center };
         control.Children.Add(Pill(badge.Text, badge.Accent));
@@ -254,7 +285,7 @@ internal sealed partial class PremiumView
         var example = Copy(detail, 12, true);
         example.Margin = new Thickness(34, -4, 0, 0);
         row.Below(example);
-        return row;
+        return (row, example);
     }
 
     private static Border Pill(string text, Color? accent)

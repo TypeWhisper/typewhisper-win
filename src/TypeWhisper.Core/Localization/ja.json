@@ -3231,5 +3231,6 @@
   "Typos that keep coming back": "何度も出てくる誤字",
   "Names the recognition does not know": "認識が知らない名前",
   "Spellings of products and technical terms": "製品名や専門用語の表記",
-  "You fix a word once after dictating. From then on it is written correctly, and with sync on every PC.": "ディクテーション後に一度直すだけ。以後は正しく書かれ、同期すればすべての PC で使えます。"
+  "You fix a word once after dictating. From then on it is written correctly, and with sync on every PC.": "ディクテーション後に一度直すだけ。以後は正しく書かれ、同期すればすべての PC で使えます。",
+  "1 correction learned": "1 件の修正を学習済み"
 }
