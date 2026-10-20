@@ -1,7 +1,7 @@
 # Windows documentation
 
-These guides describe the Windows 1.2 source on `main`; the 1.1 release line and
-its guides live on the `release/1.1` branch. A merged implementation,
+These guides describe the Windows 1.3 source on `main`; the 1.2 release line and
+its guides live on the `release/1.2` branch. A merged implementation,
 a published Daily and a validated stable release are different milestones.
 Use the release notes for the package you installed when they differ from this branch.
 
@@ -30,7 +30,7 @@ Use the release notes for the package you installed when they differ from this b
 
 - [1.1 readiness](WINUI-PROGRESS.md): remaining decisions and acceptance boundaries.
 - [Daily delivery and 1.0 migration](DAILY-1.1-CANDIDATE.md): package identities, import and rollout gates.
-- [Daily release-note source](releases/1.2-daily.md): copy for the current candidate workflow.
+- [Daily release-note source](releases/1.3-daily.md): copy for the current candidate workflow.
 - [Store submission](STORE_SUBMISSION.md): separate MSIX packaging and acceptance.
 - [Polar API maintenance](POLAR-API-VERSION-MAINTENANCE.md): license compatibility and follow-up.
 - [Release notes](releases/README.md): current sources and published versions.
