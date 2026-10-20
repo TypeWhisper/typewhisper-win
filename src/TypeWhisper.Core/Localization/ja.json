@@ -3216,5 +3216,20 @@
   "The text model provider {0} is not installed or enabled.": "テキストモデルのプロバイダー {0} はインストールされていないか、有効になっていません。",
   "Setting": "設定",
   "Scope": "適用範囲",
-  "Value": "値"
+  "Value": "値",
+  "Your dictionary on every PC. Corrections that stick.": "辞書はどの PC でも同じ。修正はずっと残る。",
+  "A commercial license keeps your dictionary and snippets in sync through your own cloud folder and learns from the corrections you make after dictating. Meeting automation follows later on Windows.": "商用ライセンスでは、辞書とスニペットを自分のクラウドフォルダー経由で同期し、ディクテーション後に行った修正から学習します。会議の自動化は Windows では後日対応します。",
+  "See plans": "プランを見る",
+  "Individual license from €5 a month or €99 once, pay what you want.": "Individual ライセンスは月額 5 € または買い切り 99 € から。金額は自由に選べます。",
+  "{0} corrections learned": "{0} 件の修正を学習済み",
+  "Local first": "ローカル優先",
+  "Your data stays in the cloud folder you choose": "データは自分で選んだクラウドフォルダーに残ります",
+  "The core app stays open source": "コアアプリはオープンソースのまま",
+  "Already have a key? Activate your license": "キーをお持ちの方はライセンスを有効化",
+  "{0} settings": "{0}の設定",
+  "What TypeWhisper learns from your corrections": "TypeWhisper が修正から学ぶこと",
+  "Typos that keep coming back": "何度も出てくる誤字",
+  "Names the recognition does not know": "認識が知らない名前",
+  "Spellings of products and technical terms": "製品名や専門用語の表記",
+  "You fix a word once after dictating. From then on it is written correctly, and with sync on every PC.": "ディクテーション後に一度直すだけ。以後は正しく書かれ、同期すればすべての PC で使えます。"
 }
