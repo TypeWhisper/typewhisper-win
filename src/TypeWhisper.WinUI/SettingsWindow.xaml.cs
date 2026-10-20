@@ -735,11 +735,18 @@ public sealed partial class SettingsWindow : Window
     private async void OpenSearchResult(SettingSearchEntry entry)
     {
         if (!await TryShowCategoryAsync(entry.Category)) return;
+        RevealRow(entry.Key, entry.Category);
+    }
+
+    // Scrolls the shown page to the row with the settings search key and focuses it; a --page activation
+    // and a search result use the same path.
+    internal void RevealRow(string key, string category)
+    {
         DispatcherQueue.TryEnqueue(() =>
         {
             SettingsRoot.UpdateLayout();
             var elements = Descendants(SettingsRoot).ToArray();
-            var target = elements.FirstOrDefault(element => entry.Key.Length > 0 && (element.Name == entry.Key || element.Tag as string == entry.Key));
+            var target = elements.FirstOrDefault(element => key.Length > 0 && (element.Name == key || element.Tag as string == key));
             for (DependencyObject? ancestor = target; ancestor is not null; ancestor = VisualTreeHelper.GetParent(ancestor))
                 if (ancestor is FrameworkElement { Tag: Action reveal }) reveal();
             SettingsRoot.UpdateLayout();
@@ -747,7 +754,7 @@ public sealed partial class SettingsWindow : Window
             if (!visible)
             {
                 // Hidden dependent fields lead to their enabling option without changing it.
-                var parentKey = entry.Key switch
+                var parentKey = key switch
                 {
                     "AudioDuckingLevel" => "AudioDuckingEnabled",
                     "SpokenFeedbackVoiceId" or "SpokenFeedbackProviderId" => "SpokenFeedbackEnabled",
@@ -766,7 +773,7 @@ public sealed partial class SettingsWindow : Window
                 if (target is Control control) control.Focus(FocusState.Keyboard);
                 else Descendants(target).OfType<Control>().FirstOrDefault(control => control is Button or TextBox or ToggleSwitch && control.IsTabStop && control.IsEnabled)?.Focus(FocusState.Keyboard);
             }
-            else _navigationButtons.FirstOrDefault(button => (string)button.Tag == (entry.Category == "Overlay editor" ? "Appearance" : entry.Category))?.Focus(FocusState.Keyboard);
+            else _navigationButtons.FirstOrDefault(button => (string)button.Tag == (category == "Overlay editor" ? "Appearance" : category))?.Focus(FocusState.Keyboard);
         });
     }
 
