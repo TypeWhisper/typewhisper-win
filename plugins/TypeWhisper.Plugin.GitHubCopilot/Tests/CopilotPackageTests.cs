@@ -17,12 +17,12 @@ public sealed class CopilotPackageTests
     [Fact]
     public void PackageShipsOnlyTheStdioRuntime()
     {
-        var native = Path.Combine(PackageSource, "runtimes", System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier, "native");
-        Assert.True(File.Exists(Path.Combine(native, OperatingSystem.IsWindows() ? "copilot-runtime.exe" : "copilot-runtime")));
-        Assert.True(File.Exists(Path.Combine(native, "runtime.node")));
+        var native = Path.Join(PackageSource, "runtimes", System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier, "native");
+        Assert.True(File.Exists(Path.Join(native, OperatingSystem.IsWindows() ? "copilot-runtime.exe" : "copilot-runtime")));
+        Assert.True(File.Exists(Path.Join(native, "runtime.node")));
         // In-process copy of runtime.node and the CLI alias: unused over stdio, 83 MB on Windows.
         foreach (var unused in new[] { "copilot_runtime.dll", "libcopilot_runtime.dylib", "libcopilot_runtime.so", "copilot.exe", "copilot" })
-            Assert.False(File.Exists(Path.Combine(native, unused)), unused);
+            Assert.False(File.Exists(Path.Join(native, unused)), unused);
     }
 
     [Fact]
