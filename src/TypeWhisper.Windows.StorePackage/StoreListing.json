@@ -1,0 +1,56 @@
+{
+  "screenshotRepository": "TypeWhisper/typewhisper.com",
+  "screenshotRevision": "c34be8d16a62dd3adcf87dacb932ed2e9d001051",
+  "listings": {
+    "en": {
+      "screenshots": [
+        { "path": "public/screenshots/en/windows/dashboard.png", "caption": "Dashboard" },
+        { "path": "public/screenshots/en/windows/dictation.png", "caption": "Dictation" },
+        { "path": "public/screenshots/en/windows/managed-settings.png", "caption": "Managed settings for organizations" },
+        { "path": "public/screenshots/en/windows/workflows.png", "caption": "Workflows" },
+        { "path": "public/screenshots/en/windows/file-transcription.png", "caption": "File Transcription" },
+        { "path": "public/screenshots/en/windows/integrations-marketplace.png", "caption": "Integrations" },
+        { "path": "public/screenshots/en/windows/recorder.png", "caption": "Recorder" },
+        { "path": "public/screenshots/en/windows/whats-new.png", "caption": "What's new after an update" }
+      ]
+    },
+    "de": {
+      "screenshots": [
+        { "path": "public/screenshots/de/windows/dashboard.png", "caption": "Dashboard" },
+        { "path": "public/screenshots/de/windows/dictation.png", "caption": "Diktat" },
+        { "path": "public/screenshots/de/windows/managed-settings.png", "caption": "Verwaltete Einstellungen für Organisationen" },
+        { "path": "public/screenshots/de/windows/workflows.png", "caption": "Workflows" },
+        { "path": "public/screenshots/de/windows/file-transcription.png", "caption": "Dateitranskription" },
+        { "path": "public/screenshots/de/windows/integrations-marketplace.png", "caption": "Integrationen" },
+        { "path": "public/screenshots/de/windows/dictionary.png", "caption": "Wörterbuch" },
+        { "path": "public/screenshots/de/windows/history.png", "caption": "Verlauf" },
+        { "path": "public/screenshots/de/windows/recorder.png", "caption": "Aufnahmen" },
+        { "path": "public/screenshots/de/windows/whats-new.png", "caption": "Neu nach einem Update" }
+      ]
+    },
+    "ja": {
+      "screenshots": [
+        { "path": "public/screenshots/en/windows/dashboard.png", "caption": "ダッシュボード" },
+        { "path": "public/screenshots/en/windows/dictation.png", "caption": "ディクテーション" },
+        { "path": "public/screenshots/en/windows/managed-settings.png", "caption": "組織向けの管理設定" },
+        { "path": "public/screenshots/en/windows/workflows.png", "caption": "ワークフロー" },
+        { "path": "public/screenshots/en/windows/file-transcription.png", "caption": "ファイル文字起こし" },
+        { "path": "public/screenshots/en/windows/integrations-marketplace.png", "caption": "連携" },
+        { "path": "public/screenshots/en/windows/recorder.png", "caption": "レコーダー" },
+        { "path": "public/screenshots/en/windows/whats-new.png", "caption": "アップデート後の新機能" }
+      ]
+    },
+    "zh": {
+      "screenshots": [
+        { "path": "public/screenshots/en/windows/dashboard.png", "caption": "主页" },
+        { "path": "public/screenshots/en/windows/dictation.png", "caption": "语音输入" },
+        { "path": "public/screenshots/en/windows/managed-settings.png", "caption": "面向组织的托管设置" },
+        { "path": "public/screenshots/en/windows/workflows.png", "caption": "工作流" },
+        { "path": "public/screenshots/en/windows/file-transcription.png", "caption": "文件转录" },
+        { "path": "public/screenshots/en/windows/integrations-marketplace.png", "caption": "集成" },
+        { "path": "public/screenshots/en/windows/recorder.png", "caption": "录音机" },
+        { "path": "public/screenshots/en/windows/whats-new.png", "caption": "更新后的新功能" }
+      ]
+    }
+  }
+}

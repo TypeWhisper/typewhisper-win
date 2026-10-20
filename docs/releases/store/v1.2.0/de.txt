@@ -1,0 +1,10 @@
+TypeWhisper 1.2 bringt verwaltete Einstellungen für Organisationen.
+
+- Administratoren richten TypeWhisper über Gruppenrichtlinien, Intune oder die Registrierung ein: Lizenzaktivierung, erlaubte Anbieter und Plugins, Cloud-Verarbeitung, Downloads von Modellen und Plugins sowie den Autostart.
+- Unter Einstellungen > Erweitert > Verwaltete Einstellungen siehst du, was deine Organisation festgelegt hat.
+- Lange Auswahllisten wie die gesprochene Sprache haben ein Suchfeld.
+- Das Overlay kann das Icon der App zeigen, in die du diktierst.
+- Ein Klick auf eine letzte Transkription auf der Startseite öffnet sie im Verlauf, ein Rechtsklick kopiert sie.
+- Das Tray-Menü folgt dem hellen Design.
+- Nach einem Update zeigt eine kurze Übersicht, was neu ist.
+- Regex-Korrekturen im Wörterbuch behalten beim Sync mit macOS ihre eigene Identität.
