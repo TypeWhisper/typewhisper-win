@@ -134,6 +134,44 @@ public sealed class CopilotSdkTransportTests
     }
 
     [Fact]
+    public async Task UnreadableAccountListFallsBackToTheSignedInAccount()
+    {
+        await using var server = new FakeCopilotServer { GhCliEntryWithoutToken = true };
+        var transport = server.CreateTransport();
+        var accounts = await transport.GetAccountsAsync(server.Root, default);
+        Assert.Equal("personal", Assert.Single(accounts).Login);
+
+        Assert.Equal("model-a", Assert.Single(await transport.GetModelsAsync(server.Root, FakeTransport.Personal, default)).Id);
+        // Without a selection ID the runtime lists the models of its signed-in account.
+        Assert.All(server.Requests.Where(r => r.Method == "models.list"), r =>
+            Assert.False(r.Params.TryGetProperty("selectionId", out var id) && id.ValueKind != JsonValueKind.Null));
+
+        Assert.Equal("Hallo Welt", await transport.ProcessAsync(server.Root, FakeTransport.Personal, "s", "u", "model-a", default));
+        Assert.Equal("personal", server.Parameters("session.gitHubAuth.setCredentials").GetProperty("credentials").GetProperty("login").GetString());
+    }
+
+    [Fact]
+    public async Task UnreadableAccountListDoesNotExposeOtherAccounts()
+    {
+        await using var server = new FakeCopilotServer { GhCliEntryWithoutToken = true };
+        await Assert.ThrowsAsync<CopilotSignInRequiredException>(() => server.CreateTransport().ProcessAsync(
+            server.Root, FakeTransport.Work, "s", "private", "model-a", default));
+        Assert.DoesNotContain(server.Requests, r => r.Method is "models.list" or "session.create" or "session.send");
+    }
+
+    [Theory]
+    [InlineData(false, "user")]
+    [InlineData(true, "env")]
+    [InlineData(true, "gh-cli")]
+    public async Task UnreadableAccountListIgnoresSignedOutOrNonOAuthAuthentication(bool authenticated, string authType)
+    {
+        await using var server = new FakeCopilotServer { GhCliEntryWithoutToken = true };
+        server.StatusAuthenticated = authenticated;
+        server.StatusAuthType = authType;
+        Assert.Empty(await server.CreateTransport().GetAccountsAsync(server.Root, default));
+    }
+
+    [Fact]
     public async Task MissingSelectedAccountStopsBeforeModelsOrSessionCreation()
     {
         await using var server = new FakeCopilotServer { MissingPersonal = true };
@@ -261,6 +299,9 @@ internal sealed class FakeCopilotServer : IAsyncDisposable
     internal string SelectedLogin = "personal";
     internal bool MismatchedSessionAccount;
     internal bool MissingPersonal;
+    internal bool GhCliEntryWithoutToken;
+    internal bool? StatusAuthenticated;
+    internal string? StatusAuthType;
     internal bool DeferredSwitch;
     internal bool MismatchedModel;
 
@@ -324,10 +365,12 @@ internal sealed class FakeCopilotServer : IAsyncDisposable
                 object result = method switch
                 {
                     "connect" => new { protocolVersion = 3 },
-                    "auth.getStatus" => new { isAuthenticated = Authenticated, authType = AuthType },
+                    "auth.getStatus" => new { isAuthenticated = StatusAuthenticated ?? Authenticated, authType = StatusAuthType ?? AuthType, host = "https://github.com", login = "personal" },
                     "account.getAllUsers" => !Authenticated ? Array.Empty<object>() :
                         (MissingPersonal ? new[] { "work" } : new[] { "personal", "work" }).Select(login => (object)new
-                        { authInfo = new { type = AuthType, host = "https://github.com", login, token = "fixture-secret-never-forward", envVar = "GH_TOKEN" }, selectionId = "opaque-" + login, token = "fixture-secret-never-forward" }).ToArray(),
+                        { authInfo = new { type = AuthType, host = "https://github.com", login, token = "fixture-secret-never-forward", envVar = "GH_TOKEN" }, selectionId = "opaque-" + login, token = "fixture-secret-never-forward" })
+                        // The runtime lists GitHub CLI logins without the token field the SDK requires.
+                        .Concat(GhCliEntryWithoutToken ? [new { authInfo = new { type = "gh-cli", host = "https://github.com", login = "gh-user" }, selectionId = "opaque-gh-user" }] : Array.Empty<object>()).ToArray(),
                     "session.gitHubAuth.getStatus" => new { isAuthenticated = true, authType = "user", host = "https://github.com", login = MismatchedSessionAccount ? "different-account" : SelectedLogin },
                     "session.model.switchTo" => new { modelId = MismatchedModel ? "different-model" : parameters.GetProperty("modelId").GetString(), deferred = DeferredSwitch, status = "applied" },
                     "models.list" => new { models = new object[] { new { id = "model-a", name = "Model A" }, new { id = "model-a", name = "Duplicate" }, new { id = "disabled", name = "Disabled", policy = new { state = "disabled" } } } },
