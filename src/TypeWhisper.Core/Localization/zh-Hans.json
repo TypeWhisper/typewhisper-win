@@ -3216,5 +3216,21 @@
   "The text model provider {0} is not installed or enabled.": "文本模型提供商 {0} 未安装或未启用。",
   "Setting": "设置",
   "Scope": "范围",
-  "Value": "值"
+  "Value": "值",
+  "Your dictionary on every PC. Corrections that stick.": "每台电脑都用同一本词典，修正一次就记住。",
+  "A commercial license keeps your dictionary and snippets in sync through your own cloud folder and learns from the corrections you make after dictating. Meeting automation follows later on Windows.": "商业许可证会通过你自己的云文件夹同步词典和文本片段，并从你听写后所做的修正中学习。会议自动化功能稍后登陆 Windows。",
+  "See plans": "查看方案",
+  "Individual license from €5 a month or €99 once, pay what you want.": "Individual 许可证每月 5 € 或一次性 99 € 起，价格由你决定。",
+  "{0} corrections learned": "已学习 {0} 条修正",
+  "Local first": "本地优先",
+  "Your data stays in the cloud folder you choose": "你的数据保留在你选择的云文件夹中",
+  "The core app stays open source": "核心应用保持开源",
+  "Already have a key? Activate your license": "已有密钥？激活许可证",
+  "{0} settings": "{0}设置",
+  "What TypeWhisper learns from your corrections": "TypeWhisper 会从你的修正中学到什么",
+  "Typos that keep coming back": "反复出现的错别字",
+  "Names the recognition does not know": "识别不认识的名字",
+  "Spellings of products and technical terms": "产品和专业术语的写法",
+  "You fix a word once after dictating. From then on it is written correctly, and with sync on every PC.": "听写后只需改正一次，之后都会写对；开启同步后，每台电脑都一样。",
+  "1 correction learned": "已学习 1 条修正"
 }
