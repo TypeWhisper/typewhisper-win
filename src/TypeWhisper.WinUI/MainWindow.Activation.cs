@@ -78,7 +78,8 @@ public sealed partial class MainWindow
 
     internal void HandleActivation(ApplicationActivationRequest request)
     {
-        SuppressStartupWhatsNew();
+        if (request.OnlyNavigates) SuppressStartupWhatsNewForNavigation();
+        else SuppressStartupWhatsNew();
         if (_closing || _profileRestoreClosing) return;
         if (!request.ShowWindow) return;
         if (request.AccountCallback is { } callback)

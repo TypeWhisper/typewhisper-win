@@ -7,8 +7,9 @@ public sealed class WhatsNewTests : IDisposable
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "whats-new-" + Guid.NewGuid());
     private string StorePath => Path.Combine(_directory, "whats-new.json");
     private WhatsNewPreferencesStore Store() => new(StorePath);
-    private WhatsNewSession Session(bool completed = true, int version = 1, ApplicationActivationRequest? request = null) =>
-        new(Store(), request ?? ApplicationActivationRequest.Parse([]), completed, version);
+    private WhatsNewSession Session(bool completed = true, int version = 1, ApplicationActivationRequest? request = null,
+        bool afterUpdate = false) =>
+        new(Store(), request ?? ApplicationActivationRequest.Parse([]), completed, version, afterUpdate);
 
     [Fact]
     public void ExistingUserSeesContentOnceAcrossCloseAndRestart()
@@ -229,6 +230,56 @@ public sealed class WhatsNewTests : IDisposable
         Assert.True(new SetupPreferencesStore(Path.Combine(_directory, "setup.json")).Current.Completed);
         Assert.Equal("existing audio preferences", File.ReadAllText(audio));
     }
+
+    [Fact]
+    public void OpeningAWindowCancelsTheNewsOfAnOrdinaryLaunch()
+    {
+        var session = Session();
+        Assert.True(session.SuppressForNavigation());
+        Assert.False(session.Pending);
+        Assert.False(session.TryShow(false, UnexpectedShow));
+        Assert.False(File.Exists(StorePath));
+    }
+
+    [Fact]
+    public void AfterAnUpdateOpeningSettingsKeepsTheNewsButWorkStillCancelsIt()
+    {
+        var session = Session(afterUpdate: true);
+        Assert.True(session.AfterUpdate);
+        Assert.False(session.SuppressForNavigation());
+        Assert.True(session.Pending);
+        var shows = 0;
+        Assert.True(session.TryShow(false, () => shows++));
+        Assert.Equal(1, shows);
+        Assert.Equal(1, Store().LastSeenContentVersion);
+
+        var busy = Session(version: 2, afterUpdate: true);
+        Assert.False(busy.TryShow(true, UnexpectedShow));
+        var dictating = Session(version: 2, afterUpdate: true);
+        dictating.Suppress();
+        Assert.False(dictating.TryShow(false, UnexpectedShow));
+        Assert.Equal(1, Store().LastSeenContentVersion);
+    }
+
+    [Fact]
+    public void AnUpdateRestartDoesNotRepeatSeenNewsOrInterruptAnUnfinishedSetup()
+    {
+        Assert.True(Session().TryShow(false, () => { }));
+        Assert.False(Session(afterUpdate: true).Pending);
+        Directory.Delete(_directory, recursive: true);
+        Assert.False(Session(completed: false, afterUpdate: true).TryShow(false, UnexpectedShow));
+    }
+
+    [Theory]
+    [InlineData(new string[0], true)]
+    [InlineData(new[] { "--settings" }, true)]
+    [InlineData(new[] { "--page", "about" }, true)]
+    [InlineData(new[] { "--dictionary" }, true)]
+    [InlineData(new[] { "--minimized" }, false)]
+    [InlineData(new[] { "--transcribe-file", @"C:\audio.wav" }, false)]
+    [InlineData(new[] { "--unknown" }, false)]
+    public void OnlyWindowAndPageRequestsCountAsNavigation(string[] arguments, bool navigates) =>
+        Assert.Equal(navigates, ApplicationActivationRequest.Parse(arguments).OnlyNavigates);
 
     private static void UnexpectedShow() => Assert.Fail("News must not interrupt this launch.");
     public void Dispose() { if (Directory.Exists(_directory)) Directory.Delete(_directory, recursive: true); }
