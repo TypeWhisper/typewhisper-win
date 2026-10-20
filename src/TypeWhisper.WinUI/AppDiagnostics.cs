@@ -174,9 +174,14 @@ internal static class AppDiagnostics
             error?.GetType().FullName, error is null ? null : $"0x{error.HResult:X8}", stack && error is not null ? Frames(error) : null);
     }
 
-    // Profile action ids embed the profile id; only the action's own name is recorded.
-    internal static string PluginStage(string stage, string pluginId, string? actionId = null) =>
-        $"{stage} plugin={pluginId}" + (actionId is null ? "" : $" action={actionId[(actionId.LastIndexOf('/') + 1)..]}");
+    // Action ids embed profile or item ids ("<profile>/refresh", "test:<script>"); only the action's own name is recorded.
+    internal static string PluginStage(string stage, string pluginId, string? actionId = null)
+    {
+        if (actionId is null) return $"{stage} plugin={pluginId}";
+        var action = actionId[(actionId.LastIndexOf('/') + 1)..];
+        if (action.IndexOf(':') is >= 0 and var colon) action = action[..colon];
+        return $"{stage} plugin={pluginId} action={action}";
+    }
 
     private static string[] Frames(Exception error) => new StackTrace(error, false).GetFrames()
         .Select(frame => frame.GetMethod())
