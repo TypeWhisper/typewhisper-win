@@ -44,6 +44,17 @@ public sealed partial class MainWindow
     internal void SuppressStartupWhatsNew(bool deferDismiss = false)
     {
         _whatsNewSession.Suppress();
+        DismissStartupWhatsNew(deferDismiss);
+    }
+
+    /// <summary>For opening a window. Right after an app update the news stays pending, and an open news window stays.</summary>
+    internal void SuppressStartupWhatsNewForNavigation()
+    {
+        if (_whatsNewSession.SuppressForNavigation()) DismissStartupWhatsNew(deferDismiss: false);
+    }
+
+    private void DismissStartupWhatsNew(bool deferDismiss)
+    {
         if (_whatsNewWindow is null) return;
         if (DispatcherQueue.HasThreadAccess && !deferDismiss) DismissWhatsNew();
         else DispatcherQueue.TryEnqueue(DismissWhatsNew);
@@ -70,7 +81,8 @@ public sealed partial class MainWindow
         try
         {
             if (!_whatsNewSession.Pending) return;
-            var busy = WhatsNewBusy || ShortcutActionBusy || _settingsWindow is not null
+            // After an app update users open Settings to see whether it worked; the news appears above it.
+            var busy = WhatsNewBusy || ShortcutActionBusy || _settingsWindow is not null && !_whatsNewSession.AfterUpdate
                 || _notice?.IsShowing == true || _reviewWindows.Count > 0;
             if (busy) { _whatsNewSession.Suppress(); return; }
             var window = CreateWhatsNewWindow();

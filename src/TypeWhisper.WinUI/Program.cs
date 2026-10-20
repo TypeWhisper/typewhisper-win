@@ -19,6 +19,8 @@ internal static class Program
         // Candidate builds do not contact an update feed or automatically apply an update.
         Velopack.VelopackApp.Build().SetAutoApplyOnStartup(false)
             .OnBeforeUninstallFastCallback(_ => WindowsStartupRegistration.Create().SetEnabledAsync(false).GetAwaiter().GetResult())
+            // Set by every updater version, including the one 1.0 and 1.1 installations keep.
+            .OnRestarted(_ => WindowsApplicationUpdates.RestartedAfterUpdate = true)
             .Run();
 #endif
         AppLanguage.Apply();

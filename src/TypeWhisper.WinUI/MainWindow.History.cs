@@ -18,7 +18,7 @@ public sealed partial class MainWindow
     private void OpenHistory(string? recordId = null)
     {
         if (_closing || _profileRestoreClosing || _historyService is null) return;
-        SuppressStartupWhatsNew();
+        SuppressStartupWhatsNewForNavigation();
         if (_historyWindow is null)
         {
             var actions = new HistoryActions(_historyService);
