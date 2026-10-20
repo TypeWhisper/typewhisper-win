@@ -206,11 +206,26 @@ public sealed class CopilotPluginTests
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => plugin.ExecuteSettingsActionAsync("refresh", default));
         Assert.DoesNotContain("secret", error.ToString());
         // Diagnostics still learn the failing type and code, never the SDK text.
-        var cause = Assert.IsType<CopilotFailureCause>(error.InnerException);
-        Assert.Equal(transport.Error!.GetType().FullName, cause.Message);
+        var cause = Assert.IsAssignableFrom<Exception>(error.InnerException);
+        Assert.Equal(transport.Error!.GetType(), cause.GetType());
+        Assert.NotSame(transport.Error, cause);
         Assert.Equal(transport.Error.HResult, cause.HResult);
         Assert.False(plugin.IsAvailable);
         Assert.Empty(plugin.SupportedModels);
+        await plugin.DeactivateAsync();
+    }
+
+    [Fact]
+    public async Task UnknownLibraryErrorsBecomeANeutralCause()
+    {
+        var transport = new FakeTransport();
+        using var plugin = new GitHubCopilotPlugin(transport);
+        await plugin.ActivateAsync(new TestHost());
+        transport.LoadAccounts = _ => throw new Xunit.Sdk.XunitException("secret token");
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => plugin.ExecuteSettingsActionAsync("refreshAccounts", default));
+        Assert.DoesNotContain("secret", error.ToString());
+        var cause = Assert.IsType<CopilotFailureCause>(error.InnerException);
+        Assert.Equal(typeof(Xunit.Sdk.XunitException).FullName, cause.Message);
         await plugin.DeactivateAsync();
     }
 

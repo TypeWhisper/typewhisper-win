@@ -31,14 +31,37 @@ internal sealed class CopilotModelUnavailableException : Exception;
 /// <remarks>SDK messages may contain text or credentials, so only the error's type name and codes are kept.</remarks>
 internal sealed class CopilotFailureCause : Exception
 {
+    private static readonly System.Reflection.MethodInfo HResultSetter =
+        typeof(Exception).GetProperty(nameof(HResult))!.GetSetMethod(nonPublic: true)!;
+
     private CopilotFailureCause(Exception cause) : base(cause.GetType().FullName) => HResult = cause.HResult;
 
     internal static Exception From(Exception error) => error.GetBaseException() switch
     {
         // A blocked or missing runtime keeps its reason only in the Windows error code; its system text is generic.
         System.ComponentModel.Win32Exception native => new System.ComponentModel.Win32Exception(native.NativeErrorCode),
-        var cause => new CopilotFailureCause(cause),
+        var cause => Recreate(cause) ?? new CopilotFailureCause(cause),
     };
+
+    // Hosts record the innermost exception's type, so framework and plugin errors are rebuilt as a fresh
+    // instance of their own type that carries only the type name. Constructors of other libraries are not run.
+    private static Exception? Recreate(Exception cause)
+    {
+        var type = cause.GetType();
+        var assembly = type.Assembly.GetName().Name ?? "";
+        if (type.Assembly != typeof(CopilotFailureCause).Assembly && assembly != "System.Private.CoreLib" &&
+            !assembly.StartsWith("System.", StringComparison.Ordinal)) return null;
+        try
+        {
+            var copy = type.GetConstructor([typeof(string)]) is { } withMessage
+                ? withMessage.Invoke([type.FullName]) as Exception
+                : type.GetConstructor(Type.EmptyTypes)?.Invoke(null) as Exception;
+            if (copy is null) return null;
+            HResultSetter.Invoke(copy, [cause.HResult]);
+            return copy;
+        }
+        catch (Exception) { return null; }
+    }
 }
 
 internal sealed class CopilotTransport : ICopilotTransport
