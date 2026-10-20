@@ -33,31 +33,32 @@ internal sealed class LiveAudioSettings(LocalDictationSession session)
         var preferences = session.AudioPreferences;
         var devices = OutputDevices();
 
-        AddPicker(Loc.T("Audio output"), Loc.T("One output for feedback sounds, spoken feedback and volume reduction."), devices,
+        AddPicker(null, Loc.T("Audio output"), Loc.T("One output for feedback sounds, spoken feedback and volume reduction."), devices,
             preferences.OutputDeviceId ?? "", id => session.AudioPreferences with { OutputDeviceId = id });
-        AddToggle(Loc.T("Sound feedback"), Loc.T("Play a short sound when recording starts or stops."), preferences.SoundFeedbackEnabled,
+        AddToggle("SoundFeedbackEnabled", Loc.T("Sound feedback"), Loc.T("Play a short sound when recording starts or stops."), preferences.SoundFeedbackEnabled,
             value => session.AudioPreferences with { SoundFeedbackEnabled = value });
-        AddToggle(Loc.T("Lower audio while recording"), Loc.T("Lower other apps on the selected output, then restore them after recording. TypeWhisper sounds keep their volume."), preferences.AudioDuckingEnabled,
+        AddToggle("AudioDuckingEnabled", Loc.T("Lower audio while recording"), Loc.T("Lower other apps on the selected output, then restore them after recording. TypeWhisper sounds keep their volume."), preferences.AudioDuckingEnabled,
             value => session.AudioPreferences with { AudioDuckingEnabled = value });
         var level = (int)Math.Round(preferences.AudioDuckingLevel * 100);
         // An API-set level outside the presets is listed instead of being shown as unavailable.
         var levels = new[] { 0, 10, 20, 30, 50, 75, 100 }.Append(level).Distinct().Order().Select(percent => new Choice(percent.ToString(), percent == 0 ? Loc.T("Muted") : $"{percent}%", Loc.T("Of each app's current volume"))).ToArray();
-        AddPicker(Loc.T("Recording volume"), Loc.T("0% silences other apps. Your own volume changes during recording are preserved."), levels,
+        AddPicker("AudioDuckingLevel", Loc.T("Recording volume"), Loc.T("0% silences other apps. Your own volume changes during recording are preserved."), levels,
             level.ToString(), id => session.AudioPreferences with { AudioDuckingLevel = int.Parse(id) / 100f });
-        AddToggle(Loc.T("Pause media during recording"), Loc.T("Send the media Play/Pause key at start and stop, as in the previous app. Use while media is playing; paused media may start."), preferences.PauseMediaDuringRecording,
+        AddToggle("PauseMediaDuringRecording", Loc.T("Pause media during recording"), Loc.T("Send the media Play/Pause key at start and stop, as in the previous app. Use while media is playing; paused media may start."), preferences.PauseMediaDuringRecording,
             value => session.AudioPreferences with { PauseMediaDuringRecording = value });
-        AddToggle(Loc.T("Stop after silence"), Loc.T("Finish and transcribe after a quiet pause, including silence at the start. Waits while shortcut modifiers are held. Background noise may delay stopping."), preferences.SilenceAutoStopEnabled,
+        AddToggle("SilenceAutoStopEnabled", Loc.T("Stop after silence"), Loc.T("Finish and transcribe after a quiet pause, including silence at the start. Waits while shortcut modifiers are held. Background noise may delay stopping."), preferences.SilenceAutoStopEnabled,
             value => session.AudioPreferences with { SilenceAutoStopEnabled = value });
         var timeouts = new[] { 3, 5, 10, 15, 30 }.Append(preferences.SilenceAutoStopSeconds).Distinct().Order()
             .Select(seconds => new Choice(seconds.ToString(), Loc.T("{0} seconds", seconds), Loc.T("Continuous silence before finishing"))).ToArray();
-        AddPicker(Loc.T("Silence timeout"), Loc.T("Used when Stop after silence is enabled. Changes apply to the next recording."), timeouts,
+        AddPicker("SilenceAutoStopSeconds", Loc.T("Silence timeout"), Loc.T("Used when Stop after silence is enabled. Changes apply to the next recording."), timeouts,
             preferences.SilenceAutoStopSeconds.ToString(), id => session.AudioPreferences with { SilenceAutoStopSeconds = int.Parse(id) });
 
-        void AddToggle(string title, string hint, bool value, Func<bool, DictationAudioPreferences> next)
+        // Keys are the settings search keys, so search results and --page deep links find the rows.
+        void AddToggle(string? key, string title, string hint, bool value, Func<bool, DictationAudioPreferences> next)
         {
             var toggle = AppToggleSwitch.Create(value);
             AutomationProperties.SetName(toggle, title); AutomationProperties.SetHelpText(toggle, hint);
-            var row = new SettingsRow().Set(title, hint, toggle);
+            var row = new SettingsRow(key).Set(title, hint, toggle);
             row.Status = session.AudioPreferencesError ?? "";
             var restoring = false;
             toggle.Toggled += (_, _) =>
@@ -69,13 +70,13 @@ internal sealed class LiveAudioSettings(LocalDictationSession session)
             };
             output.Children.Add(row);
         }
-        void AddPicker(string title, string hint, IReadOnlyList<Choice> options, string selected, Func<string, DictationAudioPreferences> next)
+        void AddPicker(string? key, string title, string hint, IReadOnlyList<Choice> options, string selected, Func<string, DictationAudioPreferences> next)
         {
             var picker = new ChoicePicker();
             picker.Configure(title, "speaker", title);
             var choices = options.Any(option => option.Id == selected) ? options : options.Concat([new Choice(selected, Loc.T("Saved device · unavailable"), Loc.T("Reconnect the device or select another output"))]).ToArray();
             picker.SetOptions(choices, selected);
-            var row = new SettingsRow().Set(title, hint, picker);
+            var row = new SettingsRow(key).Set(title, hint, picker);
             var saved = selected;
             picker.SelectionChanged += id =>
             {
