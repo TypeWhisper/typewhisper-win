@@ -242,6 +242,16 @@ jobs:
             ConvertTo-Json | Set-Content "artifacts/candidate/$name.json"
           Compress-Archive -Path candidate/* -DestinationPath "artifacts/candidate/$name.zip"
           Copy-Item installer/* artifacts/candidate/
+          # Group Policy templates in the PolicyDefinitions layout, plus the registry script for deployments without them.
+          $policy = New-Item -ItemType Directory "$env:RUNNER_TEMP/policy-templates" -Force
+          Copy-Item deployment/windows/TypeWhisper.admx, deployment/windows/Set-TypeWhisperPolicy.ps1 $policy
+          foreach ($language in 'en-US', 'de-DE') {
+            New-Item -ItemType Directory (Join-Path $policy $language) -Force | Out-Null
+            Copy-Item "deployment/windows/$language/TypeWhisper.adml" (Join-Path $policy $language)
+          }
+          Compress-Archive -Path "$policy/*" -DestinationPath artifacts/candidate/TypeWhisper-win-PolicyTemplates.zip
+          (Get-FileHash artifacts/candidate/TypeWhisper-win-PolicyTemplates.zip -Algorithm SHA256).Hash |
+            Set-Content artifacts/candidate/TypeWhisper-win-PolicyTemplates.zip.sha256
           # Only Daily builds the original installation separately; RC and Stable ship it as the installer.
           if (Test-Path legacy-installer) { Copy-Item legacy-installer artifacts/candidate/legacy-upgrade -Recurse }
           Get-ChildItem artifacts/candidate -File -Recurse | Where-Object Extension -In '.exe', '.msi', '.nupkg' | ForEach-Object {

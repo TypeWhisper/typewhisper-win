@@ -62,7 +62,7 @@ internal sealed class WhatsNewWindow : Window
         body.Children.Add(Highlight("search", Loc.T("Find your spoken language faster"),
             Loc.T("Search long selection lists by typing a language name. Open Dictation in Settings to try it.")));
         body.Children.Add(Highlight("layout", Loc.T("An app icon for your overlay"),
-            Loc.T("Choose the TypeWhisper app icon as a compact overlay widget in Appearance settings.")));
+            Loc.T("Show the icon of the app you dictate into as its own overlay widget in Appearance settings.")));
         body.Children.Add(Highlight("globe", Loc.T("Browser dictation within reach"),
             Loc.T("Find the browser extension in Integrations, alongside Raycast and the command-line tool.")));
         var scroll = new ScrollViewer { Content = body, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,

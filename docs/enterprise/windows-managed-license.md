@@ -16,9 +16,10 @@ The app reads the native 64-bit registry view. Surrounding whitespace is ignored
 an empty value counts as absent. Supporter keys are not accepted. The app never
 writes, changes or removes the value.
 
-TypeWhisper installs per user. On a shared device each Windows user runs the
-installer once, or the deployment tool installs the app in that user's context;
-the policy value itself is device-wide and applies to every user.
+The per-user setup installs TypeWhisper for one Windows user; the
+[machine-wide MSI](windows-managed-settings.md#machine-wide-installer-msi) installs
+it for every user of a device. The policy value itself is device-wide and applies to
+every user.
 
 Example for an elevated PowerShell session:
 
@@ -27,11 +28,10 @@ New-Item -Path 'HKLM:\SOFTWARE\Policies\TypeWhisper' -Force | Out-Null
 Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\TypeWhisper' -Name 'ManagedLicenseKey' -Value 'YOUR_LICENSE_KEY' -Type String
 ```
 
-Deploy the value with Group Policy Preferences (a registry item), an Intune
+Deploy the value with the [Group Policy templates](windows-managed-settings.md#group-policy-templates)
+(policy "Managed license key"), Group Policy Preferences (a registry item), an Intune
 PowerShell script that runs in the system context, or any other tool that writes
-`HKLM`. ADMX templates for Group Policy and Intune follow with the managed settings
-work in [#470](https://github.com/TypeWhisper/typewhisper-win/issues/470). Avoid
-putting real keys in interactive shell history or script logs.
+`HKLM`. Avoid putting real keys in interactive shell history or script logs.
 
 ## Activation lifecycle
 

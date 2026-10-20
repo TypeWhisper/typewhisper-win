@@ -3142,7 +3142,7 @@
   "Find your spoken language faster": "更快找到你的口语语言",
   "Search long selection lists by typing a language name. Open Dictation in Settings to try it.": "输入语言名称即可搜索较长的选项列表。打开设置中的“听写”试一试。",
   "An app icon for your overlay": "将应用图标用作悬浮窗",
-  "Choose the TypeWhisper app icon as a compact overlay widget in Appearance settings.": "在“外观”设置中，选择 TypeWhisper 应用图标作为紧凑的悬浮窗小组件。",
+  "Show the icon of the app you dictate into as its own overlay widget in Appearance settings.": "在“外观”设置中，可将目标应用的图标显示为单独的悬浮窗小组件。",
   "Browser dictation within reach": "轻松找到浏览器听写功能",
   "Find the browser extension in Integrations, alongside Raycast and the command-line tool.": "在“集成”中查找浏览器扩展，与 Raycast 和命令行工具集中在一起。",
   "Skip": "跳过",

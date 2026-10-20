@@ -3142,7 +3142,7 @@
   "Find your spoken language faster": "Deine gesprochene Sprache schneller finden",
   "Search long selection lists by typing a language name. Open Dictation in Settings to try it.": "Durchsuche lange Auswahllisten, indem du einen Sprachnamen eingibst. Probiere es in den Einstellungen unter Diktat aus.",
   "An app icon for your overlay": "Das App-Symbol als Overlay",
-  "Choose the TypeWhisper app icon as a compact overlay widget in Appearance settings.": "Wähle das TypeWhisper-App-Symbol als kompaktes Overlay-Widget in den Einstellungen unter Darstellung.",
+  "Show the icon of the app you dictate into as its own overlay widget in Appearance settings.": "Zeige in den Einstellungen unter Darstellung das Icon der Ziel-App als eigenes Overlay-Widget.",
   "Browser dictation within reach": "Diktieren im Browser leicht finden",
   "Find the browser extension in Integrations, alongside Raycast and the command-line tool.": "Du findest die Browser-Erweiterung unter Integrationen, zusammen mit Raycast und dem Kommandozeilen-Tool.",
   "Skip": "Überspringen",

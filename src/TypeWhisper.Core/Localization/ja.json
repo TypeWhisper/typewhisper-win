@@ -3142,7 +3142,7 @@
   "Find your spoken language faster": "音声の言語をすばやく検索",
   "Search long selection lists by typing a language name. Open Dictation in Settings to try it.": "言語名を入力して長い選択リストを検索できます。設定の「ディクテーション」でお試しください。",
   "An app icon for your overlay": "オーバーレイにアプリアイコンを表示",
-  "Choose the TypeWhisper app icon as a compact overlay widget in Appearance settings.": "「外観」設定で、TypeWhisperのアプリアイコンをコンパクトなオーバーレイウィジェットとして選択できます。",
+  "Show the icon of the app you dictate into as its own overlay widget in Appearance settings.": "「外観」設定で、対象のアプリのアイコンを単独のオーバーレイウィジェットとして表示できます。",
   "Browser dictation within reach": "ブラウザー音声入力を見つけやすく",
   "Find the browser extension in Integrations, alongside Raycast and the command-line tool.": "「統合」でRaycastやコマンドラインツールと一緒にブラウザー拡張機能を見つけられます。",
   "Skip": "スキップ",
