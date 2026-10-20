@@ -120,6 +120,7 @@ internal sealed partial class LivePluginTextSettings : UserControl
         catch (OperationCanceledException) { }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
+            AppDiagnostics.WriteFailure(AppDiagnostics.PluginStage("plugin.settings.load-failed", _id), ex);
             if (IsLoaded && generation == _generation)
                 SetStatus(Loc.T("Plugin settings could not be loaded. Reopen this page to retry."));
         }

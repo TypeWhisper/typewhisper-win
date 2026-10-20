@@ -414,6 +414,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         catch (TypeWhisper.Core.Models.ManagedPolicyDeniedException denied) { SetStatus(denied.Message, DictationPhase.Idle); return denied.Message; }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
+            AppDiagnostics.WriteFailure(AppDiagnostics.PluginStage("plugin.change.failed", id), ex);
             var message = Loc.T("Plugin operation could not be completed ({0}). Check the plugin's configuration and try again.", ex.GetType().Name);
             SetStatus(message, DictationPhase.Idle); return message;
         }

@@ -106,6 +106,8 @@ public sealed partial class DiagnosticLogFile
         // Setting and plugin identifiers, capture decisions, and app and OS versions.
         ["arch"] = Token, ["build"] = Token, ["decision"] = Token, ["engine"] = Token, ["kind"] = Token, ["model"] = Token,
         ["os"] = Token, ["plugin"] = Token, ["task"] = Token, ["version"] = Token,
+        // Plugin settings actions: the action name without its profile, and the innermost error's codes.
+        ["action"] = Token, ["innerCode"] = Number, ["innerHResult"] = value => HResultValue().IsMatch(value),
         ["inner"] = value => TypeName().IsMatch(value),
     }.ToFrozenDictionary(StringComparer.Ordinal);
     private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);

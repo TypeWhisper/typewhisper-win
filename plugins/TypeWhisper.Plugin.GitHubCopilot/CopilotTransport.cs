@@ -27,6 +27,20 @@ internal sealed record CopilotAccount(string Host, string Login)
 internal sealed class CopilotSignInRequiredException : Exception;
 internal sealed class CopilotModelUnavailableException : Exception;
 
+/// <summary>A content-free stand-in for an SDK error, attached so host diagnostics can record why a refresh failed.</summary>
+/// <remarks>SDK messages may contain text or credentials, so only the error's type name and codes are kept.</remarks>
+internal sealed class CopilotFailureCause : Exception
+{
+    private CopilotFailureCause(Exception cause) : base(cause.GetType().FullName) => HResult = cause.HResult;
+
+    internal static Exception From(Exception error) => error.GetBaseException() switch
+    {
+        // A blocked or missing runtime keeps its reason only in the Windows error code; its system text is generic.
+        System.ComponentModel.Win32Exception native => new System.ComponentModel.Win32Exception(native.NativeErrorCode),
+        var cause => new CopilotFailureCause(cause),
+    };
+}
+
 internal sealed class CopilotTransport : ICopilotTransport
 {
     internal static readonly TimeSpan CatalogLifetime = TimeSpan.FromMinutes(10);
