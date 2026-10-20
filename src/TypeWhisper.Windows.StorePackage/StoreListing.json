@@ -1,0 +1,50 @@
+{
+  "screenshotRepository": "TypeWhisper/typewhisper.com",
+  "screenshotRevision": "12fdd094ad32039a008be50a2c9e9bb88a9df566",
+  "listings": {
+    "en": {
+      "screenshots": [
+        { "path": "public/screenshots/en/windows/dashboard.png", "caption": "Dashboard" },
+        { "path": "public/screenshots/en/windows/file-transcription.png", "caption": "File Transcription" },
+        { "path": "public/screenshots/en/windows/workflows.png", "caption": "Workflows" },
+        { "path": "public/screenshots/en/windows/dictation.png", "caption": "Dictation" },
+        { "path": "public/screenshots/en/windows/integrations-marketplace.png", "caption": "Integrations" },
+        { "path": "public/screenshots/en/windows/recorder.png", "caption": "Recorder" }
+      ]
+    },
+    "de": {
+      "screenshots": [
+        { "path": "public/screenshots/de/windows/integrations-marketplace.png", "caption": "Integrationen" },
+        { "path": "public/screenshots/de/windows/dashboard.png", "caption": "Dashboard" },
+        { "path": "public/screenshots/de/windows/workflows.png", "caption": "Workflows" },
+        { "path": "public/screenshots/de/windows/file-transcription.png", "caption": "Dateitranskription" },
+        { "path": "public/screenshots/de/windows/recorder.png", "caption": "Aufnahmen" },
+        { "path": "public/screenshots/de/windows/dictionary.png", "caption": "Wörterbuch" },
+        { "path": "public/screenshots/de/windows/history.png", "caption": "Verlauf" },
+        { "path": "public/screenshots/de/windows/snippets.png", "caption": "Snippets" },
+        { "path": "public/screenshots/de/windows/dictation.png", "caption": "Diktat" },
+        { "path": "public/screenshots/de/windows/appearance.png", "caption": "Darstellung" }
+      ]
+    },
+    "ja": {
+      "screenshots": [
+        { "path": "public/screenshots/en/windows/dashboard.png", "caption": "ダッシュボード" },
+        { "path": "public/screenshots/en/windows/dictation.png", "caption": "ディクテーション" },
+        { "path": "public/screenshots/en/windows/workflows.png", "caption": "ワークフロー" },
+        { "path": "public/screenshots/en/windows/integrations-marketplace.png", "caption": "連携" },
+        { "path": "public/screenshots/en/windows/file-transcription.png", "caption": "ファイル文字起こし" },
+        { "path": "public/screenshots/en/windows/recorder.png", "caption": "レコーダー" }
+      ]
+    },
+    "zh": {
+      "screenshots": [
+        { "path": "public/screenshots/en/windows/dashboard.png", "caption": "主页" },
+        { "path": "public/screenshots/en/windows/file-transcription.png", "caption": "文件转录" },
+        { "path": "public/screenshots/en/windows/workflows.png", "caption": "工作流" },
+        { "path": "public/screenshots/en/windows/dictation.png", "caption": "语音输入" },
+        { "path": "public/screenshots/en/windows/integrations-marketplace.png", "caption": "集成" },
+        { "path": "public/screenshots/en/windows/recorder.png", "caption": "录音机" }
+      ]
+    }
+  }
+}
