@@ -9,6 +9,8 @@ public sealed record ApplicationActivationRequest(string? Route, IReadOnlyList<s
     public Uri? AccountCallback { get; init; }
     /// <summary>The settings page requested with --page, as the category the settings window shows.</summary>
     public string? SettingsCategory { get; init; }
+    /// <summary>Only opens a window or a settings page: no files, account callback or error to handle.</summary>
+    public bool OnlyNavigates => ShowWindow && Files.Count == 0 && AccountCallback is null && Error is null;
     /// <summary>Redacts authorization callback data from diagnostic output.</summary>
     public override string ToString() => $"Activation: {Route ?? "default"}; account callback: {AccountCallback is not null}";
     /// <summary>Maximum files in one activation.</summary>

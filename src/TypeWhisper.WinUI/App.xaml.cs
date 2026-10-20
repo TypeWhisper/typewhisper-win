@@ -13,6 +13,7 @@ public partial class App : Application
     private readonly TypeWhisper.Presentation.ActivationInbox _activations = new();
     private bool _activationReady;
     private int _redirectedActivationReceived;
+    private int _redirectedNavigationReceived;
     private readonly TaskCompletionSource<bool> _shareStartupReady = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public App()
@@ -88,11 +89,11 @@ public partial class App : Application
 
         _mainInstance.Activated += (_, redirected) =>
         {
-            // Latch before dispatching: a share or link arriving during initialization owns this start.
-            Interlocked.Exchange(ref _redirectedActivationReceived, 1);
-            _window?.SuppressStartupWhatsNew();
             if (redirected.Data is global::Windows.ApplicationModel.Activation.ShareTargetActivatedEventArgs shared)
             {
+                // Latch before dispatching: a share arriving during initialization owns this start.
+                Interlocked.Exchange(ref _redirectedActivationReceived, 1);
+                _window?.SuppressStartupWhatsNew();
                 var operation = new WindowsSharedFileOperation(shared.ShareOperation);
                 if (!dispatcher.TryEnqueue(async () =>
                 {
@@ -103,6 +104,18 @@ public partial class App : Application
                 return;
             }
             var incoming = WindowsActivationRequest.Parse(redirected);
+            // Latch before dispatching: a link or file arriving during initialization owns this start. Starting
+            // TypeWhisper again only opens Settings, which keeps the news after an app update.
+            if (incoming.OnlyNavigates)
+            {
+                Interlocked.Exchange(ref _redirectedNavigationReceived, 1);
+                _window?.SuppressStartupWhatsNewForNavigation();
+            }
+            else
+            {
+                Interlocked.Exchange(ref _redirectedActivationReceived, 1);
+                _window?.SuppressStartupWhatsNew();
+            }
             if (!incoming.ShowWindow) return;
             _activations.Add(incoming);
             dispatcher.TryEnqueue(DrainActivations);
@@ -202,9 +215,11 @@ public partial class App : Application
         var presentation = TypeWhisper.Presentation.StartupPresentationPolicy.Resolve(request, setup.Current.Completed);
         if (presentation == TypeWhisper.Presentation.StartupPresentation.RequestedDestination) _activations.Add(request);
         var news = new TypeWhisper.Presentation.WhatsNewPreferencesStore(WinUIProfile.DataPath("whats-new.json"));
-        var newsSession = new TypeWhisper.Presentation.WhatsNewSession(news, request, setup.Current.Completed, WhatsNewWindow.ContentVersion);
+        var newsSession = new TypeWhisper.Presentation.WhatsNewSession(news, request, setup.Current.Completed, WhatsNewWindow.ContentVersion,
+            afterUpdate: WindowsApplicationUpdates.RestartedAfterUpdate);
         _window = new MainWindow(newsSession);
         if (Volatile.Read(ref _redirectedActivationReceived) != 0) _window.SuppressStartupWhatsNew();
+        else if (Volatile.Read(ref _redirectedNavigationReceived) != 0) _window.SuppressStartupWhatsNewForNavigation();
         if (news.Error is { } newsError) AppDiagnostics.Write("whats-new.preferences.failed", newsError);
         // Keep a window alive throughout startup; closing the last window can end the XAML application.
         _profileOperation?.Dismiss();
