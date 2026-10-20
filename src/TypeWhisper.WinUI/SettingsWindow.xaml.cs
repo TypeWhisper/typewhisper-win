@@ -482,7 +482,11 @@ public sealed partial class SettingsWindow : Window
         }
     }
 
-    internal async void ShowCategory(string category) => await TryShowCategoryAsync(category);
+    // With a row key the shown page scrolls to that row, as --page <page>/<row key> asks.
+    internal async void ShowCategory(string category, string? rowKey = null)
+    {
+        if (await TryShowCategoryAsync(category) && rowKey is { Length: > 0 }) RevealRow(rowKey, category);
+    }
 
     private async Task<bool> ConfirmLeaveIntegrationAsync()
     {

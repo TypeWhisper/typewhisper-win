@@ -89,11 +89,7 @@ public sealed partial class MainWindow
             return;
         }
         if (request.Error is { } error) { ShowActivationNotice(error); return; }
-        if (request.SettingsCategory is { } category)
-        {
-            OpenSettingsPage(category, request.SettingsRowKey is { } key ? () => _settingsWindow?.RevealRow(key, category) : null);
-            return;
-        }
+        if (request.SettingsCategory is { } category) { OpenSettingsPage(category, rowKey: request.SettingsRowKey); return; }
         // Every route opens a settings page; the page keeps any unsaved work of its own.
         switch (request.Route)
         {
