@@ -158,11 +158,15 @@ internal static class AppDiagnostics
         var data = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var part in parts.Skip(1))
             if (part.IndexOf('=') is > 0 and var split) data[part[..split]] = part[(split + 1)..];
-        if (stack && error?.GetBaseException() is { } inner && inner != error && inner.GetType().FullName is { } innerType)
+        if (stack && error?.GetBaseException() is { } inner)
         {
-            data["inner"] = innerType;
-            data["innerHResult"] = $"0x{inner.HResult:X8}";
-            // A failed process start keeps its reason (blocked by policy, access denied) only in the native code.
+            if (inner != error && inner.GetType().FullName is { } innerType)
+            {
+                data["inner"] = innerType;
+                data["innerHResult"] = $"0x{inner.HResult:X8}";
+            }
+            // A failed process start keeps its reason (blocked by policy, access denied) only in the native code,
+            // also when the action threw it directly.
             if (inner is System.ComponentModel.Win32Exception { NativeErrorCode: >= 0 and var code }) data["innerCode"] = code.ToString(System.Globalization.CultureInfo.InvariantCulture);
         }
         long? elapsed = dictation.Id is null ? null : (long)Stopwatch.GetElapsedTime(dictation.Started).TotalMilliseconds;
