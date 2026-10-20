@@ -216,7 +216,7 @@ public sealed partial class GitHubCopilotPlugin
             _accounts = accounts;
         }
         catch (OperationCanceledException) { throw; }
-        catch (Exception) { throw new InvalidOperationException(L("Could not load GitHub accounts. Sign in through Copilot CLI and try again.")); }
+        catch (Exception ex) { throw new InvalidOperationException(L("Could not load GitHub accounts. Sign in through Copilot CLI and try again."), CopilotFailureCause.From(ex)); }
         // Missing accounts invalidate readiness without rebinding or deleting profiles.
         var removed = _catalogs.Keys.Where(key => !_accounts.Any(a => a.Key == key)).ToArray();
         foreach (var key in removed) _catalogs.Remove(key);
@@ -233,11 +233,11 @@ public sealed partial class GitHubCopilotPlugin
         }
         // Cancellation is not evidence that the saved account or its models became invalid.
         catch (OperationCanceledException) { throw; }
-        catch (Exception)
+        catch (Exception ex)
         {
             InvalidateAccountModels(account.Key);
             Host.NotifyCapabilitiesChanged();
-            throw new InvalidOperationException(L("Could not load Copilot models. Check your sign-in, Copilot access and connection, then retry."));
+            throw new InvalidOperationException(L("Could not load Copilot models. Check your sign-in, Copilot access and connection, then retry."), CopilotFailureCause.From(ex));
         }
     }
 

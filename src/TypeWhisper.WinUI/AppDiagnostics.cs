@@ -158,11 +158,29 @@ internal static class AppDiagnostics
         var data = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var part in parts.Skip(1))
             if (part.IndexOf('=') is > 0 and var split) data[part[..split]] = part[(split + 1)..];
-        if (stack && error?.GetBaseException() is { } inner && inner != error && inner.GetType().FullName is { } innerType)
-            data["inner"] = innerType;
+        if (stack && error?.GetBaseException() is { } inner)
+        {
+            if (inner != error && inner.GetType().FullName is { } innerType)
+            {
+                data["inner"] = innerType;
+                data["innerHResult"] = $"0x{inner.HResult:X8}";
+            }
+            // A failed process start keeps its reason (blocked by policy, access denied) only in the native code,
+            // also when the action threw it directly.
+            if (inner is System.ComponentModel.Win32Exception { NativeErrorCode: >= 0 and var code }) data["innerCode"] = code.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
         long? elapsed = dictation.Id is null ? null : (long)Stopwatch.GetElapsedTime(dictation.Started).TotalMilliseconds;
         return new(DateTimeOffset.UtcNow, parts.FirstOrDefault() ?? "", dictation.Id, elapsed, data.Count > 0 ? data : null,
             error?.GetType().FullName, error is null ? null : $"0x{error.HResult:X8}", stack && error is not null ? Frames(error) : null);
+    }
+
+    // Action ids embed profile or item ids ("<profile>/refresh", "test:<script>"); only the action's own name is recorded.
+    internal static string PluginStage(string stage, string pluginId, string? actionId = null)
+    {
+        if (actionId is null) return $"{stage} plugin={pluginId}";
+        var action = actionId[(actionId.LastIndexOf('/') + 1)..];
+        if (action.IndexOf(':') is >= 0 and var colon) action = action[..colon];
+        return $"{stage} plugin={pluginId} action={action}";
     }
 
     private static string[] Frames(Exception error) => new StackTrace(error, false).GetFrames()

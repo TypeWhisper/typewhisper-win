@@ -130,7 +130,10 @@ public sealed partial class PluginsView
                 message.Text = error ?? ""; message.Visibility = error is null ? Visibility.Collapsed : Visibility.Visible;
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
-            { message.Text = Loc.T("The plugin operation could not finish. Please try again."); message.Visibility = Visibility.Visible; }
+            {
+                AppDiagnostics.WriteFailure(AppDiagnostics.PluginStage("plugin.operation.failed", Path.GetFileName(row.Plugin.Id)), ex);
+                message.Text = Loc.T("The plugin operation could not finish. Please try again."); message.Visibility = Visibility.Visible;
+            }
             finally { _changingPlugin = false; await RefreshRuntimeAsync(); }
         }
         toggle.Click += async (_, _) => await Run(() => _management!.SetEnabledAsync(row.Plugin.Id, !row.Plugin.Enabled));

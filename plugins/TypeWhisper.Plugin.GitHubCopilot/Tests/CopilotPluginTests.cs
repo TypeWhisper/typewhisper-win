@@ -205,8 +205,43 @@ public sealed class CopilotPluginTests
         transport.Error = signedOut ? new CopilotSignInRequiredException() : new IOException("secret token and private text");
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => plugin.ExecuteSettingsActionAsync("refresh", default));
         Assert.DoesNotContain("secret", error.ToString());
+        // Diagnostics still learn the failing type and code, never the SDK text.
+        var cause = Assert.IsAssignableFrom<Exception>(error.InnerException);
+        Assert.Equal(transport.Error!.GetType(), cause.GetType());
+        Assert.NotSame(transport.Error, cause);
+        Assert.Equal(transport.Error.HResult, cause.HResult);
         Assert.False(plugin.IsAvailable);
         Assert.Empty(plugin.SupportedModels);
+        await plugin.DeactivateAsync();
+    }
+
+    [Fact]
+    public async Task UnknownLibraryErrorsBecomeANeutralCause()
+    {
+        var transport = new FakeTransport();
+        using var plugin = new GitHubCopilotPlugin(transport);
+        await plugin.ActivateAsync(new TestHost());
+        transport.LoadAccounts = _ => throw new Xunit.Sdk.XunitException("secret token");
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => plugin.ExecuteSettingsActionAsync("refreshAccounts", default));
+        Assert.DoesNotContain("secret", error.ToString());
+        var cause = Assert.IsType<CopilotFailureCause>(error.InnerException);
+        Assert.Equal(typeof(Xunit.Sdk.XunitException).FullName, cause.Message);
+        await plugin.DeactivateAsync();
+    }
+
+    [Fact]
+    public async Task FailedRuntimeStartKeepsOnlyItsWindowsErrorCode()
+    {
+        var transport = new FakeTransport();
+        using var plugin = new GitHubCopilotPlugin(transport);
+        await plugin.ActivateAsync(new TestHost());
+        // 1260: blocked by an AppLocker or software restriction policy.
+        transport.LoadAccounts = _ => throw new InvalidOperationException("secret token",
+            new System.ComponentModel.Win32Exception(1260, @"secret C:\Users\someone\copilot-runtime.exe"));
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => plugin.ExecuteSettingsActionAsync("refreshAccounts", default));
+        Assert.DoesNotContain("secret", error.ToString());
+        Assert.DoesNotContain("someone", error.ToString());
+        Assert.Equal(1260, Assert.IsType<System.ComponentModel.Win32Exception>(error.InnerException).NativeErrorCode);
         await plugin.DeactivateAsync();
     }
 

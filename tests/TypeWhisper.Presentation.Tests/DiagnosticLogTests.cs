@@ -96,6 +96,28 @@ public sealed class DiagnosticLogTests : IDisposable
     }
 
     [Fact]
+    public void AdmitsPluginActionFailureCodes()
+    {
+        var line = DiagnosticLogFile.Admit(new(_now, "plugin.action.failed", Data: new Dictionary<string, string>
+        {
+            ["plugin"] = "com.typewhisper.github-copilot", ["action"] = "refreshAccounts",
+            ["inner"] = "System.ComponentModel.Win32Exception", ["innerHResult"] = "0x80004005", ["innerCode"] = "1260",
+            ["innerCode2"] = "1", ["action2"] = "x",
+        }));
+        var rejected = DiagnosticLogFile.Admit(new(_now, "plugin.action.failed", Data: new Dictionary<string, string>
+        {
+            ["action"] = "default-1234/refresh my profile", ["innerHResult"] = "E_FAIL", ["innerCode"] = "-5",
+        }));
+
+        Assert.Equal(new Dictionary<string, string>
+        {
+            ["plugin"] = "com.typewhisper.github-copilot", ["action"] = "refreshAccounts",
+            ["inner"] = "System.ComponentModel.Win32Exception", ["innerHResult"] = "0x80004005", ["innerCode"] = "1260",
+        }, line.Data);
+        Assert.Null(rejected.Data);
+    }
+
+    [Fact]
     public void KeepsExceptionTypesAndHResults()
     {
         var line = DiagnosticLogFile.Admit(new(_now, "field.capture.exception",

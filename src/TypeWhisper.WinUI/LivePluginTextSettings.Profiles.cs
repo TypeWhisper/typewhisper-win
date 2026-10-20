@@ -183,7 +183,10 @@ internal sealed partial class LivePluginTextSettings
                 SetStatus(Loc.T("“{0}” saved.", _profileName));
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
-            { if (IsLoaded && generation == _generation) SetStatus(Loc.T("Could not save “{0}”. Your edits are still here; retry saving.", name)); }
+            {
+                AppDiagnostics.WriteFailure(AppDiagnostics.PluginStage("plugin.settings.save-failed", _id), ex);
+                if (IsLoaded && generation == _generation) SetStatus(Loc.T("Could not save “{0}”. Your edits are still here; retry saving.", name));
+            }
             finally { _busy = false; IsEnabled = true; if (_refreshRequested) RequestRefresh(); }
         });
         AutomationProperties.SetName(save, memoryEditor ? Loc.T("Save memory") : singleConfiguration ? Loc.T("Save settings") : Loc.T("Save profile “{0}”", name));
@@ -395,7 +398,10 @@ internal sealed partial class LivePluginTextSettings
                 }
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
-            { if (IsLoaded && generation == _generation) { picker.SelectedItem = profileItems[selector.Value]; SetStatus(Loc.T("Could not switch profiles. Try again.")); } }
+            {
+                AppDiagnostics.WriteFailure(AppDiagnostics.PluginStage("plugin.profile.switch-failed", _id), ex);
+                if (IsLoaded && generation == _generation) { picker.SelectedItem = profileItems[selector.Value]; SetStatus(Loc.T("Could not switch profiles. Try again.")); }
+            }
             finally { selecting = _busy = false; IsEnabled = true; if (_refreshRequested) RequestRefresh(); }
         };
     }
@@ -466,11 +472,18 @@ internal sealed partial class LivePluginTextSettings
             }
         }
         catch (OperationCanceledException)
-        { if (IsLoaded && generation == _generation) SetStatus(Loc.T("The action was cancelled or timed out. You can retry.")); }
+        {
+            AppDiagnostics.Write(AppDiagnostics.PluginStage("plugin.action.cancelled", _id, action.Id));
+            if (IsLoaded && generation == _generation) SetStatus(Loc.T("The action was cancelled or timed out. You can retry."));
+        }
         catch (ArgumentException ex)
         { if (IsLoaded && generation == _generation) SetStatus(ex.Message); }
+        // Only types, codes and method names reach the log, never a plugin's message.
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { if (IsLoaded && generation == _generation) SetStatus(Loc.T("Could not complete “{0}” for “{1}”. Check the plugin settings, then retry.", action.Title, name)); }
+        {
+            AppDiagnostics.WriteFailure(AppDiagnostics.PluginStage("plugin.action.failed", _id, action.Id), ex);
+            if (IsLoaded && generation == _generation) SetStatus(Loc.T("Could not complete “{0}” for “{1}”. Check the plugin settings, then retry.", action.Title, name));
+        }
         finally { _busy = false; IsEnabled = true; if (_refreshRequested) RequestRefresh(); }
     }
 
