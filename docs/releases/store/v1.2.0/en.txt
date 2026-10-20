@@ -1,0 +1,10 @@
+TypeWhisper 1.2 brings managed settings for organizations.
+
+- Administrators can set up TypeWhisper through Group Policy, Intune or the registry: license activation, allowed providers and plugins, cloud processing, model and plugin downloads, and startup.
+- Settings > Advanced > Managed settings shows what your organization has set.
+- Long selection lists such as the spoken language have a search field.
+- The overlay can show the icon of the app you dictate into.
+- Click a recent transcription on Home to open it in History, or right-click it to copy it.
+- The tray menu follows the light theme.
+- After an update, a short overview shows what is new.
+- Regex corrections in the dictionary keep their own identity when syncing with macOS.
