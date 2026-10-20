@@ -41,9 +41,25 @@ public sealed class ApplicationActivationTests
     }
 
     [Theory]
+    [InlineData("advanced/ManagedPolicy", "Advanced", "ManagedPolicy")]
+    [InlineData("dictation/Language", "Dictation", "Language")]
+    [InlineData("about", "Account & about", null)]
+    public void PageRowKeyScrollsToTheRow(string page, string category, string? key)
+    {
+        var request = ApplicationActivationRequest.Parse(["--page", page]);
+        Assert.Null(request.Error);
+        Assert.Equal(category, request.SettingsCategory);
+        Assert.Equal(key, request.SettingsRowKey);
+    }
+
+    [Theory]
     [InlineData("--page")]
     [InlineData("--page", "--settings")]
     [InlineData("--page", "unknown")]
+    [InlineData("--page", "unknown/Row")]
+    [InlineData("--page", "advanced/")]
+    [InlineData("--page", "advanced/../Row")]
+    [InlineData("--page", "advanced/Row/More")]
     [InlineData("--page", "plugin:")]
     [InlineData("--page", "plugin:../other")]
     [InlineData("--page", "advanced", "--page", "about")]

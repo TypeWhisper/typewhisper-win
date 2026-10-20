@@ -52,12 +52,12 @@ public sealed partial class MainWindow
         WorkflowsView.ExitRequested += (_, _) => _settingsPageExited = true;
     }
 
-    private void OpenSettingsPage(string category, Action? afterShown = null)
+    private void OpenSettingsPage(string category, Action? afterShown = null, string? rowKey = null)
     {
         if (_profileRestoreClosing) return;
         _afterSettingsPageShown = afterShown is null ? null : (category, afterShown);
         OpenSettings();
-        _settingsWindow?.ShowCategory(category);
+        _settingsWindow?.ShowCategory(category, rowKey);
     }
 
     private FrameworkElement? SettingsPage(string category)

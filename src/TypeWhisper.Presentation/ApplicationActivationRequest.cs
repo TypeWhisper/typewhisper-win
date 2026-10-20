@@ -9,6 +9,8 @@ public sealed record ApplicationActivationRequest(string? Route, IReadOnlyList<s
     public Uri? AccountCallback { get; init; }
     /// <summary>The settings page requested with --page, as the category the settings window shows.</summary>
     public string? SettingsCategory { get; init; }
+    /// <summary>The row the page scrolls to, given as --page &lt;page&gt;/&lt;row key&gt; with a settings search key.</summary>
+    public string? SettingsRowKey { get; init; }
     /// <summary>Only opens a window or a settings page: no files, account callback or error to handle.</summary>
     public bool OnlyNavigates => ShowWindow && Files.Count == 0 && AccountCallback is null && Error is null;
     /// <summary>Redacts authorization callback data from diagnostic output.</summary>
@@ -46,6 +48,7 @@ public sealed record ApplicationActivationRequest(string? Route, IReadOnlyList<s
         if (args.Length >= 128 || args.Sum(value => (long)value.Length) > 32767) return Failure(Loc.T("Too many activation arguments."));
         string? route = null;
         string? category = null;
+        string? rowKey = null;
         var paths = new List<string>();
         bool minimized = startup;
         for (int i = 0; i < args.Length; i++)
@@ -62,7 +65,16 @@ public sealed record ApplicationActivationRequest(string? Route, IReadOnlyList<s
             {
                 if (i + 1 >= args.Length || args[i + 1].StartsWith("--", StringComparison.Ordinal)) return Failure(Loc.T("Provide a page name after --page."));
                 if (category is not null || route is not null && route != "--settings") return Failure(Loc.T("Choose one navigation destination per activation."));
-                category = SettingsCategoryFor(args[++i]);
+                // "advanced/ManagedPolicy" opens Advanced and scrolls to the row with that settings search key.
+                var page = args[++i];
+                var slash = page.StartsWith("plugin:", StringComparison.OrdinalIgnoreCase) ? -1 : page.IndexOf('/');
+                if (slash >= 0)
+                {
+                    rowKey = page[(slash + 1)..];
+                    page = page[..slash];
+                    if (rowKey.Length is 0 or > 64 || !rowKey.All(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '-')) return Failure(Loc.T("Unknown settings page: {0}", args[i]));
+                }
+                category = SettingsCategoryFor(page);
                 if (category is null) return Failure(Loc.T("Unknown settings page: {0}", args[i]));
                 route = "--settings"; continue;
             }
@@ -88,7 +100,7 @@ public sealed record ApplicationActivationRequest(string? Route, IReadOnlyList<s
         }
         if (paths.Count > 0 && route is not null && route != "--files") return Failure(Loc.T("File activation cannot be combined with another destination."));
         return new(paths.Count > 0 ? "--files" : route, Array.AsReadOnly(paths.Distinct(StringComparer.OrdinalIgnoreCase).ToArray()), null,
-            paths.Count > 0 || route is not null || !minimized) { SettingsCategory = paths.Count > 0 ? null : category };
+            paths.Count > 0 || route is not null || !minimized) { SettingsCategory = paths.Count > 0 ? null : category, SettingsRowKey = paths.Count > 0 ? null : rowKey };
     }
 
     private static bool AbsoluteWindowsPath(string path) =>
