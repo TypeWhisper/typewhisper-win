@@ -14,6 +14,7 @@ internal sealed class DictationDictionarySnapshot
     private readonly TypeWhisper.Core.Interfaces.IVocabularyBoostingService _boosting;
     private readonly DictionaryService.CorrectionSet _corrections;
     internal string? Error { get; }
+    internal IReadOnlyList<DictionaryEntry> Entries => _entries;
     internal IReadOnlyList<DictionaryEntry> EnabledCtcEntries => _entries.Where(e => e.IsEnabled && e.EntryType == DictionaryEntryType.Term).ToArray();
     // Loaded off the UI thread while recording, so correction regexes are ready before processing.
     private DictationDictionarySnapshot(DictionaryEntry[] entries, string? error = null)
