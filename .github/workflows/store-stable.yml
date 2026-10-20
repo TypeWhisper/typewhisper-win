@@ -1,0 +1,154 @@
+name: Store Stable
+run-name: Store Stable from Candidate ${{ github.event.workflow_run.id || inputs.candidate_run_id }}
+
+# After a Stable release from a release/X.Y branch, submit it to the regular Microsoft Store listing:
+# package, "What's new in this version" in every listing language, and the screenshots from the website.
+# A person approves in the store-stable environment before anything is written to Partner Center.
+on:
+  workflow_run:
+    workflows: [Candidate]
+    types: [completed]
+    branches: ['release/**']
+  workflow_dispatch:
+    inputs:
+      candidate_run_id:
+        description: "Successful Candidate run that published a Stable release from release/X.Y (empty: read-only inspection)"
+        type: string
+        default: ''
+      release_line:
+        description: "Inspection only: the release line to allocate a Store version for, e.g. 1.2"
+        type: string
+        default: ''
+      dry_run:
+        description: "Inspect Store state and plan only; do not build or submit"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  # Read-only: Store state, the next version of a line and whether every listing language is configured.
+  inspect:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.candidate_run_id == ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: store-beta
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Inspect the regular Store listing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_LINE: ${{ inputs.release_line }}
+          PARTNER_CENTER_TENANT_ID: ${{ secrets.PARTNER_CENTER_TENANT_ID }}
+          PARTNER_CENTER_CLIENT_ID: ${{ secrets.PARTNER_CENTER_CLIENT_ID }}
+          PARTNER_CENTER_CLIENT_SECRET: ${{ secrets.PARTNER_CENTER_CLIENT_SECRET }}
+        run: python eng/store_stable_release.py inspect --release-line "$RELEASE_LINE"
+
+  plan:
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      ((github.event_name == 'workflow_dispatch' && inputs.candidate_run_id != '') ||
+       (github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_repository.full_name == github.repository &&
+        github.event.workflow_run.event == 'workflow_dispatch'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: store-beta
+    outputs:
+      publish: ${{ steps.plan.outputs.publish }}
+      source: ${{ steps.plan.outputs.source }}
+      version: ${{ steps.plan.outputs.version }}
+      app_version: ${{ steps.plan.outputs.app_version }}
+    steps:
+      # Execute automation from the trusted workflow revision; texts and screenshots are only data.
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Plan the Stable submission
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_RUN_ID: ${{ github.event.workflow_run.id || inputs.candidate_run_id }}
+          PARTNER_CENTER_TENANT_ID: ${{ secrets.PARTNER_CENTER_TENANT_ID }}
+          PARTNER_CENTER_CLIENT_ID: ${{ secrets.PARTNER_CENTER_CLIENT_ID }}
+          PARTNER_CENTER_CLIENT_SECRET: ${{ secrets.PARTNER_CENTER_CLIENT_SECRET }}
+        run: python eng/store_stable_release.py plan --candidate-run "$CANDIDATE_RUN_ID"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: store-stable-plan
+          path: artifacts/store-stable/plan.json
+          if-no-files-found: error
+
+  approve:
+    needs: plan
+    if: needs.plan.outputs.publish == 'true' && inputs.dry_run != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Required reviewers on this environment approve the plan shown in the plan job's summary.
+    environment: store-stable
+    steps:
+      - name: Record the approval
+        env:
+          APP_VERSION: ${{ needs.plan.outputs.app_version }}
+          STORE_VERSION: ${{ needs.plan.outputs.version }}
+        run: echo "Approved TypeWhisper $APP_VERSION as Store version $STORE_VERSION." >> "$GITHUB_STEP_SUMMARY"
+
+  package:
+    needs: [plan, approve]
+    uses: ./.github/workflows/store-package.yml
+    with:
+      destination: stable
+      version: ${{ needs.plan.outputs.version }}
+      source_revision: ${{ needs.plan.outputs.source }}
+
+  submit:
+    needs: [plan, approve, package]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: store-beta
+    # Only the job that writes to the Store is serialized; a run waiting for approval must not hold the group,
+    # because GitHub keeps one pending run per group and would cancel another release line's run.
+    concurrency:
+      group: store-stable-submissions
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v8
+        with:
+          name: store-stable-plan
+          path: artifacts/store-stable
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: store-msix-stable-*
+          path: artifacts/store-stable/packages
+      - name: Verify and submit the Stable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PARTNER_CENTER_TENANT_ID: ${{ secrets.PARTNER_CENTER_TENANT_ID }}
+          PARTNER_CENTER_CLIENT_ID: ${{ secrets.PARTNER_CENTER_CLIENT_ID }}
+          PARTNER_CENTER_CLIENT_SECRET: ${{ secrets.PARTNER_CENTER_CLIENT_SECRET }}
+        run: >-
+          python eng/store_stable_release.py submit
+          --plan artifacts/store-stable/plan.json
+          --packages artifacts/store-stable/packages
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: store-stable-submission-receipt
+          path: artifacts/store-stable/submission-receipt.json
+          if-no-files-found: warn

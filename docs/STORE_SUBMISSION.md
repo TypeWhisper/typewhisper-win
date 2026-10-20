@@ -82,7 +82,7 @@ For submissions created through the API, make further edits through the API. Mic
 Validate the automation without credentials or an app build:
 
 ```powershell
-python -m unittest discover -s eng/tests -p test_store_beta_release.py -v
+python -m unittest discover -s eng/tests -p 'test_store_*_release.py' -v
 ```
 
 | Destination | Packaging argument | Artifact directory |
@@ -99,6 +99,28 @@ For local development builds and launches, use the workspace development launche
 ```
 
 Use the Store workflow for submission artifacts. A successful packaging run does not establish certification or installed activation.
+
+## Automatic Stable submissions
+
+**Store Stable** (`.github/workflows/store-stable.yml`, `eng/store_stable_release.py`) submits every Stable release to the regular TypeWhisper listing. It starts when **Candidate** finishes on a `release/X.Y` branch and does nothing for release candidates or runs that published nothing.
+
+1. **Plan** (no Store writes): verifies that the Candidate run published a Stable GitHub release whose tag points at the run's commit on its release branch, reads the regular submission, every flight and the beta product, and allocates the next Store version on the release's line, above every package of that line. Betas of the next line stay higher, so testers keep them. It waits while a regular submission is pending and refuses an app version the Store already has. The job summary shows the version, the screenshots and the notes of every language.
+2. **Approve**: the `store-stable` environment holds the run until a required reviewer approves it.
+3. **Package**: the Store workflow builds the `stable` MSIX from the release commit.
+4. **Submit**: plans again, stops if anything changed, then creates one regular submission. It replaces the package, the "What's new in this version" text and the screenshots of every listing language, and publishes automatically once certification passes. Description, pricing, age ratings, visibility and other images stay as they are.
+
+What the listing shows comes from the release branch at the Stable commit:
+
+| File | Content |
+| --- | --- |
+| `src/TypeWhisper.Windows.StorePackage/StoreListing.json` | Per listing language (`en`, `de`, `ja`, `zh`, matched by prefix against Partner Center keys such as `en-us` or `zh-hans-cn`): up to 10 screenshots with captions. Paths point into `public/screenshots/` of `TypeWhisper/typewhisper.com` at the full commit in `screenshotRevision`. |
+| `docs/releases/store/v<version>/<language>.txt` | "What's new in this version" for that language, at most 1,500 characters. Every listing language needs one. |
+
+Screenshots must be PNG files from 1366×768 up to 3840×2160 (the website's 1.5x captures are 1860×1200). To show new screenshots, merge them into the website first, then move `screenshotRevision` to that commit on the release branch before the Stable release.
+
+One-time setup: create the environment **`store-stable`** restricted to `main` with the release owner as required reviewer, before the workflow first runs; a job that names a missing environment would create it without protection. The Partner Center credentials stay in `store-beta`.
+
+For a read-only check before a release, run **Store Stable** on `main` without a Candidate run ID and with the release line (for example `1.2`). It reports the regular submission, pending submissions, the next Store version of that line, every listing language with its configured screenshots, and the languages `StoreListing.json` does not cover yet. With a Candidate run ID and **dry_run** enabled it plans without approval, packaging or submission; for a release candidate the plan only reports that it would not submit.
 
 ## Version numbers
 
@@ -121,7 +143,7 @@ Since `main` moved to 1.3, the Internal Beta flight and the public beta receive 
 
 For the internal flight, open **Internal Beta** in TypeWhisper, upload the `internal-flight` x64 package after acceptance, review Flight options, and submit for certification. Testers install/update the normal TypeWhisper product while signed into a listed Microsoft account. Membership changes may take up to 30 minutes.
 
-For stable, create a regular TypeWhisper submission and copy the accepted packages from **Internal Beta**. Keep the flight on the accepted build or update it deliberately; its members continue to receive flight packages. Removing a tester or flight does not automatically downgrade an installed package: updates need an eligible higher version.
+For stable, **Store Stable** creates the regular submission after each Stable release (see [Automatic Stable submissions](#automatic-stable-submissions)). To submit by hand instead, create a regular TypeWhisper submission and copy the accepted packages from **Internal Beta**. Keep the flight on the accepted build or update it deliberately; its members continue to receive flight packages. Removing a tester or flight does not automatically downgrade an installed package: updates need an eligible higher version.
 
 For public beta, use TypeWhisper Beta with **Public audience -> Make this product available but not discoverable -> Direct link only**. The link can be forwarded. The Store download is free; normal in-app licensing still applies.
 
