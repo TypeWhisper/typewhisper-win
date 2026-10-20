@@ -18,7 +18,8 @@
       ],
       "supportedArchitectures": [
         "x64"
-      ]
+      ],
+      "locality": "cloud"
     },
     {
       "id": "com.typewhisper.authenticated-cli",
@@ -39,7 +40,8 @@
       ],
       "supportedArchitectures": [
         "x64"
-      ]
+      ],
+      "locality": "configurable"
     },
     {
       "id": "com.typewhisper.cerebras",
@@ -59,7 +61,8 @@
       ],
       "supportedArchitectures": [
         "x64"
-      ]
+      ],
+      "locality": "cloud"
     },
     {
       "id": "com.typewhisper.claude",
@@ -79,7 +82,8 @@
       ],
       "supportedArchitectures": [
         "x64"
-      ]
+      ],
+      "locality": "cloud"
     },
     {
       "id": "com.typewhisper.cloudflare-asr",
@@ -99,7 +103,8 @@
       ],
       "supportedArchitectures": [
         "x64"
-      ]
+      ],
+      "locality": "cloud"
     },
     {
       "id": "com.typewhisper.cohere",
@@ -120,7 +125,8 @@
       ],
       "supportedArchitectures": [
         "x64"
-      ]
+      ],
+      "locality": "cloud"
     },
     {
       "id": "com.typewhisper.cohere-transcribe",
@@ -140,7 +146,8 @@
       ],
       "supportedArchitectures": [
         "x64"
-      ]
+      ],
+      "locality": "local"
     },
     {
       "id": "com.typewhisper.deepgram",
@@ -160,7 +167,8 @@
       ],
       "categories": [
         "transcription"
-      ]
+      ],
+      "locality": "cloud"
     },
     {
       "id": "com.typewhisper.elevenlabs",
@@ -180,7 +188,8 @@
       ],
       "supportedArchitectures": [
         "x64"
-      ]
+      ],
+      "locality": "cloud"
     },
     {
       "id": "com.typewhisper.file-memory",
@@ -201,7 +210,8 @@
       ],
       "supportedArchitectures": [
         "x64"
-      ]
+      ],
+      "locality": "local"
     },
     {
       "id": "com.typewhisper.filler-words",
@@ -221,7 +231,8 @@
       ],
       "supportedArchitectures": [
         "x64"
-      ]
+      ],
+      "locality": "local"
     },
     {
       "id": "com.typewhisper.fireworks",
@@ -242,7 +253,8 @@
       ],
       "supportedArchitectures": [
         "x64"
-      ]
+      ],
+      "locality": "cloud"
     },
     {
       "id": "com.typewhisper.gemma-local",
@@ -262,21 +274,23 @@
       ],
       "supportedArchitectures": [
         "x64"
-      ]
+      ],
+      "locality": "local"
     },
     {
       "id": "com.typewhisper.github-copilot",
       "name": "GitHub Copilot",
-      "version": "1.1.3",
+      "version": "1.1.4",
       "minHostVersion": "1.1.2",
       "author": "TypeWhisper",
       "description": "Clean up, translate and rewrite workflow text using your own GitHub Copilot sign-in. Copilot plan limits and model availability apply.",
       "categories": [
         "llm"
       ],
-      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-github-copilot-v1.1.3/com.typewhisper.github-copilot-1.1.3-win-x64.zip",
-      "sha256": "b72bb291e82873adc5a3658e5cc7107f50bdd4c8f4209b4dfc493ee36570978a",
-      "size": 78808298,
+      "locality": "cloud",
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-github-copilot-v1.1.4/com.typewhisper.github-copilot-1.1.4-win-x64.zip",
+      "sha256": "a5132dda75e9565099e9eb34e55651b784b79a4606843641414e3307dcd2563b",
+      "size": 78808992,
       "platforms": [
         "windows"
       ],
@@ -302,7 +316,8 @@
       ],
       "supportedArchitectures": [
         "x64"
-      ]
+      ],
+      "locality": "cloud"
     },
     {
       "id": "com.typewhisper.gemini",
@@ -323,7 +338,8 @@
       ],
       "supportedArchitectures": [
         "x64"
-      ]
+      ],
+      "locality": "cloud"
     },
     {
       "id": "com.typewhisper.groq",
@@ -344,7 +360,8 @@
       "categories": [
         "transcription",
         "llm"
-      ]
+      ],
+      "locality": "cloud"
     },
     {
       "id": "com.typewhisper.granite-speech",
@@ -364,7 +381,8 @@
       ],
       "supportedArchitectures": [
         "x64"
-      ]
+      ],
+      "locality": "local"
     },
     {
       "id": "com.typewhisper.linear",
@@ -384,7 +402,8 @@
       ],
       "supportedArchitectures": [
         "x64"
-      ]
+      ],
+      "locality": "cloud"
     },
     {
       "id": "com.typewhisper.local-llm-llamacpp",
@@ -404,7 +423,8 @@
       ],
       "supportedArchitectures": [
         "x64"
-      ]
+      ],
+      "locality": "local"
     },
     {
       "id": "com.typewhisper.meta",
@@ -425,7 +445,8 @@
       ],
       "supportedArchitectures": [
         "x64"
-      ]
+      ],
+      "locality": "cloud"
     },
     {
       "id": "com.typewhisper.voxtral",
@@ -446,7 +467,8 @@
       ],
       "supportedArchitectures": [
         "x64"
-      ]
+      ],
+      "locality": "cloud"
     },
     {
       "id": "com.typewhisper.sherpa-onnx",
@@ -466,7 +488,8 @@
       ],
       "supportedArchitectures": [
         "x64"
-      ]
+      ],
+      "locality": "local"
     },
     {
       "id": "com.typewhisper.obsidian",
@@ -508,7 +531,8 @@
       ],
       "supportedArchitectures": [
         "x64"
-      ]
+      ],
+      "locality": "cloud"
     },
     {
       "id": "com.typewhisper.openai-compatible",
@@ -529,7 +553,8 @@
       ],
       "supportedArchitectures": [
         "x64"
-      ]
+      ],
+      "locality": "configurable"
     },
     {
       "id": "com.typewhisper.openrouter",
@@ -550,7 +575,8 @@
       ],
       "supportedArchitectures": [
         "x64"
-      ]
+      ],
+      "locality": "cloud"
     },
     {
       "id": "com.typewhisper.qwen3-local",
@@ -570,7 +596,8 @@
       ],
       "supportedArchitectures": [
         "x64"
-      ]
+      ],
+      "locality": "local"
     },
     {
       "id": "com.typewhisper.reson8",
@@ -590,7 +617,8 @@
       ],
       "supportedArchitectures": [
         "x64"
-      ]
+      ],
+      "locality": "configurable"
     },
     {
       "id": "com.typewhisper.script",
@@ -631,7 +659,8 @@
       ],
       "supportedArchitectures": [
         "x64"
-      ]
+      ],
+      "locality": "cloud"
     },
     {
       "id": "com.typewhisper.soniox",
@@ -651,7 +680,8 @@
       ],
       "supportedArchitectures": [
         "x64"
-      ]
+      ],
+      "locality": "cloud"
     },
     {
       "id": "com.typewhisper.speechmatics",
@@ -671,7 +701,8 @@
       ],
       "supportedArchitectures": [
         "x64"
-      ]
+      ],
+      "locality": "cloud"
     },
     {
       "id": "com.typewhisper.supertonic-tts",
@@ -691,7 +722,8 @@
       ],
       "supportedArchitectures": [
         "x64"
-      ]
+      ],
+      "locality": "local"
     },
     {
       "id": "com.typewhisper.webhook",
@@ -712,7 +744,8 @@
       ],
       "supportedArchitectures": [
         "x64"
-      ]
+      ],
+      "locality": "configurable"
     },
     {
       "id": "com.typewhisper.whisper-cpp",
@@ -732,7 +765,8 @@
       ],
       "supportedArchitectures": [
         "x64"
-      ]
+      ],
+      "locality": "local"
     },
     {
       "id": "com.typewhisper.xai",
@@ -754,7 +788,8 @@
       ],
       "supportedArchitectures": [
         "x64"
-      ]
+      ],
+      "locality": "cloud"
     }
   ]
 }
