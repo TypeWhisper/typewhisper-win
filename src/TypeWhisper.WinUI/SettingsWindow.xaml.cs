@@ -485,7 +485,7 @@ public sealed partial class SettingsWindow : Window
     // With a row key the shown page scrolls to that row, as --page <page>/<row key> asks.
     internal async void ShowCategory(string category, string? rowKey = null)
     {
-        if (await TryShowCategoryAsync(category) && rowKey is { Length: > 0 }) RevealRow(rowKey, category);
+        if (await TryShowCategoryAsync(category) && rowKey is { Length: > 0 }) RevealRow(rowKey, category, deepLink: true);
     }
 
     private async Task<bool> ConfirmLeaveIntegrationAsync()
@@ -742,17 +742,27 @@ public sealed partial class SettingsWindow : Window
         RevealRow(entry.Key, entry.Category);
     }
 
-    // Scrolls the shown page to the row with the settings search key and focuses it; a --page activation
-    // and a search result use the same path. A window that is still opening has no visual tree yet, so the
-    // lookup is retried at idle priority for a few frames before it falls back to the navigation button.
-    internal void RevealRow(string key, string category, int attempt = 0)
+    // Scrolls the shown page to the row with the settings search key; a --page activation and a search result
+    // use the same lookup. A search result lands a quarter down the page and takes focus. A deep link puts the
+    // row's card at the top and leaves focus alone. A window that is still opening has no visual tree yet, so
+    // the lookup is retried at idle priority for a few frames before it falls back to the navigation button.
+    internal void RevealRow(string key, string category, int attempt = 0, bool deepLink = false)
     {
         DispatcherQueue.TryEnqueue(attempt == 0 ? Microsoft.UI.Dispatching.DispatcherQueuePriority.Normal : Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
         {
             SettingsRoot.UpdateLayout();
             var elements = Descendants(SettingsRoot).ToArray();
-            var target = elements.FirstOrDefault(element => key.Length > 0 && (element.Name == key || element.Tag as string == key));
-            if (target is null && key.Length > 0 && attempt < 20) { RevealRow(key, category, attempt + 1); return; }
+            var target = elements.FirstOrDefault(element => key.Length > 0 && (element.Name == key
+                || string.Equals(element.Tag as string, key, StringComparison.OrdinalIgnoreCase)));
+            if (target is null && key.Length > 0 && attempt < 20) { RevealRow(key, category, attempt + 1, deepLink); return; }
+            if (target is not null && deepLink)
+            {
+                FrameworkElement anchor = target;
+                for (DependencyObject? ancestor = target; ancestor is not null; ancestor = VisualTreeHelper.GetParent(ancestor))
+                    if (ancestor is SettingsCard card) { anchor = card; break; }
+                anchor.StartBringIntoView(new BringIntoViewOptions { AnimationDesired = false, VerticalAlignmentRatio = 0, VerticalOffset = -16 });
+                return;
+            }
             for (DependencyObject? ancestor = target; ancestor is not null; ancestor = VisualTreeHelper.GetParent(ancestor))
                 if (ancestor is FrameworkElement { Tag: Action reveal }) reveal();
             SettingsRoot.UpdateLayout();
