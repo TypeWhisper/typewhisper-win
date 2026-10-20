@@ -743,14 +743,16 @@ public sealed partial class SettingsWindow : Window
     }
 
     // Scrolls the shown page to the row with the settings search key and focuses it; a --page activation
-    // and a search result use the same path.
-    internal void RevealRow(string key, string category)
+    // and a search result use the same path. A window that is still opening has no visual tree yet, so the
+    // lookup is retried at idle priority for a few frames before it falls back to the navigation button.
+    internal void RevealRow(string key, string category, int attempt = 0)
     {
-        DispatcherQueue.TryEnqueue(() =>
+        DispatcherQueue.TryEnqueue(attempt == 0 ? Microsoft.UI.Dispatching.DispatcherQueuePriority.Normal : Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
         {
             SettingsRoot.UpdateLayout();
             var elements = Descendants(SettingsRoot).ToArray();
             var target = elements.FirstOrDefault(element => key.Length > 0 && (element.Name == key || element.Tag as string == key));
+            if (target is null && key.Length > 0 && attempt < 20) { RevealRow(key, category, attempt + 1); return; }
             for (DependencyObject? ancestor = target; ancestor is not null; ancestor = VisualTreeHelper.GetParent(ancestor))
                 if (ancestor is FrameworkElement { Tag: Action reveal }) reveal();
             SettingsRoot.UpdateLayout();
