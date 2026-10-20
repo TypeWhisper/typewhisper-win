@@ -15,6 +15,17 @@ public sealed class CopilotPackageTests
         new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name, "portable-host", "Plugins", Id));
 
     [Fact]
+    public void PackageShipsOnlyTheStdioRuntime()
+    {
+        var native = Path.Combine(PackageSource, "runtimes", System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier, "native");
+        Assert.True(File.Exists(Path.Combine(native, OperatingSystem.IsWindows() ? "copilot-runtime.exe" : "copilot-runtime")));
+        Assert.True(File.Exists(Path.Combine(native, "runtime.node")));
+        // In-process copy of runtime.node and the CLI alias: unused over stdio, 83 MB on Windows.
+        foreach (var unused in new[] { "copilot_runtime.dll", "libcopilot_runtime.dylib", "libcopilot_runtime.so", "copilot.exe", "copilot" })
+            Assert.False(File.Exists(Path.Combine(native, unused)), unused);
+    }
+
+    [Fact]
     public async Task CompletePackageInstallsLoadsRestartsAndReinstallsThroughHost()
     {
         var root = Path.Combine(Path.GetTempPath(), "copilot-package-" + Guid.NewGuid().ToString("N"));
@@ -102,8 +113,8 @@ public sealed class CopilotPackageTests
             Assert.False(restart.PendingRestart(Id));
             Assert.NotEqual(oldPath, restart.Resolve(Id));
             await using var package = await PortablePluginPackage.LoadAsync(restart.Resolve(Id), new TestHost(), new(1, 1, 2));
-            Assert.Equal("1.1.4", package.Plugin.PluginVersion);
-            Assert.Equal(new Version(1, 1, 4, 0), package.Plugin.GetType().Assembly.GetName().Version);
+            Assert.Equal("1.1.5", package.Plugin.PluginVersion);
+            Assert.Equal(new Version(1, 1, 5, 0), package.Plugin.GetType().Assembly.GetName().Version);
         }
         finally { await DeleteRootAsync(root); }
     }
@@ -140,7 +151,7 @@ public sealed class CopilotPackageTests
         finally { await DeleteRootAsync(root); }
     }
 
-    private static PortableCatalogEntry Entry(byte[] payload, string version = "1.1.4") => new()
+    private static PortableCatalogEntry Entry(byte[] payload, string version = "1.1.5") => new()
     {
         Id = Id, Name = "GitHub Copilot", Version = version, MinHostVersion = "1.1.2",
         DownloadUrl = "https://fixture.invalid/copilot.zip", Size = payload.Length,
