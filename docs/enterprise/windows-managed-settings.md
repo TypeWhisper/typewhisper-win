@@ -133,10 +133,13 @@ Known limits of this release:
 [`deployment/windows`](../../deployment/windows) contains `TypeWhisper.admx` with
 `en-US` and `de-DE` ADML files. The template is self-contained (no dependency on
 `Windows.admx`), uses only machine policies and writes exactly the keys above.
-Every release ships them as `TypeWhisper-win-PolicyTemplates.zip`
-(`https://github.com/TypeWhisper/typewhisper-win/releases/latest/download/TypeWhisper-win-PolicyTemplates.zip`),
-laid out like `PolicyDefinitions` and with `Set-TypeWhisperPolicy.ps1` next to the
-template. Use the templates from the release you deploy.
+Every release ships them as `TypeWhisper-win-PolicyTemplates.zip`, laid out like
+`PolicyDefinitions` and with `Set-TypeWhisperPolicy.ps1` next to the template.
+Download the archive from the [release](https://github.com/TypeWhisper/typewhisper-win/releases)
+you deploy. The link
+`https://github.com/TypeWhisper/typewhisper-win/releases/latest/download/TypeWhisper-win-PolicyTemplates.zip`
+always points to the newest Stable release, so use the release's own page for a
+Release Candidate.
 
 1. Copy `TypeWhisper.admx` to the Central Store
    `\\<domain>\SYSVOL\<domain>\Policies\PolicyDefinitions` and the ADML files to its
