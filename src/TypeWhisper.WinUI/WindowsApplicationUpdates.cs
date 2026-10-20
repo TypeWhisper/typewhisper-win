@@ -9,6 +9,8 @@ internal sealed class WindowsApplicationUpdates : IAppUpdateBackend
 {
     internal static string CurrentVersion => typeof(App).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
         .InformationalVersion.Split('+')[0] ?? "unknown";
+    /// <summary>Velopack started this process right after installing an update.</summary>
+    internal static bool RestartedAfterUpdate { get; set; }
     private UpdateManager? _manager;
     private UpdateInfo? _update;
     private AppUpdateOffer? _offer;

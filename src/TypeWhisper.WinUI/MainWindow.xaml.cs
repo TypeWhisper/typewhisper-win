@@ -493,7 +493,7 @@ public sealed partial class MainWindow : Window
     internal void OpenSettings()
     {
         if (_profileRestoreClosing) return;
-        SuppressStartupWhatsNew();
+        SuppressStartupWhatsNewForNavigation();
         if (_settingsWindow is null)
         {
             _settingsWindow = new SettingsWindow(OverlayPreferences, _settingsValues);
