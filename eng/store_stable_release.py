@@ -94,8 +94,11 @@ class GitHub(beta.GitHub):
         version = tag[1:]
         if tuple(map(int, version.split(".")[:2])) != tuple(map(int, branch.groups())):
             raise ReleaseError("The Stable version does not belong to the release branch it was built from.")
-        reference = self.get(f"git/ref/tags/{tag}")
-        if reference.get("object", {}).get("type") != "commit" or reference["object"].get("sha") != source:
+        target = self.get(f"git/ref/tags/{tag}").get("object", {})
+        # An annotated tag points at a tag object that points at the commit.
+        if target.get("type") == "tag" and re.fullmatch(SHA_PATTERN, target.get("sha", "")):
+            target = self.get(f"git/tags/{target['sha']}").get("object", {})
+        if target.get("type") != "commit" or target.get("sha") != source:
             raise ReleaseError("The Stable tag does not point at the Candidate source.")
         if not self.is_ancestor(source, run["head_branch"]):
             raise ReleaseError("The Stable source is no longer part of its release branch.")

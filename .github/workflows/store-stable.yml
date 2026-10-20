@@ -28,11 +28,6 @@ permissions:
   contents: read
   actions: read
 
-# Never cancel an upload or commit that is already running.
-concurrency:
-  group: store-stable-submissions
-  cancel-in-progress: false
-
 jobs:
   # Read-only: Store state, the next version of a line and whether every listing language is configured.
   inspect:
@@ -121,6 +116,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: store-beta
+    # Only the job that writes to the Store is serialized; a run waiting for approval must not hold the group,
+    # because GitHub keeps one pending run per group and would cancel another release line's run.
+    concurrency:
+      group: store-stable-submissions
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
         with:

@@ -336,6 +336,17 @@ class StableReleaseTrustTests(unittest.TestCase):
         with patch.object(self.github, "get", side_effect=[self.run, self.jobs, self.releases, self.tag, {"status": "identical"}]):
             self.assertEqual(self.github.stable_release("456"), {"source": SOURCE, "branch": "release/1.2", "version": "1.2.0"})
 
+    def test_annotated_tag_is_dereferenced_to_its_commit(self):
+        annotated = {"object": {"type": "tag", "sha": "f" * 40}}
+        tag_object = {"object": {"type": "commit", "sha": SOURCE}}
+        with patch.object(self.github, "get", side_effect=[self.run, self.jobs, self.releases, annotated, tag_object, {"status": "identical"}]) as get:
+            self.assertEqual(self.github.stable_release("456")["version"], "1.2.0")
+            self.assertEqual(get.call_args_list[4].args[0], "git/tags/" + "f" * 40)
+        elsewhere = {"object": {"type": "commit", "sha": "e" * 40}}
+        with patch.object(self.github, "get", side_effect=[self.run, self.jobs, self.releases, annotated, elsewhere]):
+            with self.assertRaisesRegex(stable.ReleaseError, "tag"):
+                self.github.stable_release("456")
+
     def test_release_candidate_is_recognized_without_a_version(self):
         releases = [{"tag_name": "v1.2.0-rc.3", "target_commitish": SOURCE, "prerelease": True, "draft": False}]
         with patch.object(self.github, "get", side_effect=[self.run, self.jobs, releases]):
