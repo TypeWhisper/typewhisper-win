@@ -97,7 +97,7 @@ voice-based field editing need a separate scope decision.
 2. Record relevant automated and native acceptance against that candidate.
 3. Publish to the intended prerelease channel and gather feedback.
 4. Enable legacy Daily upgrades only after their installed-upgrade gate passes.
-5. Publish an RC, then Stable, through the Candidate workflow with their release notes, from `release/1.1`; see [Release candidates and Stable](DAILY-1.1-CANDIDATE.md#release-candidates-and-stable) and [Release branches](DAILY-1.1-CANDIDATE.md#release-branches).
+5. Publish an RC, then Stable, through the Candidate workflow with their release notes, from the line's `release/X.Y` branch (currently `release/1.2`); see [Release candidates and Stable](DAILY-1.1-CANDIDATE.md#release-candidates-and-stable) and [Release branches](DAILY-1.1-CANDIDATE.md#release-branches).
 
 The mechanics and exact gate variables live in [Daily delivery](DAILY-1.1-CANDIDATE.md)
 and [plugin releases](PLUGIN-RELEASES.md). Store delivery follows its

@@ -27,7 +27,7 @@ REPOSITORY = "TypeWhisper/typewhisper-win"
 STORE_API = "https://manage.devcenter.microsoft.com/v1.0/my/"
 DAILY_PATH = ".github/workflows/winui-daily-candidate.yml"
 # Store betas follow the Dailies from main, which carries the next minor version.
-RELEASE_LINE = "1.2"
+RELEASE_LINE = "1.3"
 FLIGHT_NAME = "Internal Beta"
 DESTINATIONS = {"internal-flight": "stable", "public-beta": "beta"}
 SHA_PATTERN = r"[0-9a-f]{40}"

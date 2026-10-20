@@ -51,7 +51,7 @@ permissions:
 
 # main carries the next minor version; its Daily versions and tags start with this prefix.
 env:
-  DAILY_VERSION_PREFIX: 1.2.0-daily.
+  DAILY_VERSION_PREFIX: 1.3.0-daily.
 
 concurrency:
   group: winui-daily-candidate-${{ github.ref }}-${{ inputs.channel || 'daily' }}
@@ -309,7 +309,7 @@ jobs:
               # The first Daily of a version line starts from the last Daily of the previous line.
               previous_tag="$(gh release list --exclude-drafts --limit 100 --json tagName,publishedAt --jq 'sort_by(.publishedAt) | reverse | .[].tagName' \
                 | awk -v current="$TAG" '/^v[0-9]+\.[0-9]+\.[0-9]+-daily\./ && $0 != current && !found { print; found = 1 }')"
-              notes_args=(--notes-file docs/releases/1.2-daily.md --generate-notes)
+              notes_args=(--notes-file docs/releases/1.3-daily.md --generate-notes)
               if [ -n "$previous_tag" ]; then
                 echo "Generating release notes since $previous_tag"
                 notes_args+=(--notes-start-tag "$previous_tag")

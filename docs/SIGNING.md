@@ -35,7 +35,7 @@ untrusted-root status. Test-signed packages cannot enter the release job.
 Create the repository environment `signpath`. Under **Deployment branches and
 tags**, choose **Selected branches and tags** and add a **Branch** rule for
 `main`, plus one for each release branch that publishes signed builds, such as
-`release/1.1`. Do not add tags, feature branches, wildcards or `refs/pull/*/merge`
+`release/1.2`. Do not add tags, feature branches, wildcards or `refs/pull/*/merge`
 patterns.
 GitHub enforces this restriction before starting a job or releasing its secrets,
 even when a pull request modifies the workflow or its tests.
