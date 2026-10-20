@@ -26,10 +26,11 @@ import zipfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import store_beta_release as beta  # noqa: E402
-from store_beta_release import (  # noqa: E402
-    ACTIVE, DAILY_PATH, FAILURES, REPOSITORY, SHA_PATTERN, NoRedirect, ReleaseError, next_version,
-    numeric_version, products, upload_archive, write_json,
-)
+
+ACTIVE, DAILY_PATH, FAILURES, REPOSITORY, SHA_PATTERN = beta.ACTIVE, beta.DAILY_PATH, beta.FAILURES, beta.REPOSITORY, beta.SHA_PATTERN
+NoRedirect, ReleaseError = beta.NoRedirect, beta.ReleaseError
+next_version, numeric_version, products = beta.next_version, beta.numeric_version, beta.products
+upload_archive, write_json = beta.upload_archive, beta.write_json
 
 
 LISTING_PATH = "src/TypeWhisper.Windows.StorePackage/StoreListing.json"
