@@ -17,7 +17,7 @@ Legacy single-account preferences migrate automatically only when exactly one st
 
 ## Text-only runtime
 
-The NuGet build targets acquire Copilot runtime 1.0.83 with release-checksum verification. The complete SDK-staged runtime, managed dependencies and notices are copied into the plugin package. At runtime the plugin starts that exact package-local executable over stdio, with a restricted environment and a plugin-owned working directory. It does not search PATH for an alternate Copilot runtime or download executable code during activation.
+The NuGet build targets acquire Copilot runtime 1.0.83 with release-checksum verification. The SDK-staged runtime, managed dependencies and notices are copied into the plugin package, except the SDK's in-process copy of the runtime library (`copilot_runtime.dll`) and its `copilot.exe` alias, which stdio mode never loads. At runtime the plugin starts that exact package-local executable over stdio, with a restricted environment and a plugin-owned working directory. It does not search PATH for an alternate Copilot runtime or download executable code during activation.
 
 Each request creates a new session with the workflow system prompt in `replace` mode and the input text as the user message. No file attachments or active-application context are supplied. Sessions explicitly disable:
 
@@ -36,7 +36,7 @@ dotnet test plugins/TypeWhisper.Plugin.GitHubCopilot/Tests/TypeWhisper.Plugin.Gi
 dotnet msbuild plugins/TypeWhisper.Plugin.GitHubCopilot/portable.proj -t:Package -p:Configuration=Release
 ```
 
-The independent staged package is at `bin/Release/portable-host/Plugins/com.typewhisper.github-copilot/`; the ZIP and SHA-256 file are at `bin/Release/com.typewhisper.github-copilot-1.1.4.zip[.sha256]`.
+The independent staged package is at `bin/Release/portable-host/Plugins/com.typewhisper.github-copilot/`; the ZIP and SHA-256 file are at `bin/Release/com.typewhisper.github-copilot-1.1.5.zip[.sha256]`.
 
 The package contains the runtime for the build machine's architecture. Only advertise that architecture in a catalog entry; build and validate other architectures separately. Do not enable `CopilotSkipCliDownload` for distribution builds. The package intentionally excludes the host-owned `TypeWhisper.PluginSDK.dll`. Keep the runtime and all applicable licenses together.
 

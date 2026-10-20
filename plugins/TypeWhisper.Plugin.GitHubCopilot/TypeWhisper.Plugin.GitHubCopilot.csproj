@@ -2,7 +2,7 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
-    <Version>1.1.4</Version>
+    <Version>1.1.5</Version>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
   <ItemGroup>
@@ -33,7 +33,10 @@
     <ItemGroup>
       <PackageLocalization Include="$(TargetDir)Localization/**/*" />
       <PackageLicense Include="$(TargetDir)Licenses/**/*" />
-      <PackageRuntime Include="$(TargetDir)runtimes/**/*" />
+      <!-- The plugin starts copilot-runtime.exe (which loads runtime.node) over stdio. The SDK also
+           stages a copy of runtime.node for in-process hosting and a copilot.exe alias; neither is used. -->
+      <PackageRuntime Include="$(TargetDir)runtimes/**/*"
+                      Exclude="$(TargetDir)runtimes/$(_CopilotRid)/native/$(_CopilotRuntimeLib);$(TargetDir)runtimes/$(_CopilotRid)/native/$(_CopilotBinary)" />
     </ItemGroup>
     <Copy SourceFiles="@(PackageLocalization)" DestinationFiles="@(PackageLocalization->'$(PackageDirectory)Localization/%(RecursiveDir)%(Filename)%(Extension)')" />
     <Copy SourceFiles="@(PackageLicense)" DestinationFiles="@(PackageLicense->'$(PackageDirectory)Licenses/%(RecursiveDir)%(Filename)%(Extension)')" />
