@@ -482,7 +482,11 @@ public sealed partial class SettingsWindow : Window
         }
     }
 
-    internal async void ShowCategory(string category) => await TryShowCategoryAsync(category);
+    // With a row key the shown page scrolls to that row, as --page <page>/<row key> asks.
+    internal async void ShowCategory(string category, string? rowKey = null)
+    {
+        if (await TryShowCategoryAsync(category) && rowKey is { Length: > 0 }) RevealRow(rowKey, category, deepLink: true);
+    }
 
     private async Task<bool> ConfirmLeaveIntegrationAsync()
     {
@@ -735,11 +739,22 @@ public sealed partial class SettingsWindow : Window
     private async void OpenSearchResult(SettingSearchEntry entry)
     {
         if (!await TryShowCategoryAsync(entry.Category)) return;
-        DispatcherQueue.TryEnqueue(() =>
+        RevealRow(entry.Key, entry.Category);
+    }
+
+    // Scrolls the shown page to the row with the settings search key; a --page activation and a search result
+    // use the same lookup. A search result lands a quarter down the page and takes focus. A deep link puts the
+    // row's card at the top and leaves focus alone. A window that is still opening has no visual tree yet, so
+    // the lookup is retried at idle priority for a few frames before it falls back to the navigation button.
+    internal void RevealRow(string key, string category, int attempt = 0, bool deepLink = false)
+    {
+        DispatcherQueue.TryEnqueue(attempt == 0 ? Microsoft.UI.Dispatching.DispatcherQueuePriority.Normal : Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
         {
             SettingsRoot.UpdateLayout();
-            var elements = Descendants(SettingsRoot).ToArray();
-            var target = elements.FirstOrDefault(element => entry.Key.Length > 0 && (element.Name == entry.Key || element.Tag as string == entry.Key));
+            // Only the shown page counts; the other page hosts stay in the tree while collapsed.
+            var elements = Descendants(SettingsRoot).Where(OnShownPage).ToArray();
+            var target = elements.FirstOrDefault(element => Matches(element, key));
+            if (target is null && key.Length > 0 && attempt < 20) { RevealRow(key, category, attempt + 1, deepLink); return; }
             for (DependencyObject? ancestor = target; ancestor is not null; ancestor = VisualTreeHelper.GetParent(ancestor))
                 if (ancestor is FrameworkElement { Tag: Action reveal }) reveal();
             SettingsRoot.UpdateLayout();
@@ -747,18 +762,17 @@ public sealed partial class SettingsWindow : Window
             if (!visible)
             {
                 // Hidden dependent fields lead to their enabling option without changing it.
-                var parentKey = entry.Key switch
-                {
-                    "AudioDuckingLevel" => "AudioDuckingEnabled",
-                    "SpokenFeedbackVoiceId" or "SpokenFeedbackProviderId" => "SpokenFeedbackEnabled",
-                    "SilenceAutoStopSeconds" => "SilenceAutoStopEnabled",
-                    "TranslationTargetLanguage" => "TranscriptionTask",
-                    "LanguageHints" => "Language",
-                    "LockPasteToFocusedField" => "AutoPaste",
-                    "VocabularyBoostingEnabledPackIds" or "VocabularyBoostingSelectedIndustryPresetId" => "VocabularyBoostingEnabled",
-                    _ => ""
-                };
-                target = elements.FirstOrDefault(element => parentKey.Length > 0 && element.Tag as string == parentKey);
+                var parentKey = DependentRowParents.GetValueOrDefault(key, "");
+                target = elements.FirstOrDefault(element => Matches(element, parentKey));
+            }
+            if (target is not null && deepLink)
+            {
+                // A deep link shows the row's whole card from the top and leaves focus where it is.
+                FrameworkElement anchor = target;
+                for (DependencyObject? ancestor = target; ancestor is not null; ancestor = VisualTreeHelper.GetParent(ancestor))
+                    if (ancestor is SettingsCard card) { anchor = card; break; }
+                anchor.StartBringIntoView(new BringIntoViewOptions { AnimationDesired = false, VerticalAlignmentRatio = 0, VerticalOffset = -16 });
+                return;
             }
             if (target is not null)
             {
@@ -766,8 +780,34 @@ public sealed partial class SettingsWindow : Window
                 if (target is Control control) control.Focus(FocusState.Keyboard);
                 else Descendants(target).OfType<Control>().FirstOrDefault(control => control is Button or TextBox or ToggleSwitch && control.IsTabStop && control.IsEnabled)?.Focus(FocusState.Keyboard);
             }
-            else _navigationButtons.FirstOrDefault(button => (string)button.Tag == (entry.Category == "Overlay editor" ? "Appearance" : entry.Category))?.Focus(FocusState.Keyboard);
+            else _navigationButtons.FirstOrDefault(button => (string)button.Tag == (category == "Overlay editor" ? "Appearance" : category))?.Focus(FocusState.Keyboard);
         });
+    }
+
+    // Row keys come from the command line too, so names and tags match without regard to case.
+    private static bool Matches(FrameworkElement element, string key) => key.Length > 0
+        && (string.Equals(element.Name, key, StringComparison.OrdinalIgnoreCase) || string.Equals(element.Tag as string, key, StringComparison.OrdinalIgnoreCase));
+
+    private static readonly Dictionary<string, string> DependentRowParents = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["AudioDuckingLevel"] = "AudioDuckingEnabled",
+        ["SpokenFeedbackVoiceId"] = "SpokenFeedbackEnabled",
+        ["SpokenFeedbackProviderId"] = "SpokenFeedbackEnabled",
+        ["SilenceAutoStopSeconds"] = "SilenceAutoStopEnabled",
+        ["TranslationTargetLanguage"] = "TranscriptionTask",
+        ["LanguageHints"] = "Language",
+        ["LockPasteToFocusedField"] = "AutoPaste",
+        ["VocabularyBoostingEnabledPackIds"] = "VocabularyBoostingEnabled",
+        ["VocabularyBoostingSelectedIndustryPresetId"] = "VocabularyBoostingEnabled"
+    };
+
+    // False below a page host that is collapsed, true for the sidebar and the shown page.
+    private bool OnShownPage(DependencyObject element)
+    {
+        for (DependencyObject? current = element; current is not null; current = VisualTreeHelper.GetParent(current))
+            if (current == SettingsScroll || current == EditorScroll || current == IntegrationsHost || current == WorkspaceHost || current == CatalogScroll)
+                return ((UIElement)current).Visibility == Visibility.Visible;
+        return true;
     }
 
     private static bool IsVisible(DependencyObject element)

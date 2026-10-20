@@ -25,7 +25,7 @@ internal sealed class ManagedPolicyView : UserControl
         var body = new StackPanel { Spacing = 10 };
         var refresh = new HandCursorButton { Content = Loc.T("Refresh"), Style = (Style)Application.Current.Resources["SecondaryButtonStyle"] };
         refresh.Click += (_, _) => WinUIManagedPolicy.RequestRefresh();
-        var row = new SettingsRow().Set(Loc.T("Organization policy"),
+        var row = new SettingsRow("ManagedPolicy").Set(Loc.T("Organization policy"),
             Loc.T("Settings your organization enforces or recommends through Windows policy. Enforced values cannot be changed here; recommended values are defaults you can change."), refresh);
         body.Children.Add(row);
         body.Children.Add(_summary);
