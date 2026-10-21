@@ -40,11 +40,12 @@ public static class TranscriptionWorkerServer
         var services = new TranscriptionWorkerHostServices(options.DataDirectory, options.AssetDirectory,
             (level, message) => connection.Post(new() { Type = TranscriptionWorkerMessageTypes.Log, LogLevel = level, LogMessage = message }));
         IPcmTranscriptionEnginePlugin engine;
+        PortablePluginPackage package;
         try
         {
             // The package stays loaded until the process ends. Exiting releases native memory
             // more reliably than disposing a context that native code may still reference.
-            var package = await PortablePluginPackage.LoadAsync(options.PackageDirectory, services, options.HostVersion).ConfigureAwait(false);
+            package = await PortablePluginPackage.LoadAsync(options.PackageDirectory, services, options.HostVersion).ConfigureAwait(false);
             engine = FindEngine(package.Plugin, options.SelectionId)
                 ?? throw new NotSupportedException("The plugin does not provide this local transcription engine.");
             if (engine.AccelerationPreference != options.Acceleration) engine.SetAccelerationPreference(options.Acceleration);
@@ -65,7 +66,11 @@ public static class TranscriptionWorkerServer
             Type = TranscriptionWorkerMessageTypes.Hello, ProtocolVersion = TranscriptionWorkerProtocol.Version,
             ProcessId = Environment.ProcessId, State = session.State(), HeartbeatInterval = options.HeartbeatInterval
         }).ConfigureAwait(false);
-        return await session.RunAsync().ConfigureAwait(false);
+        var exitCode = await session.RunAsync().ConfigureAwait(false);
+        // A collectible context starts to unload once its package object is collected, and every assembly the
+        // plugin loads after that fails. The engine alone does not keep the package reachable.
+        GC.KeepAlive(package);
+        return exitCode;
     }
 
     private static IPcmTranscriptionEnginePlugin? FindEngine(ITypeWhisperPlugin plugin, string selectionId) =>
