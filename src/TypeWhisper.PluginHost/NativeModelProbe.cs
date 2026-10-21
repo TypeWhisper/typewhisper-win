@@ -46,6 +46,8 @@ public static class NativeModelProbe
             }
             engine.SetAccelerationPreference(TranscriptionAccelerationPreference.NvidiaCuda);
             await engine.LoadModelAsync(modelId, CancellationToken.None).ConfigureAwait(false);
+            // Collecting the package would start unloading its context while the model still loads assemblies.
+            GC.KeepAlive(package);
             return ExitLoaded;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
