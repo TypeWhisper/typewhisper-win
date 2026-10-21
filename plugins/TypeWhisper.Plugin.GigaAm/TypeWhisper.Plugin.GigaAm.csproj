@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Version>1.0.0</Version>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <PortableRuntimeIdentifiers Condition="'$(PortableRuntimeIdentifiers)' == ''">win-x64</PortableRuntimeIdentifiers>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="Tests/**/*.cs" />
+    <InternalsVisibleTo Include="TypeWhisper.Plugin.GigaAm.Tests" />
+    <ProjectReference Include="../../src/TypeWhisper.PluginSDK/TypeWhisper.PluginSDK.csproj" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" />
+    <Content Include="manifest.json;THIRD-PARTY-NOTICES.md;gigaam_v3_preprocessor.onnx;Licenses/*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <Target Name="StagePortablePackage" AfterTargets="Build">
+    <PropertyGroup>
+      <PackageDirectory>$(MSBuildProjectDirectory)/bin/$(Configuration)/portable-host/Plugins/com.typewhisper.gigaam/</PackageDirectory>
+    </PropertyGroup>
+    <!-- The ONNX Runtime from NuGet links against the Visual C++ runtime. Machines without the redistributable cannot
+         load it, so the package carries the runtime files next to onnxruntime.dll, as the Parakeet CTC add-on does. -->
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)/../../eng/Copy-MsvcRuntime.ps1&quot; -OutputDirectory &quot;$(TargetDir).&quot; -RuntimeIdentifiers $(PortableRuntimeIdentifiers) -Subdirectory native -Dlls msvcp140.dll,msvcp140_1.dll,vcruntime140.dll,vcruntime140_1.dll -Required" Condition="'$(Configuration)' == 'Release' and '$(OS)' == 'Windows_NT'" />
+    <ItemGroup>
+      <PackageFile Include="$(TargetPath);$(TargetDir)$(TargetName).deps.json;$(ProjectDir)manifest.json;$(ProjectDir)THIRD-PARTY-NOTICES.md;$(ProjectDir)gigaam_v3_preprocessor.onnx" />
+      <PackageDependency Include="$(TargetDir)*.dll" Exclude="$(TargetPath);$(TargetDir)TypeWhisper.PluginSDK.dll" />
+      <LicenseFile Include="$(ProjectDir)Licenses/*" />
+      <!-- The app and the plugin catalog are x64 only. -->
+      <RuntimeFile Include="$(TargetDir)runtimes/win-x64/native/*.dll" />
+    </ItemGroup>
+    <RemoveDir Directories="$(PackageDirectory)" />
+    <MakeDir Directories="$(PackageDirectory)" />
+    <Copy SourceFiles="@(PackageFile);@(PackageDependency)" DestinationFolder="$(PackageDirectory)" />
+    <Copy SourceFiles="@(LicenseFile)" DestinationFolder="$(PackageDirectory)Licenses" />
+    <Copy SourceFiles="@(RuntimeFile)" DestinationFolder="$(PackageDirectory)runtimes/win-x64/native" />
+    <Error Condition="!Exists('$(PackageDirectory)runtimes/win-x64/native/onnxruntime.dll')" Text="The ONNX Runtime native library is missing." />
+    <Error Condition="'$(Configuration)' == 'Release' and '$(OS)' == 'Windows_NT' and !Exists('$(PackageDirectory)runtimes/win-x64/native/msvcp140_1.dll')" Text="The Visual C++ runtime files are missing." />
+  </Target>
+</Project>

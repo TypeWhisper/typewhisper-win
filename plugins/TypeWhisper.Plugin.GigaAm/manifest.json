@@ -1,0 +1,20 @@
+{
+  "id": "com.typewhisper.gigaam",
+  "locality": "local",
+  "name": "GigaAM",
+  "version": "1.0.0",
+  "minHostVersion": "1.1.6",
+  "author": "TypeWhisper",
+  "description": "Local Russian speech-to-text with GigaAM v3 by Sber. Adds punctuation and capitalization and runs on the CPU. Russian only.",
+  "descriptions": {
+    "de": "Lokale russische Spracherkennung mit GigaAM v3 von Sber. Setzt Satzzeichen und Großschreibung und läuft auf der CPU. Nur Russisch.",
+    "ja": "SberのGigaAM v3によるロシア語のローカル音声認識です。句読点と大文字を付け、CPUで動作します。ロシア語専用です。"
+  },
+  "categories": [
+    "transcription"
+  ],
+  "isLocal": true,
+  "requiresApiKey": false,
+  "assemblyName": "TypeWhisper.Plugin.GigaAm.dll",
+  "pluginClass": "TypeWhisper.Plugin.GigaAm.GigaAmPlugin"
+}

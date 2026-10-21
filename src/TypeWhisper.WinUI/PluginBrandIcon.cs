@@ -48,6 +48,7 @@ public sealed class PluginBrandIcon : UserControl
             "com.typewhisper.fireworks" => "fireworks",
             "com.typewhisper.gemini" => "gemini",
             "com.typewhisper.gemma-local" => "gemma",
+            "com.typewhisper.gigaam" => "sber",
             "com.typewhisper.gladia" => "gladia",
             "com.typewhisper.meta" => "meta",
             "com.typewhisper.linear" => "linear",

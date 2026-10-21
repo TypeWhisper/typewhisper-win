@@ -228,6 +228,15 @@ public sealed class TranscriptionWorkerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ThePluginStillLoadsAssembliesAfterACollectionInTheWorker()
+    {
+        await _engine.TranscribePcmAsync(new float[] { 0 }, null, false, default);
+        var worker = _engine.WorkerProcessId;
+        await _engine.TranscribePcmAsync(new float[] { 0 }, "collect", false, default);
+        Assert.Equal(worker, _engine.WorkerProcessId);
+    }
+
+    [Fact]
     public async Task CancellationReachesADecodeThatHonorsIt()
     {
         await _engine.TranscribePcmAsync(new float[] { 0 }, null, false, default);

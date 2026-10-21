@@ -221,7 +221,7 @@ configuration, including WPAD and PAC scripts.
 | `app.typewhisper.com` | Premium account sign-in and account status. |
 | `api.github.com`, `github.com`, `release-assets.githubusercontent.com` | App update checks and downloads (unless `UpdateMode` is 0) and plugin package downloads. |
 | `typewhisper.github.io` | The plugin catalog (`plugins-v2.json`). |
-| `huggingface.co` and the `*.hf.co` content hosts it redirects to (the wildcard must cover several subdomain levels, such as `us.aws.cdn.hf.co` and `cas-server.xethub.hf.co`) | Model downloads of the local plugins: Parakeet (sherpa-onnx), dictionary boosting assets, whisper.cpp, local text models, local speech output. |
+| `huggingface.co` and the `*.hf.co` content hosts it redirects to (the wildcard must cover several subdomain levels, such as `us.aws.cdn.hf.co` and `cas-server.xethub.hf.co`) | Model downloads of the local plugins: Parakeet (sherpa-onnx), dictionary boosting assets, whisper.cpp, GigaAM, local text models, local speech output. |
 | `download.pytorch.org`, `developer.download.nvidia.com`, `api.nuget.org` | Runtime files some local plugins fetch while loading a model (Granite Speech, whisper.cpp with CUDA, ONNX runtimes). Not covered by `AllowModelDownloads`; see the known limits above. |
 | `graph.microsoft.com`, `www.googleapis.com` | Calendar access for the meeting feature, only when a user connects a calendar. |
 | `www.typewhisper.com` | Documentation links opened in the browser. |
@@ -254,7 +254,7 @@ whatever endpoint the user enters.
 | Voxtral (Mistral) | `api.mistral.ai` |
 | xAI | `api.x.ai` |
 | Authenticated CLI, Webhook, Script | the command, CLI or URL the user configures |
-| Local plugins (Parakeet, whisper.cpp, local LLM, Gemma, Qwen, Cohere Transcribe, Granite Speech, Supertonic TTS) | `huggingface.co` and `*.hf.co` for models; see the runtime hosts above |
+| Local plugins (Parakeet, whisper.cpp, local LLM, Gemma, Qwen, GigaAM, Cohere Transcribe, Granite Speech, Supertonic TTS) | `huggingface.co` and `*.hf.co` for models; see the runtime hosts above |
 
 ## Microphone and other permissions
 
