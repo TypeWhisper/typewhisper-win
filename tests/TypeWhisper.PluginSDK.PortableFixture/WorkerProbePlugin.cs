@@ -101,6 +101,15 @@ public sealed class WorkerProbePlugin : IPcmTranscriptionEnginePlugin
                 if (!File.Exists(marker)) { File.WriteAllText(marker, ""); Environment.FailFast("Worker fixture transient crash"); }
                 break;
             case "throw": throw new NotSupportedException("Fixture engine rejected the request.");
+            case "collect":
+                // A dependency the plugin loads late must still load after a full collection. Package dependencies
+                // load by path, which fails once the context has started to unload.
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+                var assembly = typeof(WorkerProbePlugin).Assembly;
+                System.Runtime.Loader.AssemblyLoadContext.GetLoadContext(assembly)!.LoadFromAssemblyPath(assembly.Location);
+                break;
             case "hang": await Task.Delay(Timeout.Infinite, ct); break;
             case "hang-hard": Thread.Sleep(Timeout.Infinite); break;
             case "slow": await Task.Delay(SlowDecode, ct); break;

@@ -1807,7 +1807,7 @@
   "Release the memory of local models after inactivity. They load again when needed.": "空闲后释放本地模型占用的内存。需要时会重新加载。",
   "Release the shortcut keys and try again.": "请松开快捷键后重试。",
   "Released versions": "已发布的版本",
-  "Releases the memory of local models after they were not used for this long. They load again automatically when needed, so the next dictation or text workflow may start a little slower. Parakeet, whisper.cpp, Qwen3 and local text models are affected; cloud providers are not.": "本地模型在这段时间内未被使用后，释放其占用的内存。需要时会自动重新加载，因此下一次听写或文本工作流的启动可能稍慢。受影响的包括 Parakeet、whisper.cpp、Qwen3 和本地文本模型；云端提供商不受影响。",
+  "Releases the memory of local models after they were not used for this long. They load again automatically when needed, so the next dictation or text workflow may start a little slower. Parakeet, whisper.cpp, Qwen3, GigaAM and local text models are affected; cloud providers are not.": "本地模型在这段时间内未被使用后，释放其占用的内存。需要时会自动重新加载，因此下一次听写或文本工作流的启动可能稍慢。受影响的包括 Parakeet、whisper.cpp、Qwen3、GigaAM 和本地文本模型；云端提供商不受影响。",
   "Releasing model memory…": "正在释放模型内存…",
   "Remember file queue after restart": "重启后记住文件队列",
   "Remember this queue after restart": "重启后记住此队列",
