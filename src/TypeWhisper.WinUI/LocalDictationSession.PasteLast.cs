@@ -14,6 +14,8 @@ internal sealed partial class LocalDictationSession
         if (busy || !await _gate.WaitAsync(0)) return LastDictationPasteResult.Busy;
         try
         {
+            // Turning Preserve clipboard content on still applies to this paste; turning it off does not.
+            var outputAtStart = OutputPreferences.Current;
             return await LastDictationPaste.RunAsync(LastCompletedDictation, _disposed, _audio.IsRecording, target is not null, async text =>
             {
                 var destination = target!.Value;
@@ -24,7 +26,7 @@ internal sealed partial class LocalDictationSession
                 // Exit, profile restore or the target app closing may have happened during the waits above.
                 if (_disposed || !destination.IsCurrent) return false;
                 return (await _inserter.InsertAsync(text, window, () => !_disposed && destination.IsCurrent,
-                    preserveClipboard: () => OutputPreferences.Current.PreserveClipboard)).Inserted;
+                    preserveClipboard: () => outputAtStart.RestrictedBy(OutputPreferences.Current).PreserveClipboard)).Inserted;
             });
         }
         finally { _gate.Release(); }
@@ -37,11 +39,12 @@ internal sealed partial class LocalDictationSession
         if (_disposed || string.IsNullOrEmpty(text) || !await _gate.WaitAsync(0)) return false;
         try
         {
+            var outputAtStart = OutputPreferences.Current;
             if (!target.IsCurrent || !await ActivateAsync(target.Window)) return false;
             for (var attempt = 0; attempt < 80 && ModifiersHeld(); attempt++) await Task.Delay(25);
             if (_disposed || !target.IsCurrent) return false;
             return (await _inserter.InsertAsync(text, target.Window, () => !_disposed && target.IsCurrent,
-                preserveClipboard: () => OutputPreferences.Current.PreserveClipboard)).Inserted;
+                preserveClipboard: () => outputAtStart.RestrictedBy(OutputPreferences.Current).PreserveClipboard)).Inserted;
         }
         finally { _gate.Release(); }
     }

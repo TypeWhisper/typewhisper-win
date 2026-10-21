@@ -227,7 +227,7 @@ public sealed partial class OverlayWindow : Window
             }
             StatusText.Text = state.Label;
             StatusText.Foreground = new SolidColorBrush(state.Phase == DictationPhase.Error ? Color.FromArgb(255, 255, 120, 130)
-                : state.ShowsCopyWarning ? Color.FromArgb(255, 244, 188, 106) : Color.FromArgb(255, 10, 132, 255));
+                : state.Phase == DictationPhase.Copied ? Color.FromArgb(255, 244, 188, 106) : Color.FromArgb(255, 10, 132, 255));
             var notice = HasNotice(state);
             if (!IsCorrectionFeedbackVisible)
             {
@@ -514,8 +514,7 @@ public sealed partial class OverlayWindow : Window
         if (_runtimeState?.Invoke() is { Phase: DictationPhase.Processing or DictationPhase.Error or DictationPhase.Copied or DictationPhase.Completed or DictationPhase.LoadingModel } state)
         {
             var color = state.Phase == DictationPhase.Error ? Color.FromArgb(255, 255, 120, 130)
-                : state.Phase == DictationPhase.Completed || state.Phase == DictationPhase.Copied && state.CopyChosen
-                    ? Color.FromArgb(255, 96, 210, 140) : Color.FromArgb(255, 244, 188, 106);
+                : state.Phase == DictationPhase.Completed ? Color.FromArgb(255, 96, 210, 140) : Color.FromArgb(255, 244, 188, 106);
             var centerY = (float)sender.Size.Height / 2;
             for (var i = -1; i <= 1; i++) args.DrawingSession.FillCircle((float)sender.Size.Width / 2 + i * 10, centerY, 2.5f, color);
             return;

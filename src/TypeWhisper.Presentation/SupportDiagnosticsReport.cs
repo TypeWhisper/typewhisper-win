@@ -24,8 +24,9 @@ public sealed record SupportDiagnosticsReport(
 {
     /// <summary>The Windows support-report schema, independent of the macOS schema.</summary>
     /// <remarks>Version 2 replaced settings.appFormattingEnabled with appAwareFormattingEnabled and added
-    /// stripFinalPeriodFromStandaloneValues. Version 3 added the policy section.</remarks>
-    public int SchemaVersion => 3;
+    /// stripFinalPeriodFromStandaloneValues. Version 3 added the policy section. Version 4 added settings.copyInsteadOfReview
+    /// and settings.preserveClipboard.</remarks>
+    public int SchemaVersion => 4;
 
     /// <summary>App identity and process lifetime, without installation paths.</summary>
     public sealed record AppInfo(string Version, string Build, bool IsDevelopment, double UptimeSeconds);

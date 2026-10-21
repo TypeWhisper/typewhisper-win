@@ -105,13 +105,11 @@ public sealed class DictationOverlayStateTests
     }
 
     [Fact]
-    public void OnlyACopyAfterAFailedPasteIsHighlighted()
+    public void AChosenCopyIsACompletedDictationLabelledCopied()
     {
-        var blocked = new DictationOverlayState(DictationPhase.Copied, TimeSpan.Zero, "Not inserted", "Notepad");
-        var chosen = blocked with { Message = "Copied to clipboard", CopyChosen = true };
-        Assert.True(blocked.ShowsCopyWarning);
-        Assert.False(chosen.ShowsCopyWarning);
+        var chosen = new DictationOverlayState(DictationPhase.Completed, TimeSpan.Zero, "Copied to clipboard", "Notepad", CopyChosen: true);
         Assert.Equal("COPIED", chosen.Label);
-        Assert.False((chosen with { Phase = DictationPhase.Error }).ShowsCopyWarning);
+        Assert.Equal("DONE", (chosen with { CopyChosen = false }).Label);
+        Assert.True(chosen.ShouldShowTranscript(OverlayMode.Standard, true, false));
     }
 }

@@ -216,7 +216,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         _showModelLoadingForDictation = true;
         Changed?.Invoke();
     }
-    // Set with the Copied phase when Copy to clipboard was chosen, cleared by any other phase.
+    // Set with the Completed phase when Copy to clipboard was chosen, cleared by any other phase.
     private bool _copyChosen;
     internal DictationOverlayState OverlayState => new(
         DictationOverlayState.VisiblePhase(_phase, _showModelLoadingForDictation, _earlyCapture, _earlyStopSamples is not null),
@@ -1207,7 +1207,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             _copyChosen = !pasteFailed && !outcome.NeedsReview && outcome.CopiedToClipboard;
             SetStatus(snippetError is null ? message : message + " · " + snippetError,
                 pasteFailed ? outcome.CopiedToClipboard ? DictationPhase.Copied : DictationPhase.Error
-                    : outcome.NeedsReview ? DictationPhase.Idle : outcome.CopiedToClipboard ? DictationPhase.Copied : DictationPhase.Completed);
+                    : outcome.NeedsReview ? DictationPhase.Idle : DictationPhase.Completed);
             if (outcome.NeedsReview) ReviewRequested?.Invoke(outcome);
             else
             {
@@ -1302,7 +1302,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         if (phase != DictationPhase.LoadingModel) _showModelLoadingForDictation = false;
         Status = status;
         _phase = phase ?? (_audio.IsRecording ? DictationPhase.Recording : DictationPhase.Idle);
-        if (_phase != DictationPhase.Copied) _copyChosen = false;
+        if (_phase != DictationPhase.Completed) _copyChosen = false;
         Changed?.Invoke();
     }
 

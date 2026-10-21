@@ -2,15 +2,12 @@ using TypeWhisper.Presentation;
 
 namespace TypeWhisper.WinUI;
 
-// Copied: the text is on the clipboard. After a failed paste it is a notice rather than an error; with Copy to
-// clipboard chosen (CopyChosen) it is the expected result.
+// Copied: the text was not inserted but is on the clipboard, a notice rather than an error. A copy the user chose
+// with Copy to clipboard is Completed with CopyChosen, so it is handled and coloured like any finished dictation.
 internal enum DictationPhase { Idle, Recording, Processing, Error, Configuring, Completed, LoadingModel, Copied }
 internal sealed record DictationOverlayState(DictationPhase Phase, TimeSpan Duration, string Message, string TargetApp, uint TargetProcessId = 0,
     RecordingMode RecordingMode = RecordingMode.Hybrid, string? CancelWarning = null, bool Cancelled = false, bool CopyChosen = false)
 {
-    // A copy the user chose looks like a completed dictation; only a copy after a failed paste is highlighted.
-    internal bool ShowsCopyWarning => Phase == DictationPhase.Copied && !CopyChosen;
-
     // A pending Escape warning replaces the phase label until it is confirmed or expires. The owner clears it
     // once nothing is cancellable, so it also shows while capture is still starting from an earlier phase.
     internal bool ShowsCancelWarning => CancelWarning is not null && Phase is not (DictationPhase.Error or DictationPhase.Copied);
@@ -43,7 +40,7 @@ internal sealed record DictationOverlayState(DictationPhase Phase, TimeSpan Dura
         DictationPhase.Processing => Loc.T("TRANSCRIBING"),
         DictationPhase.Error => Loc.T("ERROR"),
         DictationPhase.Copied => Loc.T("COPIED"),
-        DictationPhase.Completed => Loc.T("DONE"),
+        DictationPhase.Completed => CopyChosen ? Loc.T("COPIED") : Loc.T("DONE"),
         _ => Loc.T("READY")
     };
 }
