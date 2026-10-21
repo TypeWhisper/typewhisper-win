@@ -9,6 +9,20 @@ namespace TypeWhisper.Plugin.GitHubCopilot.Tests;
 
 public sealed class CopilotSdkTransportTests
 {
+    [Fact]
+    public void PhysicalPathKeepsUnredirectedFilesAndFallsBackForMissingOnes()
+    {
+        var file = Path.Combine(Path.GetTempPath(), "copilot-path-" + Guid.NewGuid().ToString("N") + ".txt");
+        File.WriteAllText(file, "x");
+        try
+        {
+            Assert.Equal(Path.GetFullPath(file), CopilotTransport.PhysicalPath(file), ignoreCase: true);
+            var missing = file + ".missing";
+            Assert.Equal(missing, CopilotTransport.PhysicalPath(missing));
+        }
+        finally { File.Delete(file); }
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
