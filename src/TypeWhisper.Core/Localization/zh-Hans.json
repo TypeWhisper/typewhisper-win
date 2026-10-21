@@ -1119,7 +1119,7 @@
   "Insert directly": "直接插入",
   "Insert the finished transcript into the active text field.": "将完成的转录插入当前文本框。",
   "Insert the last dictation from this session into the focused app": "将本次会话的上一次听写插入当前聚焦的应用",
-  "Insert the text directly, or review the result first.": "直接插入文本，或先检查结果。",
+  "Insert the text directly, copy it to the clipboard, or review the result first.": "直接插入文本、复制到剪贴板，或先检查结果。",
   "Insert this text": "插入此文本",
   "Install": "安装",
   "Install NVIDIA Parakeet": "安装 NVIDIA Parakeet",
@@ -3232,5 +3232,9 @@
   "Names the recognition does not know": "识别不认识的名字",
   "Spellings of products and technical terms": "产品和专业术语的写法",
   "You fix a word once after dictating. From then on it is written correctly, and with sync on every PC.": "听写后只需改正一次，之后都会写对；开启同步后，每台电脑都一样。",
-  "1 correction learned": "已学习 1 条修正"
+  "1 correction learned": "已学习 1 条修正",
+  "Copy the finished text to the clipboard. Paste it yourself with Ctrl+V. No review window.": "将完成的文本复制到剪贴板。用 Ctrl+V 自行粘贴。不打开审阅窗口。",
+  "Copied to clipboard. Press Ctrl+V to paste.": "已复制到剪贴板。按 Ctrl+V 粘贴。",
+  "Preserve clipboard content": "保留剪贴板内容",
+  "Restores your clipboard after text insertion. Without this, your clipboard contains the transcribed text after dictation.": "在文本插入后恢复你的剪贴板。如果不启用此选项，听写后剪贴板中将包含转录文本。"
 }

@@ -55,7 +55,7 @@ public sealed record SupportDiagnosticsReport(
 
     /// <summary>Only known behavior choices are included; this is not a settings backup.</summary>
     public sealed record SettingsInfo(string RecordingMode, string? Language, string Task, bool LivePreviewEnabled,
-        bool AutoPaste, bool LockPasteToFocusedField, bool SaveToHistory, bool SaveHistoryAudio,
+        bool AutoPaste, bool LockPasteToFocusedField, bool CopyInsteadOfReview, bool PreserveClipboard, bool SaveToHistory, bool SaveHistoryAudio,
         string HistoryRetentionMode, int HistoryRetentionMinutes, bool RecoveryEnabled, int RecoveryRetentionDays,
         int ModelAutoUnloadSeconds, bool WhisperModeEnabled, bool AudioDuckingEnabled, float AudioDuckingLevel,
         bool PauseMediaDuringRecording, bool SoundFeedbackEnabled, bool SpokenFeedbackEnabled,

@@ -297,6 +297,108 @@ public sealed class DictationOutputTests
     }
 
     [Fact]
+    public async Task ClipboardModeCopiesInsteadOfOpeningAReview()
+    {
+        var history = new Mock<IHistoryService>(MockBehavior.Strict);
+        var prefs = new DictationOutputPreferences { SaveToHistory = false, AutoPaste = false, CopyInsteadOfReview = true };
+        var copies = 0;
+        var result = await new DictationOutputDelivery(history.Object).DeliverAsync(Record(), prefs, () => prefs,
+            () => throw new Exception("Must not paste"), copy: () => { copies++; return true; });
+        Assert.Equal(1, copies);
+        Assert.False(result.NeedsReview);
+        Assert.False(result.Failed);
+        Assert.True(result.CopiedToClipboard);
+        Assert.True(result.Committed);
+        Assert.Equal(DictationReviewReason.None, result.ReviewReason);
+        Assert.StartsWith("Copied to clipboard.", result.Message);
+    }
+
+    [Fact]
+    public async Task CancelAfterTheCopyStillReportsTheCopiedText()
+    {
+        var history = new Mock<IHistoryService>(MockBehavior.Strict);
+        using var cancellation = new CancellationTokenSource();
+        var prefs = new DictationOutputPreferences { SaveToHistory = false, AutoPaste = false, CopyInsteadOfReview = true };
+        var result = await new DictationOutputDelivery(history.Object).DeliverAsync(Record(), prefs, () => prefs,
+            () => Task.FromResult(false), cancellation.Token, copy: () => { cancellation.Cancel(); return true; });
+        Assert.True(result.CopiedToClipboard);
+        Assert.False(result.NeedsReview);
+    }
+
+    [Fact]
+    public async Task FailedClipboardCopyFallsBackToTheReview()
+    {
+        var history = new Mock<IHistoryService>(MockBehavior.Strict);
+        var prefs = new DictationOutputPreferences { SaveToHistory = false, AutoPaste = false, CopyInsteadOfReview = true };
+        foreach (var copy in new Func<bool>[] { () => false, () => throw new InvalidOperationException("Clipboard busy") })
+        {
+            var result = await new DictationOutputDelivery(history.Object).DeliverAsync(Record(), prefs, () => prefs,
+                () => Task.FromResult(false), copy: copy);
+            Assert.True(result.NeedsReview);
+            Assert.False(result.CopiedToClipboard);
+            Assert.Equal(DictationReviewReason.AutomaticPasteDisabled, result.ReviewReason);
+        }
+    }
+
+    [Theory]
+    [InlineData(true, true, true)]
+    [InlineData(false, false, true)]
+    [InlineData(false, true, false)]
+    public async Task ClipboardCopyOnlyReplacesAReviewTheUserChose(bool autoPaste, bool copyAtStart, bool copyNow)
+    {
+        var history = new Mock<IHistoryService>(MockBehavior.Strict);
+        var atStart = new DictationOutputPreferences { SaveToHistory = false, AutoPaste = autoPaste, CopyInsteadOfReview = copyAtStart };
+        var current = atStart with { CopyInsteadOfReview = copyNow };
+        var copied = false;
+        var result = await new DictationOutputDelivery(history.Object).DeliverAsync(Record(), atStart, () => current,
+            () => Task.FromResult(true), copy: () => copied = true);
+        Assert.False(copied);
+        Assert.False(result.CopiedToClipboard);
+    }
+
+    [Fact]
+    public async Task FailedProcessingIsReviewedEvenInClipboardMode()
+    {
+        var history = new Mock<IHistoryService>(MockBehavior.Strict);
+        var prefs = new DictationOutputPreferences { SaveToHistory = false, AutoPaste = false, CopyInsteadOfReview = true };
+        var copied = false;
+        var result = await new DictationOutputDelivery(history.Object).DeliverAsync(
+            Record() with { Status = TranscriptionRecordStatus.WorkflowPostProcessingFailed }, prefs, () => prefs,
+            () => Task.FromResult(false), copy: () => copied = true);
+        Assert.False(copied);
+        Assert.Equal(DictationReviewReason.ProcessingFailed, result.ReviewReason);
+    }
+
+    [Fact]
+    public void PreservingTheClipboardIsTheDefaultAndWinsWhileInProgress()
+    {
+        Assert.True(new DictationOutputPreferences().PreserveClipboard);
+        Assert.False(new DictationOutputPreferences().CopyInsteadOfReview);
+        var off = new DictationOutputPreferences { PreserveClipboard = false };
+        Assert.True(off.RestrictedBy(new()).PreserveClipboard);
+        Assert.True(new DictationOutputPreferences().RestrictedBy(off).PreserveClipboard);
+        Assert.False(off.RestrictedBy(off).PreserveClipboard);
+    }
+
+    [Fact]
+    public void ClipboardChoicesSurviveRestartAndOlderFilesKeepTheClipboard()
+    {
+        WithDirectory(directory =>
+        {
+            var path = Path.Combine(directory, "output.json");
+            File.WriteAllText(path, "{\"AutoPaste\":false,\"SaveToHistory\":true}");
+            var older = new DictationOutputPreferencesStore(path).Current;
+            Assert.True(older.PreserveClipboard);
+            Assert.False(older.CopyInsteadOfReview);
+            var store = new DictationOutputPreferencesStore(path);
+            Assert.Null(store.Save(store.Current with { CopyInsteadOfReview = true, PreserveClipboard = false }));
+            var restored = new DictationOutputPreferencesStore(path).Current;
+            Assert.True(restored.CopyInsteadOfReview);
+            Assert.False(restored.PreserveClipboard);
+        });
+    }
+
+    [Fact]
     public void PreferencesSurviveRestartWithoutWritingOnRead()
     {
         WithDirectory(directory =>

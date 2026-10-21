@@ -1119,7 +1119,7 @@
   "Insert directly": "直接挿入",
   "Insert the finished transcript into the active text field.": "完成した文字起こしをアクティブなテキストフィールドに挿入します。",
   "Insert the last dictation from this session into the focused app": "このセッションの最後のディクテーションを、フォーカスのあるアプリに挿入",
-  "Insert the text directly, or review the result first.": "テキストを直接挿入するか、先に結果を確認します。",
+  "Insert the text directly, copy it to the clipboard, or review the result first.": "テキストを直接挿入するか、クリップボードにコピーするか、先に結果を確認します。",
   "Insert this text": "挿入するテキスト",
   "Install": "インストール",
   "Install NVIDIA Parakeet": "NVIDIA Parakeetをインストール",
@@ -3232,5 +3232,9 @@
   "Names the recognition does not know": "認識が知らない名前",
   "Spellings of products and technical terms": "製品名や専門用語の表記",
   "You fix a word once after dictating. From then on it is written correctly, and with sync on every PC.": "ディクテーション後に一度直すだけ。以後は正しく書かれ、同期すればすべての PC で使えます。",
-  "1 correction learned": "1 件の修正を学習済み"
+  "1 correction learned": "1 件の修正を学習済み",
+  "Copy the finished text to the clipboard. Paste it yourself with Ctrl+V. No review window.": "完成したテキストをクリップボードにコピーします。Ctrl+V で自分で貼り付けます。確認ウインドウは開きません。",
+  "Copied to clipboard. Press Ctrl+V to paste.": "クリップボードにコピーしました。Ctrl+V で貼り付けます。",
+  "Preserve clipboard content": "クリップボードの内容を保持",
+  "Restores your clipboard after text insertion. Without this, your clipboard contains the transcribed text after dictation.": "貼り付け後、クリップボードを復元します。このオプションがない場合、音声入力後クリップボードには文字起こしのテキストが含まれます。"
 }

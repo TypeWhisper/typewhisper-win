@@ -46,10 +46,10 @@ public sealed record DictationOutputResult(TranscriptionRecord Record, bool Save
     public bool ActionAttempted { get; init; }
     /// <summary>The paste was sent to the target field.</summary>
     public bool Inserted { get; init; }
-    /// <summary>The host left the text on the clipboard after a failed paste.</summary>
+    /// <summary>The text was left on the clipboard instead of a review, or by the host after a failed paste.</summary>
     public bool CopiedToClipboard { get; init; }
     /// <summary>Text or an action already left TypeWhisper; a late cancel must not report it as discarded.</summary>
-    public bool Committed => ActionAttempted || Inserted;
+    public bool Committed => ActionAttempted || Inserted || CopiedToClipboard;
 }
 
 /// <summary>Applies output choices without requiring Windows or a clipboard.</summary>
@@ -59,11 +59,12 @@ public sealed class DictationOutputDelivery(IHistoryService history)
     /// <summary>What the History commit settled on; composed into the result only after the action or paste.</summary>
     private readonly record struct SaveOutcome(TranscriptionRecord Record, bool Saved, string? Warning);
 
-    /// <summary>Saves when allowed and runs the action or paste while the commit is in flight; the result waits for both.</summary>
+    /// <summary>Saves when allowed and runs the action or paste while the commit is in flight; the result waits for both.
+    /// Without automatic insertion, <paramref name="copy"/> puts the result on the clipboard when the user chose that over a review.</summary>
     public async Task<DictationOutputResult> DeliverAsync(TranscriptionRecord record,
         DictationOutputPreferences atStart, Func<DictationOutputPreferences> current,
         Func<Task<bool>> paste, CancellationToken ct = default, float[]? samples = null, int sampleRate = 16000,
-        Func<CancellationToken, Task<WorkflowActionResult>>? action = null)
+        Func<CancellationToken, Task<WorkflowActionResult>>? action = null, Func<bool>? copy = null)
     {
         ct.ThrowIfCancellationRequested();
         var save = Task.FromResult(new SaveOutcome(record, false, null));
@@ -84,7 +85,7 @@ public sealed class DictationOutputDelivery(IHistoryService history)
         // The commit only adds an audio reference, so the original record decides the branch.
         var succeeded = record.Status == TranscriptionRecordStatus.Succeeded;
         WorkflowActionResult? actionResult = null;
-        bool autoPaste = false, inserted = false;
+        bool autoPaste = false, inserted = false, copied = false;
         try
         {
             ct.ThrowIfCancellationRequested();
@@ -104,6 +105,12 @@ public sealed class DictationOutputDelivery(IHistoryService history)
                     catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
                     catch (Exception ex) when (ex is not OutOfMemoryException) { }
                 }
+                // A copy that did not succeed falls back to the review, so the text is never only in History.
+                else if (copy is not null && atStart.RestrictedBy(current()).CopyInsteadOfReview)
+                {
+                    try { copied = copy(); }
+                    catch (Exception ex) when (ex is not OutOfMemoryException) { }
+                }
             }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -112,7 +119,7 @@ public sealed class DictationOutputDelivery(IHistoryService history)
             try { await save; } catch (OperationCanceledException) { }
             throw;
         }
-        var committed = actionResult is not null || inserted;
+        var committed = actionResult is not null || inserted || copied;
         SaveOutcome outcome;
         try { outcome = await save; }
         // A worker cancelled before its commit saved nothing. Text or an action already left TypeWhisper, so the
@@ -134,6 +141,9 @@ public sealed class DictationOutputDelivery(IHistoryService history)
         if (!succeeded)
             return new(record, saved, true, Loc.T("Your speech was transcribed, but a processing step failed. Nothing was inserted. Check the text before copying it."))
                 { Failed = true, ReviewReason = DictationReviewReason.ProcessingFailed, StorageWarning = storageWarning };
+        if (copied)
+            return new(record, saved, false, Loc.T("Copied to clipboard. Press Ctrl+V to paste.") + " " + storage)
+                { Failed = storageWarning is not null, CopiedToClipboard = true, StorageWarning = storageWarning };
         if (!autoPaste)
             return new(record, saved, true, Loc.T("Automatic insertion is off. Copy the text, then paste it into the field you want to use."))
                 { Failed = storageWarning is not null, ReviewReason = DictationReviewReason.AutomaticPasteDisabled, StorageWarning = storageWarning };

@@ -48,7 +48,7 @@ internal sealed partial class LocalDictationSession
 
         return new(RecordingModePreferences.Current.ToString(), Report.Identifier(Language),
             TranscriptionTaskPreferences.Current.ToString(), LivePreviewEnabled,
-            output.AutoPaste, output.LockPasteToFocusedField, output.SaveToHistory, output.SaveHistoryAudio,
+            output.AutoPaste, output.LockPasteToFocusedField, output.CopyInsteadOfReview, output.PreserveClipboard, output.SaveToHistory, output.SaveHistoryAudio,
             retention.HistoryRetentionMode.ToString(), retention.HistoryRetentionMinutes,
             recovery.Enabled, recovery.RetentionDays, ModelMemoryPreferences.AutoUnloadSeconds,
             audio.WhisperModeEnabled, audio.AudioDuckingEnabled, audio.AudioDuckingLevel,

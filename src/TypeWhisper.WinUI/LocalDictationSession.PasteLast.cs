@@ -6,7 +6,7 @@ namespace TypeWhisper.WinUI;
 
 internal sealed partial class LocalDictationSession
 {
-    // Uses the dictation paste path, so the previous clipboard is restored afterwards.
+    // Uses the dictation paste path, so the previous clipboard is restored afterwards unless Preserve clipboard content is off.
     // activate brings back a window that lost the foreground to the tray menu.
     internal async Task<LastDictationPasteResult> PasteLastCompletedAsync(PasteTarget? target, bool activate, bool blocked, bool busy)
     {
@@ -23,14 +23,15 @@ internal sealed partial class LocalDictationSession
                 for (var attempt = 0; attempt < 80 && ModifiersHeld(); attempt++) await Task.Delay(25);
                 // Exit, profile restore or the target app closing may have happened during the waits above.
                 if (_disposed || !destination.IsCurrent) return false;
-                return (await _inserter.InsertAsync(text, window, () => !_disposed && destination.IsCurrent)).Inserted;
+                return (await _inserter.InsertAsync(text, window, () => !_disposed && destination.IsCurrent,
+                    preserveClipboard: OutputPreferences.Current.PreserveClipboard)).Inserted;
             });
         }
         finally { _gate.Release(); }
     }
 
     // Brings back the window the workflow palette was opened from and pastes into it. Its selection is still
-    // active there, so the text replaces it. The previous clipboard is restored, as after dictation.
+    // active there, so the text replaces it. The clipboard follows Preserve clipboard content, as after dictation.
     internal async Task<bool> InsertIntoAsync(string text, PasteTarget target)
     {
         if (_disposed || string.IsNullOrEmpty(text) || !await _gate.WaitAsync(0)) return false;
@@ -39,7 +40,8 @@ internal sealed partial class LocalDictationSession
             if (!target.IsCurrent || !await ActivateAsync(target.Window)) return false;
             for (var attempt = 0; attempt < 80 && ModifiersHeld(); attempt++) await Task.Delay(25);
             if (_disposed || !target.IsCurrent) return false;
-            return (await _inserter.InsertAsync(text, target.Window, () => !_disposed && target.IsCurrent)).Inserted;
+            return (await _inserter.InsertAsync(text, target.Window, () => !_disposed && target.IsCurrent,
+                preserveClipboard: OutputPreferences.Current.PreserveClipboard)).Inserted;
         }
         finally { _gate.Release(); }
     }

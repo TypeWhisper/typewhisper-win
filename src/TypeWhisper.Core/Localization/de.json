@@ -1119,7 +1119,7 @@
   "Insert directly": "Direkt einfügen",
   "Insert the finished transcript into the active text field.": "Das fertige Transkript in das aktive Textfeld einfügen.",
   "Insert the last dictation from this session into the focused app": "Das letzte Diktat dieser Sitzung in die fokussierte App einfügen",
-  "Insert the text directly, or review the result first.": "Den Text direkt einfügen oder das Ergebnis zuerst prüfen.",
+  "Insert the text directly, copy it to the clipboard, or review the result first.": "Den Text direkt einfügen, in die Zwischenablage kopieren oder das Ergebnis zuerst prüfen.",
   "Insert this text": "Diesen Text einfügen",
   "Install": "Installieren",
   "Install NVIDIA Parakeet": "NVIDIA Parakeet installieren",
@@ -3232,5 +3232,9 @@
   "Names the recognition does not know": "Namen, die die Erkennung nicht kennt",
   "Spellings of products and technical terms": "Schreibweisen von Produkten und Fachbegriffen",
   "You fix a word once after dictating. From then on it is written correctly, and with sync on every PC.": "Du korrigierst ein Wort einmal nach dem Diktat. Ab dann wird es richtig geschrieben, mit Sync auf jedem PC.",
-  "1 correction learned": "1 Korrektur gelernt"
+  "1 correction learned": "1 Korrektur gelernt",
+  "Copy the finished text to the clipboard. Paste it yourself with Ctrl+V. No review window.": "Den fertigen Text in die Zwischenablage kopieren. Du fügst ihn selbst mit Ctrl+V ein. Kein Prüffenster.",
+  "Copied to clipboard. Press Ctrl+V to paste.": "In die Zwischenablage kopiert. Mit Ctrl+V einfügen.",
+  "Preserve clipboard content": "Zwischenablage-Inhalt beibehalten",
+  "Restores your clipboard after text insertion. Without this, your clipboard contains the transcribed text after dictation.": "Stellt die Zwischenablage nach dem Einfügen wieder her. Ohne diese Option enthält die Zwischenablage nach dem Diktieren den transkribierten Text."
 }

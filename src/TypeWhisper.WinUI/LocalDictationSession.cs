@@ -1174,7 +1174,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                         _outputAtStart.RestrictedBy(OutputPreferences.Current).AutoPaste &&
                         (!_outputAtStart.RestrictedBy(OutputPreferences.Current).LockPasteToFocusedField || _originalField?.RecentlyVerified == true),
                         async () => !_outputAtStart.RestrictedBy(OutputPreferences.Current).LockPasteToFocusedField ||
-                            (_originalField is not null && await _originalField.IsCurrentAsync(_operationCancellation.Token)), submit);
+                            (_originalField is not null && await _originalField.IsCurrentAsync(_operationCancellation.Token)), submit,
+                        _outputAtStart.RestrictedBy(OutputPreferences.Current).PreserveClipboard);
                     var inserted = insertion.Inserted;
                     submitSkipped = inserted && submit && !insertion.Submitted;
                     if (inserted && !_disposed && !_operationCancellation.Token.IsCancellationRequested && record.Status == TranscriptionRecordStatus.Succeeded)
@@ -1183,7 +1184,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 }, _operationCancellation.Token, samples, 16000,
                 _reviewAfterTargetChange || string.IsNullOrWhiteSpace(_workflowAtStart?.TargetActionPluginId) ? null : ct => ExecuteWorkflowActionAsync(
                     _workflowActionAtStart, text, new TypeWhisper.PluginSDK.Models.ActionContext(record.AppName, record.AppProcessName,
-                        record.AppUrl, record.Language, rawText), ct));
+                        record.AppUrl, record.Language, rawText), ct),
+                () => ClipboardText.TrySet(record.FinalText));
             if (_reviewAfterTargetChange && outcome.ReviewReason == DictationReviewReason.AutomaticPasteDisabled)
                 outcome = outcome with { Message = Loc.T("The window changed while the model was loading, so nothing was inserted. Copy the text, then paste it where you want it.") };
             preserveRecovery = outcome.Failed || record.Status != TranscriptionRecordStatus.Succeeded;
@@ -1202,7 +1204,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             if (submitSkipped) message += " · " + Loc.T("Enter was not pressed.");
             SetStatus(snippetError is null ? message : message + " · " + snippetError,
                 pasteFailed ? outcome.CopiedToClipboard ? DictationPhase.Copied : DictationPhase.Error
-                    : outcome.NeedsReview ? DictationPhase.Idle : DictationPhase.Completed);
+                    : outcome.NeedsReview ? DictationPhase.Idle : outcome.CopiedToClipboard ? DictationPhase.Copied : DictationPhase.Completed);
             if (outcome.NeedsReview) ReviewRequested?.Invoke(outcome);
             else
             {
