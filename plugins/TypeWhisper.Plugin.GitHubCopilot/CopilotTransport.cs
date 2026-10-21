@@ -172,9 +172,7 @@ internal sealed class CopilotTransport : ICopilotTransport
         await using var client = CreateClient(dataDirectory);
         try
         {
-            await client.StartAsync(ct);
-            return (await client.Rpc.Account.GetAllUsersAsync(ct))
-                .Select(Identity).OfType<CopilotAccount>().DistinctBy(a => a.Key)
+            return (await ListAccountsAsync(client, ct)).Select(a => a.Account).DistinctBy(a => a.Key)
                 .OrderBy(a => a.DisplayName, StringComparer.OrdinalIgnoreCase).ToArray();
         }
         finally { await client.ForceStopAsync(); }
@@ -188,7 +186,7 @@ internal sealed class CopilotTransport : ICopilotTransport
         try
         {
             var selected = await ResolveAccountAsync(client, account, ct);
-            return Cache(key, await ListModelsAsync(client, selected.SelectionId!, ct));
+            return Cache(key, await ListModelsAsync(client, selected.SelectionId, ct));
         }
         finally { await client.ForceStopAsync(); }
     }
@@ -206,7 +204,7 @@ internal sealed class CopilotTransport : ICopilotTransport
             else
             {
                 var selected = await ResolveAccountAsync(client, account, ct);
-                if (!Cache(key, await ListModelsAsync(client, selected.SelectionId!, ct)).Any(m => m.Id == model))
+                if (!Cache(key, await ListModelsAsync(client, selected.SelectionId, ct)).Any(m => m.Id == model))
                     throw new CopilotModelUnavailableException();
             }
             // Bind authentication before choosing the request model or sending any text.
@@ -255,23 +253,41 @@ internal sealed class CopilotTransport : ICopilotTransport
         return _createClient(options);
     }
 
-    private static CopilotAccount? Identity(AccountAllUsers entry) =>
-        entry.AuthInfo is AuthInfoUser { Host: { } host, Login: { } login } &&
+    private static CopilotAccount? Identity(string? host, string? login) =>
         !string.IsNullOrWhiteSpace(login) && login.Length <= 100 &&
         Uri.TryCreate(host, UriKind.Absolute, out var uri) && uri.Scheme == "https" &&
         uri.UserInfo.Length == 0 && uri.Query.Length == 0 && uri.Fragment.Length == 0 && uri.AbsolutePath == "/"
             ? new(uri.GetLeftPart(UriPartial.Authority), login) : null;
 
-    private static async Task<AccountAllUsers> ResolveAccountAsync(CopilotClient client, CopilotAccount account, CancellationToken ct)
+    /// <summary>An OAuth account the runtime can use. A null selection ID stands for the runtime's signed-in account.</summary>
+    private sealed record ListedAccount(CopilotAccount Account, string? SelectionId, bool SignedIn = false);
+
+    private static async Task<IReadOnlyList<ListedAccount>> ListAccountsAsync(CopilotClient client, CancellationToken ct)
     {
         await client.StartAsync(ct);
-        var matches = (await client.Rpc.Account.GetAllUsersAsync(ct))
-            .Where(entry => Identity(entry) is { } identity && account.Matches(identity)).ToArray();
-        if (matches.Length != 1 || string.IsNullOrWhiteSpace(matches[0].SelectionId)) throw new CopilotSignInRequiredException();
+        IList<AccountAllUsers> entries;
+        try { entries = await client.Rpc.Account.GetAllUsersAsync(ct); }
+        // The runtime lists GitHub CLI logins without the token the SDK requires, and that one entry makes the
+        // whole list unreadable. Fall back to the signed-in OAuth account, the one models.list uses by default.
+        catch (System.Text.Json.JsonException)
+        {
+            var status = await client.GetAuthStatusAsync(ct);
+            return status is { IsAuthenticated: true, AuthType: "user" } && Identity(status.Host, status.Login) is { } signedIn
+                ? [new(signedIn, null, SignedIn: true)] : [];
+        }
+        return entries.Select(entry => entry.AuthInfo is AuthInfoUser user && Identity(user.Host, user.Login) is { } identity
+            ? new ListedAccount(identity, entry.SelectionId) : null).OfType<ListedAccount>().ToArray();
+    }
+
+    private static async Task<ListedAccount> ResolveAccountAsync(CopilotClient client, CopilotAccount account, CancellationToken ct)
+    {
+        var matches = (await ListAccountsAsync(client, ct)).Where(entry => account.Matches(entry.Account)).ToArray();
+        if (matches.Length != 1 || (!matches[0].SignedIn && string.IsNullOrWhiteSpace(matches[0].SelectionId)))
+            throw new CopilotSignInRequiredException();
         return matches[0];
     }
 
-    private static async Task<IReadOnlyList<PluginModelInfo>> ListModelsAsync(CopilotClient client, string selectionId, CancellationToken ct) =>
+    private static async Task<IReadOnlyList<PluginModelInfo>> ListModelsAsync(CopilotClient client, string? selectionId, CancellationToken ct) =>
         (await client.Rpc.Models.ListAsync(selectionId: selectionId, cancellationToken: ct)).Models
             .Where(m => !string.IsNullOrWhiteSpace(m.Id) &&
                 (m.Policy is null || m.Policy.State == ModelPolicyState.Enabled))
