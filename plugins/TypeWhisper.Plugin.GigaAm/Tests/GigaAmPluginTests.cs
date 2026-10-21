@@ -84,8 +84,10 @@ public sealed class GigaAmPluginTests : IDisposable
         var files = ModelBytes();
         using var server = new FileServer(files);
         var definitions = Definitions(files).Select(file => file.Name == GigaAmModelFiles.Joint ? file with { Sha256 = new string('0', 64) } : file).ToArray();
-        using var plugin = new GigaAmPlugin(new HttpClient(server, disposeHandler: false), (_, _) => new FakeRecognizer(_ => ""),
-            new GigaAmModelAssets(new HttpClient(server, disposeHandler: false), FixtureUrl, definitions, _ => null));
+        // The plugin disposes the client it shares with its assets.
+        var http = new HttpClient(server, disposeHandler: false);
+        using var plugin = new GigaAmPlugin(http, (_, _) => new FakeRecognizer(_ => ""),
+            new GigaAmModelAssets(http, FixtureUrl, definitions, _ => null));
         await plugin.ActivateAsync(Host());
 
         await Assert.ThrowsAsync<InvalidDataException>(() => plugin.DownloadModelAsync(GigaAmPlugin.ModelId, null, default));
@@ -116,8 +118,9 @@ public sealed class GigaAmPluginTests : IDisposable
     {
         var files = ModelBytes();
         using var server = new FileServer(files);
-        using var plugin = new GigaAmPlugin(new HttpClient(server, disposeHandler: false), (_, _) => new FakeRecognizer(_ => ""),
-            new GigaAmModelAssets(new HttpClient(server, disposeHandler: false), FixtureUrl, Definitions(files), _ => 1024));
+        var http = new HttpClient(server, disposeHandler: false);
+        using var plugin = new GigaAmPlugin(http, (_, _) => new FakeRecognizer(_ => ""),
+            new GigaAmModelAssets(http, FixtureUrl, Definitions(files), _ => 1024));
         await plugin.ActivateAsync(Host());
 
         await Assert.ThrowsAsync<InsufficientModelStorageException>(() => plugin.DownloadModelAsync(GigaAmPlugin.ModelId, null, default));
