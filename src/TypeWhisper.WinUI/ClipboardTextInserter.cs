@@ -16,7 +16,7 @@ internal sealed class ClipboardTextInserter(IntPtr owner) : IDisposable
     /// <summary>Returns once Ctrl+V was sent, or with <paramref name="submit"/> once Enter followed it.
     /// The clipboard stays gated until <see cref="Restored"/> completes.</summary>
     internal async Task<ClipboardInsertion> InsertAsync(string text, IntPtr target, Func<bool>? verifyField = null, Func<Task<bool>>? verifyFieldAsync = null,
-        bool submit = false, bool preserveClipboard = true)
+        bool submit = false, Func<bool>? preserveClipboard = null)
     {
         var dictation = AppDiagnostics.CurrentDictation;
         await TransactionGate.WaitAsync();

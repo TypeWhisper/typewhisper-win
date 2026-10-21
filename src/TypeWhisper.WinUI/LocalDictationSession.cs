@@ -1175,7 +1175,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                         (!_outputAtStart.RestrictedBy(OutputPreferences.Current).LockPasteToFocusedField || _originalField?.RecentlyVerified == true),
                         async () => !_outputAtStart.RestrictedBy(OutputPreferences.Current).LockPasteToFocusedField ||
                             (_originalField is not null && await _originalField.IsCurrentAsync(_operationCancellation.Token)), submit,
-                        _outputAtStart.RestrictedBy(OutputPreferences.Current).PreserveClipboard);
+                        () => _outputAtStart.RestrictedBy(OutputPreferences.Current).PreserveClipboard);
                     var inserted = insertion.Inserted;
                     submitSkipped = inserted && submit && !insertion.Submitted;
                     if (inserted && !_disposed && !_operationCancellation.Token.IsCancellationRequested && record.Status == TranscriptionRecordStatus.Succeeded)

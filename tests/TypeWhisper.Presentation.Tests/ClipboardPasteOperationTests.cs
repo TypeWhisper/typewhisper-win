@@ -50,11 +50,26 @@ public class ClipboardPasteOperationTests
     public async Task WithoutPreservingTheClipboardKeepsTheTextAfterThePaste()
     {
         var platform = new Fake();
-        var result = await ClipboardPasteOperation.RunAsync(platform, "text", submit: true, preserveClipboard: false);
+        var result = await ClipboardPasteOperation.RunAsync(platform, "text", submit: true, preserveClipboard: () => false);
         Assert.True(result.Inserted);
         await result.Restored;
         Assert.Equal("text", platform.Kept);
         Assert.Equal(new[] { "capture", "submit-prepare", "paste", "submit-wait", "enter", "wait", "keep", "dispose" }, platform.Calls);
+    }
+
+    [Fact]
+    public async Task TurningPreservationOnDuringThePasteStillRestoresTheClipboard()
+    {
+        var consumed = new TaskCompletionSource();
+        var platform = new Fake { PendingWait = consumed };
+        var preserve = false;
+        var result = await ClipboardPasteOperation.RunAsync(platform, "text", preserveClipboard: () => preserve);
+        Assert.True(result.Inserted);
+        preserve = true;
+        consumed.SetResult();
+        await result.Restored;
+        Assert.Contains("restore", platform.Calls);
+        Assert.DoesNotContain("keep", platform.Calls);
     }
 
     [Theory]
@@ -63,7 +78,7 @@ public class ClipboardPasteOperationTests
     public async Task UnsentPasteRestoresTheClipboardEvenWithoutPreserving(uint sent)
     {
         var platform = new Fake { Sent = sent };
-        var result = await ClipboardPasteOperation.RunAsync(platform, "text", preserveClipboard: false);
+        var result = await ClipboardPasteOperation.RunAsync(platform, "text", preserveClipboard: () => false);
         Assert.False(result.Inserted);
         Assert.Contains("restore", platform.Calls);
         Assert.DoesNotContain("keep", platform.Calls);
