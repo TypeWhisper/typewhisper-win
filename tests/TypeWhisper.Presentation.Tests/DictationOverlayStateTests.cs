@@ -103,4 +103,13 @@ public sealed class DictationOverlayStateTests
         Assert.False(state.ShowsCancelWarning);
         Assert.Equal("COPIED", state.Label);
     }
+
+    [Fact]
+    public void AChosenCopyIsACompletedDictationLabelledCopied()
+    {
+        var chosen = new DictationOverlayState(DictationPhase.Completed, TimeSpan.Zero, "Copied to clipboard", "Notepad", CopyChosen: true);
+        Assert.Equal("COPIED", chosen.Label);
+        Assert.Equal("DONE", (chosen with { CopyChosen = false }).Label);
+        Assert.True(chosen.ShouldShowTranscript(OverlayMode.Standard, true, false));
+    }
 }

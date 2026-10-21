@@ -216,9 +216,11 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         _showModelLoadingForDictation = true;
         Changed?.Invoke();
     }
+    // Set with the Completed phase when Copy to clipboard was chosen, cleared by any other phase.
+    private bool _copyChosen;
     internal DictationOverlayState OverlayState => new(
         DictationOverlayState.VisiblePhase(_phase, _showModelLoadingForDictation, _earlyCapture, _earlyStopSamples is not null),
-        _audio.IsRecording ? _audio.RecordingDuration : _lastDuration, Status, _targetApp, _targetProcessId, RecordingModePreferences.Current, CancelWarning, Cancelled);
+        _audio.IsRecording ? _audio.RecordingDuration : _lastDuration, Status, _targetApp, _targetProcessId, RecordingModePreferences.Current, CancelWarning, Cancelled, _copyChosen);
     internal string Status { get; private set; } = Loc.T("Loading local transcription plugin…");
     internal const string DefaultShortcut = "Ctrl+Shift";
     internal string Shortcut { get; set; } = DefaultShortcut;
@@ -1174,7 +1176,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                         _outputAtStart.RestrictedBy(OutputPreferences.Current).AutoPaste &&
                         (!_outputAtStart.RestrictedBy(OutputPreferences.Current).LockPasteToFocusedField || _originalField?.RecentlyVerified == true),
                         async () => !_outputAtStart.RestrictedBy(OutputPreferences.Current).LockPasteToFocusedField ||
-                            (_originalField is not null && await _originalField.IsCurrentAsync(_operationCancellation.Token)), submit);
+                            (_originalField is not null && await _originalField.IsCurrentAsync(_operationCancellation.Token)), submit,
+                        () => _outputAtStart.RestrictedBy(OutputPreferences.Current).PreserveClipboard);
                     var inserted = insertion.Inserted;
                     submitSkipped = inserted && submit && !insertion.Submitted;
                     if (inserted && !_disposed && !_operationCancellation.Token.IsCancellationRequested && record.Status == TranscriptionRecordStatus.Succeeded)
@@ -1183,7 +1186,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 }, _operationCancellation.Token, samples, 16000,
                 _reviewAfterTargetChange || string.IsNullOrWhiteSpace(_workflowAtStart?.TargetActionPluginId) ? null : ct => ExecuteWorkflowActionAsync(
                     _workflowActionAtStart, text, new TypeWhisper.PluginSDK.Models.ActionContext(record.AppName, record.AppProcessName,
-                        record.AppUrl, record.Language, rawText), ct));
+                        record.AppUrl, record.Language, rawText), ct),
+                () => ClipboardText.TrySet(record.FinalText));
             if (_reviewAfterTargetChange && outcome.ReviewReason == DictationReviewReason.AutomaticPasteDisabled)
                 outcome = outcome with { Message = Loc.T("The window changed while the model was loading, so nothing was inserted. Copy the text, then paste it where you want it.") };
             preserveRecovery = outcome.Failed || record.Status != TranscriptionRecordStatus.Succeeded;
@@ -1200,6 +1204,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             var message = !pasteFailed ? outcome.Message : outcome.CopiedToClipboard
                 ? Loc.T("Not inserted. The text is on the clipboard.") : Loc.T("Not inserted. Copy the text from the review window.");
             if (submitSkipped) message += " · " + Loc.T("Enter was not pressed.");
+            _copyChosen = !pasteFailed && !outcome.NeedsReview && outcome.CopiedToClipboard;
             SetStatus(snippetError is null ? message : message + " · " + snippetError,
                 pasteFailed ? outcome.CopiedToClipboard ? DictationPhase.Copied : DictationPhase.Error
                     : outcome.NeedsReview ? DictationPhase.Idle : DictationPhase.Completed);
@@ -1297,6 +1302,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         if (phase != DictationPhase.LoadingModel) _showModelLoadingForDictation = false;
         Status = status;
         _phase = phase ?? (_audio.IsRecording ? DictationPhase.Recording : DictationPhase.Idle);
+        if (_phase != DictationPhase.Completed) _copyChosen = false;
         Changed?.Invoke();
     }
 

@@ -18,6 +18,9 @@ internal interface IClipboardPastePlatform
     /// <summary>Sends Enter down and up, releasing it after a partial send; returns the number of events sent.</summary>
     uint SendSubmit();
     Task RestoreAsync(IDisposable lease);
+    /// <summary>Leaves <paramref name="text"/> on the clipboard as ordinary text instead of restoring it. Does nothing when
+    /// the clipboard changed since the paste.</summary>
+    Task KeepAsync(IDisposable lease, string text);
 }
 
 /// <summary>Result of a paste; <paramref name="Restored"/> completes once the previous clipboard was restored.
@@ -29,9 +32,11 @@ internal static class ClipboardPasteOperation
     /// <summary>
     /// Returns as soon as Ctrl+V was sent, or with <paramref name="submit"/> once Enter followed it. Only a complete
     /// paste defers the restore to <see cref="ClipboardPasteResult.Restored"/>; rejected, partial and failed pastes
-    /// restore before returning.
+    /// restore before returning. When <paramref name="preserveClipboard"/> returns false at the deferred restore, a
+    /// complete paste leaves the text on the clipboard instead. It is read only then, so a later change still applies.
     /// </summary>
-    internal static async Task<ClipboardPasteResult> RunAsync(IClipboardPastePlatform platform, string text, bool submit = false)
+    internal static async Task<ClipboardPasteResult> RunAsync(IClipboardPastePlatform platform, string text, bool submit = false,
+        Func<bool>? preserveClipboard = null)
     {
         if (!await platform.VerifyFieldAsync() || !platform.CanPaste)
             return new(false, Task.CompletedTask);
@@ -57,7 +62,7 @@ internal static class ClipboardPasteOperation
         }
         var submitted = submit ? SubmitAsync(platform) : null;
         // The clipboard keeps the text until Enter was decided, so a slow target still pastes the dictation.
-        var restored = RestoreAsync(platform, lease, sent, submitted);
+        var restored = RestoreAsync(platform, lease, sent, submitted, preserveClipboard is null ? null : text, preserveClipboard);
         return new(true, restored, submitted is not null && await submitted);
     }
 
@@ -74,7 +79,15 @@ internal static class ClipboardPasteOperation
         catch (Exception ex) when (ex is not OutOfMemoryException) { return false; }
     }
 
-    private static async Task RestoreAsync(IClipboardPastePlatform platform, IDisposable lease, uint sent, Task<bool>? submitted)
+    // Restoring is the protective choice, so an unreadable preference keeps the previous clipboard.
+    private static bool Preserves(Func<bool>? preserve)
+    {
+        try { return preserve?.Invoke() != false; }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return true; }
+    }
+
+    private static async Task RestoreAsync(IClipboardPastePlatform platform, IDisposable lease, uint sent, Task<bool>? submitted,
+        string? keep = null, Func<bool>? preserve = null)
     {
         using (lease)
         {
@@ -84,7 +97,11 @@ internal static class ClipboardPasteOperation
                 if (sent > 0) await platform.WaitForPasteAsync();
                 if (submitted is not null) await submitted;
             }
-            finally { await platform.RestoreAsync(lease); }
+            finally
+            {
+                if (keep is null || Preserves(preserve)) await platform.RestoreAsync(lease);
+                else await platform.KeepAsync(lease, keep);
+            }
         }
     }
 }

@@ -6,7 +6,7 @@ manual next step. The window does not require an approval to finish transcriptio
 
 | Heading | Why it appears | Next step |
 | --- | --- | --- |
-| Your dictation | Automatic insertion is disabled by the effective output preferences. | Copy the text and paste it into the desired field. |
+| Your dictation | **After recording** is set to **Review first**, or automatic insertion was turned off while dictating. | Copy the text and paste it into the desired field. |
 | Text could not be inserted | Automatic insertion could not complete, for example because the target could not be restored or the clipboard was unavailable. | Check the target field, copy the text and paste any missing text. |
 | Text processing did not finish | Speech recognition completed, but a workflow or text processor failed. | Check the retained text before copying it; it may lack the intended transformation. |
 | Workflow action needs attention | The configured destination did not confirm successful delivery. | Read the reported outcome and check the destination before trying again. |
@@ -14,6 +14,23 @@ manual next step. The window does not require an approval to finish transcriptio
 The window does not infer the exact native insertion failure from a generic
 failure result. In particular, a failed delivery does not prove that no text
 reached the target. Check the field to avoid inserting duplicates.
+
+## Clipboard
+
+With **After recording** set to **Copy to clipboard**, TypeWhisper copies the
+finished text instead of inserting it, and the overlay confirms the copy.
+No result window opens. If the clipboard cannot be written, for example because
+another app holds it, the *Your dictation* window opens instead. Processing and
+workflow action failures still open their result window.
+
+**Preserve clipboard content** (on by default) restores your previous clipboard
+after TypeWhisper pastes. Turn it off to keep the transcribed text on the
+clipboard after every insertion, so you can paste it again with Ctrl+V when no
+text field had focus. The kept text appears in the Windows clipboard history.
+The setting also applies to pasting the last dictation and to inserting from the
+workflow palette. When a dictation paste is blocked or fails, TypeWhisper leaves
+the text on the clipboard regardless of this setting, as long as the clipboard
+is available.
 
 ## Copying and closing
 

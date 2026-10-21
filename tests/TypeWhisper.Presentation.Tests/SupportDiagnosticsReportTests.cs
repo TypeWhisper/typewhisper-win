@@ -50,7 +50,7 @@ public sealed class SupportDiagnosticsReportTests
         Assert.Equal(2, policy.Issues.Count(item => item.Key == "[omitted]" && item.Message.Contains("[omitted]")));
 
         var json = (Empty() with { Policy = policy }).ToJson();
-        Assert.Contains("\"schemaVersion\": 3", json);
+        Assert.Contains("\"schemaVersion\": 4", json);
         Assert.Contains("\"policy\"", json);
         Assert.DoesNotContain("private.bin", json);
         Assert.DoesNotContain("not an id", json);
@@ -225,7 +225,7 @@ public sealed class SupportDiagnosticsReportTests
             var json = File.ReadAllText(destination);
             Assert.DoesNotContain("private", json, StringComparison.OrdinalIgnoreCase);
             using var document = JsonDocument.Parse(json);
-            Assert.Equal(3, document.RootElement.GetProperty("schemaVersion").GetInt32());
+            Assert.Equal(4, document.RootElement.GetProperty("schemaVersion").GetInt32());
             var entry = Assert.Single(document.RootElement.GetProperty("log").GetProperty("entries").EnumerateArray());
             Assert.Equal("sherpa-onnx", entry.GetProperty("data").GetProperty("engine").GetString());
             Assert.False(entry.TryGetProperty("error", out _));

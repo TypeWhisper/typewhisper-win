@@ -16,14 +16,14 @@ internal sealed class ClipboardTextInserter(IntPtr owner) : IDisposable
     /// <summary>Returns once Ctrl+V was sent, or with <paramref name="submit"/> once Enter followed it.
     /// The clipboard stays gated until <see cref="Restored"/> completes.</summary>
     internal async Task<ClipboardInsertion> InsertAsync(string text, IntPtr target, Func<bool>? verifyField = null, Func<Task<bool>>? verifyFieldAsync = null,
-        bool submit = false)
+        bool submit = false, Func<bool>? preserveClipboard = null)
     {
         var dictation = AppDiagnostics.CurrentDictation;
         await TransactionGate.WaitAsync();
         var releaseNow = true;
         try
         {
-            var result = await ClipboardPasteOperation.RunAsync(new Platform(_clipboard, target, verifyField, verifyFieldAsync), text, submit);
+            var result = await ClipboardPasteOperation.RunAsync(new Platform(_clipboard, target, verifyField, verifyFieldAsync), text, submit, preserveClipboard);
             AppDiagnostics.Write(result.Inserted ? "clipboard.paste.sent" : "clipboard.paste.rejected");
             if (result.Inserted && submit) AppDiagnostics.Write(result.Submitted ? "clipboard.submit.sent" : "clipboard.submit.skipped");
             _restored = ReleaseAfterRestoreAsync(result.Restored, dictation);
@@ -62,6 +62,8 @@ internal sealed class ClipboardTextInserter(IntPtr owner) : IDisposable
             return lease;
         }
         public Task RestoreAsync(IDisposable lease) => clipboard.RestoreAsync((IClipboardLease)lease, CancellationToken.None);
+        // Replaces the temporary text, which clipboard history skips, with ordinary text, so it also appears in Win+V.
+        public Task KeepAsync(IDisposable lease, string text) => clipboard.CommitTemporaryTextAsync((IClipboardLease)lease, text, CancellationToken.None);
         public Task WaitForPasteAsync() => Task.Delay(500);
         public async Task PrepareSubmitAsync() => _landing = await PasteLandingObserver.CaptureAsync(target);
         public void DiscardSubmit() { _landing?.Dispose(); _landing = null; }

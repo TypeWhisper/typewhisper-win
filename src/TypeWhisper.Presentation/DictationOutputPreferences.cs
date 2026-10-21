@@ -10,6 +10,10 @@ public sealed record DictationOutputPreferences
     public bool AutoPaste { get; init; } = true;
     /// <summary>Restore and verify the editor captured at recording start before inserting.</summary>
     public bool LockPasteToFocusedField { get; init; }
+    /// <summary>Without automatic insertion, copy the result to the clipboard instead of opening a review.</summary>
+    public bool CopyInsteadOfReview { get; init; }
+    /// <summary>Restore the previous clipboard after pasting; off leaves the inserted text on the clipboard.</summary>
+    public bool PreserveClipboard { get; init; } = true;
     /// <summary>Whether new results may be added to local history.</summary>
     public bool SaveToHistory { get; init; } = true;
 
@@ -23,6 +27,9 @@ public sealed record DictationOutputPreferences
     {
         AutoPaste = AutoPaste && current.AutoPaste,
         LockPasteToFocusedField = LockPasteToFocusedField || current.LockPasteToFocusedField,
+        CopyInsteadOfReview = CopyInsteadOfReview && current.CopyInsteadOfReview,
+        // Keeping the previous clipboard is the protective choice, so turning it on applies to work in progress.
+        PreserveClipboard = PreserveClipboard || current.PreserveClipboard,
         SaveToHistory = SaveToHistory && current.SaveToHistory,
         SaveHistoryAudio = SaveToHistory && current.SaveToHistory && SaveHistoryAudio && current.SaveHistoryAudio
     };
@@ -61,7 +68,9 @@ public sealed class DictationOutputPreferencesStore
             {
                 AutoPaste = paste.GetBoolean(), SaveToHistory = history.GetBoolean(),
                 LockPasteToFocusedField = root.TryGetProperty(nameof(DictationOutputPreferences.LockPasteToFocusedField), out var locked) && locked.GetBoolean(),
-                SaveHistoryAudio = root.TryGetProperty(nameof(DictationOutputPreferences.SaveHistoryAudio), out var audio) && audio.GetBoolean()
+                SaveHistoryAudio = root.TryGetProperty(nameof(DictationOutputPreferences.SaveHistoryAudio), out var audio) && audio.GetBoolean(),
+                CopyInsteadOfReview = root.TryGetProperty(nameof(DictationOutputPreferences.CopyInsteadOfReview), out var copy) && copy.GetBoolean(),
+                PreserveClipboard = !root.TryGetProperty(nameof(DictationOutputPreferences.PreserveClipboard), out var preserve) || preserve.GetBoolean()
             };
         }
         catch (FileNotFoundException) { }

@@ -19,7 +19,7 @@ internal static partial class SettingsCatalog
         var model = Card(Loc.T("Model"), "Language", "LanguageHints", "TranscriptionTask", "TranslationTargetLanguage");
         // LiveDictationSettings fills this row with the provider and adds the model row below it.
         model.Children.Insert(1, new SettingsRow("DictationModel"));
-        Card(Loc.T("Recording"), "Mode", "AutoPaste", "LockPasteToFocusedField");
+        Card(Loc.T("Recording"), "Mode", "AutoPaste", "LockPasteToFocusedField", "PreserveClipboard");
         var text = Card(Loc.T("Text"), "TranscriptionNumberNormalizationEnabled", "ShortUtterancePunctuationEnabled",
             "EnglishOutputVariant", "GermanOutputVariant");
 
