@@ -216,9 +216,11 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         _showModelLoadingForDictation = true;
         Changed?.Invoke();
     }
+    // Set with the Copied phase when Copy to clipboard was chosen, cleared by any other phase.
+    private bool _copyChosen;
     internal DictationOverlayState OverlayState => new(
         DictationOverlayState.VisiblePhase(_phase, _showModelLoadingForDictation, _earlyCapture, _earlyStopSamples is not null),
-        _audio.IsRecording ? _audio.RecordingDuration : _lastDuration, Status, _targetApp, _targetProcessId, RecordingModePreferences.Current, CancelWarning, Cancelled);
+        _audio.IsRecording ? _audio.RecordingDuration : _lastDuration, Status, _targetApp, _targetProcessId, RecordingModePreferences.Current, CancelWarning, Cancelled, _copyChosen);
     internal string Status { get; private set; } = Loc.T("Loading local transcription plugin…");
     internal const string DefaultShortcut = "Ctrl+Shift";
     internal string Shortcut { get; set; } = DefaultShortcut;
@@ -1202,6 +1204,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             var message = !pasteFailed ? outcome.Message : outcome.CopiedToClipboard
                 ? Loc.T("Not inserted. The text is on the clipboard.") : Loc.T("Not inserted. Copy the text from the review window.");
             if (submitSkipped) message += " · " + Loc.T("Enter was not pressed.");
+            _copyChosen = !pasteFailed && !outcome.NeedsReview && outcome.CopiedToClipboard;
             SetStatus(snippetError is null ? message : message + " · " + snippetError,
                 pasteFailed ? outcome.CopiedToClipboard ? DictationPhase.Copied : DictationPhase.Error
                     : outcome.NeedsReview ? DictationPhase.Idle : outcome.CopiedToClipboard ? DictationPhase.Copied : DictationPhase.Completed);
@@ -1299,6 +1302,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         if (phase != DictationPhase.LoadingModel) _showModelLoadingForDictation = false;
         Status = status;
         _phase = phase ?? (_audio.IsRecording ? DictationPhase.Recording : DictationPhase.Idle);
+        if (_phase != DictationPhase.Copied) _copyChosen = false;
         Changed?.Invoke();
     }
 
