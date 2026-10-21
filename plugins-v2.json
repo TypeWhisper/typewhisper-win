@@ -278,6 +278,27 @@
       "locality": "local"
     },
     {
+      "id": "com.typewhisper.gigaam",
+      "name": "GigaAM",
+      "version": "1.0.0",
+      "minHostVersion": "1.1.6",
+      "author": "TypeWhisper",
+      "description": "Local Russian speech-to-text with GigaAM v3 by Sber. Adds punctuation and capitalization and runs on the CPU. Russian only.",
+      "categories": [
+        "transcription"
+      ],
+      "locality": "local",
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-gigaam-v1.0.0/com.typewhisper.gigaam-1.0.0-win-x64.zip",
+      "sha256": "c9caefb44493f90ae3fd5503a814e7ab595cf8ecf760a47c0549c180e0d91b6a",
+      "size": 6974224,
+      "platforms": [
+        "windows"
+      ],
+      "supportedArchitectures": [
+        "x64"
+      ]
+    },
+    {
       "id": "com.typewhisper.github-copilot",
       "name": "GitHub Copilot",
       "version": "1.1.6",
