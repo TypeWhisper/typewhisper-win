@@ -102,7 +102,7 @@ internal sealed class CopilotTransport : ICopilotTransport
             if (readEnvironment(name) is { } value) environment[name] = value;
         var runtimeDirectory = Path.Combine(Path.GetDirectoryName(typeof(CopilotTransport).Assembly.Location)!,
             "runtimes", System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier, "native");
-        var executable = Path.Combine(runtimeDirectory, OperatingSystem.IsWindows() ? "copilot-runtime.exe" : "copilot-runtime");
+        var executable = PhysicalPath(Path.Combine(runtimeDirectory, OperatingSystem.IsWindows() ? "copilot-runtime.exe" : "copilot-runtime"));
         return new CopilotClientOptions
         {
             // Empty mode disables the user's keychain. Keep login compatibility and explicitly
@@ -117,6 +117,31 @@ internal sealed class CopilotTransport : ICopilotTransport
             BuiltinPluginDirectories = []
         };
     }
+
+    /// <summary>Returns where a file is actually stored, or the path unchanged if that cannot be determined.</summary>
+    /// <remarks>
+    /// The Microsoft Store app redirects AppData into its package folder. The runtime starts from the
+    /// redirected path but then cannot load its own runtime.node from there, so it is started from the package folder.
+    /// </remarks>
+    internal static string PhysicalPath(string path)
+    {
+        if (!OperatingSystem.IsWindows()) return path;
+        try
+        {
+            using var file = File.OpenHandle(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            var buffer = new char[32768];
+            var length = GetFinalPathNameByHandleW(file, buffer, (uint)buffer.Length, 0);
+            if (length == 0 || length >= buffer.Length) return path;
+            var final = new string(buffer, 0, (int)length);
+            final = final.StartsWith(@"\\?\UNC\", StringComparison.Ordinal) ? @"\\" + final[8..]
+                : final.StartsWith(@"\\?\", StringComparison.Ordinal) ? final[4..] : final;
+            return File.Exists(final) ? final : path;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { return path; }
+    }
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
+    private static extern uint GetFinalPathNameByHandleW(Microsoft.Win32.SafeHandles.SafeFileHandle file, char[] buffer, uint length, uint flags);
 
     // Safety controls include experimental APIs; changes require review when upgrading the pinned SDK.
 #pragma warning disable GHCP001
