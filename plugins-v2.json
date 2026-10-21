@@ -301,7 +301,7 @@
     {
       "id": "com.typewhisper.github-copilot",
       "name": "GitHub Copilot",
-      "version": "1.1.6",
+      "version": "1.1.7",
       "minHostVersion": "1.1.2",
       "author": "TypeWhisper",
       "description": "Clean up, translate and rewrite workflow text using your own GitHub Copilot sign-in. Copilot plan limits and model availability apply.",
@@ -309,9 +309,9 @@
         "llm"
       ],
       "locality": "cloud",
-      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-github-copilot-v1.1.6/com.typewhisper.github-copilot-1.1.6-win-x64.zip",
-      "sha256": "0dba14835d2bd6dc02c9d96b617f81806cf3685dce2a85158dcf3f5d09339096",
-      "size": 46653359,
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-github-copilot-v1.1.7/com.typewhisper.github-copilot-1.1.7-win-x64.zip",
+      "sha256": "d821530096569c17e15b7e7b3da118821b8f1d317fe69cf0fc95abed6eeb7755",
+      "size": 46653763,
       "platforms": [
         "windows"
       ],
