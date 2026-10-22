@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Net;
@@ -217,6 +218,7 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
     private readonly int _maxDownloadAttempts;
     private readonly TimeSpan _downloadRetryDelay;
     private readonly Func<string, long?>? _availableBytes;
+    private readonly string _vcRuntimeDirectory;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private string? _huggingFaceToken;
 
@@ -227,7 +229,8 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
         TimeSpan? downloadInactivityTimeout = null,
         int maxDownloadAttempts = DefaultMaxDownloadAttempts,
         TimeSpan? downloadRetryDelay = null,
-        Func<string, long?>? availableBytes = null)
+        Func<string, long?>? availableBytes = null,
+        string? vcRuntimeDirectory = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(assetRoot);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(downloadChunkSizeBytes);
@@ -249,6 +252,7 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
         _maxDownloadAttempts = maxDownloadAttempts;
         _downloadRetryDelay = retryDelay;
         _availableBytes = availableBytes;
+        _vcRuntimeDirectory = vcRuntimeDirectory ?? DefaultVcRuntimeDirectory;
 
         if (!_httpClient.DefaultRequestHeaders.UserAgent.Any())
             _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("TypeWhisper-CohereTranscribe/1.0");
@@ -420,7 +424,8 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
                 && FindRuntimeExecutable(runtimeDirectory) is not null
                 && await VerifyRuntimeFilesAsync(runtimeDirectory, cancellationToken))
             {
-                if (!RuntimeFilesMatchMetadata(runtimeDirectory))
+                // Runtimes installed by 1.2.4 and earlier lack the Visual C++ files.
+                if (InstallVcRuntime(runtimeDirectory) || !RuntimeFilesMatchMetadata(runtimeDirectory))
                     await WriteRuntimeFilesAsync(runtimeDirectory, cancellationToken);
                 progress?.Report(new ArtifactTransferProgress(
                     package.Archive.SizeBytes,
@@ -472,6 +477,7 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
                         $"The verified CrispASR {package.Id} archive did not contain crispasr.exe.");
                 }
 
+                InstallVcRuntime(stagingDirectory);
                 await WriteRuntimeFilesAsync(stagingDirectory, cancellationToken);
                 File.WriteAllText(
                     GetRuntimeMarkerPath(stagingDirectory),
@@ -1009,6 +1015,61 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
                 "crispasr.exe",
                 SearchOption.AllDirectories).FirstOrDefault()
             : null;
+
+    // crispasr.exe imports these from the Visual C++ runtime, but the CrispASR archives do not ship them.
+    internal static readonly string[] VcRuntimeFileNames =
+        ["msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll", "vcomp140.dll"];
+
+    private static string DefaultVcRuntimeDirectory =>
+        Path.Join(
+            Path.GetDirectoryName(typeof(CohereLocalAssetManager).Assembly.Location) ?? AppContext.BaseDirectory,
+            "runtimes",
+            "win-x64");
+
+    /// <summary>
+    /// Copies the Visual C++ runtime that ships with the plugin next to crispasr.exe, so it also starts
+    /// on PCs without the redistributable (exit code 0xC0000135 otherwise). Windows searches the
+    /// executable's folder first. An existing file is replaced only by a newer version.
+    /// </summary>
+    /// <returns>Whether a file was added or replaced.</returns>
+    internal bool InstallVcRuntime(string runtimeDirectory)
+    {
+        var executable = FindRuntimeExecutable(runtimeDirectory);
+        if (executable is null || !Directory.Exists(_vcRuntimeDirectory))
+            return false;
+
+        var targetDirectory = Path.GetDirectoryName(executable)!;
+        var changed = false;
+        foreach (var fileName in VcRuntimeFileNames)
+        {
+            var source = Path.Join(_vcRuntimeDirectory, fileName);
+            if (!File.Exists(source))
+                continue;
+
+            var destination = Path.Join(targetDirectory, fileName);
+            if (File.Exists(destination) && GetFileVersion(destination) >= GetFileVersion(source))
+                continue;
+
+            try
+            {
+                File.Copy(source, destination, overwrite: true);
+                changed = true;
+            }
+            catch (Exception exception) when (
+                File.Exists(destination) && exception is IOException or UnauthorizedAccessException)
+            {
+                // A running CrispASR process can lock an older copy. It still works; retry on the next load.
+            }
+        }
+
+        return changed;
+    }
+
+    private static Version GetFileVersion(string path)
+    {
+        var info = FileVersionInfo.GetVersionInfo(path);
+        return new Version(info.FileMajorPart, info.FileMinorPart, info.FileBuildPart, info.FilePrivatePart);
+    }
 
     private static bool IsHuggingFaceDownload(string downloadUrl) =>
         Uri.TryCreate(downloadUrl, UriKind.Absolute, out var uri)

@@ -403,7 +403,7 @@ internal sealed class CrispAsrServer : ICrispAsrServer
                 if (IsPortUnavailable(new Uri(baseUrl).Port))
                     throw new ListenerCollisionException("The speech port was unavailable when the runtime tried to bind. Retry loading on another port.");
                 throw new InvalidOperationException(
-                    $"CrispASR exited during startup with code {process.ExitCode}.{GetOutputTail()}");
+                    $"CrispASR exited during startup with code {DescribeExitCode(process.ExitCode)}{GetOutputTail()}");
             }
 
             try
@@ -441,6 +441,16 @@ internal sealed class CrispAsrServer : ICrispAsrServer
     }
 
     private sealed class ListenerCollisionException(string message) : IOException(message);
+
+    private const int StatusDllNotFound = unchecked((int)0xC0000135);
+
+    internal static string DescribeExitCode(int exitCode)
+    {
+        var code = $"0x{exitCode:X8}.";
+        return exitCode == StatusDllNotFound
+            ? code + " Windows could not find a DLL that CrispASR needs, usually from the Microsoft Visual C++ Redistributable (x64)."
+            : code;
+    }
 
     private static bool IsPortUnavailable(int port)
     {
