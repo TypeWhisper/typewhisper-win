@@ -1063,15 +1063,23 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
                 olderCopy = comparison < 0;
             }
 
+            // Copy next to the target and swap it in with a rename, so a failure never leaves a partial file.
+            var incoming = destination + ".incoming";
             try
             {
-                File.Copy(source, destination, overwrite: true);
+                File.Copy(source, incoming, overwrite: true);
+                File.Move(incoming, destination, overwrite: true);
                 changed = true;
             }
-            catch (IOException) when (olderCopy && File.Exists(destination))
+            catch (Exception exception) when (
+                olderCopy && exception is IOException or UnauthorizedAccessException)
             {
-                // A running CrispASR process has the older copy loaded, so it works; replace it on the next load.
-                // A missing or damaged file must not be accepted, so those failures propagate.
+                // The older copy is untouched, typically because a running CrispASR process has it loaded.
+                // It still works; replace it on the next load. Missing or damaged files propagate the failure.
+            }
+            finally
+            {
+                TryDeleteFile(incoming);
             }
         }
 

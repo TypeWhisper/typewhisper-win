@@ -1600,7 +1600,11 @@ public sealed class CohereTranscribePluginTests
         var damaged = Path.Join(runtime, "msvcp140.dll");
         await File.WriteAllTextAsync(damaged, "damaged");
         using (new FileStream(damaged, FileMode.Open, FileAccess.Read, FileShare.Read))
-            Assert.ThrowsAny<IOException>(() => assets.InstallVcRuntime(runtime));
+        {
+            var error = Assert.ThrowsAny<Exception>(() => assets.InstallVcRuntime(runtime));
+            Assert.True(error is IOException or UnauthorizedAccessException, error.ToString());
+        }
+        Assert.Equal("damaged", await File.ReadAllTextAsync(damaged));
         Assert.True(assets.InstallVcRuntime(runtime));
 
         var systemRuntime = Path.Join(Environment.SystemDirectory, "vcruntime140.dll");
@@ -1610,6 +1614,15 @@ public sealed class CohereTranscribePluginTests
             await File.WriteAllTextAsync(Path.Join(runtime, "vcruntime140.dll"), "unversioned");
             Assert.True(assets.InstallVcRuntime(runtime));
             Assert.Equal(await File.ReadAllBytesAsync(systemRuntime), await File.ReadAllBytesAsync(Path.Join(runtime, "vcruntime140.dll")));
+
+            // An older copy in use stays intact until the next load; no partial or temporary file remains.
+            var inUse = Path.Join(runtime, "vcruntime140.dll");
+            await File.WriteAllTextAsync(inUse, "older");
+            using (new FileStream(inUse, FileMode.Open, FileAccess.Read, FileShare.Read))
+                Assert.False(assets.InstallVcRuntime(runtime));
+            Assert.Equal("older", await File.ReadAllTextAsync(inUse));
+            Assert.DoesNotContain(Directory.EnumerateFiles(runtime), path => path.EndsWith(".incoming", StringComparison.Ordinal));
+            Assert.True(assets.InstallVcRuntime(runtime));
 
             // A newer copy next to the executable is kept.
             File.Copy(systemRuntime, Path.Join(runtime, "vcruntime140_1.dll"), overwrite: true);
