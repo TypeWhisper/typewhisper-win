@@ -52,6 +52,7 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
                         Dispatch(_state.Key(altGr ? HybridHotkeyState.AltGrControl : (int)key.Key, down, now - InputEventTiming.Age(key.Time, now), _bindings, isRecording(), mode, paused?.Invoke() == true,
                             held => (NativeMethods.GetAsyncKeyState(held == HybridHotkeyState.AltGrControl ? 0xA2 : held) & 0x8000) != 0,
                             stale: InputEventTiming.IsStale(key.Time, now)));
+                        LogDroppedKeys(key.Time);
                     }
                 }
             }
@@ -60,6 +61,15 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
         _hook = NativeMethods.SetWindowsHookEx(NativeMethods.WH_KEYBOARD_LL, _callback, NativeMethods.GetModuleHandle(null), 0);
         if (_hook == IntPtr.Zero) { _regular.Dispose(); throw new Win32Exception(Marshal.GetLastWin32Error()); }
     }
+    // Every shortcut hook sees the same event, so a lost key-up is logged once per event.
+    private static uint _lastDroppedEvent;
+    private void LogDroppedKeys(uint eventTime)
+    {
+        if (_state.DroppedKeys.Count == 0 || eventTime == _lastDroppedEvent) return;
+        _lastDroppedEvent = eventTime;
+        foreach (var key in _state.DroppedKeys) AppDiagnostics.Write("shortcut.lost-release kind=" + ShortcutKeys.DiagnosticKind(key));
+    }
+
     internal void ObservePause() => _state.Suspend();
     // Read by the Enter hook, which runs on the same UI thread.
     internal bool HoldsKey(int key) => !_disposed && !_interrupted && _state.Holds(key);

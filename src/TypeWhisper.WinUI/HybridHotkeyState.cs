@@ -10,7 +10,13 @@ internal sealed class HybridHotkeyState
     internal const long HoldMilliseconds = 300;
     // Stands in for the synthetic left Ctrl that AltGr sends; outside the virtual-key range.
     internal const int AltGrControl = 0x1A2;
+    // A held key that is not a modifier repeats while it is the newest key. Without any event for this
+    // long it was released and its key-up got lost, e.g. swallowed by another app's keyboard hook.
+    // Windows can then still report it as down, which would block every shortcut until it is pressed again.
+    internal const long LostReleaseMilliseconds = 1500;
     private readonly HashSet<int> _down = [];
+    private readonly Dictionary<int, long> _lastEvent = [];
+    private readonly List<int> _dropped = [];
     private string? _armed;
     private long _pressedAt;
     private bool _startedByGesture;
@@ -20,6 +26,7 @@ internal sealed class HybridHotkeyState
     internal void ResetAfterInterruption(IEnumerable<int> heldKeys)
     {
         _down.Clear();
+        _lastEvent.Clear();
         _down.UnionWith(heldKeys);
         _armed = null; _startedByGesture = false; _mode = null;
         _blocked = _down.Count > 0;
@@ -34,9 +41,12 @@ internal sealed class HybridHotkeyState
         RecordingMode mode = RecordingMode.Hybrid, bool paused = false, Func<int, bool>? held = null, bool stale = false)
     {
         HybridHotkeyAction? action = null;
+        _dropped.Clear();
+        foreach (var pressed in _down) _lastEvent.TryAdd(pressed, now);
         // Windows skips a low-level hook that misses its timeout, e.g. while capture starts on
         // the UI thread. A lost key-up would otherwise block the next press of the shortcut.
-        if (held is not null && _down.RemoveWhere(pressed => !held(pressed)) > 0)
+        // Keys of a running gesture stay, so a held shortcut is never ended by this.
+        if (held is not null && _down.RemoveWhere(pressed => !held(pressed) || LostRelease(pressed, key, now)) > 0)
         {
             if (_armed is not null && Chord() != _armed)
             {
@@ -54,8 +64,11 @@ internal sealed class HybridHotkeyState
             _armed = null; _startedByGesture = false; _blocked = _down.Count > 0;
         }
         _mode = mode;
+        if (_lastEvent.Count > _down.Count)
+            foreach (var released in _lastEvent.Keys.Where(pressed => !_down.Contains(pressed)).ToArray()) _lastEvent.Remove(released);
+        if (down) _lastEvent[key] = now;
         if (down && !_down.Add(key)) return action;
-        if (!down) _down.Remove(key);
+        if (!down) { _down.Remove(key); _lastEvent.Remove(key); }
         // Delayed input cannot start capture, including the remaining keys of that gesture.
         // Terminal actions still stop an existing recording after the UI recovers.
         if (paused || stale && !recording) { Suspend(); return null; }
@@ -87,6 +100,16 @@ internal sealed class HybridHotkeyState
     {
         0xA0 or 0xA1 => 0x10, 0xA2 or 0xA3 => 0x11, 0xA4 or 0xA5 => 0x12, _ => -1
     }) || key == 0xA2 && _down.Contains(AltGrControl));
+
+    /// <summary>Keys that the last event dropped as released because their key-up was lost.</summary>
+    internal IReadOnlyList<int> DroppedKeys => _dropped;
+
+    private bool LostRelease(int pressed, int key, long now)
+    {
+        if (_armed is not null || pressed == key || IsModifier(pressed) || now - _lastEvent[pressed] <= LostReleaseMilliseconds) return false;
+        _dropped.Add(pressed);
+        return true;
+    }
 
     private static bool IsModifier(int key) => key == AltGrControl || ShortcutKeys.IsModifier(key);
     // With a main key AltGr is Ctrl+Alt, as for RegisterHotKey. Without one it counts as neither,
