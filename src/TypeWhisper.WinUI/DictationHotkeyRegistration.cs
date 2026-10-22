@@ -52,7 +52,7 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
                         Dispatch(_state.Key(altGr ? HybridHotkeyState.AltGrControl : (int)key.Key, down, now - InputEventTiming.Age(key.Time, now), _bindings, isRecording(), mode, paused?.Invoke() == true,
                             held => (NativeMethods.GetAsyncKeyState(held == HybridHotkeyState.AltGrControl ? 0xA2 : held) & 0x8000) != 0,
                             stale: InputEventTiming.IsStale(key.Time, now)));
-                        LogDroppedKeys(key.Time);
+                        LogDroppedKeys(_state.DroppedKeys, key.Time);
                     }
                 }
             }
@@ -65,11 +65,11 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
     // All hooks run on the UI thread.
     private static uint _droppedEvent;
     private static readonly HashSet<int> _droppedLogged = [];
-    private void LogDroppedKeys(uint eventTime)
+    private static void LogDroppedKeys(IReadOnlyList<int> dropped, uint eventTime)
     {
-        if (_state.DroppedKeys.Count == 0) return;
+        if (dropped.Count == 0) return;
         if (eventTime != _droppedEvent) { _droppedEvent = eventTime; _droppedLogged.Clear(); }
-        foreach (var key in _state.DroppedKeys)
+        foreach (var key in dropped)
             if (_droppedLogged.Add(key)) AppDiagnostics.Write("shortcut.lost-release kind=" + ShortcutKeys.DiagnosticKind(key));
     }
 
