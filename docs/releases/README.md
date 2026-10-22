@@ -3,6 +3,7 @@
 ## Current release-note sources
 
 - [Windows 1.2 Daily release notes](1.2-daily.md): introduction of every Daily from `main`.
+- [Windows 1.2.1 release notes](v1.2.1.md): text of the 1.2.1 Stable release. The Store texts for the release are in [store/v1.2.1](store/v1.2.1).
 - [Windows 1.2.0 release notes](v1.2.0.md): text of the Stable release. The Store texts for the release are in [store/v1.2.0](store/v1.2.0).
 - [Windows 1.2.0-rc.1 release notes](v1.2.0-rc.1.md): text of the first 1.2 release candidate. Notes for later 1.2
   releases are added on `release/1.2`, which publishes them.

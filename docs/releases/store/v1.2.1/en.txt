@@ -1,0 +1,4 @@
+TypeWhisper 1.2.1 fixes two issues in 1.2.
+
+- A shortcut without Ctrl, Alt or Shift can again use Insert, Pause or a media, volume or browser key. Until now only F1 to F24 worked alone.
+- The Hugging Face token field of Cohere Transcribe (Local) and Supertonic TTS shows "(optional)" only once.
