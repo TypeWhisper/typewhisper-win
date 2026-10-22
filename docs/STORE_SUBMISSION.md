@@ -118,7 +118,7 @@ What the listing shows comes from the release branch at the Stable commit:
 
 Screenshots must be PNG files from 1366×768 up to 3840×2160 (the website's 1.5x captures are 1860×1200). To show new screenshots, merge them into the website first, then move `screenshotRevision` to that commit on the release branch before the Stable release.
 
-If the plan stops after the release was published, for example because Partner Center has a listing language without notes, fix the files on the release branch and run **Store Stable** on `main` with the Candidate run ID and that commit as **listing_revision**. The plan accepts only a commit of the same release branch at or after the release commit; the package is still built from the release commit.
+If the plan stops after the release was published, for example because Partner Center has a listing language without notes, fix the files on the release branch and run **Store Stable** on `main` with the Candidate run ID and that commit's full SHA as **listing_revision**. The plan accepts only a commit of the same release branch at or after the release commit; the package is still built from the release commit.
 
 One-time setup: create the environment **`store-stable`** restricted to `main` with the release owner as required reviewer, before the workflow first runs; a job that names a missing environment would create it without protection. The Partner Center credentials stay in `store-beta`.
 

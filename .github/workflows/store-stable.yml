@@ -20,7 +20,7 @@ on:
         type: string
         default: ''
       listing_revision:
-        description: "Optional: later commit of the release branch with fixed Store texts or screenshots (empty: the release commit)"
+        description: "Optional: full commit SHA on the release branch, at or after the release, with fixed Store texts or screenshots (empty: the release commit)"
         type: string
         default: ''
       dry_run:
