@@ -19,6 +19,10 @@ on:
         description: "Inspection only: the release line to allocate a Store version for, e.g. 1.2"
         type: string
         default: ''
+      listing_revision:
+        description: "Optional: full commit SHA on the release branch, at or after the release, with fixed Store texts or screenshots (empty: the release commit)"
+        type: string
+        default: ''
       dry_run:
         description: "Inspect Store state and plan only; do not build or submit"
         type: boolean
@@ -79,10 +83,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           CANDIDATE_RUN_ID: ${{ github.event.workflow_run.id || inputs.candidate_run_id }}
+          LISTING_REVISION: ${{ inputs.listing_revision }}
           PARTNER_CENTER_TENANT_ID: ${{ secrets.PARTNER_CENTER_TENANT_ID }}
           PARTNER_CENTER_CLIENT_ID: ${{ secrets.PARTNER_CENTER_CLIENT_ID }}
           PARTNER_CENTER_CLIENT_SECRET: ${{ secrets.PARTNER_CENTER_CLIENT_SECRET }}
-        run: python eng/store_stable_release.py plan --candidate-run "$CANDIDATE_RUN_ID"
+        run: python eng/store_stable_release.py plan --candidate-run "$CANDIDATE_RUN_ID" --listing-revision "$LISTING_REVISION"
       - uses: actions/upload-artifact@v7
         with:
           name: store-stable-plan

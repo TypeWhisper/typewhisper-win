@@ -40,6 +40,18 @@
         { "path": "public/screenshots/en/windows/whats-new.png", "caption": "アップデート後の新機能" }
       ]
     },
+    "ru": {
+      "screenshots": [
+        { "path": "public/screenshots/en/windows/dashboard.png", "caption": "Панель" },
+        { "path": "public/screenshots/en/windows/dictation.png", "caption": "Диктовка" },
+        { "path": "public/screenshots/en/windows/managed-settings.png", "caption": "Управляемые настройки для организаций" },
+        { "path": "public/screenshots/en/windows/workflows.png", "caption": "Рабочие процессы" },
+        { "path": "public/screenshots/en/windows/file-transcription.png", "caption": "Расшифровка файлов" },
+        { "path": "public/screenshots/en/windows/integrations-marketplace.png", "caption": "Интеграции" },
+        { "path": "public/screenshots/en/windows/recorder.png", "caption": "Запись аудио" },
+        { "path": "public/screenshots/en/windows/whats-new.png", "caption": "Что нового после обновления" }
+      ]
+    },
     "zh": {
       "screenshots": [
         { "path": "public/screenshots/en/windows/dashboard.png", "caption": "主页" },

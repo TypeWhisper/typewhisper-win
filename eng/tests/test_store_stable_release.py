@@ -15,6 +15,9 @@ import store_stable_release as stable
 
 SOURCE = "c" * 40
 SITE = "d" * 40
+EARLIER = "b" * 40  # release branch commit before the release
+LATER = "a" * 40  # release branch commit after the release
+ELSEWHERE = "e" * 40  # commit on another branch
 IDENTITIES = stable.products()
 STABLE = "applications/" + IDENTITIES["stable"]["storeProductId"]
 BETA = "applications/" + IDENTITIES["beta"]["storeProductId"]
@@ -44,17 +47,24 @@ class FakeGitHub:
         self.files = {stable.LISTING_PATH: json.dumps(LISTING, ensure_ascii=False)}
         for language in LISTING["listings"]:
             self.files[f"{stable.NOTES_ROOT}/v1.2.0/{language}.txt"] = f"TypeWhisper 1.2 ({language})\r\n\r\n- Managed settings."
+        # release/1.2 in order; files of commits other than SOURCE.
+        self.branch = [EARLIER, SOURCE, LATER]
+        self.revisions = {}
 
     def stable_release(self, run_id):
         if self.source is None:
             return None
         return {"source": self.source, "branch": "release/1.2", "version": self.version}
 
+    def is_ancestor(self, older, newer):
+        head = self.branch[-1] if newer == "release/1.2" else newer
+        return older in self.branch and head in self.branch and self.branch.index(older) <= self.branch.index(head)
+
     def text(self, path, ref):
-        assert ref == SOURCE
-        if path not in self.files:
+        files = self.files if ref == SOURCE else self.revisions[ref]
+        if path not in files:
             raise stable.ReleaseError(f"{path} is not a file at the release source.")
-        return self.files[path]
+        return files[path]
 
 
 class FakeSite:
@@ -206,6 +216,25 @@ class StoreStablePlanTests(unittest.TestCase):
         with self.assertRaisesRegex(stable.ReleaseError, "de.txt"):
             self.plan(FakeStore(), github)
 
+    def test_texts_fixed_after_the_release_come_from_a_later_commit_of_its_branch(self):
+        self.store.resources[STABLE + "/submissions/1"]["listings"]["ru-ru"] = listing("ru", "1.1")
+        with self.assertRaisesRegex(stable.ReleaseError, "ru-ru"):
+            self.plan()
+        config = copy.deepcopy(LISTING)
+        config["listings"]["ru"] = {"screenshots": [{"path": "public/screenshots/en/windows/dashboard.png", "caption": "Панель"}]}
+        self.github.revisions[LATER] = {**self.github.files, stable.LISTING_PATH: json.dumps(config, ensure_ascii=False),
+                                        f"{stable.NOTES_ROOT}/v1.2.0/ru.txt": "TypeWhisper 1.2 (ru)"}
+        plan = stable.make_plan(self.store, self.github, "456", IDENTITIES, self.site, listing_revision=LATER)
+        self.assertTrue(plan["publish"])
+        self.assertEqual((plan["sourceRevision"], plan["listingRevision"]), (SOURCE, LATER))
+        self.assertEqual(plan["listings"]["ru-ru"]["releaseNotes"], "TypeWhisper 1.2 (ru)")
+        self.assertEqual(self.plan(FakeStore())["listingRevision"], SOURCE)
+
+    def test_listing_revision_must_follow_the_release_commit_on_its_branch(self):
+        for revision in (EARLIER, ELSEWHERE, "release/1.2", "a" * 39):
+            with self.subTest(revision=revision), self.assertRaisesRegex(stable.ReleaseError, "listing revision"):
+                stable.make_plan(self.store, self.github, "456", IDENTITIES, self.site, listing_revision=revision)
+
     def test_listing_limits_are_enforced(self):
         def broken(change):
             github = FakeGitHub()
@@ -295,6 +324,15 @@ class StoreStableSubmitTests(unittest.TestCase):
         self.assertIn("Test the dictation shortcut.", body["notesForCertification"])
         self.assertNotIn("secret", self.receipt.read_text())
         self.assertFalse(any(path.startswith(BETA) or "/flights/" in path for method, path, _ in self.store.calls if method != "GET"))
+
+    def test_submission_rechecks_the_planned_listing_revision(self):
+        self.github.revisions[LATER] = {**self.github.files, f"{stable.NOTES_ROOT}/v1.2.0/en.txt": "TypeWhisper 1.2 (fixed)"}
+        self.plan = stable.make_plan(self.store, self.github, "456", IDENTITIES, self.site, listing_revision=LATER)
+        self.store.calls.clear()
+        self.submit()
+        body = next(body for method, path, body in self.store.calls if method == "PUT")
+        self.assertEqual(body["listings"]["en-us"]["baseListing"]["releaseNotes"], "TypeWhisper 1.2 (fixed)")
+        self.assertEqual(body["listings"]["de-de"]["baseListing"]["releaseNotes"], "TypeWhisper 1.2 (de)\n\n- Managed settings.")
 
     def test_screenshot_changed_after_planning_prevents_all_writes(self):
         self.site.images["public/screenshots/en/windows/workflows.png"] = png(salt=b"changed")
