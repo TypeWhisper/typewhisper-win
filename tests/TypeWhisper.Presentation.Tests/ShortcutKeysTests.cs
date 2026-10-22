@@ -150,6 +150,7 @@ public class ShortcutKeysTests
     [InlineData(0x20, "text")]
     [InlineData(0xBE, "text")]
     [InlineData(0x65, "text")]
+    [InlineData(0xE7, "text")]
     [InlineData(0xFF, "vk-FF")]
     [InlineData(0xAF, "vk-AF")]
     [InlineData(0x7C, "vk-7C")]

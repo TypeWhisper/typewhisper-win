@@ -434,4 +434,49 @@ public class HybridHotkeyStateTests
         Assert.Null(state.Key(0xA0, true, 5010, bindings, true, RecordingMode.Toggle, held: Held));
         Assert.Equal(HybridHotkeyAction.Stop, state.Key(0x20, true, 5020, bindings, true, RecordingMode.Toggle, held: Held));
     }
+
+    [Fact]
+    public void LostReleaseFoundWhileAModifierIsHeldDoesNotBlockTheShortcut()
+    {
+        var state = new HybridHotkeyState();
+        var bindings = new HashSet<string> { ShortcutRules.Normalize("CTRL+SHIFT+SPACE") };
+        static bool Held(int key) => true;
+        state.Key(0xFF, true, 0, bindings, held: Held);
+        state.Key(0xA2, true, 1000, bindings, held: Held);
+        state.Key(0xA0, true, 1600, bindings, held: Held);
+        Assert.Equal([0xFF], state.DroppedKeys);
+
+        Assert.Equal(HybridHotkeyAction.Start, state.Key(0x20, true, 1610, bindings, held: Held));
+    }
+
+    [Fact]
+    public void LostReleaseDoesNotLiftABlockFromKeysTypedLater()
+    {
+        // Ctrl+Left was typed after the lost key, and Ctrl is still held.
+        var state = new HybridHotkeyState();
+        var bindings = new HashSet<string> { ShortcutRules.Normalize("CTRL+SHIFT+SPACE") };
+        state.Key(0xFF, true, 0, bindings, held: _ => true);
+        state.Key(0xA2, true, 500, bindings, held: _ => true);
+        state.Key(0x25, true, 600, bindings, held: _ => true);
+        state.Key(0x25, false, 700, bindings, held: _ => true);
+        state.Key(0xA0, true, 2000, bindings, held: key => key != 0x25);
+        Assert.Equal([0xFF], state.DroppedKeys);
+
+        Assert.Null(state.Key(0x20, true, 2010, bindings, held: key => key != 0x25));
+    }
+
+    [Fact]
+    public void NextPressOfAModifierChordWhoseReleaseWasLostStopsTheRecording()
+    {
+        // Shift-up of a Toggle Ctrl+Shift shortcut got lost and Windows still reports Shift as held.
+        var state = new HybridHotkeyState();
+        var bindings = new HashSet<string> { "CTRL+SHIFT" };
+        static bool Held(int key) => true;
+        state.Key(0xA2, true, 0, bindings, mode: RecordingMode.Toggle, held: Held);
+        Assert.Equal(HybridHotkeyAction.Start, state.Key(0xA0, true, 10, bindings, mode: RecordingMode.Toggle, held: Held));
+        Assert.Null(state.Key(0xA2, false, 100, bindings, true, RecordingMode.Toggle, held: Held));
+
+        Assert.Null(state.Key(0xA2, true, 3000, bindings, true, RecordingMode.Toggle, held: Held));
+        Assert.Equal(HybridHotkeyAction.Stop, state.Key(0xA0, true, 3010, bindings, true, RecordingMode.Toggle, held: Held));
+    }
 }

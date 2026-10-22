@@ -21,6 +21,8 @@ internal sealed class HybridHotkeyState
     private long _pressedAt;
     private bool _startedByGesture;
     private bool _blocked;
+    // The keys held when the gesture was last invalidated.
+    private readonly HashSet<int> _blockedWith = [];
     private RecordingMode? _mode;
 
     internal void ResetAfterInterruption(IEnumerable<int> heldKeys)
@@ -29,12 +31,12 @@ internal sealed class HybridHotkeyState
         _lastEvent.Clear();
         _down.UnionWith(heldKeys);
         _armed = null; _startedByGesture = false; _mode = null;
-        _blocked = _down.Count > 0;
+        Block(_down.Count > 0);
     }
 
     internal void Suspend()
     {
-        _armed = null; _startedByGesture = false; _blocked = _down.Count > 0;
+        _armed = null; _startedByGesture = false; Block(_down.Count > 0);
     }
 
     internal HybridHotkeyAction? Key(int key, bool down, long now, IReadOnlySet<string> bindings, bool recording = false,
@@ -46,6 +48,7 @@ internal sealed class HybridHotkeyState
         {
             var released = Key(key, false, now, bindings, recording, mode, paused, held, stale);
             var dropped = _dropped.Append(key).ToArray();
+            UnblockAfterLostRelease();
             var again = Key(key, true, now, bindings, recording, mode, paused, held, stale);
             _dropped.AddRange(dropped);
             return again ?? released;
@@ -63,15 +66,16 @@ internal sealed class HybridHotkeyState
                 // The release time is unknown, so only a gesture started in Hold mode can infer a Stop;
                 // a Hybrid gesture counts as a tap. Keys still held must be released before the next gesture.
                 action = _startedByGesture && (_mode ?? mode) == RecordingMode.Hold ? HybridHotkeyAction.Stop : null;
-                _armed = null; _startedByGesture = false; _blocked = _down.Count > 0;
+                _armed = null; _startedByGesture = false; Block(_down.Count > 0);
             }
-            else if (_down.Count == 0) _blocked = false;
+            else if (_down.Count == 0) Block(false);
+            if (_dropped.Count > 0) UnblockAfterLostRelease();
         }
         if (_mode is not null && _mode != mode)
         {
             // A changed setting must never reinterpret keys which are already held.
             action = _startedByGesture && recording ? HybridHotkeyAction.Cancel : action;
-            _armed = null; _startedByGesture = false; _blocked = _down.Count > 0;
+            _armed = null; _startedByGesture = false; Block(_down.Count > 0);
         }
         _mode = mode;
         if (_lastEvent.Count > _down.Count)
@@ -90,7 +94,7 @@ internal sealed class HybridHotkeyState
             action = !_startedByGesture ? null : down ? HybridHotkeyAction.Cancel
                 : mode == RecordingMode.Hold || mode == RecordingMode.Hybrid && now - _pressedAt >= HoldMilliseconds
                     ? HybridHotkeyAction.Stop : null;
-            _armed = null; _startedByGesture = false; _blocked = true;
+            _armed = null; _startedByGesture = false; Block(true);
         }
         if (!_blocked && down && bindings.Contains(chord))
         {
@@ -100,9 +104,23 @@ internal sealed class HybridHotkeyState
             action = recording ? mode == RecordingMode.Hold ? action : HybridHotkeyAction.Stop : HybridHotkeyAction.Start;
         }
         // Non-modifier keys outside a configured chord invalidate the gesture.
-        if (down && _armed is null && !IsModifier(key)) _blocked = true;
-        if (_down.Count == 0) _blocked = false;
+        if (down && _armed is null && !IsModifier(key)) Block(true);
+        if (_down.Count == 0) Block(false);
         return action;
+    }
+
+    private void Block(bool blocked)
+    {
+        _blocked = blocked;
+        _blockedWith.Clear();
+        if (blocked) _blockedWith.UnionWith(_down);
+    }
+
+    // Once none of the keys behind the block is down anymore, the block only waited for a lost release.
+    // Keys pressed since then started the next gesture, like after a release that arrived.
+    private void UnblockAfterLostRelease()
+    {
+        if (_blocked && !_blockedWith.Overlaps(_down)) Block(false);
     }
 
     /// <summary>Whether the held shortcut that started the current recording includes this left or right modifier key.</summary>
