@@ -37,10 +37,10 @@ internal static class ShortcutRules
         if (keys.Length == 0)
             return allowModifiersOnly && parts.Length >= 2 ? null : Loc.T("Add a key to the modifier, such as Ctrl + Shift + K.");
         if (keys.Length != 1 || keys[0].Length == 0) return Loc.T("Press one key together with your modifiers.");
-        if (!ShortcutKeys.TryParse(keys[0], out _)) return Loc.T("This key can't be used in a shortcut. Choose another key.");
+        if (!ShortcutKeys.TryParse(keys[0], out var key)) return Loc.T("This key can't be used in a shortcut. Choose another key.");
         if (Normalize(candidate) is "ALT+F4" or "ALT+TAB" or "CTRL+ALT+DELETE") return Loc.T("This combination is reserved by Windows.");
-        if (parts.Length == 1 && !(keys[0].StartsWith('F') && int.TryParse(keys[0][1..], out var n) && n is >= 1 and <= 24))
-            return Loc.T("Use Ctrl, Alt or Shift with the key, or choose a function key.");
+        if (parts.Length == 1 && !ShortcutKeys.WorksAlone(key))
+            return Loc.T("Use Ctrl, Alt or Shift with this key. Function keys, Insert, Pause and media keys also work alone.");
         return null;
     }
 
