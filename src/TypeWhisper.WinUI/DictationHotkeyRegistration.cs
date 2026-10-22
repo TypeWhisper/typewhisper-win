@@ -61,13 +61,16 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
         _hook = NativeMethods.SetWindowsHookEx(NativeMethods.WH_KEYBOARD_LL, _callback, NativeMethods.GetModuleHandle(null), 0);
         if (_hook == IntPtr.Zero) { _regular.Dispose(); throw new Win32Exception(Marshal.GetLastWin32Error()); }
     }
-    // Every shortcut hook sees the same event, so a lost key-up is logged once per event.
-    private static uint _lastDroppedEvent;
+    // Every shortcut hook sees the same event, so each lost key-up is logged once per event and key.
+    // All hooks run on the UI thread.
+    private static uint _droppedEvent;
+    private static readonly HashSet<int> _droppedLogged = [];
     private void LogDroppedKeys(uint eventTime)
     {
-        if (_state.DroppedKeys.Count == 0 || eventTime == _lastDroppedEvent) return;
-        _lastDroppedEvent = eventTime;
-        foreach (var key in _state.DroppedKeys) AppDiagnostics.Write("shortcut.lost-release kind=" + ShortcutKeys.DiagnosticKind(key));
+        if (_state.DroppedKeys.Count == 0) return;
+        if (eventTime != _droppedEvent) { _droppedEvent = eventTime; _droppedLogged.Clear(); }
+        foreach (var key in _state.DroppedKeys)
+            if (_droppedLogged.Add(key)) AppDiagnostics.Write("shortcut.lost-release kind=" + ShortcutKeys.DiagnosticKind(key));
     }
 
     internal void ObservePause() => _state.Suspend();

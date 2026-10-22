@@ -40,13 +40,23 @@ internal sealed class HybridHotkeyState
     internal HybridHotkeyAction? Key(int key, bool down, long now, IReadOnlySet<string> bindings, bool recording = false,
         RecordingMode mode = RecordingMode.Hybrid, bool paused = false, Func<int, bool>? held = null, bool stale = false)
     {
+        // A second key-down without auto-repeat in between follows a lost key-up, e.g. of a Toggle
+        // shortcut that started a recording. It is a new press, so the key is released first.
+        if (down && _down.Contains(key) && _lastEvent.TryGetValue(key, out var last) && now - last > LostReleaseMilliseconds)
+        {
+            var released = Key(key, false, now, bindings, recording, mode, paused, held, stale);
+            var dropped = _dropped.Append(key).ToArray();
+            var again = Key(key, true, now, bindings, recording, mode, paused, held, stale);
+            _dropped.AddRange(dropped);
+            return again ?? released;
+        }
         HybridHotkeyAction? action = null;
         _dropped.Clear();
         foreach (var pressed in _down) _lastEvent.TryAdd(pressed, now);
         // Windows skips a low-level hook that misses its timeout, e.g. while capture starts on
         // the UI thread. A lost key-up would otherwise block the next press of the shortcut.
-        // Keys of a running gesture stay, so a held shortcut is never ended by this.
-        if (held is not null && _down.RemoveWhere(pressed => !held(pressed) || LostRelease(pressed, key, now)) > 0)
+        // Keys of a running Hold or Hybrid gesture stay, so a held shortcut is never ended by this.
+        if (held is not null && _down.RemoveWhere(pressed => !held(pressed) || LostRelease(pressed, key, now, mode)) > 0)
         {
             if (_armed is not null && Chord() != _armed)
             {
@@ -104,9 +114,9 @@ internal sealed class HybridHotkeyState
     /// <summary>Keys that the last event dropped as released because their key-up was lost.</summary>
     internal IReadOnlyList<int> DroppedKeys => _dropped;
 
-    private bool LostRelease(int pressed, int key, long now)
+    private bool LostRelease(int pressed, int key, long now, RecordingMode mode)
     {
-        if (_armed is not null || pressed == key || IsModifier(pressed) || now - _lastEvent[pressed] <= LostReleaseMilliseconds) return false;
+        if (_armed is not null && (_mode ?? mode) != RecordingMode.Toggle || pressed == key || IsModifier(pressed) || now - _lastEvent[pressed] <= LostReleaseMilliseconds) return false;
         _dropped.Add(pressed);
         return true;
     }
