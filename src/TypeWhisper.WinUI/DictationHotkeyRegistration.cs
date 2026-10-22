@@ -69,8 +69,8 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
     {
         if (dropped.Count == 0) return;
         if (eventTime != _droppedEvent) { _droppedEvent = eventTime; _droppedLogged.Clear(); }
-        foreach (var key in dropped)
-            if (_droppedLogged.Add(key)) AppDiagnostics.Write("shortcut.lost-release kind=" + ShortcutKeys.DiagnosticKind(key));
+        foreach (var key in dropped.Where(_droppedLogged.Add))
+            AppDiagnostics.Write("shortcut.lost-release kind=" + ShortcutKeys.DiagnosticKind(key));
     }
 
     internal void ObservePause() => _state.Suspend();
