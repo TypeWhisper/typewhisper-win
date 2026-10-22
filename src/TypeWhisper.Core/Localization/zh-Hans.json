@@ -2791,7 +2791,7 @@
   "Usage by time of day": "按时段统计的使用情况",
   "Usage counts cannot be negative.": "使用次数不能为负数。",
   "Use AI to improve punctuation, paragraphs, grammar, and structure while preserving the original message.": "使用 AI 改进标点、段落、语法和结构，同时保留原意。",
-  "Use Ctrl, Alt or Shift with the key, or choose a function key.": "请将 Ctrl、Alt 或 Shift 与该按键组合使用，或选择功能键。",
+  "Use Ctrl, Alt or Shift with this key. Function keys, Insert, Pause and media keys also work alone.": "请将此按键与 Ctrl、Alt 或 Shift 组合使用。功能键、Insert、Pause 和媒体键也可单独使用。",
   "Use Export all data first if you want to keep a copy. Files in your cloud sync folder, your TypeWhisper account and your license activations are not changed; to move a license to another PC, use Deactivate this device under Premium first.": "如需保留副本，请先使用“导出所有数据”。云同步文件夹中的文件、你的 TypeWhisper 账户和许可证激活不会更改；要将许可证转移到另一台电脑，请先在“高级”中停用此设备。",
   "Use a CTC similarity between 40% and 95%.": "请使用 40% 到 95% 之间的 CTC 相似度。",
   "Use a single line of up to 160 characters.": "请使用不超过 160 个字符的单行文本。",

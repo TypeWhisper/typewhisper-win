@@ -29,6 +29,64 @@ public class ShortcutKeysTests
     }
 
     [Theory]
+    [InlineData(0x2D, "Insert")]
+    [InlineData(0x13, "Pause")]
+    [InlineData(0x70, "F1")]
+    [InlineData(0x87, "F24")]
+    [InlineData(0xA6, "BrowserBack")]
+    [InlineData(0xAD, "VolumeMute")]
+    [InlineData(0xB3, "MediaPlayPause")]
+    [InlineData(0xB7, "LaunchApp2")]
+    public void KeyWithoutTypingJobWorksAlone(int key, string token)
+    {
+        Assert.Null(ShortcutRules.Validate(token, allowModifiersOnly: true));
+        Assert.Null(ShortcutRules.Validate(token, allowModifiersOnly: false));
+        var bindings = new HashSet<string> { ShortcutRules.Normalize(token) };
+        var state = new HybridHotkeyState();
+        Assert.Equal(HybridHotkeyAction.Start, state.Key(key, true, 0, bindings));
+        Assert.Equal(HybridHotkeyAction.Stop, state.Key(key, false, HybridHotkeyState.HoldMilliseconds, bindings, recording: true));
+    }
+
+    [Theory]
+    [InlineData("A")]
+    [InlineData("5")]
+    [InlineData("Space")]
+    [InlineData("Enter")]
+    [InlineData("Tab")]
+    [InlineData("Backspace")]
+    [InlineData("Esc")]
+    [InlineData("Delete")]
+    [InlineData("Home")]
+    [InlineData("Up")]
+    [InlineData("Comma")]
+    [InlineData("Num1")]
+    [InlineData("NumAdd")]
+    [InlineData("CapsLock")]
+    [InlineData("NumLock")]
+    [InlineData("ScrollLock")]
+    [InlineData("Apps")]
+    [InlineData("PrintScreen")]
+    [InlineData("Sleep")]
+    public void KeyThatTypesOrTogglesNeedsAModifier(string token)
+    {
+        Assert.NotNull(ShortcutRules.Validate(token, allowModifiersOnly: true));
+        Assert.Null(ShortcutRules.Validate("Ctrl+" + token, allowModifiersOnly: true));
+    }
+
+    [Fact]
+    public void CopyAndPasteWithInsertDoNotStartAnInsertShortcut()
+    {
+        var bindings = new HashSet<string> { "INSERT" };
+        var state = new HybridHotkeyState();
+        Assert.Null(state.Key(0xA2, true, 0, bindings));
+        Assert.Null(state.Key(0x2D, true, 0, bindings));
+        Assert.Null(state.Key(0x2D, false, 0, bindings));
+        Assert.Null(state.Key(0xA2, false, 0, bindings));
+        Assert.Null(state.Key(0xA0, true, 0, bindings));
+        Assert.Null(state.Key(0x2D, true, 0, bindings));
+    }
+
+    [Theory]
     [InlineData("Ctrl+220", "CTRL+\\")]
     [InlineData("Ctrl+VK220", "CTRL+\\")]
     [InlineData("Ctrl+Snapshot", "CTRL+PRINTSCREEN")]
