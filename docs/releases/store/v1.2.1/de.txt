@@ -1,0 +1,4 @@
+TypeWhisper 1.2.1 behebt zwei Fehler in 1.2.
+
+- Ein Tastenkürzel ohne Ctrl, Alt oder Shift kann wieder Insert (Einfg), Pause oder eine Medien-, Lautstärke- oder Browsertaste nutzen. Bisher funktionierten nur F1 bis F24 allein.
+- Das Feld für den Hugging-Face-Token von Cohere Transcribe (Local) und Supertonic TTS zeigt „(optional)“ nur noch einmal.

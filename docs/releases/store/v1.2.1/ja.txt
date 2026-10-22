@@ -1,0 +1,4 @@
+TypeWhisper 1.2.1 では、1.2 の 2 つの問題を修正しました。
+
+- Ctrl、Alt、Shift を使わないショートカットに、Insert、Pause、メディア キー、音量キー、ブラウザー キーを再び使えるようになりました。これまでは F1～F24 しか単独で使えませんでした。
+- Cohere Transcribe (Local) と Supertonic TTS の Hugging Face トークン欄で、「（任意）」が 1 回だけ表示されるようになりました。

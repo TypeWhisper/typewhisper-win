@@ -1,0 +1,4 @@
+TypeWhisper 1.2.1 修复了 1.2 中的两个问题。
+
+- 不带 Ctrl、Alt 或 Shift 的快捷键可以再次使用 Insert、Pause 以及媒体键、音量键或浏览器键。此前只有 F1 到 F24 可以单独使用。
+- Cohere Transcribe (Local) 和 Supertonic TTS 的 Hugging Face 令牌字段中，“（可选）”只显示一次。
