@@ -112,4 +112,11 @@ internal static class ShortcutKeys
     internal static bool IsAltGrControl(uint key, uint scan) => key == 0xA2 && scan == 0x21D;
 
     internal static bool IsModifier(int key) => key is 0x10 or 0x11 or 0x12 or >= 0xA0 and <= 0xA5 or 0x5B or 0x5C;
+
+    // Keys that may be a shortcut without a modifier: F1-F24, Insert, Pause and the browser, volume,
+    // media and launch keys. They don't type or edit text, and RegisterHotKey swallows their press.
+    // Lock keys still toggle their state, apps open the context menu when the menu key is released
+    // (RegisterHotKey lets that through), and Windows uses Print Screen and Sleep itself, so those
+    // keep needing a modifier.
+    internal static bool WorksAlone(int key) => key is >= 0x70 and <= 0x87 or 0x2D or 0x13 or >= 0xA6 and <= 0xB7;
 }

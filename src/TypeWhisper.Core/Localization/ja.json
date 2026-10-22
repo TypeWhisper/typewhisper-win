@@ -2791,7 +2791,7 @@
   "Usage by time of day": "時間帯別の利用状況",
   "Usage counts cannot be negative.": "使用回数を負の値にすることはできません。",
   "Use AI to improve punctuation, paragraphs, grammar, and structure while preserving the original message.": "AIを使って、元の内容を保ちながら句読点、段落、文法、構成を整えます。",
-  "Use Ctrl, Alt or Shift with the key, or choose a function key.": "キーと一緒にCtrl、Alt、Shiftのいずれかを使用するか、ファンクションキーを選択してください。",
+  "Use Ctrl, Alt or Shift with this key. Function keys, Insert, Pause and media keys also work alone.": "このキーはCtrl、Alt、Shiftのいずれかと組み合わせて使用してください。ファンクションキー、Insert、Pause、メディアキーは単独でも使用できます。",
   "Use Export all data first if you want to keep a copy. Files in your cloud sync folder, your TypeWhisper account and your license activations are not changed; to move a license to another PC, use Deactivate this device under Premium first.": "コピーを残したい場合は、先に「すべてのデータを書き出す」を使用してください。クラウド同期フォルダ内のファイル、TypeWhisperアカウント、ライセンスのアクティベーションは変更されません。ライセンスを別のPCに移すには、先に「プレミアム」でこのデバイスのアクティベーションを解除してください。",
   "Use a CTC similarity between 40% and 95%.": "CTC類似度は40%〜95%の範囲で指定してください。",
   "Use a single line of up to 160 characters.": "160文字以内の1行で入力してください。",
