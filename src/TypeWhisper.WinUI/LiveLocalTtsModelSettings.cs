@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
+using TypeWhisper.Presentation;
 
 namespace TypeWhisper.WinUI;
 
@@ -111,7 +112,7 @@ internal sealed class LiveLocalTtsModelSettings : UserControl
             }
             foreach (var requirement in state.Item4.Where(r => r.Kind == PluginModelDownloadRequirementKind.Credential))
             {
-                _licenses.Children.Add(Note(requirement.Title + (requirement.IsRequired ? "" : " " + Loc.T("(optional)"))));
+                _licenses.Children.Add(Note(ModelDownloadRequirementTitle.For(requirement.Title, requirement.IsRequired)));
                 _licenses.Children.Add(Note(requirement.Description));
                 var credential = new PasswordBox { PlaceholderText = requirement.IsSatisfied ? Loc.T("Token saved securely") : Loc.T("Hugging Face token") };
                 AutomationProperties.SetName(credential, requirement.Title);

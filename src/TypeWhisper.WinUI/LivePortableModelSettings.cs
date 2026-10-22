@@ -5,6 +5,7 @@ using Microsoft.UI.Xaml.Media;
 using TypeWhisper.PluginHost;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
+using TypeWhisper.Presentation;
 
 namespace TypeWhisper.WinUI;
 
@@ -211,7 +212,7 @@ internal sealed class LivePortableModelSettings : UserControl
         {
             if (!row.Credentials.TryGetValue(requirement.Id, out var credential))
             {
-                credential = new CredentialRow(requirement.IsRequired ? requirement.Title : Loc.T("{0} (optional)", requirement.Title));
+                credential = new CredentialRow(ModelDownloadRequirementTitle.For(requirement.Title, requirement.IsRequired));
                 row.Credentials.Add(requirement.Id, credential); row.CredentialPanel.Children.Add(credential.Panel);
                 var capturedRow = row; var capturedCredential = credential; var id = requirement.Id;
                 credential.Save.Click += async (_, _) => await SaveCredentialAsync(capturedRow, id, capturedCredential, clear: false);
