@@ -422,9 +422,10 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
             var runtimeDirectory = GetRuntimeDirectory(package);
             if (MarkerMatches(GetRuntimeMarkerPath(runtimeDirectory), package.Archive.Sha256)
                 && FindRuntimeExecutable(runtimeDirectory) is not null
-                && await VerifyRuntimeFilesAsync(runtimeDirectory, cancellationToken))
+                && await VerifyRuntimeFilesAsync(runtimeDirectory, cancellationToken, IsBundledVcRuntimeFile))
             {
-                // Runtimes installed by 1.2.4 and earlier lack the Visual C++ files.
+                // The bundled Visual C++ files are checked against the plugin's copies instead of the
+                // manifest, so a damaged one is repaired locally. 1.2.4 and earlier did not install them.
                 if (InstallVcRuntime(runtimeDirectory) || !RuntimeFilesMatchMetadata(runtimeDirectory))
                     await WriteRuntimeFilesAsync(runtimeDirectory, cancellationToken);
                 progress?.Report(new ArtifactTransferProgress(
@@ -919,7 +920,10 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
         catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException or JsonException or ArgumentException) { return false; }
     }
 
-    internal static async Task<bool> VerifyRuntimeFilesAsync(string directory, CancellationToken ct)
+    internal static async Task<bool> VerifyRuntimeFilesAsync(
+        string directory,
+        CancellationToken ct,
+        Func<string, bool>? skip = null)
     {
         try
         {
@@ -927,6 +931,8 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
             {
                 ct.ThrowIfCancellationRequested();
                 var path = RuntimeFilePath(directory, expected);
+                if (skip?.Invoke(path) == true)
+                    continue;
                 if (!File.Exists(path) || new FileInfo(path).Length != expected.Size
                     || !string.Equals(await ComputeSha256Async(path, ct), expected.Sha256, StringComparison.OrdinalIgnoreCase)) return false;
             }
@@ -1029,7 +1035,8 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
     /// <summary>
     /// Copies the Visual C++ runtime that ships with the plugin next to crispasr.exe, so it also starts
     /// on PCs without the redistributable (exit code 0xC0000135 otherwise). Windows searches the
-    /// executable's folder first. An existing file is replaced only by a newer version.
+    /// executable's folder first. An existing file is replaced when it is older, or when it has the
+    /// same version but different content (damaged). A newer file is kept.
     /// </summary>
     /// <returns>Whether a file was added or replaced.</returns>
     internal bool InstallVcRuntime(string runtimeDirectory)
@@ -1047,8 +1054,12 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
                 continue;
 
             var destination = Path.Join(targetDirectory, fileName);
-            if (File.Exists(destination) && GetFileVersion(destination) >= GetFileVersion(source))
-                continue;
+            if (File.Exists(destination))
+            {
+                var comparison = GetFileVersion(destination).CompareTo(GetFileVersion(source));
+                if (comparison > 0 || (comparison == 0 && HasSameContent(destination, source)))
+                    continue;
+            }
 
             try
             {
@@ -1063,6 +1074,31 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
         }
 
         return changed;
+    }
+
+    /// <summary>
+    /// Whether the path is a Visual C++ file next to crispasr.exe that the plugin can restore itself.
+    /// </summary>
+    private bool IsBundledVcRuntimeFile(string path)
+    {
+        var fileName = Path.GetFileName(path);
+        var directory = Path.GetDirectoryName(path);
+        return directory is not null
+            && VcRuntimeFileNames.Contains(fileName, StringComparer.OrdinalIgnoreCase)
+            && File.Exists(Path.Join(_vcRuntimeDirectory, fileName))
+            && File.Exists(Path.Join(directory, "crispasr.exe"));
+    }
+
+    private static bool HasSameContent(string first, string second)
+    {
+        var firstInfo = new FileInfo(first);
+        var secondInfo = new FileInfo(second);
+        if (firstInfo.Length != secondInfo.Length)
+            return false;
+
+        using var firstStream = firstInfo.OpenRead();
+        using var secondStream = secondInfo.OpenRead();
+        return SHA256.HashData(firstStream).AsSpan().SequenceEqual(SHA256.HashData(secondStream));
     }
 
     private static Version GetFileVersion(string path)

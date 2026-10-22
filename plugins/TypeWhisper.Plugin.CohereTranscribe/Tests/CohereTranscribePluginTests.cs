@@ -1564,10 +1564,20 @@ public sealed class CohereTranscribePluginTests
         var stamp = File.GetLastWriteTimeUtc(Path.Join(directory, ".typewhisper-runtime.files.json"));
         await assets.EnsureRuntimeAsync(CrispAsrBackend.Cpu, null, default);
         Assert.Equal(stamp, File.GetLastWriteTimeUtc(Path.Join(directory, ".typewhisper-runtime.files.json")));
+
+        // Damaged or missing bundled files are restored from the plugin, still without a download.
+        await File.WriteAllTextAsync(Path.Join(executableDirectory, "vcruntime140.dll"), "damaged");
+        File.Delete(Path.Join(executableDirectory, "msvcp140.dll"));
+        Assert.False(assets.IsRuntimeInstalled(CrispAsrBackend.Cpu));
+        await assets.EnsureRuntimeAsync(CrispAsrBackend.Cpu, null, default);
+        Assert.Equal("vcruntime140.dll", await File.ReadAllTextAsync(Path.Join(executableDirectory, "vcruntime140.dll")));
+        Assert.Equal("msvcp140.dll", await File.ReadAllTextAsync(Path.Join(executableDirectory, "msvcp140.dll")));
+        Assert.True(assets.IsRuntimeInstalled(CrispAsrBackend.Cpu));
+        Assert.True(await CohereLocalAssetManager.VerifyRuntimeFilesAsync(directory, default));
     }
 
     [WindowsFact]
-    public async Task VcRuntimeKeepsSameVersionAndReplacesOlderCopies()
+    public async Task VcRuntimeKeepsIdenticalAndNewerCopiesAndReplacesOlderOrDamagedOnes()
     {
         using var temp = new TempDirectory();
         var vcRuntime = Path.Join(temp.Path, "bundled-vc");
@@ -1576,12 +1586,15 @@ public sealed class CohereTranscribePluginTests
         Directory.CreateDirectory(runtime);
         await File.WriteAllBytesAsync(Path.Join(runtime, "crispasr.exe"), [1]);
         await File.WriteAllTextAsync(Path.Join(vcRuntime, "msvcp140.dll"), "bundled");
-        await File.WriteAllTextAsync(Path.Join(runtime, "msvcp140.dll"), "existing");
+        await File.WriteAllTextAsync(Path.Join(runtime, "msvcp140.dll"), "bundled");
         using var assets = new CohereLocalAssetManager(temp.Path, vcRuntimeDirectory: vcRuntime);
 
-        // Neither file has a version resource, so the existing copy stays.
         Assert.False(assets.InstallVcRuntime(runtime));
-        Assert.Equal("existing", await File.ReadAllTextAsync(Path.Join(runtime, "msvcp140.dll")));
+
+        // Same (missing) version resource but different bytes counts as damaged.
+        await File.WriteAllTextAsync(Path.Join(runtime, "msvcp140.dll"), "damaged");
+        Assert.True(assets.InstallVcRuntime(runtime));
+        Assert.Equal("bundled", await File.ReadAllTextAsync(Path.Join(runtime, "msvcp140.dll")));
 
         var systemRuntime = Path.Join(Environment.SystemDirectory, "vcruntime140.dll");
         if (File.Exists(systemRuntime))
@@ -1590,6 +1603,12 @@ public sealed class CohereTranscribePluginTests
             await File.WriteAllTextAsync(Path.Join(runtime, "vcruntime140.dll"), "unversioned");
             Assert.True(assets.InstallVcRuntime(runtime));
             Assert.Equal(await File.ReadAllBytesAsync(systemRuntime), await File.ReadAllBytesAsync(Path.Join(runtime, "vcruntime140.dll")));
+
+            // A newer copy next to the executable is kept.
+            File.Copy(systemRuntime, Path.Join(runtime, "vcruntime140_1.dll"), overwrite: true);
+            await File.WriteAllTextAsync(Path.Join(vcRuntime, "vcruntime140_1.dll"), "unversioned");
+            Assert.False(assets.InstallVcRuntime(runtime));
+            Assert.Equal(await File.ReadAllBytesAsync(systemRuntime), await File.ReadAllBytesAsync(Path.Join(runtime, "vcruntime140_1.dll")));
         }
 
         using var withoutBundle = new CohereLocalAssetManager(temp.Path, vcRuntimeDirectory: Path.Join(temp.Path, "missing"));
