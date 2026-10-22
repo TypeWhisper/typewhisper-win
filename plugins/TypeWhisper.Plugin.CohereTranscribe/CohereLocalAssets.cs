@@ -1054,11 +1054,13 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
                 continue;
 
             var destination = Path.Join(targetDirectory, fileName);
+            var olderCopy = false;
             if (File.Exists(destination))
             {
                 var comparison = GetFileVersion(destination).CompareTo(GetFileVersion(source));
                 if (comparison > 0 || (comparison == 0 && HasSameContent(destination, source)))
                     continue;
+                olderCopy = comparison < 0;
             }
 
             try
@@ -1066,10 +1068,10 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
                 File.Copy(source, destination, overwrite: true);
                 changed = true;
             }
-            catch (Exception exception) when (
-                File.Exists(destination) && exception is IOException or UnauthorizedAccessException)
+            catch (IOException) when (olderCopy && File.Exists(destination))
             {
-                // A running CrispASR process can lock an older copy. It still works; retry on the next load.
+                // A running CrispASR process has the older copy loaded, so it works; replace it on the next load.
+                // A missing or damaged file must not be accepted, so those failures propagate.
             }
         }
 

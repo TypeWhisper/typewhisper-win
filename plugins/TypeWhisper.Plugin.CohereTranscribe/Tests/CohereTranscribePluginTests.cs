@@ -1596,6 +1596,13 @@ public sealed class CohereTranscribePluginTests
         Assert.True(assets.InstallVcRuntime(runtime));
         Assert.Equal("bundled", await File.ReadAllTextAsync(Path.Join(runtime, "msvcp140.dll")));
 
+        // A damaged copy that cannot be replaced is an error, not a working runtime.
+        var damaged = Path.Join(runtime, "msvcp140.dll");
+        await File.WriteAllTextAsync(damaged, "damaged");
+        using (new FileStream(damaged, FileMode.Open, FileAccess.Read, FileShare.Read))
+            Assert.ThrowsAny<IOException>(() => assets.InstallVcRuntime(runtime));
+        Assert.True(assets.InstallVcRuntime(runtime));
+
         var systemRuntime = Path.Join(Environment.SystemDirectory, "vcruntime140.dll");
         if (File.Exists(systemRuntime))
         {
