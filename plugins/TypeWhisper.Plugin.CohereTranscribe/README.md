@@ -2,7 +2,7 @@
 
 Local CrispASR transcription with managed runtime/model downloads and download requirements.
 
-Version `1.2.4`; plugin ID `com.typewhisper.cohere-transcribe`; minimum host `1.1.6`.
+Version `1.2.5`; plugin ID `com.typewhisper.cohere-transcribe`; minimum host `1.1.6`.
 
 ## Setup
 
@@ -30,6 +30,8 @@ The complete package is staged under `bin/Release/portable-host/Plugins/com.type
 Tests cover runtime provisioning, archive/path validation, download credentials, process contracts, package lifecycle, persisted device settings, cold model loading, and PCM conversion/cancellation.
 
 Regression coverage also verifies the job-assignment launch gate, uncommitted model loads, persistence failures, canceled download status and unreadable checksum markers.
+
+The CrispASR archives do not include the Visual C++ runtime that `crispasr.exe` needs. The package therefore ships `msvcp140.dll`, `vcruntime140.dll`, `vcruntime140_1.dll` and `vcomp140.dll` under `runtimes/win-x64` and copies them next to `crispasr.exe`. This also applies to runtimes that 1.2.4 or earlier installed. Without these files the runtime does not start on PCs without the redistributable (exit code `0xC0000135`). Building the release package requires the files from a Visual Studio installation; the Windows build fails without them.
 
 Runtime files are rehashed before reuse. Missing or damaged dependencies are repaired from the pinned archive. Preview runtime caches without the per-file manifest are downloaded again once. Automatic device selection prefers an already installed compatible runtime before provisioning another backend.
 

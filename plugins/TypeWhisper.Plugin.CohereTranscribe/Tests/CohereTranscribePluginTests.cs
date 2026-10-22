@@ -1536,6 +1536,115 @@ public sealed class CohereTranscribePluginTests
     }
 
     [WindowsFact]
+    public async Task ExistingRuntimeGetsBundledVcRuntimeNextToExecutableWithoutDownloading()
+    {
+        using var temp = new TempDirectory();
+        var vcRuntime = Path.Join(temp.Path, "bundled-vc");
+        Directory.CreateDirectory(vcRuntime);
+        foreach (var name in CohereLocalAssetManager.VcRuntimeFileNames)
+            await File.WriteAllTextAsync(Path.Join(vcRuntime, name), name);
+        using var http = new HttpClient(new StaticResponseHandler(HttpStatusCode.BadRequest, "Network must not be used"));
+        using var assets = new CohereLocalAssetManager(temp.Path, http, maxDownloadAttempts: 1, vcRuntimeDirectory: vcRuntime);
+        var directory = Path.Join(temp.Path, "Runtimes", "CrispASR", CohereLocalAssetManager.CrispAsrVersion, "cpu");
+        var executableDirectory = Path.Join(directory, "crispasr-windows-x86_64-cpu");
+        Directory.CreateDirectory(executableDirectory);
+        await File.WriteAllBytesAsync(Path.Join(executableDirectory, "crispasr.exe"), [1, 2]);
+        await CohereLocalAssetManager.WriteRuntimeFilesAsync(directory, default);
+        await File.WriteAllTextAsync(Path.Join(directory, ".typewhisper-runtime.sha256"), CohereLocalAssetManager.CpuRuntime.Archive.Sha256);
+
+        await assets.EnsureRuntimeAsync(CrispAsrBackend.Cpu, null, default);
+
+        foreach (var name in CohereLocalAssetManager.VcRuntimeFileNames)
+            Assert.Equal(name, await File.ReadAllTextAsync(Path.Join(executableDirectory, name)));
+        Assert.True(assets.IsRuntimeInstalled(CrispAsrBackend.Cpu));
+        var manifest = await File.ReadAllTextAsync(Path.Join(directory, ".typewhisper-runtime.files.json"));
+        Assert.Contains("vcruntime140_1.dll", manifest);
+
+        // A second load finds everything in place and leaves the files alone.
+        var stamp = File.GetLastWriteTimeUtc(Path.Join(directory, ".typewhisper-runtime.files.json"));
+        await assets.EnsureRuntimeAsync(CrispAsrBackend.Cpu, null, default);
+        Assert.Equal(stamp, File.GetLastWriteTimeUtc(Path.Join(directory, ".typewhisper-runtime.files.json")));
+
+        // Damaged or missing bundled files are restored from the plugin, still without a download.
+        await File.WriteAllTextAsync(Path.Join(executableDirectory, "vcruntime140.dll"), "damaged");
+        File.Delete(Path.Join(executableDirectory, "msvcp140.dll"));
+        Assert.False(assets.IsRuntimeInstalled(CrispAsrBackend.Cpu));
+        await assets.EnsureRuntimeAsync(CrispAsrBackend.Cpu, null, default);
+        Assert.Equal("vcruntime140.dll", await File.ReadAllTextAsync(Path.Join(executableDirectory, "vcruntime140.dll")));
+        Assert.Equal("msvcp140.dll", await File.ReadAllTextAsync(Path.Join(executableDirectory, "msvcp140.dll")));
+        Assert.True(assets.IsRuntimeInstalled(CrispAsrBackend.Cpu));
+        Assert.True(await CohereLocalAssetManager.VerifyRuntimeFilesAsync(directory, default));
+    }
+
+    [WindowsFact]
+    public async Task VcRuntimeKeepsIdenticalAndNewerCopiesAndReplacesOlderOrDamagedOnes()
+    {
+        using var temp = new TempDirectory();
+        var vcRuntime = Path.Join(temp.Path, "bundled-vc");
+        var runtime = Path.Join(temp.Path, "runtime");
+        Directory.CreateDirectory(vcRuntime);
+        Directory.CreateDirectory(runtime);
+        await File.WriteAllBytesAsync(Path.Join(runtime, "crispasr.exe"), [1]);
+        await File.WriteAllTextAsync(Path.Join(vcRuntime, "msvcp140.dll"), "bundled");
+        await File.WriteAllTextAsync(Path.Join(runtime, "msvcp140.dll"), "bundled");
+        using var assets = new CohereLocalAssetManager(temp.Path, vcRuntimeDirectory: vcRuntime);
+
+        Assert.False(assets.InstallVcRuntime(runtime));
+
+        // Same (missing) version resource but different bytes counts as damaged.
+        await File.WriteAllTextAsync(Path.Join(runtime, "msvcp140.dll"), "damaged");
+        Assert.True(assets.InstallVcRuntime(runtime));
+        Assert.Equal("bundled", await File.ReadAllTextAsync(Path.Join(runtime, "msvcp140.dll")));
+
+        // A damaged copy that cannot be replaced is an error, not a working runtime.
+        var damaged = Path.Join(runtime, "msvcp140.dll");
+        await File.WriteAllTextAsync(damaged, "damaged");
+        using (new FileStream(damaged, FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            var error = Assert.ThrowsAny<Exception>(() => assets.InstallVcRuntime(runtime));
+            Assert.True(error is IOException or UnauthorizedAccessException, error.ToString());
+        }
+        Assert.Equal("damaged", await File.ReadAllTextAsync(damaged));
+        Assert.True(assets.InstallVcRuntime(runtime));
+
+        var systemRuntime = Path.Join(Environment.SystemDirectory, "vcruntime140.dll");
+        if (File.Exists(systemRuntime))
+        {
+            File.Copy(systemRuntime, Path.Join(vcRuntime, "vcruntime140.dll"));
+            await File.WriteAllTextAsync(Path.Join(runtime, "vcruntime140.dll"), "unversioned");
+            Assert.True(assets.InstallVcRuntime(runtime));
+            Assert.Equal(await File.ReadAllBytesAsync(systemRuntime), await File.ReadAllBytesAsync(Path.Join(runtime, "vcruntime140.dll")));
+
+            // An older copy in use stays intact until the next load; no partial or temporary file remains.
+            var inUse = Path.Join(runtime, "vcruntime140.dll");
+            await File.WriteAllTextAsync(inUse, "older");
+            using (new FileStream(inUse, FileMode.Open, FileAccess.Read, FileShare.Read))
+                Assert.False(assets.InstallVcRuntime(runtime));
+            Assert.Equal("older", await File.ReadAllTextAsync(inUse));
+            Assert.DoesNotContain(Directory.EnumerateFiles(runtime), path => path.EndsWith(".incoming", StringComparison.Ordinal));
+            Assert.True(assets.InstallVcRuntime(runtime));
+
+            // A newer copy next to the executable is kept.
+            File.Copy(systemRuntime, Path.Join(runtime, "vcruntime140_1.dll"), overwrite: true);
+            await File.WriteAllTextAsync(Path.Join(vcRuntime, "vcruntime140_1.dll"), "unversioned");
+            Assert.False(assets.InstallVcRuntime(runtime));
+            Assert.Equal(await File.ReadAllBytesAsync(systemRuntime), await File.ReadAllBytesAsync(Path.Join(runtime, "vcruntime140_1.dll")));
+        }
+
+        using var withoutBundle = new CohereLocalAssetManager(temp.Path, vcRuntimeDirectory: Path.Join(temp.Path, "missing"));
+        Assert.False(withoutBundle.InstallVcRuntime(runtime));
+    }
+
+    [Fact]
+    public void StartupExitCodeNamesMissingDll()
+    {
+        var missingDll = CrispAsrServer.DescribeExitCode(-1073741515);
+        Assert.StartsWith("0xC0000135.", missingDll);
+        Assert.Contains("Visual C++ Redistributable", missingDll);
+        Assert.Equal("0x00000001.", CrispAsrServer.DescribeExitCode(1));
+    }
+
+    [WindowsFact]
     public async Task ExitedSidecarOnOccupiedPortIsClassifiedAsRetryableCollision()
     {
         using var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("cmd.exe", "/c exit 1")

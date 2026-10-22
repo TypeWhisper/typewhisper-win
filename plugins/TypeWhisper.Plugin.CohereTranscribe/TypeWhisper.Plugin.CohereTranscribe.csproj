@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
-    <Version>1.2.4</Version><CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <Version>1.2.5</Version><CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="Tests/**/*.cs" />
@@ -15,6 +15,8 @@
   </ItemGroup>
   <Target Name="StagePortablePackage" AfterTargets="Build">
     <PropertyGroup><PackageDirectory>$(MSBuildProjectDirectory)/bin/$(Configuration)/portable-host/Plugins/com.typewhisper.cohere-transcribe/</PackageDirectory></PropertyGroup>
+    <!-- crispasr.exe needs the Visual C++ runtime, which its release archives do not ship. The plugin copies these files next to it. -->
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)/../../eng/Copy-MsvcRuntime.ps1&quot; -OutputDirectory &quot;$(TargetDir).&quot; -RuntimeIdentifiers win-x64 -Required" Condition="'$(Configuration)' == 'Release' and '$(OS)' == 'Windows_NT'" />
     <ItemGroup>
       <PackageFile Include="$(TargetPath);$(TargetDir)$(TargetName).deps.json;$(ProjectDir)manifest.json" />
       <PackageDependency Include="$(TargetDir)*.dll" Exclude="$(TargetPath);$(TargetDir)TypeWhisper.PluginSDK.dll" />
@@ -23,5 +25,6 @@
     <MakeDir Directories="$(PackageDirectory)" />
     <Copy SourceFiles="@(PackageFile);@(PackageDependency)" DestinationFolder="$(PackageDirectory)" />
     <Copy SourceFiles="@(PackageTree)" DestinationFiles="@(PackageTree->'$(PackageDirectory)%(RecursiveDir)%(Filename)%(Extension)')" Condition="'@(PackageTree)' != ''" />
+    <Error Condition="'$(Configuration)' == 'Release' and '$(OS)' == 'Windows_NT' and (!Exists('$(PackageDirectory)runtimes/win-x64/msvcp140.dll') or !Exists('$(PackageDirectory)runtimes/win-x64/vcruntime140.dll') or !Exists('$(PackageDirectory)runtimes/win-x64/vcruntime140_1.dll') or !Exists('$(PackageDirectory)runtimes/win-x64/VCOMP140.DLL'))" Text="The Visual C++ runtime files for CrispASR are missing." />
   </Target>
 </Project>
