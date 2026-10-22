@@ -137,7 +137,7 @@ def screenshot_url(repository, revision, path):
 
 
 def load_listing(github, source, version, fetch=request_bytes):
-    """Reads the listing configuration and this version's notes at the release source."""
+    """Reads the listing configuration and this version's notes at the given release branch commit."""
     try:
         config = json.loads(github.text(LISTING_PATH, source))
     except json.JSONDecodeError:
@@ -245,7 +245,19 @@ def allocate(versions, regular, line):
     return next_version([v for v in versions if numeric_version(v)[:2] <= current], line)
 
 
-def make_plan(store, github, run_id, identities, fetch=request_bytes):
+def listing_source(github, release, revision):
+    """Texts and screenshots come from the release commit, or from a later commit of the same release branch
+    when they were fixed after the release was published."""
+    if not revision or revision == release["source"]:
+        return release["source"]
+    if not re.fullmatch(SHA_PATTERN, revision):
+        raise ReleaseError("The listing revision must be a full commit SHA.")
+    if not github.is_ancestor(release["source"], revision) or not github.is_ancestor(revision, release["branch"]):
+        raise ReleaseError(f"The listing revision must be a commit of {release['branch']} at or after the release commit.")
+    return revision
+
+
+def make_plan(store, github, run_id, identities, fetch=request_bytes, listing_revision=None):
     release = github.stable_release(run_id)
     plan = {"candidateRunId": str(run_id), "sourceRevision": None, "appVersion": None, "publish": False}
     if not release:
@@ -255,7 +267,8 @@ def make_plan(store, github, run_id, identities, fetch=request_bytes):
         return {**plan, "reason": "The Candidate run published a release candidate; only Stable releases go to the regular Store listing."}
     version = release["version"]
     line = ".".join(version.split(".")[:2])
-    listing = load_listing(github, release["source"], version, fetch)
+    plan["listingRevision"] = listing_source(github, release, listing_revision)
+    listing = load_listing(github, plan["listingRevision"], version, fetch)
     versions, published, blocker = inspect_stable(store, identities)
     if blocker:
         return {**plan, "reason": f"Waiting for the existing Store submission: {blocker}."}
@@ -385,7 +398,7 @@ def submit(store, github, plan, identities, package_dir, receipt_path,
         raise ReleaseError("Release plan has no submission to publish.")
     packages = validate_packages(package_dir, plan, identities)
     # The Store may have changed while the package was built and approved. Revalidate before the first write.
-    if make_plan(store, github, plan["candidateRunId"], identities, fetch) != plan:
+    if make_plan(store, github, plan["candidateRunId"], identities, fetch, plan.get("listingRevision")) != plan:
         raise ReleaseError("Store or release state changed during packaging. Run again; no submission was created.")
     receipt = {"appVersion": plan["appVersion"], "sourceRevision": plan["sourceRevision"], "version": plan["version"],
                "candidateRunId": plan["candidateRunId"], "submissions": []}
@@ -450,6 +463,8 @@ def main():
     commands = parser.add_subparsers(dest="command", required=True)
     plan_args = commands.add_parser("plan")
     plan_args.add_argument("--candidate-run", required=True)
+    plan_args.add_argument("--listing-revision", default="",
+                           help="Later commit of the release branch to read the Store texts and screenshots from")
     plan_args.add_argument("--output", default="artifacts/store-stable/plan.json")
     submit_args = commands.add_parser("submit")
     submit_args.add_argument("--plan", required=True)
@@ -471,8 +486,8 @@ def main():
     if args.command == "plan":
         # A release candidate or validation-only run never needs Store credentials.
         release = github.stable_release(args.candidate_run)
-        plan = (make_plan(beta.Store(), github, args.candidate_run, identities) if release and release["version"]
-                else make_plan(None, github, args.candidate_run, identities))
+        plan = (make_plan(beta.Store(), github, args.candidate_run, identities, listing_revision=args.listing_revision)
+                if release and release["version"] else make_plan(None, github, args.candidate_run, identities))
         if plan["publish"]:
             github.require_reviewers(APPROVAL_ENVIRONMENT)
         write_json(args.output, plan)
@@ -486,6 +501,8 @@ def main():
             with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
                 summary.write("## Store Stable plan\n\n" + plan["reason"] + "\n\n")
                 summary.write(f"- Candidate run: {plan['candidateRunId']}\n- Source: {plan['sourceRevision']}\n")
+                if plan.get("listingRevision") not in (None, plan["sourceRevision"]):
+                    summary.write(f"- Store texts and screenshots from: {plan['listingRevision']}\n")
                 if plan["publish"]:
                     summary.write(f"- TypeWhisper {plan['appVersion']} as Store version {plan['version']}\n")
                     summary.write(f"- Screenshots: {plan['screenshotRepository']}@{plan['screenshotRevision']}\n")
