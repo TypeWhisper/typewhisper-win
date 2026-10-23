@@ -7,32 +7,23 @@ namespace TypeWhisper.WinUI.Platform;
 internal static partial class KeyboardRepeatTiming
 {
     private const uint GetKeyboardDelay = 0x16, GetFilterKeys = 0x32, FilterKeysOn = 0x1;
-    private const long RefreshMilliseconds = 5000;
     private const long LongestFilterKeysDelay = 20000;
-    private static bool _read;
-    private static long _readAt;
-    private static long _longestGap = 1000;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct FilterKeys { public uint Size, Flags, WaitMilliseconds, DelayMilliseconds, RepeatMilliseconds, BounceMilliseconds; }
 
     /// <summary>The longest gap between two key-downs of a held key, or long.MaxValue when keys never repeat.
-    /// Read on the hook's thread and cached briefly.</summary>
+    /// Read for every key event, so a FilterKeys change applies to the next key; both reads take microseconds.</summary>
     internal static long LongestGapMilliseconds
     {
         get
         {
-            var now = Environment.TickCount64;
-            if (_read && now - _readAt < RefreshMilliseconds) return _longestGap;
-            _read = true;
-            _readAt = now;
             var filter = new FilterKeys { Size = (uint)Marshal.SizeOf<FilterKeys>() };
             // FilterKeys might be on with slow repeats; assume its longest delay rather than the normal timing.
-            if (!SystemParametersInfo(GetFilterKeys, filter.Size, ref filter, 0)) return _longestGap = LongestFilterKeysDelay;
-            var filterOn = (filter.Flags & FilterKeysOn) != 0;
+            if (!SystemParametersInfo(GetFilterKeys, filter.Size, ref filter, 0)) return LongestFilterKeysDelay;
             uint delay = 3;
             if (!SystemParametersInfo(GetKeyboardDelay, 0, ref delay, 0)) delay = 3;
-            return _longestGap = HybridHotkeyRepeat.LongestGap(filterOn, filter.DelayMilliseconds, filter.RepeatMilliseconds, delay);
+            return HybridHotkeyRepeat.LongestGap((filter.Flags & FilterKeysOn) != 0, filter.DelayMilliseconds, filter.RepeatMilliseconds, delay);
         }
     }
 
