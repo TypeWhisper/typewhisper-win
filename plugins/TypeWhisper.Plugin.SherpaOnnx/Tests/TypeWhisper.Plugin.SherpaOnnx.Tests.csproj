@@ -10,4 +10,12 @@
     <ProjectReference Include="../TypeWhisper.Plugin.SherpaOnnx.csproj" SetTargetFramework="TargetFramework=net10.0" SkipGetTargetFrameworkProperties="true" />
     <None Include="../manifest.json" Link="manifest.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+  <!-- The plugin loads sherpa-onnx-c-api.dll with its import renamed to sherpaort.dll. The plugin build patches
+       those files in its own output; tests that load the native runtime need the same files next to them. -->
+  <Target Name="CopyPatchedSherpaRuntime" AfterTargets="Build" Condition="'$(OS)' == 'Windows_NT'">
+    <ItemGroup>
+      <_PatchedSherpaRuntime Include="../bin/$(Configuration)/net10.0/runtimes/win-*/native/sherpa-onnx-c-api.dll;../bin/$(Configuration)/net10.0/runtimes/win-*/native/sherpaort.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_PatchedSherpaRuntime)" DestinationFiles="@(_PatchedSherpaRuntime->'$(OutDir)runtimes/%(RecursiveDir)%(Filename)%(Extension)')" />
+  </Target>
 </Project>

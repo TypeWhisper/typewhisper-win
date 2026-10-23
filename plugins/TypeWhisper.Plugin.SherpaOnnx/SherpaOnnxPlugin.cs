@@ -144,7 +144,7 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.3.2";
+    public string PluginVersion => "1.3.3";
 
     // ITranscriptionEnginePlugin
     /// <summary>
@@ -830,8 +830,8 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
 
     private static OfflineRecognizer CreateRecognizer(ModelDefinition model, string modelDir) =>
         model.SupportsTranslation
-            ? CreateCanaryRecognizer(modelDir, "en", "en")
-            : new(CreateParakeetConfig(modelDir));
+            ? CreateCanaryRecognizer(model.DisplayName, modelDir, "en", "en")
+            : SherpaOnnxRecognizers.Create(CreateParakeetConfig(modelDir), model.DisplayName);
 
     private OfflineRecognizer CreateRecognizerForLoad(ModelDefinition model, string modelDir) =>
         _recognizerFactory is null
@@ -858,10 +858,11 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
     }
 
     private static OfflineRecognizer CreateCanaryRecognizer(
+        string modelName,
         string modelDir,
         string srcLang,
         string tgtLang) =>
-        new(CreateCanaryConfig(modelDir, srcLang, tgtLang));
+        SherpaOnnxRecognizers.Create(CreateCanaryConfig(modelDir, srcLang, tgtLang), modelName);
 
     private void EnsureCanaryLanguage(string? language, bool translate)
     {
@@ -872,8 +873,11 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
 
         if (srcLang == _canarySrcLang && tgtLang == _canaryTgtLang) return;
 
+        // Create the replacement first, so a failure keeps the recognizer for the previous languages usable.
+        var modelName = _loadedModelId is null ? "Canary" : GetModelDefinition(_loadedModelId).DisplayName;
+        var replacement = CreateCanaryRecognizer(modelName, _loadedModelDir, srcLang, tgtLang);
         _recognizer?.Dispose();
-        _recognizer = CreateCanaryRecognizer(_loadedModelDir, srcLang, tgtLang);
+        _recognizer = replacement;
         _canarySrcLang = srcLang;
         _canaryTgtLang = tgtLang;
     }

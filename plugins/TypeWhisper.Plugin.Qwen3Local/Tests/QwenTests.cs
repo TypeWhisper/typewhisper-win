@@ -11,6 +11,18 @@ public sealed class QwenTests : IDisposable
     private readonly string _root = Path.Combine(Path.GetTempPath(), "qwen-tests-" + Guid.NewGuid().ToString("N"));
 
     [Fact]
+    public void DamagedModelFilesFailWhileLoadingInsteadOfOnTheFirstDictation()
+    {
+        Directory.CreateDirectory(Path.Combine(_root, "tokenizer"));
+        foreach (var name in QwenModelAssets.RequiredFiles)
+            File.WriteAllText(Path.Combine(_root, name), "not a model file");
+
+        var ex = Assert.Throws<InvalidOperationException>(() => QwenRecognizer.CreateLoaded(QwenRecognizer.CreateConfig(_root)));
+
+        Assert.StartsWith("The Qwen3-ASR model could not be loaded.", ex.Message);
+    }
+
+    [Fact]
     public async Task VerifiedDownloadPublishesOnlyCompleteAssetsAndRepairsTruncation()
     {
         var bytes = Archive();

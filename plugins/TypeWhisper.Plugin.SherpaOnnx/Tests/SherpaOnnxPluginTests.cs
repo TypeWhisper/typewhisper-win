@@ -26,8 +26,32 @@ public class SherpaOnnxPluginTests
         var sut = new SherpaOnnxPlugin();
 
         Assert.NotNull(manifest);
-        Assert.Equal("1.3.2", manifest.Version);
+        Assert.Equal("1.3.3", manifest.Version);
         Assert.Equal(manifest.Version, sut.PluginVersion);
+    }
+
+    [WindowsX64Fact]
+    public void DamagedModelFilesFailWhileLoadingInsteadOfOnTheFirstDictation()
+    {
+        // Load through the plugin's own resolver, as other tests in this process may already have registered it.
+        SherpaOnnxNativeRuntime.RegisterResolver();
+        var directory = Directory.CreateTempSubdirectory("tw-sherpa-damaged-").FullName;
+        try
+        {
+            foreach (var name in new[] { "encoder.int8.onnx", "decoder.int8.onnx", "joiner.int8.onnx" })
+                File.WriteAllText(Path.Join(directory, name), "not an ONNX model");
+            File.WriteAllText(Path.Join(directory, "tokens.txt"), "<blk> 0" + Environment.NewLine);
+
+            foreach (var config in new[] { SherpaOnnxPlugin.CreateParakeetConfig(directory), SherpaOnnxPlugin.CreateCanaryConfig(directory, "en", "en") })
+            {
+                var ex = Assert.Throws<InvalidOperationException>(() => SherpaOnnxRecognizers.Create(config, "Test Model"));
+                Assert.StartsWith("Test Model could not be loaded.", ex.Message);
+            }
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
     }
 
     [Fact]
@@ -492,5 +516,15 @@ public class SherpaOnnxPluginTests
         public IReadOnlyList<string> AvailableLanguages => ["en"];
         public string GetString(string key) => key;
         public string GetString(string key, params object[] args) => string.Format(key, args);
+    }
+}
+
+// The plugin's native runtime ships for Windows only; the test output carries its patched x64 files.
+public sealed class WindowsX64FactAttribute : FactAttribute
+{
+    public WindowsX64FactAttribute()
+    {
+        if (!OperatingSystem.IsWindows() || RuntimeInformation.ProcessArchitecture != Architecture.X64)
+            Skip = "The sherpa-onnx native runtime is tested on Windows x64.";
     }
 }
