@@ -13,9 +13,9 @@ public sealed class QwenTests : IDisposable
     [Fact]
     public void DamagedModelFilesFailWhileLoadingInsteadOfOnTheFirstDictation()
     {
-        Directory.CreateDirectory(Path.Combine(_root, "tokenizer"));
+        Directory.CreateDirectory(Path.Join(_root, "tokenizer"));
         foreach (var name in QwenModelAssets.RequiredFiles)
-            File.WriteAllText(Path.Combine(_root, name), "not a model file");
+            File.WriteAllText(Path.Join(_root, name), "not a model file");
 
         var ex = Assert.Throws<InvalidOperationException>(() => QwenRecognizer.CreateLoaded(QwenRecognizer.CreateConfig(_root)));
 
