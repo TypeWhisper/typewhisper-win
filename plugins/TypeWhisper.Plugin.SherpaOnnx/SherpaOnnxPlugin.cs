@@ -144,7 +144,7 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.3.1";
+    public string PluginVersion => "1.3.2";
 
     // ITranscriptionEnginePlugin
     /// <summary>
