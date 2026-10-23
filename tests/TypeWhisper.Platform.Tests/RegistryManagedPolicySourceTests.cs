@@ -120,8 +120,10 @@ public sealed class RegistryManagedPolicySourceTests : IDisposable
     [Fact]
     public async Task Watching_ReportsCreationChangesAndDeletion()
     {
+        // Not disposed: a notification already past the source's lock can still release it after the test ends,
+        // and releasing a disposed semaphore on that thread-pool thread would crash the test host.
+        var signal = new SemaphoreSlim(0);
         using var source = Create();
-        using var signal = new SemaphoreSlim(0);
         source.Changed += () => signal.Release();
         Assert.True(source.StartWatching(), source.WatchError);
         Assert.True(source.IsWatching);
