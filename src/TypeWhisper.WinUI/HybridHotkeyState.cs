@@ -4,6 +4,19 @@ namespace TypeWhisper.WinUI;
 
 internal enum HybridHotkeyAction { Toggle, Start, Stop, Cancel }
 
+internal static class HybridHotkeyRepeat
+{
+    /// <summary>The longest gap between two key-downs of a held key, or long.MaxValue when keys never repeat.</summary>
+    /// <param name="filterKeysOn">Whether the FilterKeys accessibility feature is on.</param>
+    /// <param name="filterDelay">FilterKeys delay before a held key repeats; 0 when it never repeats.</param>
+    /// <param name="filterRepeat">FilterKeys interval between repeats; 0 when it never repeats.</param>
+    /// <param name="keyboardDelay">The keyboard delay setting 0-3, meaning 250-1000 ms.</param>
+    internal static long LongestGap(bool filterKeysOn, uint filterDelay, uint filterRepeat, uint keyboardDelay) => filterKeysOn
+        ? filterDelay == 0 || filterRepeat == 0 ? long.MaxValue : Math.Max(filterDelay, filterRepeat)
+        // The normal repeat interval is always shorter than the delay.
+        : (Math.Min(keyboardDelay, 3u) + 1) * 250;
+}
+
 // Pure state machine; timestamps are monotonic milliseconds. No native input or audio.
 internal sealed class HybridHotkeyState
 {
@@ -16,8 +29,9 @@ internal sealed class HybridHotkeyState
     internal const long DefaultLostReleaseMilliseconds = 1500;
     /// <summary>Set from the keyboard repeat timing, so slow accessibility repeats still count as held.</summary>
     internal long LostReleaseMilliseconds { get; set; } = DefaultLostReleaseMilliseconds;
-    internal static long LostReleaseAfter(long longestRepeatGapMilliseconds) =>
-        Math.Max(DefaultLostReleaseMilliseconds, longestRepeatGapMilliseconds + 500);
+    // Without repeats a quiet key may still be held, so nothing counts as a lost release.
+    internal static long LostReleaseAfter(long longestRepeatGapMilliseconds) => longestRepeatGapMilliseconds == long.MaxValue
+        ? long.MaxValue : Math.Max(DefaultLostReleaseMilliseconds, longestRepeatGapMilliseconds + 500);
     private readonly HashSet<int> _down = [];
     private readonly Dictionary<int, long> _lastEvent = [];
     private readonly List<int> _dropped = [];
