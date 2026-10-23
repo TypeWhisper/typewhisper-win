@@ -62,7 +62,9 @@ internal sealed class HybridHotkeyState
     {
         // A second key-down without auto-repeat in between follows a lost key-up, e.g. of a Toggle
         // shortcut that started a recording. It is a new press, so the key is released first.
-        if (down && _down.Contains(key) && _lastEvent.TryGetValue(key, out var last) && now - last > LostReleaseMilliseconds)
+        // When keys never repeat, every second key-down is one.
+        if (down && _down.Contains(key) && _lastEvent.TryGetValue(key, out var last)
+            && (LostReleaseMilliseconds == long.MaxValue || now - last > LostReleaseMilliseconds))
         {
             var released = Key(key, false, now, bindings, recording, mode, paused, held, stale);
             var dropped = _dropped.Append(key).ToArray();
@@ -152,7 +154,8 @@ internal sealed class HybridHotkeyState
 
     private bool LostRelease(int pressed, int key, long now, RecordingMode mode)
     {
-        if (_armed is not null && (_mode ?? mode) != RecordingMode.Toggle || pressed == key || IsModifier(pressed) || now - _lastEvent[pressed] <= LostReleaseMilliseconds) return false;
+        // Only a Hold or Hybrid gesture that started the capture itself keeps a quiet key.
+        if (_armed is not null && _startedByGesture && (_mode ?? mode) != RecordingMode.Toggle || pressed == key || IsModifier(pressed) || now - _lastEvent[pressed] <= LostReleaseMilliseconds) return false;
         _dropped.Add(pressed);
         return true;
     }

@@ -528,4 +528,28 @@ public class HybridHotkeyStateTests
         Assert.Null(state.Key(0x20, true, 60020, bindings, held: Held));
         Assert.Empty(state.DroppedKeys);
     }
+
+    [Fact]
+    public void WithoutKeyRepeatASecondPressAfterALostReleaseIsANewPress()
+    {
+        var state = new HybridHotkeyState { LostReleaseMilliseconds = HybridHotkeyState.LostReleaseAfter(long.MaxValue) };
+        var bindings = new HashSet<string> { "F13" };
+        static bool Held(int key) => true;
+        Assert.Equal(HybridHotkeyAction.Start, state.Key(0x7C, true, 0, bindings, mode: RecordingMode.Toggle, held: Held));
+
+        Assert.Equal(HybridHotkeyAction.Stop, state.Key(0x7C, true, 300, bindings, true, RecordingMode.Toggle, held: Held));
+    }
+
+    [Fact]
+    public void PressThatOnlyStoppedAnotherRecordingDoesNotKeepItsQuietKey()
+    {
+        // F13 stopped a recording started elsewhere, then its key-up got lost.
+        var state = new HybridHotkeyState();
+        var bindings = new HashSet<string> { "F13", "F14" };
+        static bool Held(int key) => true;
+        Assert.Equal(HybridHotkeyAction.Stop, state.Key(0x7C, true, 0, bindings, true, RecordingMode.Hybrid, held: Held));
+
+        Assert.Equal(HybridHotkeyAction.Start, state.Key(0x7D, true, 5000, bindings, mode: RecordingMode.Hybrid, held: Held));
+        Assert.Equal([0x7C], state.DroppedKeys);
+    }
 }
