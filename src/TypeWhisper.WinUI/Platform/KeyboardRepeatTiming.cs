@@ -8,6 +8,7 @@ internal static partial class KeyboardRepeatTiming
 {
     private const uint GetKeyboardDelay = 0x16, GetFilterKeys = 0x32, FilterKeysOn = 0x1;
     private const long RefreshMilliseconds = 5000;
+    private const long LongestFilterKeysDelay = 20000;
     private static bool _read;
     private static long _readAt;
     private static long _longestGap = 1000;
@@ -26,7 +27,9 @@ internal static partial class KeyboardRepeatTiming
             _read = true;
             _readAt = now;
             var filter = new FilterKeys { Size = (uint)Marshal.SizeOf<FilterKeys>() };
-            var filterOn = SystemParametersInfo(GetFilterKeys, filter.Size, ref filter, 0) && (filter.Flags & FilterKeysOn) != 0;
+            // FilterKeys might be on with slow repeats; assume its longest delay rather than the normal timing.
+            if (!SystemParametersInfo(GetFilterKeys, filter.Size, ref filter, 0)) return _longestGap = LongestFilterKeysDelay;
+            var filterOn = (filter.Flags & FilterKeysOn) != 0;
             uint delay = 3;
             if (!SystemParametersInfo(GetKeyboardDelay, 0, ref delay, 0)) delay = 3;
             return _longestGap = HybridHotkeyRepeat.LongestGap(filterOn, filter.DelayMilliseconds, filter.RepeatMilliseconds, delay);
