@@ -479,4 +479,27 @@ public class HybridHotkeyStateTests
         Assert.Null(state.Key(0xA2, true, 3000, bindings, true, RecordingMode.Toggle, held: Held));
         Assert.Equal(HybridHotkeyAction.Stop, state.Key(0xA0, true, 3010, bindings, true, RecordingMode.Toggle, held: Held));
     }
+
+    [Theory]
+    [InlineData(250, 1500)]
+    [InlineData(1000, 1500)]
+    [InlineData(2000, 2500)]
+    [InlineData(20000, 20500)]
+    public void LostReleaseWaitsLongerThanTheSlowestRepeat(long repeatGap, long threshold) =>
+        Assert.Equal(threshold, HybridHotkeyState.LostReleaseAfter(repeatGap));
+
+    [Fact]
+    public void SlowAccessibilityRepeatsOfAHeldShortcutAreNotNewPresses()
+    {
+        // FilterKeys can repeat a held key only every two seconds.
+        var state = new HybridHotkeyState { LostReleaseMilliseconds = HybridHotkeyState.LostReleaseAfter(2000) };
+        var bindings = new HashSet<string> { "F13" };
+        static bool Held(int key) => true;
+        Assert.Equal(HybridHotkeyAction.Start, state.Key(0x7C, true, 0, bindings, mode: RecordingMode.Hold, held: Held));
+        Assert.Null(state.Key(0x7C, true, 2000, bindings, true, RecordingMode.Hold, held: Held));
+        Assert.Null(state.Key(0x7C, true, 4000, bindings, true, RecordingMode.Hold, held: Held));
+        Assert.Empty(state.DroppedKeys);
+
+        Assert.Equal(HybridHotkeyAction.Stop, state.Key(0x7C, false, 5000, bindings, true, RecordingMode.Hold, held: Held));
+    }
 }

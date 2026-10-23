@@ -111,10 +111,10 @@ internal static class ShortcutKeys
     // AltGr sends a synthetic left Ctrl with this scan code before right Alt.
     internal static bool IsAltGrControl(uint key, uint scan) => key == 0xA2 && scan == 0x21D;
 
-    // For the diagnostic log: keys that type text, including characters sent as VK_PACKET, are only "text";
+    // For the diagnostic log: keys that type text, including keypad Equals and characters sent as VK_PACKET, are only "text";
     // other keys their virtual-key code, e.g. vk-FF.
     internal static string DiagnosticKind(int key) => key is 0x20 or >= 0x30 and <= 0x39 or >= 0x41 and <= 0x5A or >= 0x60 and <= 0x6F
-        or >= 0xBA and <= 0xC0 or >= 0xDB and <= 0xDF or 0xE2 or 0xE7 ? "text" : $"vk-{key:X2}";
+        or 0x92 or >= 0xBA and <= 0xC0 or >= 0xDB and <= 0xDF or 0xE2 or 0xE7 ? "text" : $"vk-{key:X2}";
 
     internal static bool IsModifier(int key) => key is 0x10 or 0x11 or 0x12 or >= 0xA0 and <= 0xA5 or 0x5B or 0x5C;
 

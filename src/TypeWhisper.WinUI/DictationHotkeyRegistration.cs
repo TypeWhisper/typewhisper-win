@@ -49,6 +49,7 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
                     {
                         var mode = recordingMode();
                         var now = Environment.TickCount64;
+                        _state.LostReleaseMilliseconds = HybridHotkeyState.LostReleaseAfter(KeyboardRepeatTiming.LongestGapMilliseconds);
                         Dispatch(_state.Key(altGr ? HybridHotkeyState.AltGrControl : (int)key.Key, down, now - InputEventTiming.Age(key.Time, now), _bindings, isRecording(), mode, paused?.Invoke() == true,
                             held => (NativeMethods.GetAsyncKeyState(held == HybridHotkeyState.AltGrControl ? 0xA2 : held) & 0x8000) != 0,
                             stale: InputEventTiming.IsStale(key.Time, now)));

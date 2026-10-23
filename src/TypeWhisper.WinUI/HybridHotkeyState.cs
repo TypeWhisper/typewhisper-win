@@ -13,7 +13,11 @@ internal sealed class HybridHotkeyState
     // A held key that is not a modifier repeats while it is the newest key. Without any event for this
     // long it was released and its key-up got lost, e.g. swallowed by another app's keyboard hook.
     // Windows can then still report it as down, which would block every shortcut until it is pressed again.
-    internal const long LostReleaseMilliseconds = 1500;
+    internal const long DefaultLostReleaseMilliseconds = 1500;
+    /// <summary>Set from the keyboard repeat timing, so slow accessibility repeats still count as held.</summary>
+    internal long LostReleaseMilliseconds { get; set; } = DefaultLostReleaseMilliseconds;
+    internal static long LostReleaseAfter(long longestRepeatGapMilliseconds) =>
+        Math.Max(DefaultLostReleaseMilliseconds, longestRepeatGapMilliseconds + 500);
     private readonly HashSet<int> _down = [];
     private readonly Dictionary<int, long> _lastEvent = [];
     private readonly List<int> _dropped = [];
