@@ -49,9 +49,11 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
                     {
                         var mode = recordingMode();
                         var now = Environment.TickCount64;
+                        _state.LostReleaseMilliseconds = HybridHotkeyState.LostReleaseAfter(KeyboardRepeatTiming.LongestGapMilliseconds);
                         Dispatch(_state.Key(altGr ? HybridHotkeyState.AltGrControl : (int)key.Key, down, now - InputEventTiming.Age(key.Time, now), _bindings, isRecording(), mode, paused?.Invoke() == true,
                             held => (NativeMethods.GetAsyncKeyState(held == HybridHotkeyState.AltGrControl ? 0xA2 : held) & 0x8000) != 0,
                             stale: InputEventTiming.IsStale(key.Time, now)));
+                        LogDroppedKeys(_state.DroppedKeys, key.Time);
                     }
                 }
             }
@@ -60,6 +62,18 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
         _hook = NativeMethods.SetWindowsHookEx(NativeMethods.WH_KEYBOARD_LL, _callback, NativeMethods.GetModuleHandle(null), 0);
         if (_hook == IntPtr.Zero) { _regular.Dispose(); throw new Win32Exception(Marshal.GetLastWin32Error()); }
     }
+    // Every shortcut hook sees the same event, so each lost key-up is logged once per event and key.
+    // All hooks run on the UI thread.
+    private static uint _droppedEvent;
+    private static readonly HashSet<int> _droppedLogged = [];
+    private static void LogDroppedKeys(IReadOnlyList<int> dropped, uint eventTime)
+    {
+        if (dropped.Count == 0) return;
+        if (eventTime != _droppedEvent) { _droppedEvent = eventTime; _droppedLogged.Clear(); }
+        foreach (var key in dropped.Where(_droppedLogged.Add))
+            AppDiagnostics.Write("shortcut.lost-release kind=" + ShortcutKeys.DiagnosticKind(key));
+    }
+
     internal void ObservePause() => _state.Suspend();
     // Read by the Enter hook, which runs on the same UI thread.
     internal bool HoldsKey(int key) => !_disposed && !_interrupted && _state.Holds(key);

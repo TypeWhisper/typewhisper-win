@@ -336,4 +336,233 @@ public class HybridHotkeyStateTests
 
         Assert.False(state.Holds(0xA2));
     }
+
+    // #709: another app's hook swallowed a key-up, and Windows still reports the key as down.
+    [Fact]
+    public void KeyWithLostReleaseStopsBlockingShortcutsAfterItGoesQuiet()
+    {
+        var state = new HybridHotkeyState();
+        var bindings = new HashSet<string> { ShortcutRules.Normalize("CTRL+SHIFT+SPACE") };
+        static bool Held(int key) => true;
+        state.Key(0xFF, true, 0, bindings, held: Held);
+        Assert.Null(state.Key(0xA2, true, 1000, bindings, held: Held));
+        state.Key(0xA2, false, 1100, bindings, held: key => key == 0xFF);
+
+        Assert.Null(state.Key(0xA2, true, 1600, bindings, held: Held));
+        Assert.Equal([0xFF], state.DroppedKeys);
+        Assert.Null(state.Key(0xA0, true, 1610, bindings, held: Held));
+        Assert.Empty(state.DroppedKeys);
+        Assert.Equal(HybridHotkeyAction.Start, state.Key(0x20, true, 1620, bindings, held: Held));
+    }
+
+    [Fact]
+    public void HeldKeyThatRepeatsKeepsBlockingShortcuts()
+    {
+        var state = new HybridHotkeyState();
+        var bindings = new HashSet<string> { ShortcutRules.Normalize("CTRL+SHIFT+SPACE") };
+        static bool Held(int key) => true;
+        for (var time = 0; time <= 3000; time += 500) state.Key(0x41, true, time, bindings, held: Held);
+        state.Key(0xA2, true, 3400, bindings, held: Held);
+        state.Key(0xA0, true, 3410, bindings, held: Held);
+
+        Assert.Null(state.Key(0x20, true, 3420, bindings, held: Held));
+        Assert.Empty(state.DroppedKeys);
+    }
+
+    [Fact]
+    public void ModifiersHeldForLongStillStartShortcuts()
+    {
+        var state = new HybridHotkeyState();
+        var bindings = new HashSet<string> { ShortcutRules.Normalize("CTRL+SHIFT+SPACE") };
+        static bool Held(int key) => true;
+        state.Key(0xA2, true, 0, bindings, held: Held);
+        state.Key(0xA0, true, 5000, bindings, held: Held);
+
+        Assert.Equal(HybridHotkeyAction.Start, state.Key(0x20, true, 9000, bindings, held: Held));
+    }
+
+    [Fact]
+    public void HeldShortcutKeyIsNeverDroppedWhileItsGestureRuns()
+    {
+        // Some media keys do not repeat while held, so push-to-talk on one stays quiet.
+        var state = new HybridHotkeyState();
+        var bindings = new HashSet<string> { "F13" };
+        static bool Held(int key) => true;
+        Assert.Equal(HybridHotkeyAction.Start, state.Key(0x7C, true, 0, bindings, mode: RecordingMode.Hold, held: Held));
+        Assert.Null(state.Key(0x41, false, 5000, bindings, true, RecordingMode.Hold, held: Held));
+        Assert.Empty(state.DroppedKeys);
+
+        Assert.Equal(HybridHotkeyAction.Stop, state.Key(0x7C, false, 6000, bindings, true, RecordingMode.Hold, held: Held));
+    }
+
+    [Theory]
+    [InlineData(RecordingMode.Toggle)]
+    [InlineData(RecordingMode.Hold)]
+    public void NextPressOfAShortcutWhoseReleaseWasLostStopsTheRecording(RecordingMode mode)
+    {
+        var state = new HybridHotkeyState();
+        var bindings = new HashSet<string> { "F13" };
+        static bool Held(int key) => true;
+        Assert.Equal(HybridHotkeyAction.Start, state.Key(0x7C, true, 0, bindings, mode: mode, held: Held));
+
+        Assert.Equal(HybridHotkeyAction.Stop, state.Key(0x7C, true, 5000, bindings, true, mode, held: Held));
+        Assert.Equal([0x7C], state.DroppedKeys);
+    }
+
+    [Fact]
+    public void AutoRepeatOfAToggleShortcutIsNotANewPress()
+    {
+        var state = new HybridHotkeyState();
+        var bindings = new HashSet<string> { "F13" };
+        static bool Held(int key) => true;
+        Assert.Equal(HybridHotkeyAction.Start, state.Key(0x7C, true, 0, bindings, mode: RecordingMode.Toggle, held: Held));
+        for (var time = 500; time <= 4000; time += 500)
+            Assert.Null(state.Key(0x7C, true, time, bindings, true, RecordingMode.Toggle, held: Held));
+        Assert.Empty(state.DroppedKeys);
+    }
+
+    [Fact]
+    public void ToggleShortcutWithLostReleaseDoesNotBlockItsOtherShortcuts()
+    {
+        var state = new HybridHotkeyState();
+        var bindings = new HashSet<string> { "F13", ShortcutRules.Normalize("CTRL+SHIFT+SPACE") };
+        static bool Held(int key) => true;
+        Assert.Equal(HybridHotkeyAction.Start, state.Key(0x7C, true, 0, bindings, mode: RecordingMode.Toggle, held: Held));
+
+        Assert.Null(state.Key(0xA2, true, 5000, bindings, true, RecordingMode.Toggle, held: Held));
+        Assert.Equal([0x7C], state.DroppedKeys);
+        Assert.Null(state.Key(0xA0, true, 5010, bindings, true, RecordingMode.Toggle, held: Held));
+        Assert.Equal(HybridHotkeyAction.Stop, state.Key(0x20, true, 5020, bindings, true, RecordingMode.Toggle, held: Held));
+    }
+
+    [Fact]
+    public void LostReleaseFoundWhileAModifierIsHeldDoesNotBlockTheShortcut()
+    {
+        var state = new HybridHotkeyState();
+        var bindings = new HashSet<string> { ShortcutRules.Normalize("CTRL+SHIFT+SPACE") };
+        static bool Held(int key) => true;
+        state.Key(0xFF, true, 0, bindings, held: Held);
+        state.Key(0xA2, true, 1000, bindings, held: Held);
+        state.Key(0xA0, true, 1600, bindings, held: Held);
+        Assert.Equal([0xFF], state.DroppedKeys);
+
+        Assert.Equal(HybridHotkeyAction.Start, state.Key(0x20, true, 1610, bindings, held: Held));
+    }
+
+    [Fact]
+    public void LostReleaseDoesNotLiftABlockFromKeysTypedLater()
+    {
+        // Ctrl+Left was typed after the lost key, and Ctrl is still held.
+        var state = new HybridHotkeyState();
+        var bindings = new HashSet<string> { ShortcutRules.Normalize("CTRL+SHIFT+SPACE") };
+        state.Key(0xFF, true, 0, bindings, held: _ => true);
+        state.Key(0xA2, true, 500, bindings, held: _ => true);
+        state.Key(0x25, true, 600, bindings, held: _ => true);
+        state.Key(0x25, false, 700, bindings, held: _ => true);
+        state.Key(0xA0, true, 2000, bindings, held: key => key != 0x25);
+        Assert.Equal([0xFF], state.DroppedKeys);
+
+        Assert.Null(state.Key(0x20, true, 2010, bindings, held: key => key != 0x25));
+    }
+
+    [Fact]
+    public void NextPressOfAModifierChordWhoseReleaseWasLostStopsTheRecording()
+    {
+        // Shift-up of a Toggle Ctrl+Shift shortcut got lost and Windows still reports Shift as held.
+        var state = new HybridHotkeyState();
+        var bindings = new HashSet<string> { "CTRL+SHIFT" };
+        static bool Held(int key) => true;
+        state.Key(0xA2, true, 0, bindings, mode: RecordingMode.Toggle, held: Held);
+        Assert.Equal(HybridHotkeyAction.Start, state.Key(0xA0, true, 10, bindings, mode: RecordingMode.Toggle, held: Held));
+        Assert.Null(state.Key(0xA2, false, 100, bindings, true, RecordingMode.Toggle, held: Held));
+
+        Assert.Null(state.Key(0xA2, true, 3000, bindings, true, RecordingMode.Toggle, held: Held));
+        Assert.Equal(HybridHotkeyAction.Stop, state.Key(0xA0, true, 3010, bindings, true, RecordingMode.Toggle, held: Held));
+    }
+
+    [Theory]
+    [InlineData(250, 1500)]
+    [InlineData(1000, 1500)]
+    [InlineData(2000, 2500)]
+    [InlineData(20000, 20500)]
+    [InlineData(long.MaxValue, long.MaxValue)]
+    public void LostReleaseWaitsLongerThanTheSlowestRepeat(long repeatGap, long threshold) =>
+        Assert.Equal(threshold, HybridHotkeyState.LostReleaseAfter(repeatGap));
+
+    [Fact]
+    public void SlowAccessibilityRepeatsOfAHeldShortcutAreNotNewPresses()
+    {
+        // FilterKeys can repeat a held key only every two seconds.
+        var state = new HybridHotkeyState { LostReleaseMilliseconds = HybridHotkeyState.LostReleaseAfter(2000) };
+        var bindings = new HashSet<string> { "F13" };
+        static bool Held(int key) => true;
+        Assert.Equal(HybridHotkeyAction.Start, state.Key(0x7C, true, 0, bindings, mode: RecordingMode.Hold, held: Held));
+        Assert.Null(state.Key(0x7C, true, 2000, bindings, true, RecordingMode.Hold, held: Held));
+        Assert.Null(state.Key(0x7C, true, 4000, bindings, true, RecordingMode.Hold, held: Held));
+        Assert.Empty(state.DroppedKeys);
+
+        Assert.Equal(HybridHotkeyAction.Stop, state.Key(0x7C, false, 5000, bindings, true, RecordingMode.Hold, held: Held));
+    }
+
+    [Theory]
+    [InlineData(false, 0u, 0u, 0u, 250L)]
+    [InlineData(false, 0u, 0u, 3u, 1000L)]
+    [InlineData(true, 2000u, 500u, 1u, 2000L)]
+    [InlineData(true, 1000u, 20000u, 1u, 20000L)]
+    [InlineData(true, 0u, 0u, 1u, long.MaxValue)]
+    [InlineData(true, 1000u, 0u, 1u, long.MaxValue)]
+    public void RepeatGapFollowsKeyboardAndFilterKeysSettings(bool filterOn, uint delay, uint repeat, uint keyboardDelay, long gap) =>
+        Assert.Equal(gap, HybridHotkeyRepeat.LongestGap(filterOn, delay, repeat, keyboardDelay));
+
+    [Fact]
+    public void WithoutKeyRepeatAQuietHeldKeyKeepsBlocking()
+    {
+        // FilterKeys without repeats: a held key stays quiet, so it is never taken as released.
+        var state = new HybridHotkeyState { LostReleaseMilliseconds = HybridHotkeyState.LostReleaseAfter(long.MaxValue) };
+        var bindings = new HashSet<string> { ShortcutRules.Normalize("CTRL+SHIFT+SPACE") };
+        static bool Held(int key) => true;
+        state.Key(0x41, true, 0, bindings, held: Held);
+        state.Key(0xA2, true, 60000, bindings, held: Held);
+        state.Key(0xA0, true, 60010, bindings, held: Held);
+
+        Assert.Null(state.Key(0x20, true, 60020, bindings, held: Held));
+        Assert.Empty(state.DroppedKeys);
+    }
+
+    [Fact]
+    public void WithoutKeyRepeatASecondPressAfterALostReleaseIsANewPress()
+    {
+        var state = new HybridHotkeyState { LostReleaseMilliseconds = HybridHotkeyState.LostReleaseAfter(long.MaxValue) };
+        var bindings = new HashSet<string> { "F13" };
+        static bool Held(int key) => true;
+        Assert.Equal(HybridHotkeyAction.Start, state.Key(0x7C, true, 0, bindings, mode: RecordingMode.Toggle, held: Held));
+
+        Assert.Equal(HybridHotkeyAction.Stop, state.Key(0x7C, true, 300, bindings, true, RecordingMode.Toggle, held: Held));
+    }
+
+    [Fact]
+    public void PressThatOnlyStoppedAnotherRecordingDoesNotKeepItsQuietKey()
+    {
+        // F13 stopped a recording started elsewhere, then its key-up got lost.
+        var state = new HybridHotkeyState();
+        var bindings = new HashSet<string> { "F13", "F14" };
+        static bool Held(int key) => true;
+        Assert.Equal(HybridHotkeyAction.Stop, state.Key(0x7C, true, 0, bindings, true, RecordingMode.Hybrid, held: Held));
+
+        Assert.Equal(HybridHotkeyAction.Start, state.Key(0x7D, true, 5000, bindings, mode: RecordingMode.Hybrid, held: Held));
+        Assert.Equal([0x7C], state.DroppedKeys);
+    }
+
+    [Fact]
+    public void RejectedStartDoesNotKeepItsQuietKey()
+    {
+        // The app could not start, so no capture runs, and the key-up of that press got lost.
+        var state = new HybridHotkeyState();
+        var bindings = new HashSet<string> { "F13", "F14" };
+        static bool Held(int key) => true;
+        Assert.Equal(HybridHotkeyAction.Start, state.Key(0x7C, true, 0, bindings, mode: RecordingMode.Hold, held: Held));
+
+        Assert.Equal(HybridHotkeyAction.Start, state.Key(0x7D, true, 5000, bindings, mode: RecordingMode.Hold, held: Held));
+        Assert.Equal([0x7C], state.DroppedKeys);
+    }
 }

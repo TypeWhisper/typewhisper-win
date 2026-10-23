@@ -143,4 +143,23 @@ public class ShortcutKeysTests
     [InlineData("Ctrl+300")]
     public void UnknownKeysAreRejected(string candidate) =>
         Assert.NotNull(ShortcutRules.Validate(candidate, allowModifiersOnly: true));
+
+    [Theory]
+    [InlineData(0x41, "text")]
+    [InlineData(0x35, "text")]
+    [InlineData(0x20, "text")]
+    [InlineData(0xBE, "text")]
+    [InlineData(0x65, "text")]
+    [InlineData(0xE7, "text")]
+    [InlineData(0x92, "text")]
+    [InlineData(0xC1, "text")]
+    [InlineData(0xC2, "text")]
+    [InlineData(0xE9, "text")]
+    [InlineData(0x2D, "vk-2D")]
+    [InlineData(0x0D, "vk-0D")]
+    [InlineData(0x90, "vk-90")]
+    [InlineData(0xFF, "vk-FF")]
+    [InlineData(0xAF, "vk-AF")]
+    [InlineData(0x7C, "vk-7C")]
+    public void DiagnosticKindNeverNamesTextKeys(int key, string kind) => Assert.Equal(kind, ShortcutKeys.DiagnosticKind(key));
 }
