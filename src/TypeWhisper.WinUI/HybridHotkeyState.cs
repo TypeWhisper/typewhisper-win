@@ -79,7 +79,7 @@ internal sealed class HybridHotkeyState
         // Windows skips a low-level hook that misses its timeout, e.g. while capture starts on
         // the UI thread. A lost key-up would otherwise block the next press of the shortcut.
         // Keys of a running Hold or Hybrid gesture stay, so a held shortcut is never ended by this.
-        if (held is not null && _down.RemoveWhere(pressed => !held(pressed) || LostRelease(pressed, key, now, mode)) > 0)
+        if (held is not null && _down.RemoveWhere(pressed => !held(pressed) || LostRelease(pressed, key, now, mode, recording)) > 0)
         {
             if (_armed is not null && Chord() != _armed)
             {
@@ -152,10 +152,10 @@ internal sealed class HybridHotkeyState
     /// <summary>Keys that the last event dropped as released because their key-up was lost.</summary>
     internal IReadOnlyList<int> DroppedKeys => _dropped;
 
-    private bool LostRelease(int pressed, int key, long now, RecordingMode mode)
+    private bool LostRelease(int pressed, int key, long now, RecordingMode mode, bool recording)
     {
-        // Only a Hold or Hybrid gesture that started the capture itself keeps a quiet key.
-        if (_armed is not null && _startedByGesture && (_mode ?? mode) != RecordingMode.Toggle || pressed == key || IsModifier(pressed) || now - _lastEvent[pressed] <= LostReleaseMilliseconds) return false;
+        // Only a Hold or Hybrid gesture whose own capture is still running keeps a quiet key; a rejected start does not.
+        if (_armed is not null && _startedByGesture && recording && (_mode ?? mode) != RecordingMode.Toggle || pressed == key || IsModifier(pressed) || now - _lastEvent[pressed] <= LostReleaseMilliseconds) return false;
         _dropped.Add(pressed);
         return true;
     }

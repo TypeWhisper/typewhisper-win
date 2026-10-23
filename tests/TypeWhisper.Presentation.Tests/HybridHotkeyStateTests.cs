@@ -552,4 +552,17 @@ public class HybridHotkeyStateTests
         Assert.Equal(HybridHotkeyAction.Start, state.Key(0x7D, true, 5000, bindings, mode: RecordingMode.Hybrid, held: Held));
         Assert.Equal([0x7C], state.DroppedKeys);
     }
+
+    [Fact]
+    public void RejectedStartDoesNotKeepItsQuietKey()
+    {
+        // The app could not start, so no capture runs, and the key-up of that press got lost.
+        var state = new HybridHotkeyState();
+        var bindings = new HashSet<string> { "F13", "F14" };
+        static bool Held(int key) => true;
+        Assert.Equal(HybridHotkeyAction.Start, state.Key(0x7C, true, 0, bindings, mode: RecordingMode.Hold, held: Held));
+
+        Assert.Equal(HybridHotkeyAction.Start, state.Key(0x7D, true, 5000, bindings, mode: RecordingMode.Hold, held: Held));
+        Assert.Equal([0x7C], state.DroppedKeys);
+    }
 }
