@@ -1,7 +1,7 @@
 # Third-party notices
 
 - Qwen3-ASR 0.6B and 1.7B: Alibaba Qwen team, Apache-2.0. Models: https://huggingface.co/Qwen/Qwen3-ASR-0.6B and https://huggingface.co/Qwen/Qwen3-ASR-1.7B
-- sherpa-onnx 1.13.8: Xiaomi Corporation and contributors, Apache-2.0. https://github.com/k2-fsa/sherpa-onnx
+- sherpa-onnx 2.0.0: Xiaomi Corporation and contributors, Apache-2.0. https://github.com/k2-fsa/sherpa-onnx
 - ONNX Runtime (distributed by sherpa-onnx): Microsoft Corporation, MIT. https://github.com/microsoft/onnxruntime
 - SharpCompress 0.50.7: Adam Hathcock and contributors, MIT. https://github.com/adamhathcock/sharpcompress
 
