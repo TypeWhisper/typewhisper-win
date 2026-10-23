@@ -26,6 +26,11 @@ internal sealed partial class QwenRecognizer : IQwenRecognizer
                 _registered = true;
             }
         }
+        _recognizer = CreateLoaded(CreateConfig(directory));
+    }
+
+    internal static OfflineRecognizerConfig CreateConfig(string directory)
+    {
         var config = new OfflineRecognizerConfig();
         config.ModelConfig.Qwen3Asr.ConvFrontend = Path.Combine(directory, "conv_frontend.onnx");
         config.ModelConfig.Qwen3Asr.Encoder = Path.Combine(directory, "encoder.int8.onnx");
@@ -36,7 +41,22 @@ internal sealed partial class QwenRecognizer : IQwenRecognizer
         config.ModelConfig.NumThreads = Math.Clamp(Environment.ProcessorCount / 2, 1, 4);
         config.ModelConfig.Provider = "cpu";
         config.ModelConfig.Tokens = "";
-        _recognizer = new OfflineRecognizer(config);
+        return config;
+    }
+
+    // Since sherpa-onnx 2.0 a model that cannot be loaded (for example a damaged file) no longer throws: the
+    // recognizer keeps a null native handle and only the first dictation would fail, with a NullReferenceException.
+    // The wrapper does not expose that handle, but a stream created from a null recognizer has a null handle too.
+    internal static OfflineRecognizer CreateLoaded(OfflineRecognizerConfig config)
+    {
+        var recognizer = new OfflineRecognizer(config);
+        bool loaded;
+        using (var probe = recognizer.CreateStream())
+            loaded = probe.Handle != IntPtr.Zero;
+        if (loaded) return recognizer;
+        recognizer.Dispose();
+        throw new InvalidOperationException(
+            "The Qwen3-ASR model could not be loaded. Its files may be damaged; remove the model and download it again.");
     }
 
     public string Decode(float[] samples, string? language)
