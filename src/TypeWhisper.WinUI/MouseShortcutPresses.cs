@@ -43,6 +43,20 @@ internal sealed class MouseShortcutPresses
 
     internal void Reset() => _owned.Clear();
 
+    /// <summary>Whether a shortcut owns this button's press and its release has not happened yet.</summary>
+    internal bool Holds(int key) => _owned.Contains(key);
+
+    /// <summary>The replayed modifiers whose real release, after the click's press, is already known, ordered by time.</summary>
+    /// <param name="modifiers">The modifiers replayed with the click's press.</param>
+    /// <param name="press">The click's press time on the Windows uptime clock.</param>
+    /// <param name="released">A modifier's last release time seen by the keyboard hook, if any.</param>
+    internal static (int Modifier, uint Time)[] KnownReleases(int[] modifiers, uint press, Func<int, uint?> released) =>
+        modifiers.Select(modifier => (modifier, time: released(modifier)))
+            .Where(step => step.time is { } time && unchecked((int)(time - press)) > 0)
+            .Select(step => (step.modifier, step.time!.Value))
+            .OrderBy(step => unchecked((int)(step.Value - press)))
+            .ToArray();
+
     /// <summary>The modifiers of a matched click that are no longer held, as virtual keys to replay around the click.</summary>
     /// <param name="chord">The shortcut the hook matched at event time, or null.</param>
     /// <param name="downNow">Whether a generic modifier key is held now.</param>
