@@ -50,7 +50,7 @@ internal static class ShortcutRules
         var parts = Normalize(candidate).Split('+');
         if (!parts.Contains("CTRL") || !parts.Contains("ALT") || parts.Contains("WIN")) return null;
         var keys = parts.Where(part => part is not ("CTRL" or "ALT" or "SHIFT")).ToArray();
-        if (keys.Length != 1 || !ShortcutKeys.TryParse(keys[0], out var key)) return null;
+        if (keys.Length != 1 || !ShortcutKeys.TryParse(keys[0], out var key) || ShortcutKeys.IsMouseButton(key)) return null;
         return altGrCharacter(key, parts.Contains("SHIFT")) is { } character
             ? Loc.T("Your keyboard types \"{0}\" with this combination (AltGr). Choose another shortcut.", character) : null;
     }

@@ -5,7 +5,7 @@ using TypeWhisper.WinUI.Platform;
 
 namespace TypeWhisper.WinUI;
 
-internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend, IDisposable
+internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend, IMouseShortcutHandler, IDisposable
 {
     private readonly HotkeyRegistration _regular;
     private readonly NativeMethods.HookProc _callback;
@@ -14,6 +14,16 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
     private HashSet<string> _bindings = [];
     private HybridHotkeyState _state = new();
     private bool _disposed;
+    // The mouse hook thread decides which clicks a shortcut owns; the gesture itself runs on the UI thread.
+    private readonly object _mouseLock = new();
+    private readonly MouseShortcutPresses _mousePresses = new();
+    private readonly Func<bool>? _paused;
+    private readonly Microsoft.UI.Dispatching.DispatcherQueue _queue;
+    private readonly Action<int, bool, uint, string?, bool> _mouseGesture;
+    // Mouse presses that a shortcut owns never reach Windows' key state, so held buttons are tracked here (UI thread).
+    private readonly HashSet<int> _mouseDown = [];
+    private HashSet<int> _mouseButtons = [];
+    private bool _mouseHooked;
     public string Value { get; private set; } = "";
     // Lets the shortcut recorder tell AltGr from a real Ctrl, which XAML key events cannot.
     internal static bool AltGrControlDown { get; private set; }
@@ -21,6 +31,8 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
         Func<RecordingMode>? recordingMode = null, Func<bool>? paused = null, int idBase = 0x6500)
     {
         recordingMode ??= () => RecordingMode.Hybrid;
+        _paused = paused;
+        _queue = window.DispatcherQueue;
         // Reserve ordinary chords, but use the hook for both press and release.
         _regular = new(window, () => { }, idBase);
         void Dispatch(HybridHotkeyAction? action)
@@ -30,6 +42,33 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
             // This preserves event-time readiness before a long UI queue can drain.
             if (action is not null && !_disposed && !ShortcutRecorder.AnyEditing) invoke(action.Value);
         }
+        bool Held(int held) => ShortcutKeys.IsMouseButton(held) ? _mouseDown.Contains(held)
+            : (NativeMethods.GetAsyncKeyState(held == HybridHotkeyState.AltGrControl ? 0xA2 : held) & 0x8000) != 0;
+        void Feed(int key, bool down, uint time)
+        {
+            var mode = recordingMode();
+            var now = Environment.TickCount64;
+            _state.LostReleaseMilliseconds = HybridHotkeyState.LostReleaseAfter(KeyboardRepeatTiming.LongestGapMilliseconds);
+            Dispatch(_state.Key(key, down, now - InputEventTiming.Age(time, now), _bindings, isRecording(), mode, paused?.Invoke() == true,
+                Held, stale: InputEventTiming.IsStale(time, now)));
+            LogDroppedKeys(_state.DroppedKeys, time);
+        }
+        _mouseGesture = (key, down, time, chord, editing) =>
+        {
+            if (_disposed || _interrupted) return;
+            if (editing)
+            {
+                // Like a reserved keyboard chord, the press goes to the open shortcut editor instead of dictation.
+                _state = new(); _mouseDown.Clear();
+                if (chord is not null) ShortcutRecorder.CaptureRegisteredShortcut(chord);
+                return;
+            }
+            // Mouse buttons don't repeat: a second press without a release in between follows a lost release.
+            if (down && _mouseDown.Contains(key)) { Feed(key, false, time); _mouseDown.Remove(key); }
+            // Like Windows' key state seen from a keyboard hook, a button counts as held until its release is handled.
+            Feed(key, down, time);
+            if (down) _mouseDown.Add(key); else _mouseDown.Remove(key);
+        };
         _callback = (code, message, data) =>
         {
             if (code >= 0 && !_interrupted && !_disposed)
@@ -45,16 +84,7 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
                     var down = message.ToInt64() is 0x100 or 0x104;
                     var up = message.ToInt64() is 0x101 or 0x105;
                     if (ShortcutRecorder.AnyEditing) _state = new();
-                    else if (down || up)
-                    {
-                        var mode = recordingMode();
-                        var now = Environment.TickCount64;
-                        _state.LostReleaseMilliseconds = HybridHotkeyState.LostReleaseAfter(KeyboardRepeatTiming.LongestGapMilliseconds);
-                        Dispatch(_state.Key(altGr ? HybridHotkeyState.AltGrControl : (int)key.Key, down, now - InputEventTiming.Age(key.Time, now), _bindings, isRecording(), mode, paused?.Invoke() == true,
-                            held => (NativeMethods.GetAsyncKeyState(held == HybridHotkeyState.AltGrControl ? 0xA2 : held) & 0x8000) != 0,
-                            stale: InputEventTiming.IsStale(key.Time, now)));
-                        LogDroppedKeys(_state.DroppedKeys, key.Time);
-                    }
+                    else if (down || up) Feed(altGr ? HybridHotkeyState.AltGrControl : (int)key.Key, down, key.Time);
                 }
             }
             return NativeMethods.CallNextHookEx(IntPtr.Zero, code, message, data);
@@ -74,6 +104,23 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
             AppDiagnostics.Write("shortcut.lost-release kind=" + ShortcutKeys.DiagnosticKind(key));
     }
 
+    // Runs on the mouse hook thread: only the decision whether the click belongs to a shortcut.
+    bool IMouseShortcutHandler.Button(int key, bool down, uint time, string modifiers)
+    {
+        if (_disposed || _interrupted || !_mouseButtons.Contains(key)) return false;
+        var editing = ShortcutRecorder.AnyEditing;
+        bool owned;
+        string? chord;
+        lock (_mouseLock) owned = _mousePresses.Button(key, down, modifiers, _bindings, editing || _paused?.Invoke() != true, out chord);
+        _queue.TryEnqueue(() => _mouseGesture(key, down, time, chord, editing));
+        return owned;
+    }
+
+    void IMouseShortcutHandler.Reset()
+    {
+        lock (_mouseLock) _mousePresses.Reset();
+    }
+
     internal void ObservePause() => _state.Suspend();
     // Read by the Enter hook, which runs on the same UI thread.
     internal bool HoldsKey(int key) => !_disposed && !_interrupted && _state.Holds(key);
@@ -83,6 +130,7 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
         _interrupted = true;
         AltGrControlDown = false;
         _state.ResetAfterInterruption([]);
+        _mouseDown.Clear(); ((IMouseShortcutHandler)this).Reset();
     }
 
     internal string? Recover()
@@ -98,6 +146,7 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
         // would leave a phantom generic key down after the physical key-up.
         _state.ResetAfterInterruption(Enumerable.Range(8, 247)
             .Where(key => key is not (0x10 or 0x11 or 0x12) && (NativeMethods.GetAsyncKeyState(key) & 0x8000) != 0));
+        _mouseDown.Clear(); ((IMouseShortcutHandler)this).Reset();
         _interrupted = false;
         return null;
     }
@@ -108,12 +157,41 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
         foreach (var chord in chords)
             if (ShortcutRules.Validate(chord, true) is string error) return error;
         static bool ModifierOnly(string chord) => chord.Split('+').All(p => p is "CTRL" or "ALT" or "SHIFT" or "WIN");
-        var registrationError = _regular.TryChange(string.Join(",", chords.Where(c => !ModifierOnly(c))));
-        if (registrationError is not null) return registrationError;
+        var mouseButtons = chords.Where(ShortcutKeys.IsMouseChord)
+            .Select(chord => ShortcutKeys.TryParse(chord.Split('+')[^1], out var button) ? button : 0).ToHashSet();
+        // Install the mouse hook first, so a failure leaves the previous shortcuts untouched.
+        var hookAdded = false;
+        if (mouseButtons.Count > 0 && !_mouseHooked)
+        {
+            if (MouseShortcutHook.Add(this) is { } hookError) return hookError;
+            _mouseHooked = hookAdded = true;
+        }
+        var registrationError = _regular.TryChange(string.Join(",", chords.Where(c => !ModifierOnly(c) && !ShortcutKeys.IsMouseChord(c))));
+        if (registrationError is not null)
+        {
+            if (hookAdded) StopMouse();
+            return registrationError;
+        }
+        if (mouseButtons.Count == 0) StopMouse();
         _bindings = chords.ToHashSet();
+        _mouseButtons = mouseButtons;
         _state = new();
+        _mouseDown.Clear(); ((IMouseShortcutHandler)this).Reset();
         Value = string.Join(",", chords);
         return null;
     }
-    public void Dispose() { if (_disposed) return; _disposed = true; NativeMethods.UnhookWindowsHookEx(_hook); _hook = IntPtr.Zero; _regular.Dispose(); }
+    private void StopMouse()
+    {
+        if (!_mouseHooked) return;
+        MouseShortcutHook.Remove(this);
+        _mouseHooked = false;
+    }
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        NativeMethods.UnhookWindowsHookEx(_hook); _hook = IntPtr.Zero;
+        StopMouse();
+        _regular.Dispose();
+    }
 }

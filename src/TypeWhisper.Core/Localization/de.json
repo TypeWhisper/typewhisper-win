@@ -1621,7 +1621,7 @@
   "Press Esc once to cancel.": "Drücke Esc einmal, um abzubrechen.",
   "Press Esc twice within 3 seconds to cancel.": "Drücke Esc zweimal innerhalb von 3 Sekunden, um abzubrechen.",
   "Press a hotkey and speak in any app.": "Drücke ein Tastenkürzel und sprich in jeder App.",
-  "Press keys, then choose Use shortcut. Esc cancels; Tab moves to the buttons.": "Drücke Tasten und wähle dann „Tastenkürzel verwenden“. Esc bricht ab; Tab wechselt zu den Schaltflächen.",
+  "Press keys or click here with the middle or a side mouse button, then choose Use shortcut. Esc cancels; Tab moves to the buttons.": "Drücke Tasten oder klicke hier mit der mittleren oder einer seitlichen Maustaste und wähle dann „Tastenkürzel verwenden“. Esc bricht ab; Tab wechselt zu den Schaltflächen.",
   "Press once to start and again to stop.": "Einmal drücken zum Starten, erneut drücken zum Stoppen.",
   "Press once to start and again to stop. Applies only to this recording and uses your dictation paste and history settings.": "Einmal drücken zum Starten, erneut zum Stoppen. Gilt nur für diese Aufnahme und verwendet deine Einfüge- und Verlaufseinstellungen für Diktate.",
   "Press one key together with your modifiers.": "Drücke eine Taste zusammen mit deinen Modifikatortasten.",
@@ -3236,5 +3236,9 @@
   "Copy the finished text to the clipboard. Paste it yourself with Ctrl+V. No review window.": "Den fertigen Text in die Zwischenablage kopieren. Du fügst ihn selbst mit Ctrl+V ein. Kein Prüffenster.",
   "Copied to clipboard. Press Ctrl+V to paste.": "In die Zwischenablage kopiert. Mit Ctrl+V einfügen.",
   "Preserve clipboard content": "Zwischenablage-Inhalt beibehalten",
-  "Restores your clipboard after text insertion. Without this, your clipboard contains the transcribed text after dictation.": "Stellt die Zwischenablage nach dem Einfügen wieder her. Ohne diese Option enthält die Zwischenablage nach dem Diktieren den transkribierten Text."
+  "Restores your clipboard after text insertion. Without this, your clipboard contains the transcribed text after dictation.": "Stellt die Zwischenablage nach dem Einfügen wieder her. Ohne diese Option enthält die Zwischenablage nach dem Diktieren den transkribierten Text.",
+  "Middle mouse button": "Mittlere Maustaste",
+  "Mouse back button": "Maustaste Zurück",
+  "Mouse forward button": "Maustaste Vorwärts",
+  "Mouse button shortcuts are unavailable (Windows error {0}). Restart TypeWhisper to retry.": "Tastenkürzel mit Maustasten sind nicht verfügbar (Windows-Fehler {0}). Starte TypeWhisper neu, um es erneut zu versuchen."
 }

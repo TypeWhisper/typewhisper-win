@@ -16,7 +16,9 @@ internal static class ShortcutKeys
         ("LaunchMail", 0xB4), ("MediaSelect", 0xB5), ("LaunchApp1", 0xB6), ("LaunchApp2", 0xB7),
         ("`", 0xC0), ("-", 0xBD), ("=", 0xBB), ("[", 0xDB), ("]", 0xDD), (";", 0xBA), ("'", 0xDE),
         // A literal comma would split the stored shortcut list.
-        ("Comma", 0xBC), (".", 0xBE), ("/", 0xBF), ("\\", 0xDC), ("Oem8", 0xDF), ("Oem102", 0xE2)
+        ("Comma", 0xBC), (".", 0xBE), ("/", 0xBF), ("\\", 0xDC), ("Oem8", 0xDF), ("Oem102", 0xE2),
+        // Mouse buttons use their virtual-key codes. The left and right buttons are never shortcuts.
+        ("MouseMiddle", 0x04), ("MouseBack", 0x05), ("MouseForward", 0x06)
     ];
     private static readonly Dictionary<int, string> TokensByKey = Named.ToDictionary(item => item.Key, item => item.Token);
     private static readonly Dictionary<string, int> KeysByToken = Named
@@ -61,7 +63,7 @@ internal static class ShortcutKeys
         { key = 0x60 + token[3] - '0'; return true; }
         var number = token.StartsWith("VK", StringComparison.OrdinalIgnoreCase) ? token.AsSpan(2) : token.AsSpan();
         if (int.TryParse(number, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out key)
-            && key is >= 1 and <= 254 && !IsModifier(key)) return true;
+            && key is >= 3 and <= 254 && !IsModifier(key)) return true;
         key = 0;
         return false;
     }
@@ -69,7 +71,15 @@ internal static class ShortcutKeys
     // Punctuation keys are stored by position; show the character they type on the
     // active layout instead, e.g. "<" or "^" on a German keyboard.
     internal static string Label(string part, Func<int, char?>? layout = null) => !TryParse(part, out var key) ? part
+        : IsMouseButton(key) ? MouseLabel(key)
         : IsLayoutKey(key) && layout?.Invoke(key) is { } character ? char.ToUpperInvariant(character).ToString() : Token(key);
+
+    private static string MouseLabel(int key) => key switch
+    {
+        0x04 => Loc.T("Middle mouse button"),
+        0x05 => Loc.T("Mouse back button"),
+        _ => Loc.T("Mouse forward button")
+    };
 
     internal static string Display(string chord, Func<int, char?>? layout = null) => string.Join(" + ",
         chord.Split('+', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Select(part => Label(part, layout)));
@@ -117,12 +127,18 @@ internal static class ShortcutKeys
     internal static string DiagnosticKind(int key) => key is >= 0x01 and <= 0x1F or >= 0x21 and <= 0x2F or >= 0x5B and <= 0x5F
         or >= 0x70 and <= 0x87 or 0x90 or 0x91 or >= 0xA0 and <= 0xB7 or >= 0xF6 and <= 0xFF ? $"vk-{key:X2}" : "text";
 
+    // Middle, back (XButton1) and forward (XButton2). RegisterHotKey cannot reserve them, so a mouse hook handles them.
+    internal static bool IsMouseButton(int key) => key is 0x04 or 0x05 or 0x06;
+
+    internal static bool IsMouseChord(string chord) =>
+        TryParse(chord.Split('+', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).LastOrDefault() ?? "", out var key) && IsMouseButton(key);
+
     internal static bool IsModifier(int key) => key is 0x10 or 0x11 or 0x12 or >= 0xA0 and <= 0xA5 or 0x5B or 0x5C;
 
     // Keys that may be a shortcut without a modifier: F1-F24, Insert, Pause and the browser, volume,
     // media and launch keys. They don't type or edit text, and RegisterHotKey swallows their press.
     // Lock keys still toggle their state, apps open the context menu when the menu key is released
     // (RegisterHotKey lets that through), and Windows uses Print Screen and Sleep itself, so those
-    // keep needing a modifier.
-    internal static bool WorksAlone(int key) => key is >= 0x70 and <= 0x87 or 0x2D or 0x13 or >= 0xA6 and <= 0xB7;
+    // keep needing a modifier. The middle and side mouse buttons don't type either.
+    internal static bool WorksAlone(int key) => key is >= 0x70 and <= 0x87 or 0x2D or 0x13 or >= 0xA6 and <= 0xB7 || IsMouseButton(key);
 }

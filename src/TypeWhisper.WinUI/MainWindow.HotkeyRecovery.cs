@@ -15,6 +15,7 @@ public sealed partial class MainWindow
                 _dictationHotkey?.Interrupt();
                 foreach (var entry in _recordingShortcuts.Values) entry.Registration.Interrupt();
                 _dictationKeyHook?.Interrupt();
+                MouseShortcutHook.Interrupt();
             }, () =>
             {
                 if (_closing || _profileRestoreClosing) return null;
@@ -30,6 +31,7 @@ public sealed partial class MainWindow
                 foreach (var entry in _recordingShortcuts.Values)
                     if (entry.Registration.Recover() is { } failure) errors.Add(failure);
                 if (_dictationKeyHook?.Recover() is { } keyError) errors.Add(keyError);
+                if (MouseShortcutHook.Recover() is { } mouseError) errors.Add(mouseError);
                 return errors.Count == 0 ? null : string.Join(" ", errors.Distinct());
             }, ReportHotkeyRecovery);
             _hotkeyRecovery.SessionActivity += (message, reason) =>

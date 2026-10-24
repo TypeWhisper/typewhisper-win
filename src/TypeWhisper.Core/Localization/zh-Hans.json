@@ -1621,7 +1621,7 @@
   "Press Esc once to cancel.": "按一次 Esc 取消。",
   "Press Esc twice within 3 seconds to cancel.": "3 秒内按两次 Esc 取消。",
   "Press a hotkey and speak in any app.": "按下快捷键，在任意应用中说话。",
-  "Press keys, then choose Use shortcut. Esc cancels; Tab moves to the buttons.": "按下按键，然后选择“使用快捷键”。Esc 取消；Tab 移到按钮。",
+  "Press keys or click here with the middle or a side mouse button, then choose Use shortcut. Esc cancels; Tab moves to the buttons.": "按下按键，或在此处用鼠标中键或侧键单击，然后选择“使用快捷键”。Esc 取消；Tab 移到按钮。",
   "Press once to start and again to stop.": "按一次开始，再按一次停止。",
   "Press once to start and again to stop. Applies only to this recording and uses your dictation paste and history settings.": "按一次开始，再按一次停止。仅适用于本次录音，并使用你的听写粘贴和历史记录设置。",
   "Press one key together with your modifiers.": "请同时按下修饰键和一个按键。",
@@ -3236,5 +3236,9 @@
   "Copy the finished text to the clipboard. Paste it yourself with Ctrl+V. No review window.": "将完成的文本复制到剪贴板。用 Ctrl+V 自行粘贴。不打开审阅窗口。",
   "Copied to clipboard. Press Ctrl+V to paste.": "已复制到剪贴板。按 Ctrl+V 粘贴。",
   "Preserve clipboard content": "保留剪贴板内容",
-  "Restores your clipboard after text insertion. Without this, your clipboard contains the transcribed text after dictation.": "在文本插入后恢复你的剪贴板。如果不启用此选项，听写后剪贴板中将包含转录文本。"
+  "Restores your clipboard after text insertion. Without this, your clipboard contains the transcribed text after dictation.": "在文本插入后恢复你的剪贴板。如果不启用此选项，听写后剪贴板中将包含转录文本。",
+  "Middle mouse button": "鼠标中键",
+  "Mouse back button": "鼠标后退键",
+  "Mouse forward button": "鼠标前进键",
+  "Mouse button shortcuts are unavailable (Windows error {0}). Restart TypeWhisper to retry.": "鼠标按键快捷键不可用（Windows 错误 {0}）。请重启 TypeWhisper 后重试。"
 }

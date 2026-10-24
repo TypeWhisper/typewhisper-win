@@ -145,6 +145,8 @@ public sealed class ShortcutRecorder : UserControl
             Grid.SetColumnSpan(panel, narrow ? 2 : 1); Grid.SetColumnSpan(copy, narrow ? 2 : 1);
             panel.Margin = narrow ? new Thickness(0, 12, 0, 0) : new Thickness(0);
         };
+        // Buttons mark pointer presses handled, so listen to handled ones as well.
+        AddHandler(PointerPressedEvent, new PointerEventHandler(CapturePointer), true);
         Unloaded += (_, _) => Cancel(false);
         LostFocus += (_, _) => DispatcherQueue.TryEnqueue(() =>
         {
@@ -236,7 +238,7 @@ public sealed class ShortcutRecorder : UserControl
         _shell.BorderBrush = (Brush)Application.Current.Resources["AccentBrush"];
         _shortcuts.IsHitTestVisible = false;
         foreach (var control in _shortcuts.Children.OfType<Grid>().SelectMany(row => row.Children).OfType<Control>().Concat(_shortcuts.Children.OfType<Control>())) control.IsEnabled = false;
-        _hint.Text = Loc.T("Press keys, then choose Use shortcut. Esc cancels; Tab moves to the buttons.");
+        _hint.Text = Loc.T("Press keys or click here with the middle or a side mouse button, then choose Use shortcut. Esc cancels; Tab moves to the buttons.");
         _apply.IsEnabled = false;
         _normalActions.Visibility = Visibility.Collapsed; _editActions.Visibility = Visibility.Visible;
         _record.Style = (Style)Application.Current.Resources["PrimaryButtonStyle"];
@@ -349,6 +351,25 @@ public sealed class ShortcutRecorder : UserControl
         }
         _hasMainKey = true;
         var name = ShortcutKeys.Token((int)e.Key);
+        Candidate(modifiers.Length == 0 ? name : $"{modifiers}+{name}");
+    }
+    // The middle and side mouse buttons, pressed over the editor. A shortcut that already uses the
+    // button never arrives here; its mouse hook passes it on through CaptureRegisteredShortcut.
+    private void CapturePointer(object sender, PointerRoutedEventArgs e)
+    {
+        if (!IsCapturing || e.Pointer.PointerDeviceType != PointerDeviceType.Mouse) return;
+        var key = e.GetCurrentPoint(this).Properties.PointerUpdateKind switch
+        {
+            PointerUpdateKind.MiddleButtonPressed => 0x04,
+            PointerUpdateKind.XButton1Pressed => 0x05,
+            PointerUpdateKind.XButton2Pressed => 0x06,
+            _ => 0
+        };
+        if (key == 0) return;
+        e.Handled = true;
+        _hasMainKey = true;
+        var modifiers = Modifiers();
+        var name = ShortcutKeys.Token(key);
         Candidate(modifiers.Length == 0 ? name : $"{modifiers}+{name}");
     }
     internal void CaptureKeyUp(KeyRoutedEventArgs e)
