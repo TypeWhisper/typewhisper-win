@@ -48,6 +48,19 @@ internal sealed class MouseShortcutPresses
     /// <param name="downNow">Whether a generic modifier key is held now.</param>
     /// <remarks>The UI thread handles a click after the keyboard events queued before it. A modifier released in
     /// between would otherwise be missing from the chord, and the shortcut would silently do nothing.</remarks>
+    /// <summary>The virtual key that ReleasedModifiers uses for a modifier key, or 0 for any other key.</summary>
+    internal static int ReplayKey(int key) => key switch
+    {
+        0x11 or 0xA2 or 0xA3 => 0xA2, 0x12 or 0xA4 or 0xA5 => 0xA4, 0x10 or 0xA0 or 0xA1 => 0xA0, 0x5B or 0x5C => 0x5B, _ => 0
+    };
+
+    /// <summary>When to replay a modifier's release: its real release time if that came after the click, else the click's.</summary>
+    /// <param name="click">The click's time on the Windows uptime clock.</param>
+    /// <param name="released">The modifier's last release time seen by the keyboard hook, if any.</param>
+    /// <remarks>Uptime subtraction stays valid across the 49-day wrap. A hold longer than the tap limit stays a hold.</remarks>
+    internal static uint ReplayReleaseTime(uint click, uint? released) =>
+        released is { } time && unchecked((int)(time - click)) > 0 ? time : click;
+
     internal static int[] ReleasedModifiers(string? chord, Func<int, bool> downNow)
     {
         if (chord is null) return [];

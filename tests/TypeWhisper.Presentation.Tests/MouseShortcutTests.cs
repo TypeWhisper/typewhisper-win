@@ -187,4 +187,25 @@ public class MouseShortcutTests
         foreach (var modifier in replay) Assert.Null(state.Key(modifier, true, 10, bindings, held: HeldWithReplay));
         Assert.Equal(HybridHotkeyAction.Start, state.Key(Back, true, 10, bindings, held: HeldWithReplay));
     }
+
+    [Theory]
+    [InlineData(1000u, 1400u, 1400u)]
+    [InlineData(1000u, 900u, 1000u)]
+    [InlineData(uint.MaxValue - 100, 200u, 200u)]
+    public void ReplayedReleaseKeepsItsRealTime(uint click, uint released, uint expected) =>
+        Assert.Equal(expected, MouseShortcutPresses.ReplayReleaseTime(click, released));
+
+    [Fact]
+    public void ReplayedReleaseAfterAHoldStopsAHybridGesture()
+    {
+        // Ctrl+MouseBack held for 400 ms: with the real release time the replayed Ctrl-up ends the hold.
+        var state = new HybridHotkeyState();
+        var bindings = new HashSet<string> { ShortcutRules.Normalize("Ctrl+MouseBack") };
+        bool Held(int key) => key is 0xA2 or Back;
+        Assert.Null(state.Key(0xA2, true, 0, bindings, held: Held));
+        Assert.Equal(HybridHotkeyAction.Start, state.Key(Back, true, 0, bindings, held: Held));
+        var release = MouseShortcutPresses.ReplayReleaseTime(0, 400);
+        Assert.Equal(HybridHotkeyAction.Stop, state.Key(0xA2, false, release, bindings, true, held: Held));
+        Assert.Equal(new[] { 0xA2, 0xA4, 0xA0, 0x5B, 0 }, new[] { 0xA3, 0x12, 0xA1, 0x5C, 0x41 }.Select(MouseShortcutPresses.ReplayKey));
+    }
 }

@@ -24,6 +24,8 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
     private readonly HashSet<int> _mouseDown = [];
     private HashSet<int> _mouseButtons = [];
     private bool _mouseHooked;
+    // When each modifier was last released, so a replayed release keeps its real time (UI thread).
+    private readonly Dictionary<int, uint> _modifierReleased = [];
     public string Value { get; private set; } = "";
     // Lets the shortcut recorder tell AltGr from a real Ctrl, which XAML key events cannot.
     internal static bool AltGrControlDown { get; private set; }
@@ -76,7 +78,8 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
             // Like Windows' key state seen from a keyboard hook, a button counts as held until its release is handled.
             Feed(key, down, time, HeldWithReplay);
             if (down) _mouseDown.Add(key); else _mouseDown.Remove(key);
-            foreach (var modifier in replay) Feed(modifier, false, time, HeldWithReplay);
+            foreach (var modifier in replay)
+                Feed(modifier, false, MouseShortcutPresses.ReplayReleaseTime(time, _modifierReleased.TryGetValue(modifier, out var released) ? released : null), HeldWithReplay);
         };
         _callback = (code, message, data) =>
         {
@@ -92,6 +95,7 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
                 {
                     var down = message.ToInt64() is 0x100 or 0x104;
                     var up = message.ToInt64() is 0x101 or 0x105;
+                    if (up && MouseShortcutPresses.ReplayKey((int)key.Key) is var replayKey and not 0) _modifierReleased[replayKey] = key.Time;
                     if (ShortcutRecorder.AnyEditing) _state = new();
                     else if (down || up) Feed(altGr ? HybridHotkeyState.AltGrControl : (int)key.Key, down, key.Time);
                 }
