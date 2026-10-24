@@ -44,13 +44,13 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
         }
         bool Held(int held) => ShortcutKeys.IsMouseButton(held) ? _mouseDown.Contains(held)
             : (NativeMethods.GetAsyncKeyState(held == HybridHotkeyState.AltGrControl ? 0xA2 : held) & 0x8000) != 0;
-        void Feed(int key, bool down, uint time)
+        void Feed(int key, bool down, uint time, Func<int, bool>? held = null)
         {
             var mode = recordingMode();
             var now = Environment.TickCount64;
             _state.LostReleaseMilliseconds = HybridHotkeyState.LostReleaseAfter(KeyboardRepeatTiming.LongestGapMilliseconds);
             Dispatch(_state.Key(key, down, now - InputEventTiming.Age(time, now), _bindings, isRecording(), mode, paused?.Invoke() == true,
-                Held, stale: InputEventTiming.IsStale(time, now)));
+                held ?? Held, stale: InputEventTiming.IsStale(time, now)));
             LogDroppedKeys(_state.DroppedKeys, time);
         }
         _mouseGesture = (key, down, time, chord, editing) =>
@@ -63,11 +63,17 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
                 if (chord is not null) ShortcutRecorder.CaptureRegisteredShortcut(chord);
                 return;
             }
+            // A modifier of the matched chord that was released before this queued click is replayed around it,
+            // so the gesture sees the order Windows saw.
+            int[] replay = down ? MouseShortcutPresses.ReleasedModifiers(chord, held => (NativeMethods.GetAsyncKeyState(held) & 0x8000) != 0) : [];
+            bool HeldWithReplay(int held) => replay.Contains(held) || Held(held);
+            foreach (var modifier in replay) Feed(modifier, true, time, HeldWithReplay);
             // Mouse buttons don't repeat: a second press without a release in between follows a lost release.
             if (down && _mouseDown.Contains(key)) { Feed(key, false, time); _mouseDown.Remove(key); }
             // Like Windows' key state seen from a keyboard hook, a button counts as held until its release is handled.
-            Feed(key, down, time);
+            Feed(key, down, time, HeldWithReplay);
             if (down) _mouseDown.Add(key); else _mouseDown.Remove(key);
+            foreach (var modifier in replay) Feed(modifier, false, time, HeldWithReplay);
         };
         _callback = (code, message, data) =>
         {
