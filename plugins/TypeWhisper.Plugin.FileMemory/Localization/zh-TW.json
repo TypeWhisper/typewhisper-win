@@ -1,0 +1,19 @@
+{
+  "Remember in File Memory": "記住於檔案記憶",
+  "Memory stored locally.": "記憶儲存於本機。",
+  "Memories": "記憶",
+  "Memory file unavailable": "記憶檔案無法使用",
+  "Read-only": "唯讀",
+  "New memory": "新增記憶",
+  "Keep useful facts on this device. For example: ‘Project Aurora uses British English.’ Save text with the ‘Remember in File Memory’ workflow action. To reuse matching facts, choose File Memory under ‘Memory context’ in a text-processing workflow. Only that workflow sends matches to its LLM provider.": "在此裝置保留實用資訊。例如：「Aurora 專案使用英式英文。」使用「記住於檔案記憶」工作流程動作儲存文字。若要重複使用相符資訊，請在文字處理工作流程的「記憶內容」中選擇「檔案記憶」。只有該工作流程會將相符內容傳送至其 LLM 供應商。",
+  "Memory": "記憶",
+  "Search memories": "搜尋記憶",
+  "Search the saved entries without saving your draft.": "搜尋已儲存的項目，不儲存草稿。",
+  "This memory already exists.": "此記憶已存在。",
+  "Add memory": "新增記憶",
+  "Search": "搜尋",
+  "Remove memory…": "移除記憶…",
+  "Enter a memory, then save it.": "請輸入記憶內容，然後儲存。",
+  "Memory removed.": "記憶已移除。",
+  "No memories found.": "找不到記憶。"
+}

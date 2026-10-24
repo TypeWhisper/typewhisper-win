@@ -1,0 +1,9 @@
+{
+  "Settings.Test": "測試",
+  "Settings.Saved": "已儲存",
+  "Settings.EnterApiKey": "請先輸入 API 金鑰",
+  "Settings.Testing": "測試中...",
+  "Settings.ApiKeyValid": "API 金鑰有效！",
+  "Settings.ApiKeyInvalid": "API 金鑰無效",
+  "Settings.Error": "錯誤：{0}"
+}

@@ -19,10 +19,11 @@ public static partial class Loc
     private static Dictionary<string, string> _english = [];
     private static (Regex Pattern, string English, int[] Arguments)[]? _englishFormats;
 
-    /// <summary>The languages offered in Settings; they match the macOS app.</summary>
+    /// <summary>The languages offered in Settings.</summary>
     public static IReadOnlyList<InterfaceLanguage> Languages { get; } =
     [
-        new("en", "English"), new("de", "Deutsch"), new("ja", "日本語"), new("zh-Hans", "简体中文")
+        new("en", "English"), new("de", "Deutsch"), new("ja", "日本語"), new("zh-Hans", "简体中文"),
+        new("zh-TW", "繁體中文")
     ];
 
     /// <summary>The code of the language in use.</summary>
@@ -32,6 +33,12 @@ public static partial class Loc
     public static string Resolve(string? saved, CultureInfo system)
     {
         if (Languages.Any(language => language.Code == saved)) return saved!;
+        // Walk the culture hierarchy so an explicit script (for example zh-Hans-HK) wins over the region.
+        for (var culture = system; culture.Name.Length > 0; culture = culture.Parent)
+        {
+            if (culture.Name is "zh-Hant" or "zh-TW" or "zh-HK" or "zh-MO") return "zh-TW";
+            if (culture.Name is "zh-Hans" or "zh-CN" or "zh-SG") return "zh-Hans";
+        }
         return system.TwoLetterISOLanguageName switch { "de" => "de", "ja" => "ja", "zh" => "zh-Hans", _ => "en" };
     }
 

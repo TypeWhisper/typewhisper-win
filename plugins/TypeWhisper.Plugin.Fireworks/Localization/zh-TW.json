@@ -1,0 +1,6 @@
+{
+  "Fireworks deprecated its audio API. Turbo currently works; Whisper V3 may reject valid keys. Live transcription is unavailable.": "Fireworks 已淘汰其音訊 API。目前 Turbo 可運作；Whisper V3 可能拒絕有效金鑰。無法使用即時轉錄。",
+  "Refresh models": "重新整理模型",
+  "Save the model catalog using the stored key.": "使用已儲存的金鑰儲存模型目錄。",
+  "Models updated.": "模型已更新。"
+}

@@ -1,0 +1,15 @@
+{
+  "Select a valid team or project.": "請選取有效的團隊或專案。",
+  "Create Linear issue": "建立 Linear 問題",
+  "Save an API key and select a team first.": "請先儲存 API 金鑰並選取團隊。",
+  "Issue text is empty.": "問題文字是空的。",
+  "Linear issue created.": "Linear 問題已建立。",
+  "Team": "團隊",
+  "Load teams and projects, then choose where workflow issues are created.": "載入團隊與專案，然後選擇建立工作流程問題的位置。",
+  "Select a team…": "選取團隊…",
+  "Project (optional)": "專案（選填）",
+  "Choose a project belonging to the selected team, or leave issues without a project.": "選擇屬於所選團隊的專案，或留白以建立不含專案的問題。",
+  "No project": "無專案",
+  "Load teams and projects": "載入團隊與專案",
+  "Uses the saved API key. This does not create an issue.": "使用已儲存的 API 金鑰。這不會建立問題。"
+}

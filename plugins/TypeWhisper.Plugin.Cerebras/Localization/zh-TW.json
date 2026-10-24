@@ -1,0 +1,15 @@
+{
+  "Default text model": "預設文字模型",
+  "Used when a workflow does not specify a model. Refresh to load models available to your account.": "工作流程未指定模型時使用。重新整理以載入帳戶可用的模型。",
+  "Temperature mode": "溫度模式",
+  "Use the provider default or set a custom sampling temperature.": "使用供應商預設值或設定自訂取樣溫度。",
+  "Provider default": "供應商預設值",
+  "Custom": "自定義",
+  "Temperature": "溫度",
+  "A value between 0 and 2. Model support varies.": "介於 0 到 2 的值。模型支援情況各異。",
+  "Check connection": "檢查連線",
+  "Test the entered key before saving.": "在儲存前測試輸入的金鑰。",
+  "Refresh models": "重新整理模型",
+  "Fetch available text models. Save settings to keep the list.": "擷取可用的文字模型。儲存設定以保留清單。",
+  "Connection verified. No changes saved.": "連線已驗證。未儲存變更。"
+}

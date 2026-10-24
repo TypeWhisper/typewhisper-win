@@ -1,0 +1,16 @@
+{
+  "Transcription mode": "轉錄模式",
+  "Automatic shows live text. Audio events, multiple speakers or dictionary terms use the complete recording.": "自動模式會顯示即時文字；音訊事件、多位說話者或字典詞彙會使用完整錄音。",
+  "Automatic": "自動",
+  "After recording": "錄音後",
+  "Clean transcript": "清理轉錄文字",
+  "Remove filler words and false starts.": "移除填充詞與未完成語句。",
+  "Audio events": "音訊事件",
+  "Include events such as laughter in recorded-audio transcription.": "在錄製音訊轉錄中包含笑聲等事件。",
+  "Speaker count": "說話者數量",
+  "Expected speakers in the recording.": "錄音中的預期說話者數量。",
+  "Dictionary terms": "字典詞彙",
+  "Use active TypeWhisper dictionary terms to improve recognition.": "使用啟用中的 TypeWhisper 字典詞彙改善辨識。",
+  "On": "開啟",
+  "Off": "關閉"
+}

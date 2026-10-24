@@ -31,6 +31,15 @@ applies, what is copied and what remains in the previous profile.
 If a result window opens, its heading explains why. See
 [dictation results](DICTATION-RESULTS.md) for the next step.
 
+## Interface language
+
+Choose **繁體中文** in **Settings → General → App Language** for Traditional Chinese
+with terminology used in Taiwan, then restart the app to apply the choice.
+New profiles follow the Windows display language: Traditional Chinese locales
+use Traditional Chinese; Simplified Chinese locales use Simplified Chinese.
+An explicitly saved language always takes precedence. Plugins use their own
+translation catalogs; packages without this language fall back to English.
+
 ## Find the main workspaces
 
 Click the tray icon to open Settings. As in the macOS app, its sidebar holds
