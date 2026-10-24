@@ -61,7 +61,7 @@ internal sealed class MouseShortcutPresses
     internal static uint ReplayReleaseTime(uint click, uint? released) =>
         released is { } time && unchecked((int)(time - click)) > 0 ? time : click;
 
-    /// <summary>Orders the replayed releases of a click's modifiers around the click's own release, by event time.</summary>
+    /// <summary>Orders the replayed releases of a click's modifiers by event time, each on its side of the click's own release.</summary>
     /// <param name="modifiers">The modifiers replayed with the click's press.</param>
     /// <param name="press">The click's press time on the Windows uptime clock.</param>
     /// <param name="release">The click's release time.</param>
@@ -71,7 +71,7 @@ internal sealed class MouseShortcutPresses
         {
             var time = ReplayReleaseTime(press, released(modifier));
             return (modifier, time, unchecked((int)(time - release)) <= 0);
-        }).ToArray();
+        }).OrderBy(step => unchecked((int)(step.time - press))).ToArray();
 
     internal static int[] ReleasedModifiers(string? chord, Func<int, bool> downNow)
     {

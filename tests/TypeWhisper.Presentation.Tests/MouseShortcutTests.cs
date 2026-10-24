@@ -228,6 +228,21 @@ public class MouseShortcutTests
     public void ReplayedReleaseBeforeTheClickReleaseComesFirst()
     {
         var plan = MouseShortcutPresses.PlanReleases([0xA2, 0xA0], 1000, 1500, key => key == 0xA2 ? 1200u : null);
-        Assert.Equal(new[] { (0xA2, 1200u, true), (0xA0, 1000u, true) }, plan);
+        Assert.Equal(new[] { (0xA0, 1000u, true), (0xA2, 1200u, true) }, plan);
+    }
+
+    [Fact]
+    public void SeveralReplayedReleasesFollowTheirOwnOrder()
+    {
+        // Ctrl+Shift+MouseBack pressed at 0, Shift up at 50, Ctrl up at 350, click up at 400: a short tap keeps recording.
+        var plan = MouseShortcutPresses.PlanReleases([0xA2, 0xA0], 0, 400, key => key == 0xA2 ? 350u : 50u);
+        Assert.Equal(new[] { 0xA0, 0xA2 }, plan.Select(step => step.Modifier));
+        var state = new HybridHotkeyState();
+        var bindings = new HashSet<string> { ShortcutRules.Normalize("Ctrl+Shift+MouseBack") };
+        bool Held(int key) => key is 0xA2 or 0xA0 or Back;
+        Assert.Null(state.Key(0xA2, true, 0, bindings, held: Held));
+        Assert.Null(state.Key(0xA0, true, 0, bindings, held: Held));
+        Assert.Equal(HybridHotkeyAction.Start, state.Key(Back, true, 0, bindings, held: Held));
+        foreach (var step in plan) Assert.Null(state.Key(step.Modifier, false, step.Time, bindings, true, held: Held));
     }
 }
