@@ -80,6 +80,23 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
             foreach (var modifier in replay) Feed(modifier, true, time, HeldWithReplay);
             Feed(key, true, time, HeldWithReplay);
             _mouseDown.Add(key);
+            if (replay.Length == 0) return;
+            // While the hook still sees the button held, every release already observed came before the click's
+            // release, so it is replayed now. Only after the button was released do they wait for the click's release.
+            bool stillHeld;
+            lock (_mouseLock) stillHeld = _mousePresses.Holds(key);
+            if (stillHeld)
+            {
+                var waiting = replay.ToHashSet();
+                bool HeldWaiting(int held) => waiting.Contains(held) || Held(held);
+                foreach (var (modifier, released) in MouseShortcutPresses.KnownReleases(replay, time,
+                    modifier => _modifierReleased.TryGetValue(modifier, out var at) ? at : null))
+                {
+                    Feed(modifier, false, released, HeldWaiting);
+                    waiting.Remove(modifier);
+                }
+                replay = replay.Where(waiting.Contains).ToArray();
+            }
             if (replay.Length > 0) _replayed[key] = (replay, time);
         };
         // Like Windows' key state seen from a keyboard hook, a button or modifier counts as held until its release is handled.
