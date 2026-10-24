@@ -163,111 +163,32 @@ public class MouseShortcutTests
         Assert.Null(state.Key(0xA0, true, 2010, bindings, held: Held));
     }
 
+    // The dictation hook handles queued clicks before any later keyboard event, so the gesture sees input in
+    // the order Windows saw it. These sequences pin the results of that order.
     [Fact]
-    public void ModifierReleasedBeforeTheQueuedClickIsReplayed()
+    public void ShortCtrlClickTapKeepsRecordingWhenCtrlIsReleasedLater()
     {
-        // Ctrl was held when the hook matched Ctrl+MouseBack, but is up by the time the UI thread handles the click.
-        Assert.Equal(new[] { 0xA2 }, MouseShortcutPresses.ReleasedModifiers("CTRL+MOUSEBACK", _ => false));
-        Assert.Empty(MouseShortcutPresses.ReleasedModifiers("CTRL+MOUSEBACK", key => key == 0x11));
-        Assert.Equal(new[] { 0xA0, 0x5B }, MouseShortcutPresses.ReleasedModifiers("CTRL+SHIFT+WIN+MOUSEFORWARD", key => key == 0x11));
-        Assert.Empty(MouseShortcutPresses.ReleasedModifiers("WIN+MOUSEMIDDLE", key => key == 0x5C));
-        Assert.Empty(MouseShortcutPresses.ReleasedModifiers(null, _ => false));
-    }
-
-    [Fact]
-    public void ReplayedModifierStartsTheChordInTheOrderWindowsSaw()
-    {
-        // The keyboard hook already handled Ctrl's release; the replay feeds Ctrl, the click and Ctrl's release again.
         var state = new HybridHotkeyState();
         var bindings = new HashSet<string> { ShortcutRules.Normalize("Ctrl+MouseBack") };
-        Assert.Null(state.Key(0xA2, true, 0, bindings, held: _ => true));
-        Assert.Null(state.Key(0xA2, false, 5, bindings, held: _ => true));
-        var replay = MouseShortcutPresses.ReleasedModifiers("CTRL+MOUSEBACK", _ => false);
-        bool HeldWithReplay(int key) => replay.Contains(key) || key == Back;
-        foreach (var modifier in replay) Assert.Null(state.Key(modifier, true, 10, bindings, held: HeldWithReplay));
-        Assert.Equal(HybridHotkeyAction.Start, state.Key(Back, true, 10, bindings, held: HeldWithReplay));
-    }
-
-    [Theory]
-    [InlineData(1000u, 1400u, 1400u)]
-    [InlineData(1000u, 900u, 1000u)]
-    [InlineData(uint.MaxValue - 100, 200u, 200u)]
-    public void ReplayedReleaseKeepsItsRealTime(uint click, uint released, uint expected) =>
-        Assert.Equal(expected, MouseShortcutPresses.ReplayReleaseTime(click, released));
-
-    [Fact]
-    public void ReplayedReleaseAfterAHoldStopsAHybridGesture()
-    {
-        // Ctrl+MouseBack held for 400 ms: with the real release time the replayed Ctrl-up ends the hold.
-        var state = new HybridHotkeyState();
-        var bindings = new HashSet<string> { ShortcutRules.Normalize("Ctrl+MouseBack") };
-        bool Held(int key) => key is 0xA2 or Back;
+        var held = new HashSet<int>();
+        bool Held(int key) => held.Contains(key);
+        held.Add(0xA2);
         Assert.Null(state.Key(0xA2, true, 0, bindings, held: Held));
-        Assert.Equal(HybridHotkeyAction.Start, state.Key(Back, true, 0, bindings, held: Held));
-        var release = MouseShortcutPresses.ReplayReleaseTime(0, 400);
-        Assert.Equal(HybridHotkeyAction.Stop, state.Key(0xA2, false, release, bindings, true, held: Held));
-        Assert.Equal(new[] { 0xA2, 0xA4, 0xA0, 0x5B, 0 }, new[] { 0xA3, 0x12, 0xA1, 0x5C, 0x41 }.Select(MouseShortcutPresses.ReplayKey));
-    }
-
-    [Fact]
-    public void ReplayedReleaseFollowsAnEarlierClickRelease()
-    {
-        // Click pressed at 0 and released at 50, Ctrl released at 350, all handled late: a short tap keeps recording.
-        var plan = MouseShortcutPresses.PlanReleases([0xA2], 0, 50, _ => 350);
-        Assert.Equal((0xA2, 350u, false), Assert.Single(plan));
-        var state = new HybridHotkeyState();
-        var bindings = new HashSet<string> { ShortcutRules.Normalize("Ctrl+MouseBack") };
-        bool Held(int key) => key is 0xA2 or Back;
-        Assert.Null(state.Key(0xA2, true, 0, bindings, held: Held));
+        held.Add(Back);
         Assert.Equal(HybridHotkeyAction.Start, state.Key(Back, true, 0, bindings, held: Held));
         Assert.Null(state.Key(Back, false, 50, bindings, true, held: Held));
-        Assert.Null(state.Key(0xA2, false, plan[0].Time, bindings, true, held: Held));
+        held.Remove(Back);
+        Assert.Null(state.Key(0xA2, false, 350, bindings, true, held: Held));
     }
 
     [Fact]
-    public void ReplayedReleaseBeforeTheClickReleaseComesFirst()
+    public void ReleasingCtrlWhileTheButtonIsHeldStopsAHold()
     {
-        var plan = MouseShortcutPresses.PlanReleases([0xA2, 0xA0], 1000, 1500, key => key == 0xA2 ? 1200u : null);
-        Assert.Equal(new[] { (0xA0, 1000u, true), (0xA2, 1200u, true) }, plan);
-    }
-
-    [Fact]
-    public void SeveralReplayedReleasesFollowTheirOwnOrder()
-    {
-        // Ctrl+Shift+MouseBack pressed at 0, Shift up at 50, Ctrl up at 350, click up at 400: a short tap keeps recording.
-        var plan = MouseShortcutPresses.PlanReleases([0xA2, 0xA0], 0, 400, key => key == 0xA2 ? 350u : 50u);
-        Assert.Equal(new[] { 0xA0, 0xA2 }, plan.Select(step => step.Modifier));
-        var state = new HybridHotkeyState();
-        var bindings = new HashSet<string> { ShortcutRules.Normalize("Ctrl+Shift+MouseBack") };
-        bool Held(int key) => key is 0xA2 or 0xA0 or Back;
-        Assert.Null(state.Key(0xA2, true, 0, bindings, held: Held));
-        Assert.Null(state.Key(0xA0, true, 0, bindings, held: Held));
-        Assert.Equal(HybridHotkeyAction.Start, state.Key(Back, true, 0, bindings, held: Held));
-        foreach (var step in plan) Assert.Null(state.Key(step.Modifier, false, step.Time, bindings, true, held: Held));
-    }
-
-    [Fact]
-    public void KnownReleasesAfterThePressAreReplayedInOrder()
-    {
-        var known = MouseShortcutPresses.KnownReleases([0xA2, 0xA0, 0x5B], 1000, key => key switch { 0xA2 => 1350u, 0xA0 => 1100u, _ => 900u });
-        Assert.Equal(new[] { (0xA0, 1100u), (0xA2, 1350u) }, known);
-        var presses = new MouseShortcutPresses();
-        Assert.True(presses.Button(Back, true, "CTRL", new HashSet<string> { "CTRL+MOUSEBACK" }, true, out _));
-        Assert.True(presses.Holds(Back));
-        Assert.True(presses.Button(Back, false, "", new HashSet<string>(), true, out _));
-        Assert.False(presses.Holds(Back));
-    }
-
-    [Fact]
-    public void HeldClickWithAnEarlierModifierReleaseStopsAHoldAtOnce()
-    {
-        // Hold mode: Ctrl+MouseBack at 0, Ctrl released at 350 while the button stays held, handled at 400.
         var state = new HybridHotkeyState();
         var bindings = new HashSet<string> { ShortcutRules.Normalize("Ctrl+MouseBack") };
         bool Held(int key) => key is 0xA2 or Back;
         Assert.Null(state.Key(0xA2, true, 0, bindings, mode: RecordingMode.Hold, held: Held));
         Assert.Equal(HybridHotkeyAction.Start, state.Key(Back, true, 0, bindings, mode: RecordingMode.Hold, held: Held));
-        var (modifier, released) = Assert.Single(MouseShortcutPresses.KnownReleases([0xA2], 0, _ => 350));
-        Assert.Equal(HybridHotkeyAction.Stop, state.Key(modifier, false, released, bindings, true, RecordingMode.Hold, held: Held));
+        Assert.Equal(HybridHotkeyAction.Stop, state.Key(0xA2, false, 350, bindings, true, RecordingMode.Hold, held: Held));
     }
 }
