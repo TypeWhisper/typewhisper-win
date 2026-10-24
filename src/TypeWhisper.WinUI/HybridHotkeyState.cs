@@ -149,6 +149,9 @@ internal sealed class HybridHotkeyState
         0xA0 or 0xA1 => 0x10, 0xA2 or 0xA3 => 0x11, 0xA4 or 0xA5 => 0x12, _ => -1
     }) || key == 0xA2 && _down.Contains(AltGrControl));
 
+    /// <summary>The configured chord of the gesture in progress, or null.</summary>
+    internal string? ArmedChord => _armed;
+
     /// <summary>Keys that the last event dropped as released because their key-up was lost.</summary>
     internal IReadOnlyList<int> DroppedKeys => _dropped;
 

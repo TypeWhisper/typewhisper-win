@@ -49,11 +49,19 @@ public sealed class ShortcutRecorder : UserControl
     private bool _altGr;
     private bool _startingCapture;
     private bool _commitRefreshQueued;
+    // The shortcut test, offered only where the shortcut is already live.
+    private static readonly string[] PausableKeys = ["MainDictationHotkeys", "PushToTalkHotkey", "ToggleOnlyHotkeys", "HoldOnlyHotkeys"];
+    private readonly HandCursorButton? _test;
+    private readonly HandCursorButton _repair;
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _testTimer;
+    private ShortcutTestSession? _testSession;
+    // Keys still held when the test ends must not press the Test button through key repeat.
+    private bool _testKeysHeld;
     internal bool IsCapturing { get; private set; }
     internal bool IsEditing { get; private set; }
 
     internal ShortcutRecorder(string key, string label, string defaultValue, Dictionary<string, string> values,
-        Func<IEnumerable<(string Key, string Label, string Value)>> bindings, Func<string, string?>? commit = null)
+        Func<IEnumerable<(string Key, string Label, string Value)>> bindings, Func<string, string?>? commit = null, bool testable = false)
     {
         _key = key; _label = label; _defaultValue = defaultValue; _values = values; _bindings = bindings;
         _commit = commit;
@@ -77,6 +85,10 @@ public sealed class ShortcutRecorder : UserControl
         _hint = Text("", 12, true);
         AutomationProperties.SetLiveSetting(_hint, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
         panel.Children.Add(_hint);
+        _repair = Button(Loc.T("Repair"), "SecondaryButtonStyle", Loc.T("Restart the shortcut listener"));
+        _repair.HorizontalAlignment = HorizontalAlignment.Left; _repair.Visibility = Visibility.Collapsed;
+        _repair.Click += (_, _) => Repair();
+        panel.Children.Add(_repair);
         _normalActions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         var reset = Button(new TypeWhisperGlyph
         {
@@ -90,7 +102,29 @@ public sealed class ShortcutRecorder : UserControl
         _add.MinWidth = 34; _add.MinHeight = 34; _add.Padding = new Thickness(6, 0, 6, 0);
         ToolTipService.SetToolTip(_add, Loc.T("Add another shortcut"));
         _add.Click += (_, _) => Begin();
-        _normalActions.Children.Add(_add); _normalActions.Children.Add(reset);
+        _normalActions.Children.Add(_add);
+        if (testable)
+        {
+            _test = Button(Text(Loc.T("Test"), 12), "SecondaryButtonStyle", Loc.T("Test {0} shortcut", label));
+            _test.MinHeight = 34; _test.Padding = new Thickness(10, 0, 10, 0);
+            ToolTipService.SetToolTip(_test, Loc.T("Check whether this shortcut reaches TypeWhisper"));
+            _test.Click += (_, _) => { if (_testSession is null) StartTest(); else StopTest(Loc.T("Test stopped.")); };
+            _normalActions.Children.Add(_test);
+            // The keys of the shortcut must not press the focused Test button while the test listens; Esc stops it.
+            PreviewKeyDown += (_, e) =>
+            {
+                if (_testSession is null)
+                {
+                    // A fresh press after the test is ordinary input again; repeats of a held shortcut are not.
+                    if (_testKeysHeld && e.KeyStatus.WasKeyDown) e.Handled = true; else _testKeysHeld = false;
+                    return;
+                }
+                e.Handled = true;
+                if (e.Key == VirtualKey.Escape) StopTest(Loc.T("Test stopped."));
+            };
+            PreviewKeyUp += (_, e) => { if (_testSession is not null || _testKeysHeld) e.Handled = true; };
+        }
+        _normalActions.Children.Add(reset);
         Grid.SetColumn(_normalActions, 1); bindingsRow.Children.Add(_normalActions);
         _editActions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Visibility = Visibility.Collapsed };
         _apply = Button(Loc.T("Use shortcut"), "PrimaryButtonStyle", Loc.T("Use {0} shortcut", label));
@@ -147,7 +181,7 @@ public sealed class ShortcutRecorder : UserControl
         };
         // Buttons mark pointer presses handled, so listen to handled ones as well.
         AddHandler(PointerPressedEvent, new PointerEventHandler(CapturePointer), true);
-        Unloaded += (_, _) => Cancel(false);
+        Unloaded += (_, _) => { StopTest(null); Cancel(false); };
         LostFocus += (_, _) => DispatcherQueue.TryEnqueue(() =>
         {
             if (!IsEditing || _startingCapture || XamlRoot is null) return;
@@ -217,6 +251,9 @@ public sealed class ShortcutRecorder : UserControl
             _shortcuts.Children.Add(row);
         }
         _record.Visibility = Visibility.Collapsed;
+        StopTest(null);
+        _repair.Visibility = Visibility.Collapsed;
+        if (_test is not null) _test.Visibility = current.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
         _hint.Text = ""; _hint.Visibility = Visibility.Collapsed;
         _shell.BorderBrush = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
         _record.Style = (Style)Application.Current.Resources["SecondaryButtonStyle"];
@@ -226,6 +263,9 @@ public sealed class ShortcutRecorder : UserControl
     private void Begin(int index = -1)
     {
         if (_commitRefreshQueued) return;
+        StopTest(null);
+        // A test in another editor would take the keys this editor is about to record.
+        ShortcutTest.Stop();
         if (_active?.TryGetTarget(out var previous) == true && !ReferenceEquals(previous, this)) previous.Cancel(false);
         _active = new(this);
         _editingIndex = index;
@@ -353,6 +393,84 @@ public sealed class ShortcutRecorder : UserControl
         var name = ShortcutKeys.Token((int)e.Key);
         Candidate(modifiers.Length == 0 ? name : $"{modifiers}+{name}");
     }
+    private void ShowHint(string text)
+    {
+        if (_hint.Text != text) _hint.Text = text;
+        _hint.Visibility = Visibility.Visible;
+    }
+
+    private string Show(string chord) => ShortcutKeys.Display(chord, ShortcutKeys.LayoutCharacter);
+
+    private void StartTest()
+    {
+        _repair.Visibility = Visibility.Collapsed;
+        if (ShortcutTest.Start(Current) is { } error) { ShowHint(error); return; }
+        _testSession = ShortcutTest.Session;
+        if (_test is not null) _test.Content = Text(Loc.T("Stop test"), 12);
+        ShowHint(Loc.T("Press your shortcut now. Nothing starts during the test."));
+        if (_testTimer is null)
+        {
+            _testTimer = DispatcherQueue.CreateTimer();
+            _testTimer.Interval = TimeSpan.FromMilliseconds(100);
+            _testTimer.Tick += (_, _) => TestTick();
+        }
+        _testTimer.Start();
+    }
+
+    private void StopTest(string? message)
+    {
+        _testTimer?.Stop();
+        if (_testSession is null) return;
+        // Another editor may have started its own test meanwhile; that one keeps running.
+        if (ReferenceEquals(ShortcutTest.Session, _testSession)) ShortcutTest.Stop();
+        _testSession = null;
+        _testKeysHeld = message is not null;
+        if (_test is not null) _test.Content = Text(Loc.T("Test"), 12);
+        if (message is not null) ShowHint(message);
+    }
+
+    private void TestTick()
+    {
+        if (_testSession is not { } session) return;
+        if (!IsLoaded) { StopTest(null); return; }
+        if (!ReferenceEquals(ShortcutTest.Session, session)) { StopTest(Loc.T("Test stopped.")); return; }
+        var verdict = session.Verdict(Environment.TickCount64, PausableKeys.Contains(_key) && ShortcutTest.Paused());
+        if (verdict == ShortcutTestVerdict.Waiting)
+        {
+            if (session.Seen is { } received) ShowHint(Loc.T("Received {0}. Waiting for your shortcut…", Show(received)));
+            return;
+        }
+        var seen = session.Seen is { } chord ? Show(chord) : "";
+        // Repair restarts TypeWhisper's own hooks. A RegisterHotKey shortcut that Windows delivered but did not
+        // pass on is taken by another app; restarting cannot change that.
+        var hookShortcut = PausableKeys.Contains(_key) || session.DeliveredChord is { } delivered && ShortcutKeys.IsMouseChord(delivered);
+        StopTest(verdict switch
+        {
+            ShortcutTestVerdict.Works => Loc.T("Works. TypeWhisper received {0}.", Show(session.Responded ?? "")),
+            ShortcutTestVerdict.Paused => Loc.T("Dictation shortcuts are paused. Resume them from the tray icon."),
+            ShortcutTestVerdict.NotResponding when hookShortcut =>
+                Loc.T("Windows delivered your shortcut, but TypeWhisper didn't react. Choose Repair to restart its shortcut listener."),
+            ShortcutTestVerdict.NotResponding =>
+                Loc.T("Windows delivered your shortcut, but it didn't reach TypeWhisper. Another app may use the same keys; close keyboard tools one at a time and test again."),
+            ShortcutTestVerdict.WrongOrder =>
+                Loc.T("TypeWhisper received the keys of your shortcut in a different order. Hold the modifier keys first, then press the last key."),
+            ShortcutTestVerdict.DifferentKeys when session.FunctionKeyArrivedAsMediaKey =>
+                Loc.T("TypeWhisper received {0} instead of your shortcut. Your keyboard sends a media key there: turn on Fn Lock or hold Fn while you press it.", seen),
+            ShortcutTestVerdict.DifferentKeys =>
+                Loc.T("TypeWhisper received {0} instead of your shortcut. If you didn't press all of these keys, another app may be holding one down; press each key once and test again.", seen),
+            _ when session.ExpectsFunctionKey =>
+                Loc.T("TypeWhisper received nothing. Laptop function keys often change brightness or volume without sending a key: turn on Fn Lock or hold Fn."),
+            _ => Loc.T("TypeWhisper received nothing. Another app may be intercepting the keyboard; close keyboard tools one at a time and test again.")
+        });
+        if (verdict == ShortcutTestVerdict.NotResponding && hookShortcut && ShortcutTest.Repair is not null) _repair.Visibility = Visibility.Visible;
+    }
+
+    private void Repair()
+    {
+        _repair.Visibility = Visibility.Collapsed;
+        ShowHint(ShortcutTest.Repair?.Invoke() ?? Loc.T("Shortcut listener restarted. Choose Test to check again."));
+    }
+
     // The middle and side mouse buttons, pressed over the editor. A shortcut that already uses the
     // button never arrives here; its mouse hook passes it on through CaptureRegisteredShortcut.
     private void CapturePointer(object sender, PointerRoutedEventArgs e)

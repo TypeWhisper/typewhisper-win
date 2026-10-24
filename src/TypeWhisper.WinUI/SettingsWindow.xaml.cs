@@ -164,6 +164,8 @@ public sealed partial class SettingsWindow : Window
         SetPreferences(preferences);
         Closed += (_, _) =>
         {
+            // A running shortcut test would otherwise keep holding back every shortcut.
+            ShortcutTest.Stop();
             _ = ShutdownSetupImportAsync();
             // Release the hosted view so the next settings window can show it.
             WorkspaceHost.Child = null;

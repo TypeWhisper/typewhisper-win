@@ -34,13 +34,16 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
         _paused = paused;
         _queue = window.DispatcherQueue;
         // Reserve ordinary chords, but use the hook for both press and release.
-        _regular = new(window, () => { }, idBase);
+        _regular = new(window, () => { }, idBase, testable: false);
         void Dispatch(HybridHotkeyAction? action)
         {
             // The hook runs on the installing UI thread. The receiver only captures
             // intent here and schedules audio work through its bounded coordinator.
             // This preserves event-time readiness before a long UI queue can drain.
-            if (action is not null && !_disposed && !ShortcutRecorder.AnyEditing) invoke(action.Value);
+            if (action is null || _disposed || ShortcutRecorder.AnyEditing) return;
+            // A shortcut test only learns that the gesture arrived; nothing starts.
+            if (ShortcutTest.Active) { if (action != HybridHotkeyAction.Cancel && _state.ArmedChord is { } chord) ShortcutTest.Respond(chord); return; }
+            invoke(action.Value);
         }
         bool Held(int held) => ShortcutKeys.IsMouseButton(held) ? _mouseDown.Contains(held)
             : (NativeMethods.GetAsyncKeyState(held == HybridHotkeyState.AltGrControl ? 0xA2 : held) & 0x8000) != 0;

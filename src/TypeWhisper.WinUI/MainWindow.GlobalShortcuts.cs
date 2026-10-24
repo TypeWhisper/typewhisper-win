@@ -73,6 +73,7 @@ public sealed partial class MainWindow
     // Dictation and workflow shortcuts have their own lifetimes; every other global shortcut stops here.
     private void DisposeShortcutRegistrations()
     {
+        ShortcutTest.Stop();
         _cancelProcessingShortcut?.Dispose();
         _recentTranscriptionsShortcut?.Dispose();
         _workflowPaletteShortcut?.Dispose();

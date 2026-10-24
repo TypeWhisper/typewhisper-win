@@ -27,14 +27,17 @@ internal sealed class HotkeyRegistration : IShortcutRegistrationBackend, IMouseS
     private readonly MouseShortcutPresses _mousePresses = new();
     private HashSet<string> _mouseChords = [];
     private bool _mouseHooked;
+    // A reservation for a shortcut that a hook handles must not count as its reaction in a shortcut test.
+    private readonly bool _testable;
 
     public string Value => string.Join(",", _bindings.Keys);
 
-    internal HotkeyRegistration(Microsoft.UI.Xaml.Window window, Action callback, int idBase)
-        : this(window, (_, stale) => { if (!stale) callback(); }, idBase) { }
+    internal HotkeyRegistration(Microsoft.UI.Xaml.Window window, Action callback, int idBase, bool testable = true)
+        : this(window, (_, stale) => { if (!stale) callback(); }, idBase, testable) { }
 
-    internal HotkeyRegistration(Microsoft.UI.Xaml.Window window, Action<string, bool> callback, int idBase)
+    internal HotkeyRegistration(Microsoft.UI.Xaml.Window window, Action<string, bool> callback, int idBase, bool testable = true)
     {
+        _testable = testable;
         _nextId = idBase;
         SubclassId = (nuint)idBase;
         _hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
@@ -116,7 +119,7 @@ internal sealed class HotkeyRegistration : IShortcutRegistrationBackend, IMouseS
         if (chord is { } pressed)
             _queue.TryEnqueue(() =>
             {
-                if (_registered && _mouseChords.Contains(pressed))
+                if (_registered && _mouseChords.Contains(pressed) && !RespondToTest(pressed))
                     _dispatch.Invoke(pressed, time, Environment.TickCount64, ShortcutRecorder.CaptureRegisteredShortcut);
             });
         return owned;
@@ -126,6 +129,9 @@ internal sealed class HotkeyRegistration : IShortcutRegistrationBackend, IMouseS
     {
         lock (_mouseLock) _mousePresses.Reset();
     }
+
+    // A running shortcut test takes the chord instead of its action, also when it arrives late.
+    private bool RespondToTest(string chord) => _testable && ShortcutTest.Respond(chord);
 
     private IntPtr WindowSubclassProc(
         IntPtr hwnd,
@@ -137,8 +143,8 @@ internal sealed class HotkeyRegistration : IShortcutRegistrationBackend, IMouseS
     {
         if (message == WmHotkey && _bindings.FirstOrDefault(binding => binding.Value == wParam.ToInt32()).Key is { } chord)
         {
-            _dispatch.Invoke(chord, unchecked((uint)NativeMethods.GetMessageTime()), Environment.TickCount64,
-                ShortcutRecorder.CaptureRegisteredShortcut);
+            if (!RespondToTest(chord))
+                _dispatch.Invoke(chord, unchecked((uint)NativeMethods.GetMessageTime()), Environment.TickCount64, ShortcutRecorder.CaptureRegisteredShortcut);
         }
 
         return NativeMethods.DefSubclassProc(hwnd, message, wParam, lParam);

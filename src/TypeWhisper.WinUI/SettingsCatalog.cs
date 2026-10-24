@@ -191,7 +191,7 @@ internal static partial class SettingsCatalog
                     Func<string, string?>? commit = commitShortcut is null ? null : value => commitShortcut(field.Key, value);
                     item.Children.Add(new ShortcutRecorder(field.Key, field.Label, field.Value, values,
                         () => Fields.Where(f => f.Category == "Shortcuts").Select(f =>
-                            (f.Key, f.Label, values.GetValueOrDefault(f.Key, f.Value))), commit) { IsEnabled = commit is not null });
+                            (f.Key, f.Label, values.GetValueOrDefault(f.Key, f.Value))), commit, testable: commit is not null) { IsEnabled = commit is not null });
                     rows.Children.Add(item);
                 }
                 section.Children.Add(new Border
