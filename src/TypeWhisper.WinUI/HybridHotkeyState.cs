@@ -155,7 +155,9 @@ internal sealed class HybridHotkeyState
     private bool LostRelease(int pressed, int key, long now, RecordingMode mode, bool recording)
     {
         // Only a Hold or Hybrid gesture whose own capture is still running keeps a quiet key; a rejected start does not.
-        if (_armed is not null && _startedByGesture && recording && (_mode ?? mode) != RecordingMode.Toggle || pressed == key || IsModifier(pressed) || now - _lastEvent[pressed] <= LostReleaseMilliseconds) return false;
+        // Mouse buttons never repeat, so their silence says nothing; the mouse hook reports their release itself.
+        if (_armed is not null && _startedByGesture && recording && (_mode ?? mode) != RecordingMode.Toggle || pressed == key || IsModifier(pressed)
+            || ShortcutKeys.IsMouseButton(pressed) || now - _lastEvent[pressed] <= LostReleaseMilliseconds) return false;
         _dropped.Add(pressed);
         return true;
     }

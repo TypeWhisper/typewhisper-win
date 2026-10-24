@@ -1621,7 +1621,7 @@
   "Press Esc once to cancel.": "Escを1回押すとキャンセルします。",
   "Press Esc twice within 3 seconds to cancel.": "3秒以内にEscを2回押すとキャンセルします。",
   "Press a hotkey and speak in any app.": "ショートカットキーを押して、どのアプリでも話せます。",
-  "Press keys, then choose Use shortcut. Esc cancels; Tab moves to the buttons.": "キーを押してから、「ショートカットを使用」を選択します。Escでキャンセル、Tabでボタンに移動します。",
+  "Press keys or click here with the middle or a side mouse button, then choose Use shortcut. Esc cancels; Tab moves to the buttons.": "キーを押すか、ここでマウスの中ボタンまたはサイドボタンをクリックしてから、「ショートカットを使用」を選択します。Escでキャンセル、Tabでボタンに移動します。",
   "Press once to start and again to stop.": "1 回押すと開始、もう一度押すと停止します。",
   "Press once to start and again to stop. Applies only to this recording and uses your dictation paste and history settings.": "1回押すと開始、もう一度押すと停止します。この録音にのみ適用され、ディクテーションの貼り付けと履歴の設定を使用します。",
   "Press one key together with your modifiers.": "修飾キーと一緒にキーを1つ押してください。",
@@ -3236,5 +3236,9 @@
   "Copy the finished text to the clipboard. Paste it yourself with Ctrl+V. No review window.": "完成したテキストをクリップボードにコピーします。Ctrl+V で自分で貼り付けます。確認ウインドウは開きません。",
   "Copied to clipboard. Press Ctrl+V to paste.": "クリップボードにコピーしました。Ctrl+V で貼り付けます。",
   "Preserve clipboard content": "クリップボードの内容を保持",
-  "Restores your clipboard after text insertion. Without this, your clipboard contains the transcribed text after dictation.": "貼り付け後、クリップボードを復元します。このオプションがない場合、音声入力後クリップボードには文字起こしのテキストが含まれます。"
+  "Restores your clipboard after text insertion. Without this, your clipboard contains the transcribed text after dictation.": "貼り付け後、クリップボードを復元します。このオプションがない場合、音声入力後クリップボードには文字起こしのテキストが含まれます。",
+  "Middle mouse button": "マウスの中ボタン",
+  "Mouse back button": "マウスの戻るボタン",
+  "Mouse forward button": "マウスの進むボタン",
+  "Mouse button shortcuts are unavailable (Windows error {0}). Restart TypeWhisper to retry.": "マウスボタンのショートカットは使用できません（Windows エラー {0}）。TypeWhisper を再起動してもう一度お試しください。"
 }

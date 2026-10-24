@@ -5,7 +5,7 @@ using TypeWhisper.WinUI.Platform;
 
 namespace TypeWhisper.WinUI;
 
-internal sealed class HotkeyRegistration : IShortcutRegistrationBackend, IDisposable
+internal sealed class HotkeyRegistration : IShortcutRegistrationBackend, IMouseShortcutHandler, IDisposable
 {
     private const uint WmHotkey = 0x0312;
     private const uint ModAlt = 0x0001;
@@ -19,6 +19,14 @@ internal sealed class HotkeyRegistration : IShortcutRegistrationBackend, IDispos
     private bool _registered;
     private readonly Dictionary<string, int> _bindings = new();
     private int _nextId;
+    // RegisterHotKey cannot reserve mouse buttons; these chords go through the shared mouse hook instead.
+    private const int MouseBinding = 0;
+    private readonly Microsoft.UI.Dispatching.DispatcherQueue _queue;
+    // The mouse hook thread reads these; the UI thread replaces them under the lock.
+    private readonly object _mouseLock = new();
+    private readonly MouseShortcutPresses _mousePresses = new();
+    private HashSet<string> _mouseChords = [];
+    private bool _mouseHooked;
 
     public string Value => string.Join(",", _bindings.Keys);
 
@@ -32,6 +40,7 @@ internal sealed class HotkeyRegistration : IShortcutRegistrationBackend, IDispos
         _hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
         _dispatch = new(callback);
         _subclassProc = WindowSubclassProc;
+        _queue = window.DispatcherQueue;
 
         if (!NativeMethods.SetWindowSubclass(_hwnd, _subclassProc, SubclassId, IntPtr.Zero))
             throw new Win32Exception(Marshal.GetLastWin32Error(), "Unable to receive global shortcuts for this window.");
@@ -49,26 +58,73 @@ internal sealed class HotkeyRegistration : IShortcutRegistrationBackend, IDispos
             var parts = chord.Split('+');
             if (error is not null || !ShortcutKeys.TryParse(parts[^1], out var vk) || vk == 0x7B)
             {
-                foreach (var id in added.Values) UnregisterHotKey(_hwnd, id);
+                Unregister(added.Values);
                 return error ?? Loc.T("Choose another key with modifiers. F12 is reserved.");
             }
+            if (ShortcutKeys.IsMouseButton(vk)) { added.Add(chord, MouseBinding); continue; }
             uint mods = ModNoRepeat;
             foreach (var modifier in parts[..^1]) mods |= modifier switch { "ALT" => ModAlt, "CTRL" => ModControl, "SHIFT" => 4u, "WIN" => 8u, _ => 0u };
             var newId = ++_nextId;
             if (!RegisterHotKey(_hwnd, newId, mods, (uint)vk))
             {
-                foreach (var id in added.Values) UnregisterHotKey(_hwnd, id);
+                Unregister(added.Values);
                 return Loc.T("{0} is unavailable or already used by another app. Your previous shortcuts are unchanged.", chord);
             }
             added.Add(chord, newId);
         }
+        var mouseChords = requested.Where(ShortcutKeys.IsMouseChord).ToHashSet();
+        if (mouseChords.Count > 0 && !_mouseHooked)
+        {
+            if (MouseShortcutHook.Add(this) is { } hookError) { Unregister(added.Values); return hookError; }
+            _mouseHooked = true;
+        }
         foreach (var old in _bindings.Keys.Where(key => !requested.Contains(key)).ToArray())
         {
-            UnregisterHotKey(_hwnd, _bindings[old]);
+            Unregister([_bindings[old]]);
             _bindings.Remove(old);
         }
         foreach (var pair in added) _bindings.Add(pair.Key, pair.Value);
+        lock (_mouseLock) _mouseChords = mouseChords;
+        if (mouseChords.Count == 0) StopMouse();
         return null;
+    }
+
+    private void Unregister(IEnumerable<int> ids)
+    {
+        foreach (var id in ids.Where(id => id != MouseBinding)) UnregisterHotKey(_hwnd, id);
+    }
+
+    private void StopMouse()
+    {
+        if (!_mouseHooked) return;
+        MouseShortcutHook.Remove(this);
+        _mouseHooked = false;
+        ((IMouseShortcutHandler)this).Reset();
+    }
+
+    // Runs on the mouse hook thread. The press is taken there, the action on the UI thread. A press
+    // that waits too long there counts as stale, like a late WM_HOTKEY.
+    bool IMouseShortcutHandler.Button(int key, bool down, uint time, string modifiers)
+    {
+        bool owned;
+        string? chord;
+        lock (_mouseLock)
+        {
+            if (!_registered) return false;
+            owned = _mousePresses.Button(key, down, modifiers, _mouseChords, true, out chord);
+        }
+        if (chord is { } pressed)
+            _queue.TryEnqueue(() =>
+            {
+                if (_registered && _mouseChords.Contains(pressed))
+                    _dispatch.Invoke(pressed, time, Environment.TickCount64, ShortcutRecorder.CaptureRegisteredShortcut);
+            });
+        return owned;
+    }
+
+    void IMouseShortcutHandler.Reset()
+    {
+        lock (_mouseLock) _mousePresses.Reset();
     }
 
     private IntPtr WindowSubclassProc(
@@ -93,9 +149,10 @@ internal sealed class HotkeyRegistration : IShortcutRegistrationBackend, IDispos
         if (!_registered)
             return;
 
-        _registered = false;
-        foreach (var id in _bindings.Values) UnregisterHotKey(_hwnd, id);
+        lock (_mouseLock) _registered = false;
+        Unregister(_bindings.Values);
         _bindings.Clear();
+        StopMouse();
         NativeMethods.RemoveWindowSubclass(_hwnd, _subclassProc, SubclassId);
     }
 
