@@ -42,4 +42,21 @@ internal sealed class MouseShortcutPresses
     }
 
     internal void Reset() => _owned.Clear();
+
+    /// <summary>The modifiers of a matched click that are no longer held, as virtual keys to replay around the click.</summary>
+    /// <param name="chord">The shortcut the hook matched at event time, or null.</param>
+    /// <param name="downNow">Whether a generic modifier key is held now.</param>
+    /// <remarks>The UI thread handles a click after the keyboard events queued before it. A modifier released in
+    /// between would otherwise be missing from the chord, and the shortcut would silently do nothing.</remarks>
+    internal static int[] ReleasedModifiers(string? chord, Func<int, bool> downNow)
+    {
+        if (chord is null) return [];
+        var parts = chord.Split('+');
+        return new (string Name, int Key)[] { ("CTRL", 0xA2), ("ALT", 0xA4), ("SHIFT", 0xA0), ("WIN", 0x5B) }
+            .Where(modifier => parts.Contains(modifier.Name) && !(modifier.Name switch
+            {
+                "CTRL" => downNow(0x11), "ALT" => downNow(0x12), "SHIFT" => downNow(0x10), _ => downNow(0x5B) || downNow(0x5C)
+            }))
+            .Select(modifier => modifier.Key).ToArray();
+    }
 }

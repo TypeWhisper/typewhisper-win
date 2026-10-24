@@ -153,11 +153,38 @@ public class MouseShortcutTests
         // Mouse buttons don't repeat. A long middle-button drag must keep blocking another shortcut.
         var state = new HybridHotkeyState();
         var bindings = new HashSet<string> { "CTRL+SHIFT", ShortcutRules.Normalize("Alt+MouseMiddle") };
-        var held = new HashSet<int> { Middle };
+        var held = new HashSet<int>();
         bool Held(int key) => held.Contains(key);
         Assert.Null(state.Key(Middle, true, 0, bindings, held: Held));
+        held.Add(Middle);
         Assert.Null(state.Key(0xA2, true, 2000, bindings, held: Held));
-        Assert.Null(state.Key(0xA0, true, 2010, bindings, held: Held));
         Assert.Empty(state.DroppedKeys);
+        held.Add(0xA2);
+        Assert.Null(state.Key(0xA0, true, 2010, bindings, held: Held));
+    }
+
+    [Fact]
+    public void ModifierReleasedBeforeTheQueuedClickIsReplayed()
+    {
+        // Ctrl was held when the hook matched Ctrl+MouseBack, but is up by the time the UI thread handles the click.
+        Assert.Equal(new[] { 0xA2 }, MouseShortcutPresses.ReleasedModifiers("CTRL+MOUSEBACK", _ => false));
+        Assert.Empty(MouseShortcutPresses.ReleasedModifiers("CTRL+MOUSEBACK", key => key == 0x11));
+        Assert.Equal(new[] { 0xA0, 0x5B }, MouseShortcutPresses.ReleasedModifiers("CTRL+SHIFT+WIN+MOUSEFORWARD", key => key == 0x11));
+        Assert.Empty(MouseShortcutPresses.ReleasedModifiers("WIN+MOUSEMIDDLE", key => key == 0x5C));
+        Assert.Empty(MouseShortcutPresses.ReleasedModifiers(null, _ => false));
+    }
+
+    [Fact]
+    public void ReplayedModifierStartsTheChordInTheOrderWindowsSaw()
+    {
+        // The keyboard hook already handled Ctrl's release; the replay feeds Ctrl, the click and Ctrl's release again.
+        var state = new HybridHotkeyState();
+        var bindings = new HashSet<string> { ShortcutRules.Normalize("Ctrl+MouseBack") };
+        Assert.Null(state.Key(0xA2, true, 0, bindings, held: _ => true));
+        Assert.Null(state.Key(0xA2, false, 5, bindings, held: _ => true));
+        var replay = MouseShortcutPresses.ReleasedModifiers("CTRL+MOUSEBACK", _ => false);
+        bool HeldWithReplay(int key) => replay.Contains(key) || key == Back;
+        foreach (var modifier in replay) Assert.Null(state.Key(modifier, true, 10, bindings, held: HeldWithReplay));
+        Assert.Equal(HybridHotkeyAction.Start, state.Key(Back, true, 10, bindings, held: HeldWithReplay));
     }
 }
