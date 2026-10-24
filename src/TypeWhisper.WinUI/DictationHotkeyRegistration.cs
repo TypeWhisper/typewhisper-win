@@ -26,6 +26,8 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
     private bool _mouseHooked;
     // When each modifier was last released, so a replayed release keeps its real time (UI thread).
     private readonly Dictionary<int, uint> _modifierReleased = [];
+    // Modifiers replayed with a click's press, released again around the click's release (UI thread).
+    private readonly Dictionary<int, (int[] Modifiers, uint Press)> _replayed = [];
     public string Value { get; private set; } = "";
     // Lets the shortcut recorder tell AltGr from a real Ctrl, which XAML key events cannot.
     internal static bool AltGrControlDown { get; private set; }
@@ -64,23 +66,37 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
             if (editing)
             {
                 // Like a reserved keyboard chord, the press goes to the open shortcut editor instead of dictation.
-                _state = new(); _mouseDown.Clear();
+                _state = new(); _mouseDown.Clear(); _replayed.Clear();
                 if (chord is not null) ShortcutRecorder.CaptureRegisteredShortcut(chord);
                 return;
             }
-            // A modifier of the matched chord that was released before this queued click is replayed around it,
-            // so the gesture sees the order Windows saw.
-            int[] replay = down ? MouseShortcutPresses.ReleasedModifiers(chord, held => (NativeMethods.GetAsyncKeyState(held) & 0x8000) != 0) : [];
+            // Mouse buttons don't repeat: a second press without a release in between follows a lost release.
+            if (down && _mouseDown.Contains(key)) ReleaseClick(key, time);
+            if (!down) { ReleaseClick(key, time); return; }
+            // A modifier of the matched chord that was released before this queued click is replayed as pressed,
+            // so the gesture sees the order Windows saw. Its release follows around the click's release.
+            int[] replay = MouseShortcutPresses.ReleasedModifiers(chord, held => (NativeMethods.GetAsyncKeyState(held) & 0x8000) != 0);
             bool HeldWithReplay(int held) => replay.Contains(held) || Held(held);
             foreach (var modifier in replay) Feed(modifier, true, time, HeldWithReplay);
-            // Mouse buttons don't repeat: a second press without a release in between follows a lost release.
-            if (down && _mouseDown.Contains(key)) { Feed(key, false, time); _mouseDown.Remove(key); }
-            // Like Windows' key state seen from a keyboard hook, a button counts as held until its release is handled.
-            Feed(key, down, time, HeldWithReplay);
-            if (down) _mouseDown.Add(key); else _mouseDown.Remove(key);
-            foreach (var modifier in replay)
-                Feed(modifier, false, MouseShortcutPresses.ReplayReleaseTime(time, _modifierReleased.TryGetValue(modifier, out var released) ? released : null), HeldWithReplay);
+            Feed(key, true, time, HeldWithReplay);
+            _mouseDown.Add(key);
+            if (replay.Length > 0) _replayed[key] = (replay, time);
         };
+        // Like Windows' key state seen from a keyboard hook, a button or modifier counts as held until its release is handled.
+        void ReleaseClick(int key, uint time)
+        {
+            int[] modifiers = [];
+            var press = time;
+            if (_replayed.Remove(key, out var replayed)) (modifiers, press) = replayed;
+            var waiting = modifiers.ToHashSet();
+            bool HeldWaiting(int held) => waiting.Contains(held) || Held(held);
+            var plan = MouseShortcutPresses.PlanReleases(modifiers, press, time,
+                modifier => _modifierReleased.TryGetValue(modifier, out var released) ? released : null);
+            foreach (var step in plan.Where(step => step.BeforeClick)) { Feed(step.Modifier, false, step.Time, HeldWaiting); waiting.Remove(step.Modifier); }
+            Feed(key, false, time, HeldWaiting);
+            _mouseDown.Remove(key);
+            foreach (var step in plan.Where(step => !step.BeforeClick)) { Feed(step.Modifier, false, step.Time, HeldWaiting); waiting.Remove(step.Modifier); }
+        }
         _callback = (code, message, data) =>
         {
             if (code >= 0 && !_interrupted && !_disposed)
@@ -125,7 +141,9 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
         bool owned;
         string? chord;
         lock (_mouseLock) owned = _mousePresses.Button(key, down, modifiers, _bindings, editing || _paused?.Invoke() != true, out chord);
-        _queue.TryEnqueue(() => _mouseGesture(key, down, time, chord, editing));
+        // Only clicks that a shortcut owns reach the gesture. A click left with the focused app must not
+        // start dictation later, e.g. when its extra modifier was released before the UI thread handles it.
+        if (owned) _queue.TryEnqueue(() => _mouseGesture(key, down, time, chord, editing));
         return owned;
     }
 
@@ -143,7 +161,7 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
         _interrupted = true;
         AltGrControlDown = false;
         _state.ResetAfterInterruption([]);
-        _mouseDown.Clear(); ((IMouseShortcutHandler)this).Reset();
+        _mouseDown.Clear(); _replayed.Clear(); ((IMouseShortcutHandler)this).Reset();
     }
 
     internal string? Recover()
@@ -159,7 +177,7 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
         // would leave a phantom generic key down after the physical key-up.
         _state.ResetAfterInterruption(Enumerable.Range(8, 247)
             .Where(key => key is not (0x10 or 0x11 or 0x12) && (NativeMethods.GetAsyncKeyState(key) & 0x8000) != 0));
-        _mouseDown.Clear(); ((IMouseShortcutHandler)this).Reset();
+        _mouseDown.Clear(); _replayed.Clear(); ((IMouseShortcutHandler)this).Reset();
         _interrupted = false;
         return null;
     }
@@ -189,7 +207,7 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
         _bindings = chords.ToHashSet();
         _mouseButtons = mouseButtons;
         _state = new();
-        _mouseDown.Clear(); ((IMouseShortcutHandler)this).Reset();
+        _mouseDown.Clear(); _replayed.Clear(); ((IMouseShortcutHandler)this).Reset();
         Value = string.Join(",", chords);
         return null;
     }
