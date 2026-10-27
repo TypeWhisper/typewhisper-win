@@ -13,7 +13,7 @@ internal static class LiveModelMemorySettings
         var picker = new ChoicePicker();
         picker.Configure(Loc.T("Unload idle models"), "history", Loc.T("Unload idle models"));
         row.Set(Loc.T("Unload idle models"), Loc.T("Release the memory of local models after inactivity. They load again when needed."),
-            Loc.T("Releases the memory of local models after they were not used for this long. They load again automatically when needed, so the next dictation or text workflow may start a little slower. Parakeet, whisper.cpp, Qwen3, GigaAM and local text models are affected; cloud providers are not."), picker);
+            Loc.T("Releases the memory of local models after they were not used for this long. They load again automatically when needed, so the next dictation or text workflow may start a little slower. Parakeet, whisper.cpp, Qwen3, GigaAM, Voxtral and local text models are affected; cloud providers are not."), picker);
         string? selectionError = null;
         void Refresh()
         {

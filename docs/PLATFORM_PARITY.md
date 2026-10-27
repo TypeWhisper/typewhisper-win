@@ -17,7 +17,7 @@ TypeWhisper for Windows follows the same product goals as TypeWhisper for macOS:
 | System-wide dictation | Supported | Global keyboard and mouse hotkeys, hold and toggle modes, background transcription, and automatic paste into the active application. |
 | Application-aware behavior | Supported | Workflows can match applications, browser sites, and dedicated hotkeys, then select language, task, model, prompt processing, output, and actions. |
 | File transcription | Supported | Local and cloud engines can transcribe common audio and video formats and export text, SRT, or WebVTT. |
-| Local speech recognition | Supported | Local plugins include sherpa-onnx models such as Parakeet and Canary, whisper.cpp models, Qwen3 Local and GigaAM for Russian. |
+| Local speech recognition | Supported | Local plugins include sherpa-onnx models such as Parakeet and Canary, whisper.cpp models, Qwen3 Local, GigaAM for Russian and Voxtral (Local) through transcribe.cpp. Windows names the local Voxtral plugin `com.typewhisper.voxtral-local`, because `com.typewhisper.voxtral` is the Mistral cloud plugin there. |
 | Cloud speech recognition | Supported | Cloud engines are supplied through the Windows plugin system and marketplace. |
 | AI text processing | Supported | Workflows use configured portable LLM providers. This does not depend on Apple Intelligence. |
 | Translation | Supported | Workflows use configured LLM providers. Some transcription providers also expose audio-to-English translation. Supporting Marian code does not establish an automatic local fallback in the WinUI host. |

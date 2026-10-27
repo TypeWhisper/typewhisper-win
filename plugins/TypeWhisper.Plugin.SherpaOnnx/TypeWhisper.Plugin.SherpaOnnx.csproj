@@ -10,6 +10,10 @@
   <ItemGroup>
     <Compile Remove="Tests/**/*.cs" />
     <InternalsVisibleTo Include="TypeWhisper.Plugin.SherpaOnnx.Tests" />
+    <!-- The transcribe.cpp bindings and downloads, shared with the local Voxtral plugin. -->
+    <Compile Include="../shared/TranscribeCpp.cs" Link="Shared/TranscribeCpp.cs" />
+    <Compile Include="../shared/TranscribeCppAssets.cs" Link="Shared/TranscribeCppAssets.cs" />
+    <Using Include="TypeWhisper.Plugin.Shared" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\TypeWhisper.PluginSDK\TypeWhisper.PluginSDK.csproj" />

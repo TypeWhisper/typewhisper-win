@@ -1807,7 +1807,7 @@
   "Release the memory of local models after inactivity. They load again when needed.": "使用していないローカルモデルのメモリを解放します。必要になると再度読み込まれます。",
   "Release the shortcut keys and try again.": "ショートカットのキーを離してから、もう一度お試しください。",
   "Released versions": "リリース済みバージョン",
-  "Releases the memory of local models after they were not used for this long. They load again automatically when needed, so the next dictation or text workflow may start a little slower. Parakeet, whisper.cpp, Qwen3, GigaAM and local text models are affected; cloud providers are not.": "ローカルモデルがこの時間使用されなかった場合に、メモリを解放します。必要になると自動的に再び読み込まれるため、次のディクテーションやテキストワークフローの開始が少し遅くなることがあります。対象はParakeet、whisper.cpp、Qwen3、GigaAM、ローカルテキストモデルで、クラウドプロバイダーは対象外です。",
+  "Releases the memory of local models after they were not used for this long. They load again automatically when needed, so the next dictation or text workflow may start a little slower. Parakeet, whisper.cpp, Qwen3, GigaAM, Voxtral and local text models are affected; cloud providers are not.": "ローカルモデルがこの時間使用されなかった場合に、メモリを解放します。必要になると自動的に再び読み込まれるため、次のディクテーションやテキストワークフローの開始が少し遅くなることがあります。対象はParakeet、whisper.cpp、Qwen3、GigaAM、Voxtral、ローカルテキストモデルで、クラウドプロバイダーは対象外です。",
   "Releasing model memory…": "モデルのメモリを解放中…",
   "Remember file queue after restart": "再起動後もファイルキューを保持する",
   "Remember this queue after restart": "再起動後もこのキューを保持する",

@@ -3,11 +3,11 @@ using System.Runtime.InteropServices;
 using System.Text.Json;
 using TypeWhisper.PluginSDK.Models;
 
-namespace TypeWhisper.Plugin.SherpaOnnx;
+namespace TypeWhisper.Plugin.Shared;
 
 /// <summary>
 /// P/Invoke surface of transcribe.cpp's generic C API (include/transcribe.h), pinned to one release.
-/// Only the offline subset the Parakeet GPU path needs is declared. The layouts follow the x64 C ABI and are
+/// Only the offline subset the local plugins need is declared. The layouts follow the x64 C ABI and are
 /// checked against transcribe_abi_struct_size before the first model loads, so a mismatched DLL fails
 /// with an error instead of reading the wrong fields.
 /// </summary>
@@ -446,27 +446,4 @@ internal sealed class TranscribeCppSession : IDisposable
         if (_session != IntPtr.Zero) { TranscribeCppNative.transcribe_session_free(_session); _session = IntPtr.Zero; }
         if (_model != IntPtr.Zero) { TranscribeCppNative.transcribe_model_free(_model); _model = IntPtr.Zero; }
     }
-}
-
-/// <summary>A Parakeet model loaded on the graphics card; the plugin serializes calls.</summary>
-internal interface IGpuRecognizer : IDisposable
-{
-    /// <summary>Where the model runs, as shown in the processing device settings.</summary>
-    TranscriptionAccelerationStatus Status { get; }
-    TranscribeCppResult Transcribe(float[] samples, bool tokens, CancellationToken cancellationToken);
-}
-
-internal sealed class TranscribeCppRecognizer(TranscribeCppSession session) : IGpuRecognizer
-{
-    public TranscriptionAccelerationStatus Status { get; } = DescribeDevice(session.Device);
-
-    // Parakeet v3 detects the language itself; transcribe.cpp would accept a hint but ignores it for Parakeet.
-    public TranscribeCppResult Transcribe(float[] samples, bool tokens, CancellationToken cancellationToken) =>
-        session.Transcribe(samples, null, tokens, cancellationToken);
-
-    internal static TranscriptionAccelerationStatus DescribeDevice(TranscribeCppDevice? device) => device is { Kind: "vulkan" }
-        ? new(TranscriptionAccelerationBackend.AmdVulkan, device.Description)
-        : new(TranscriptionAccelerationBackend.Cpu, "Using CPU");
-
-    public void Dispose() => session.Dispose();
 }

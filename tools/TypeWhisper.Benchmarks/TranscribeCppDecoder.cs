@@ -1,5 +1,4 @@
 using System.Globalization;
-using TypeWhisper.Plugin.SherpaOnnx;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Helpers;
 

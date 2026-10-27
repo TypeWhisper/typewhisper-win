@@ -60,14 +60,14 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
             new("decoder.int8.onnx", $"{ParakeetUltraRepo}/decoder.int8.onnx", 12, "1fab98fe6c12aded87d2da66272cc9e148d0a0044ce3850a12fe56302ec4a922"),
             new("joiner.int8.onnx", $"{ParakeetUltraRepo}/joiner.int8.onnx", 6, "8a71aaccfdba3d451775507a889afd2257d2e754463fd81095a8c8f290f924c2"),
             new("tokens.txt", $"{ParakeetUltraRepo}/tokens.txt", 1, "d58544679ea4bc6ac563d1f545eb7d474bd6cfa467f0a6e2c1dc1c7d37e3c35d")
-        ], TranscribeCppAsset.ParakeetUltraQ8),
+        ], ParakeetGguf.ParakeetUltraQ8),
         new("parakeet-tdt-0.6b", "Parakeet TDT 0.6B", "NVIDIA", "~670 MB", 670, 25, false, false,
         [
             new("encoder.int8.onnx", $"{ParakeetRepo}/encoder.int8.onnx", 652, "acfc2b4456377e15d04f0243af540b7fe7c992f8d898d751cf134c3a55fd2247"),
             new("decoder.int8.onnx", $"{ParakeetRepo}/decoder.int8.onnx", 12, "179e50c43d1a9de79c8a24149a2f9bac6eb5981823f2a2ed88d655b24248db4e"),
             new("joiner.int8.onnx", $"{ParakeetRepo}/joiner.int8.onnx", 6, "3164c13fc2821009440d20fcb5fdc78bff28b4db2f8d0f0b329101719c0948b3"),
             new("tokens.txt", $"{ParakeetRepo}/tokens.txt", 1, "d58544679ea4bc6ac563d1f545eb7d474bd6cfa467f0a6e2c1dc1c7d37e3c35d")
-        ], TranscribeCppAsset.ParakeetV3Q8),
+        ], ParakeetGguf.ParakeetV3Q8),
         new("canary-180m-flash", "Canary 180M Flash", "NVIDIA", "~198 MB", 198, 4, false, true,
         [
             new("encoder.int8.onnx", $"{CanaryRepo}/encoder.int8.onnx", 127, "7a75b4e2a5857a6dcc0819503bbe3fad66943db4a3ccf21d3f27c633667d303f"),

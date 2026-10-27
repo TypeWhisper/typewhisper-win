@@ -158,7 +158,10 @@ internal sealed class LivePortableModelSettings : UserControl
             var hasModelSetting = _cloudMode && TranscriptionModelSettingChoices.Any(choices =>
                 choices.SetEquals(models.Select(model => model.ModelId)));
             _cloudPanel.Visibility = _cloudMode && !hasModelSetting ? Visibility.Visible : Visibility.Collapsed;
-            _refresh.Visibility = _cloudMode || !_session.PluginRuntime.TranscriptionProviders.Any(p => p.PluginId == _pluginId)
+            // Local plugins ship a fixed model list and report download changes themselves; only provider catalogs
+            // that are fetched from an account can change on request.
+            var localCatalog = models.Count > 0 && models.All(m => m.SupportsDownload);
+            _refresh.Visibility = _cloudMode || localCatalog || !_session.PluginRuntime.TranscriptionProviders.Any(p => p.PluginId == _pluginId)
                 ? Visibility.Collapsed : Visibility.Visible;
             _localLlm.Visibility = HasLocalLlmModels ? Visibility.Visible : Visibility.Collapsed;
             _settingCloudModel = true;

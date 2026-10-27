@@ -7,7 +7,8 @@ internal sealed partial class DictationPluginServices
     // Local engines whose native code runs in a worker process, so a crash there cannot end the app.
     private static readonly IReadOnlySet<string> IsolatedTranscriptionPlugins = new HashSet<string>(StringComparer.Ordinal)
     {
-        LocalTranscriptionPlugin.PluginId, "com.typewhisper.whisper-cpp", "com.typewhisper.qwen3-local", "com.typewhisper.gigaam"
+        LocalTranscriptionPlugin.PluginId, "com.typewhisper.whisper-cpp", "com.typewhisper.qwen3-local", "com.typewhisper.gigaam",
+        "com.typewhisper.voxtral-local"
     };
 
     // The worker is this executable in worker mode. TYPEWHISPER_TRANSCRIPTION_WORKER=0 keeps the
