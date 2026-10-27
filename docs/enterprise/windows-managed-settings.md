@@ -222,9 +222,9 @@ configuration, including WPAD and PAC scripts.
 | --- | --- |
 | `api.polar.sh` | Activation and validation of commercial license keys, including `ManagedLicenseKey`. |
 | `app.typewhisper.com` | Premium account sign-in and account status. |
-| `api.github.com`, `github.com`, `release-assets.githubusercontent.com` | App update checks and downloads (unless `UpdateMode` is 0) and plugin package downloads. |
+| `api.github.com`, `github.com`, `release-assets.githubusercontent.com` | App update checks and downloads (unless `UpdateMode` is 0), plugin package downloads, and the transcribe.cpp runtime that Parakeet on the graphics card and Voxtral (Local) download. |
 | `typewhisper.github.io` | The plugin catalog (`plugins-v2.json`). |
-| `huggingface.co` and the `*.hf.co` content hosts it redirects to (the wildcard must cover several subdomain levels, such as `us.aws.cdn.hf.co` and `cas-server.xethub.hf.co`) | Model downloads of the local plugins: Parakeet (sherpa-onnx), dictionary boosting assets, whisper.cpp, GigaAM, local text models, local speech output. |
+| `huggingface.co` and the `*.hf.co` content hosts it redirects to (the wildcard must cover several subdomain levels, such as `us.aws.cdn.hf.co` and `cas-server.xethub.hf.co`) | Model downloads of the local plugins: Parakeet (sherpa-onnx), dictionary boosting assets, whisper.cpp, GigaAM, Voxtral (Local), local text models, local speech output. |
 | `www.python.org`, `raw.githubusercontent.com`, `pypi.org`, `files.pythonhosted.org`, `download.pytorch.org`, `download-r2.pytorch.org` | The Python and PyTorch runtime Granite Speech installs as part of its model download: embedded Python, the pinned pip bootstrap script and the Python packages. The PyTorch package index on `download.pytorch.org` currently points to `download-r2.pytorch.org` for its wheel files. Covered by `AllowModelDownloads`. |
 | `developer.download.nvidia.com`, `api.nuget.org` | Runtime files some local plugins fetch while loading a model (whisper.cpp with CUDA, ONNX runtimes). Not covered by `AllowModelDownloads`; see the known limits above. |
 | `graph.microsoft.com`, `www.googleapis.com` | Calendar access for the meeting feature, only when a user connects a calendar. |
@@ -259,7 +259,7 @@ whatever endpoint the user enters.
 | xAI | `api.x.ai` |
 | Authenticated CLI, Webhook, Script | the command, CLI or URL the user configures |
 | Granite Speech | `huggingface.co` and `*.hf.co` for the model; `www.python.org`, `raw.githubusercontent.com`, `pypi.org`, `files.pythonhosted.org`, `download.pytorch.org` and `download-r2.pytorch.org` for its runtime |
-| Other local plugins (Parakeet, whisper.cpp, local LLM, Gemma, Qwen, GigaAM, Cohere Transcribe, Supertonic TTS) | `huggingface.co` and `*.hf.co` for models; see the runtime hosts above |
+| Other local plugins (Parakeet, whisper.cpp, local LLM, Gemma, Qwen, GigaAM, Voxtral (Local), Cohere Transcribe, Supertonic TTS) | `huggingface.co` and `*.hf.co` for models; see the runtime hosts above |
 
 ## Microphone and other permissions
 

@@ -41,6 +41,7 @@ public sealed class PluginBrandIcon : UserControl
             "com.typewhisper.cloudflare-asr" => "cloudflare",
             "com.typewhisper.claude" => "claude",
             "com.typewhisper.voxtral" => "mistral",
+            "com.typewhisper.voxtral-local" => "mistral",
             "com.typewhisper.cohere" => "cohere",
             "com.typewhisper.cohere-transcribe" => "cohere",
             "com.typewhisper.deepgram" => "deepgram",

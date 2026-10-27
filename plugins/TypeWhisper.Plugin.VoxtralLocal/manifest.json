@@ -1,0 +1,20 @@
+{
+  "id": "com.typewhisper.voxtral-local",
+  "locality": "local",
+  "name": "Voxtral (Local)",
+  "version": "1.0.0",
+  "minHostVersion": "1.1.6",
+  "author": "TypeWhisper",
+  "description": "Offline speech recognition with Mistral's Voxtral Mini 4B Realtime in 13 languages, with punctuation and numbers. Needs a graphics card with Vulkan for dictation; on the processor it is slow. Downloads about 2.8 GB.",
+  "descriptions": {
+    "de": "Lokale Spracherkennung mit Voxtral Mini 4B Realtime von Mistral in 13 Sprachen, mit Satzzeichen und Zahlen. Zum Diktieren wird eine Grafikkarte mit Vulkan benötigt; auf dem Prozessor ist es langsam. Lädt etwa 2,8 GB herunter.",
+    "ja": "MistralのVoxtral Mini 4B Realtimeによる13言語のローカル音声認識です。句読点と数字に対応します。音声入力にはVulkan対応のグラフィックカードが必要で、CPUでは低速です。約2.8 GBをダウンロードします。"
+  },
+  "categories": [
+    "transcription"
+  ],
+  "isLocal": true,
+  "requiresApiKey": false,
+  "assemblyName": "TypeWhisper.Plugin.VoxtralLocal.dll",
+  "pluginClass": "TypeWhisper.Plugin.VoxtralLocal.VoxtralLocalPlugin"
+}

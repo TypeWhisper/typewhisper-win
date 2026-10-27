@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Version>1.0.0</Version>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="Tests/**/*.cs" />
+    <!-- The transcribe.cpp bindings and runtime download, shared with the NVIDIA Parakeet plugin's graphics card path. -->
+    <Compile Include="../shared/TranscribeCpp.cs" Link="Shared/TranscribeCpp.cs" />
+    <Compile Include="../shared/TranscribeCppAssets.cs" Link="Shared/TranscribeCppAssets.cs" />
+    <Compile Include="../shared/ResumableModelDownloader.cs" Link="Shared/ResumableModelDownloader.cs" />
+    <Compile Include="../shared/PluginLocalization.cs" Link="Shared/PluginLocalization.cs" />
+    <Using Include="TypeWhisper.Plugin.Shared" />
+    <InternalsVisibleTo Include="TypeWhisper.Plugin.VoxtralLocal.Tests" />
+    <ProjectReference Include="../../src/TypeWhisper.PluginSDK/TypeWhisper.PluginSDK.csproj" />
+    <Content Include="manifest.json;THIRD-PARTY-NOTICES.md" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <!-- The package holds only managed code; transcribe.cpp and the model are downloaded on first use. -->
+  <Target Name="StagePortablePackage" AfterTargets="Build">
+    <PropertyGroup>
+      <PackageDirectory>$(MSBuildProjectDirectory)/bin/$(Configuration)/portable-host/Plugins/com.typewhisper.voxtral-local/</PackageDirectory>
+    </PropertyGroup>
+    <ItemGroup>
+      <PackageFile Include="$(TargetPath);$(TargetDir)$(TargetName).deps.json;$(ProjectDir)manifest.json;$(ProjectDir)THIRD-PARTY-NOTICES.md" />
+      <PackageDependency Include="$(TargetDir)*.dll" Exclude="$(TargetPath);$(TargetDir)TypeWhisper.PluginSDK.dll" />
+    </ItemGroup>
+    <RemoveDir Directories="$(PackageDirectory)" />
+    <MakeDir Directories="$(PackageDirectory)" />
+    <Copy SourceFiles="@(PackageFile);@(PackageDependency)" DestinationFolder="$(PackageDirectory)" />
+  </Target>
+</Project>

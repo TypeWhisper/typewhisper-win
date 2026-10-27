@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
+    <IsTestProject>true</IsTestProject><IsPackable>false</IsPackable><GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" /><PackageReference Include="xunit.runner.visualstudio" />
+    <Using Include="Xunit" />
+    <Using Include="TypeWhisper.Plugin.Shared" />
+    <ProjectReference Include="../../../src/TypeWhisper.PluginHost/TypeWhisper.PluginHost.csproj" />
+    <ProjectReference Include="../TypeWhisper.Plugin.VoxtralLocal.csproj" />
+    <None Include="../manifest.json" Link="manifest.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
