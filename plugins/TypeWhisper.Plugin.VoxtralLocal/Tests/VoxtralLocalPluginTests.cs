@@ -248,13 +248,16 @@ public sealed class VoxtralLocalPluginTests : IDisposable
         Assert.Equal(VoxtralLocalModel.MiniQ4.Id, restarted.SelectedModelId);
         await restarted.LoadModelAsync(VoxtralLocalModel.MiniQ4.Id, default);
 
-        await restarted.RemoveModelAsync(VoxtralLocalModel.MiniQ4.Id, default);
+        Assert.Equal("remove-model", Assert.Single(restarted.SettingsActions).Id);
+        await restarted.ExecuteSettingsActionAsync("remove-model", default);
 
         Assert.True(Assert.Single(restartedRecognizers).Disposed);
         Assert.Null(restarted.SelectedModelId);
         Assert.False(restarted.IsConfigured);
         Assert.False(Directory.Exists(ModelDirectory()));
         Assert.True(File.Exists(Path.Combine(RuntimeDirectory(), "transcribe.dll")));
+        Assert.Contains("not downloaded", await restarted.ExecuteSettingsActionAsync("remove-model", default));
+        await Assert.ThrowsAsync<ArgumentException>(() => restarted.ExecuteSettingsActionAsync("other", default));
     }
 
     [Fact]

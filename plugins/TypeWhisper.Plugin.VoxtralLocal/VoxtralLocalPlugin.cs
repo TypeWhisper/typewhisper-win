@@ -11,7 +11,7 @@ namespace TypeWhisper.Plugin.VoxtralLocal;
 /// language itself, writes punctuation, capitalization and numbers, and is meant for a graphics card with Vulkan;
 /// it also runs on the processor, but only about as fast as speech. Transcription runs after the recording ends.
 /// </summary>
-public sealed partial class VoxtralLocalPlugin : IPcmTranscriptionEnginePlugin, IPluginTextSettings
+public sealed partial class VoxtralLocalPlugin : IPcmTranscriptionEnginePlugin, IPluginTextSettings, IPluginSettingsActions
 {
     internal const int SampleRate = 16000;
     private const string SelectedModelSetting = "selectedModel";
@@ -144,7 +144,7 @@ public sealed partial class VoxtralLocalPlugin : IPcmTranscriptionEnginePlugin, 
     public async Task DownloadModelAsync(string modelId, IProgress<double>? progress, CancellationToken ct)
     {
         ValidateModel(modelId);
-        EnsurePlatform();
+        if (_factory is null) EnsurePlatform();
         await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {

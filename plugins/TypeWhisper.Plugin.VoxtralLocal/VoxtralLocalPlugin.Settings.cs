@@ -37,6 +37,28 @@ public sealed partial class VoxtralLocalPlugin
         return text + " " + L("In use: ", "In Verwendung: ") + device + (_status.Detail is { } detail ? " · " + detail : "");
     }
 
+    // The host blocks removing the selected model, and Voxtral has only one, so the model row could never remove it.
+    internal const string RemoveAction = "remove-model";
+
+    /// <inheritdoc />
+    public IReadOnlyList<PluginSettingsAction> SettingsActions =>
+    [
+        new(RemoveAction, L($"Unload and remove {_model.DisplayName}", $"{_model.DisplayName} entladen und entfernen"),
+            L("Deletes the 2.8 GB model, unloading it and clearing the selection. You can download it again.",
+                "Löscht das 2,8-GB-Modell, entlädt es und hebt die Auswahl auf. Du kannst es erneut herunterladen."))
+        { Section = PluginSettingsSection.Transcription }
+    ];
+
+    /// <inheritdoc />
+    public async Task<string?> ExecuteSettingsActionAsync(string id, CancellationToken cancellationToken)
+    {
+        if (id != RemoveAction) throw new ArgumentException("Unknown Voxtral settings action.", nameof(id));
+        // Checks the directory, not readiness, so an incomplete or damaged download can still be removed.
+        if (_host is null || !Directory.Exists(ModelDirectory)) return L($"{_model.DisplayName} is not downloaded.", $"{_model.DisplayName} ist nicht heruntergeladen.");
+        await RemoveModelAsync(_model.Id, cancellationToken).ConfigureAwait(false);
+        return L($"{_model.DisplayName} removed. Download it again to use it.", $"{_model.DisplayName} entfernt. Lade es erneut herunter, um es zu nutzen.");
+    }
+
     /// <summary>Saves the device and releases a model loaded on another one, so the next dictation loads it again.</summary>
     public async Task SaveTextSettingAsync(string id, string value, CancellationToken cancellationToken)
     {
