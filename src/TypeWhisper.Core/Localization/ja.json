@@ -3240,5 +3240,10 @@
   "Middle mouse button": "マウスの中ボタン",
   "Mouse back button": "マウスの戻るボタン",
   "Mouse forward button": "マウスの進むボタン",
-  "Mouse button shortcuts are unavailable (Windows error {0}). Restart TypeWhisper to retry.": "マウスボタンのショートカットは使用できません（Windows エラー {0}）。TypeWhisper を再起動してもう一度お試しください。"
+  "Mouse button shortcuts are unavailable (Windows error {0}). Restart TypeWhisper to retry.": "マウスボタンのショートカットは使用できません（Windows エラー {0}）。TypeWhisper を再起動してもう一度お試しください。",
+  "Transcription Time": "文字起こし時間",
+  "LLM": "LLM",
+  "LLM Time": "LLM処理時間",
+  "{0:0.0} s": "{0:0.0}秒",
+  "{0} min {1} s": "{0}分{1}秒"
 }

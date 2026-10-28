@@ -3240,5 +3240,10 @@
   "Middle mouse button": "鼠标中键",
   "Mouse back button": "鼠标后退键",
   "Mouse forward button": "鼠标前进键",
-  "Mouse button shortcuts are unavailable (Windows error {0}). Restart TypeWhisper to retry.": "鼠标按键快捷键不可用（Windows 错误 {0}）。请重启 TypeWhisper 后重试。"
+  "Mouse button shortcuts are unavailable (Windows error {0}). Restart TypeWhisper to retry.": "鼠标按键快捷键不可用（Windows 错误 {0}）。请重启 TypeWhisper 后重试。",
+  "Transcription Time": "转录用时",
+  "LLM": "LLM",
+  "LLM Time": "LLM 用时",
+  "{0:0.0} s": "{0:0.0} 秒",
+  "{0} min {1} s": "{0} 分钟 {1} 秒"
 }
