@@ -179,6 +179,22 @@ public static class HistoryWorkspace
         return provider is null ? name : $"{provider} · {name}";
     }
 
+    /// <summary>A readable label for the LLM a workflow used, or null when no LLM ran for the entry.</summary>
+    public static string? LlmLabel(string? provider, string? model)
+    {
+        var parts = new[] { provider?.Trim(), model?.Trim() }.Where(part => !string.IsNullOrEmpty(part)).ToArray();
+        return parts.Length == 0 ? null : string.Join(" · ", parts);
+    }
+
+    /// <summary>A short processing time such as "1.4 s" or "2 min 5 s", or null when it was not recorded.</summary>
+    public static string? ProcessingTime(double? seconds)
+    {
+        if (seconds is not { } value || !double.IsFinite(value) || value < 0) return null;
+        if (value < 59.95) return Loc.T("{0:0.0} s", value);
+        var whole = (long)Math.Round(value);
+        return Loc.T("{0} min {1} s", whole / 60, whole % 60);
+    }
+
     /// <summary>The app name shown for an entry, falling back to its process name.</summary>
     public static string? AppOf(TranscriptionRecord record) =>
         string.IsNullOrWhiteSpace(record.AppName) ? string.IsNullOrWhiteSpace(record.AppProcessName) ? null : record.AppProcessName : record.AppName;

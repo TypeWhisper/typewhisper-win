@@ -3240,5 +3240,10 @@
   "Middle mouse button": "Mittlere Maustaste",
   "Mouse back button": "Maustaste Zurück",
   "Mouse forward button": "Maustaste Vorwärts",
-  "Mouse button shortcuts are unavailable (Windows error {0}). Restart TypeWhisper to retry.": "Tastenkürzel mit Maustasten sind nicht verfügbar (Windows-Fehler {0}). Starte TypeWhisper neu, um es erneut zu versuchen."
+  "Mouse button shortcuts are unavailable (Windows error {0}). Restart TypeWhisper to retry.": "Tastenkürzel mit Maustasten sind nicht verfügbar (Windows-Fehler {0}). Starte TypeWhisper neu, um es erneut zu versuchen.",
+  "Transcription Time": "Transkriptionsdauer",
+  "LLM": "LLM",
+  "LLM Time": "LLM-Dauer",
+  "{0:0.0} s": "{0:0.0} s",
+  "{0} min {1} s": "{0} Min. {1} s"
 }
