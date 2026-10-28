@@ -30,7 +30,8 @@ public sealed class WorkflowLlmUsage
             Model = string.IsNullOrWhiteSpace(names.Model) ? model : names.Model;
             var started = _time.GetTimestamp();
             var result = await process(provider, prompt, text, model, ct);
-            Seconds = (Seconds ?? 0) + _time.GetElapsedTime(started).TotalSeconds;
+            // The workflow rejects an empty answer as a failure, so it gets no duration either.
+            if (!string.IsNullOrWhiteSpace(result)) Seconds = (Seconds ?? 0) + _time.GetElapsedTime(started).TotalSeconds;
             return result;
         };
 }

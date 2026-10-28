@@ -73,6 +73,21 @@ public sealed class HistoryProcessingDetailsTests
         Assert.Null(usage.Seconds);
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task WorkflowLlmUsage_RecordsNoDurationForAnEmptyAnswerTheWorkflowRejects(string answer)
+    {
+        var clock = new Clock();
+        var usage = new WorkflowLlmUsage((provider, model) => (provider, model), clock);
+        var process = usage.Wrap((_, _, _, _, _) => { clock.Milliseconds += 800; return Task.FromResult(answer); });
+
+        Assert.Equal(answer, await process("openai", "p", "t", "gpt-4o-mini", CancellationToken.None));
+
+        Assert.Equal("openai", usage.Provider);
+        Assert.Null(usage.Seconds);
+    }
+
     private sealed class Clock : TimeProvider
     {
         internal long Milliseconds;
