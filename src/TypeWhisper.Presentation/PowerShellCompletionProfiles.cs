@@ -126,6 +126,8 @@ public sealed class PowerShellCompletionProfiles
     private static string WithoutBlock(string text, string directory)
     {
         var begin = Begin(directory);
+        var result = new StringBuilder(text.Length);
+        var kept = 0;
         for (var start = text.IndexOf(begin, StringComparison.OrdinalIgnoreCase); start >= 0;
             start = text.IndexOf(begin, start, StringComparison.OrdinalIgnoreCase))
         {
@@ -139,9 +141,10 @@ public sealed class PowerShellCompletionProfiles
             end += End.Length;
             if (end < text.Length && text[end] == '\r') end++;
             if (end < text.Length && text[end] == '\n') end++;
-            text = text[..start] + text[end..];
+            result.Append(text, kept, start - kept);
+            kept = start = end;
         }
-        return text;
+        return result.Append(text, kept, text.Length - kept).ToString();
     }
 
     // Keeps the profile's bytes: Unicode profiles by their byte order mark, anything else as Latin-1,
