@@ -140,8 +140,8 @@ public sealed class PowerShellCompletionProfiles
         for (var start = text.IndexOf(begin, StringComparison.OrdinalIgnoreCase); start >= 0;
             start = text.IndexOf(begin, start, StringComparison.OrdinalIgnoreCase))
         {
-            var end = text.IndexOf(End, start, StringComparison.Ordinal);
-            var next = text.IndexOf(BeginPrefix, start + begin.Length, StringComparison.Ordinal);
+            var end = text.IndexOf(End, start, StringComparison.OrdinalIgnoreCase);
+            var next = text.IndexOf(BeginPrefix, start + begin.Length, StringComparison.OrdinalIgnoreCase);
             if (end < 0 || next >= 0 && next < end)
             {
                 start += begin.Length;

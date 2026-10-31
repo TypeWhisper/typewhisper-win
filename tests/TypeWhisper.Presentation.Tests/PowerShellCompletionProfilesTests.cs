@@ -159,6 +159,8 @@ public sealed class PowerShellCompletionProfilesTests : IDisposable
         var edited = File.ReadAllText(CoreProfile);
         var firstEnd = edited.IndexOf("# <<< TypeWhisper CLI completion <<<", StringComparison.Ordinal);
         edited = edited.Remove(firstEnd, "# <<< TypeWhisper CLI completion <<<".Length);
+        // A differently cased marker still bounds the edited block.
+        edited = edited.Replace("# >>> TypeWhisper CLI completion: " + _beta, "# >>> TYPEWHISPER CLI COMPLETION: " + _beta);
         File.WriteAllText(CoreProfile, edited);
 
         Assert.Null(service.Unregister(_stable));
