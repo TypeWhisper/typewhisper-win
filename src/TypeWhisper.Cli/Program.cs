@@ -109,8 +109,9 @@ static class Program
             using var response = await http.SendAsync(request, Cancellation.Token);
             if (!response.IsSuccessStatusCode) return 0;
             var body = await response.Content.ReadAsStringAsync(Cancellation.Token);
+            // LF only: bash and zsh keep a carriage return as part of the ID, for example in Git Bash.
             foreach (var id in CliCompletions.Ids(body, kind == "engines", options.Engine))
-                Console.WriteLine(id);
+                Console.Out.Write(id + "\n");
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {

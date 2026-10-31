@@ -99,7 +99,7 @@ public class CompletionTests
         var result = await run;
         Assert.Equal(0, result.Exit);
         Assert.Empty(result.Error);
-        Assert.Equal(expected, result.Output.ReplaceLineEndings("\n"));
+        Assert.Equal(expected, result.Output);
     }
 
     [Theory]

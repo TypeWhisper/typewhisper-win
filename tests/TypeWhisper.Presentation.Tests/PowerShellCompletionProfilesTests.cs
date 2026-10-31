@@ -125,6 +125,54 @@ public sealed class PowerShellCompletionProfilesTests : IDisposable
     }
 
     [Fact]
+    public void NonAsciiPathsStayAsciiInAnsiProfiles()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(WindowsProfile)!);
+        byte[] original = [0x24, 0x78, 0x20, 0x3D, 0x20, 0x27, 0xE4, 0x27, 0x0D, 0x0A]; // ANSI "ä"
+        File.WriteAllBytes(WindowsProfile, original);
+        var directory = Path.Join(_root, "Jürgen 太郎", "Cli");
+        var executable = Path.Join(directory, "typewhisper.exe");
+        var service = Service();
+
+        service.Register(executable);
+        var bytes = File.ReadAllBytes(WindowsProfile);
+        Assert.Equal(original, bytes[..original.Length]);
+        Assert.All(bytes[original.Length..], b => Assert.True(b < 128));
+        var block = Encoding.ASCII.GetString(bytes[original.Length..]);
+        Assert.Contains($"[char[]]@({string.Join(',', executable.Select(c => (int)c))})", block);
+        Assert.Contains("J\\u00FCrgen \\u592A\\u90CE", block);
+
+        service.Register(executable);
+        Assert.Equal(bytes, File.ReadAllBytes(WindowsProfile));
+        Assert.Null(service.Unregister(directory));
+        Assert.Equal(original, File.ReadAllBytes(WindowsProfile));
+    }
+
+    [Fact]
+    public void RemovalNeverReachesIntoAnotherInstallationsBlock()
+    {
+        var service = Service();
+        service.Register(Path.Join(_stable, "typewhisper.exe"));
+        File.AppendAllText(CoreProfile, "Set-Alias ll Get-ChildItem\r\n");
+        service.Register(Path.Join(_beta, "typewhisper.exe"));
+        // The user deletes the stable block's end marker.
+        var edited = File.ReadAllText(CoreProfile);
+        var firstEnd = edited.IndexOf("# <<< TypeWhisper CLI completion <<<", StringComparison.Ordinal);
+        edited = edited.Remove(firstEnd, "# <<< TypeWhisper CLI completion <<<".Length);
+        File.WriteAllText(CoreProfile, edited);
+
+        Assert.Null(service.Unregister(_stable));
+        Assert.Equal(edited, File.ReadAllText(CoreProfile));
+
+        // Registering again appends a complete block, which a later removal finds past the edited one.
+        service.Register(Path.Join(_stable, "typewhisper.exe"));
+        Assert.Null(service.Unregister(_stable));
+        Assert.Equal(edited, File.ReadAllText(CoreProfile));
+        Assert.Contains("Set-Alias ll Get-ChildItem", edited);
+        Assert.Contains(_beta + " >>>", edited);
+    }
+
+    [Fact]
     public void EditedBlockWithoutEndMarkerIsLeftAlone()
     {
         var service = Service();

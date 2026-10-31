@@ -108,25 +108,42 @@ public sealed class PowerShellCompletionProfiles
         return error;
     }
 
-    private static string Begin(string directory) => BeginPrefix + Path.TrimEndingDirectorySeparator(directory) + " >>>";
+    // The block stays ASCII: Windows PowerShell 5.1 reads a profile without byte order mark in the ANSI code page.
+    private static string Begin(string directory) =>
+        BeginPrefix + string.Concat(Path.TrimEndingDirectorySeparator(directory).Select(c => c < 128 ? c.ToString() : $"\\u{(int)c:X4}")) + " >>>";
+
+    // A path with non-ASCII characters, such as from the user name, is rebuilt from character codes.
+    private static string PowerShellString(string value) => value.All(c => c < 128)
+        ? "'" + value.Replace("'", "''") + "'"
+        : $"([string]::new([char[]]@({string.Join(',', value.Select(c => (int)c))})))";
 
     private static string Block(string executable, string directory)
     {
-        var quoted = "'" + Path.GetFullPath(executable).Replace("'", "''") + "'";
-        return $"{Begin(directory)}\r\nif (Test-Path -LiteralPath {quoted}) {{ & {quoted} completions powershell | Out-String | Invoke-Expression }}\r\n{End}\r\n";
+        var path = PowerShellString(Path.GetFullPath(executable));
+        return $"{Begin(directory)}\r\nif (Test-Path -LiteralPath {path}) {{ & {path} completions powershell | Out-String | Invoke-Expression }}\r\n{End}\r\n";
     }
 
+    // Removes every complete block of this directory. A block is complete only when its end marker comes
+    // before the next block starts; an edited block is left for the user rather than taking a neighbor with it.
     private static string WithoutBlock(string text, string directory)
     {
         var begin = Begin(directory);
-        var start = text.IndexOf(begin, StringComparison.OrdinalIgnoreCase);
-        if (start < 0) return text;
-        var end = text.IndexOf(End, start, StringComparison.Ordinal);
-        if (end < 0) return text; // An edited block without its end marker is left for the user.
-        end += End.Length;
-        if (end < text.Length && text[end] == '\r') end++;
-        if (end < text.Length && text[end] == '\n') end++;
-        return text[..start] + text[end..];
+        for (var start = text.IndexOf(begin, StringComparison.OrdinalIgnoreCase); start >= 0;
+            start = text.IndexOf(begin, start, StringComparison.OrdinalIgnoreCase))
+        {
+            var end = text.IndexOf(End, start, StringComparison.Ordinal);
+            var next = text.IndexOf(BeginPrefix, start + begin.Length, StringComparison.Ordinal);
+            if (end < 0 || next >= 0 && next < end)
+            {
+                start += begin.Length;
+                continue;
+            }
+            end += End.Length;
+            if (end < text.Length && text[end] == '\r') end++;
+            if (end < text.Length && text[end] == '\n') end++;
+            text = text[..start] + text[end..];
+        }
+        return text;
     }
 
     // Keeps the profile's bytes: Unicode profiles by their byte order mark, anything else as Latin-1,
