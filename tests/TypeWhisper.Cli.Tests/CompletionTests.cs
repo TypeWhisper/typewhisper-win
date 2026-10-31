@@ -61,7 +61,7 @@ public class CompletionTests
     [InlineData("fish", "complete -c typewhisper -f")]
     public async Task CompletionsPrintScriptsWithoutRunningApp(string shell, string marker)
     {
-        var result = await RunCliAsync(["completions", shell], environment: new() { ["TYPEWHISPER_PROFILE"] = Path.Combine(Path.GetTempPath(), "missing-profile") });
+        var result = await RunCliAsync(["completions", shell], environment: new() { ["TYPEWHISPER_PROFILE"] = Path.Join(Path.GetTempPath(), "missing-profile") });
         Assert.Equal(0, result.Exit);
         Assert.Empty(result.Error);
         Assert.Contains(marker, result.Output);
@@ -153,16 +153,16 @@ public class CompletionTests
         var root = Directory.CreateTempSubdirectory("typewhisper-completion-");
         try
         {
-            var work = Directory.CreateDirectory(Path.Combine(root.FullName, "work")).FullName;
-            File.WriteAllText(Path.Combine(work, "rec.wav"), "");
-            Directory.CreateDirectory(Path.Combine(work, "profdir"));
+            var work = Directory.CreateDirectory(Path.Join(root.FullName, "work")).FullName;
+            File.WriteAllText(Path.Join(work, "rec.wav"), "");
+            Directory.CreateDirectory(Path.Join(work, "profdir"));
             var bin = CreateFakeCommand(root.FullName, shell);
-            var scriptPath = Path.Combine(root.FullName, "completion." + shell);
+            var scriptPath = Path.Join(root.FullName, "completion." + shell);
             var scriptShell = shell is "pwsh" or "powershell" ? "powershell" : shell;
             File.WriteAllText(scriptPath, (await RunCliAsync(["completions", scriptShell])).Output);
 
             var cases = StaticCases.Concat(DynamicCases).ToArray();
-            var driverPath = Path.Combine(root.FullName, "driver" + (shell is "pwsh" or "powershell" ? ".ps1" : "." + shell));
+            var driverPath = Path.Join(root.FullName, "driver" + (shell is "pwsh" or "powershell" ? ".ps1" : "." + shell));
             File.WriteAllText(driverPath, Driver(shell, Unix(scriptPath, shell), Unix(work, shell), cases.Select(item => item.Line).ToArray()));
 
             var start = new ProcessStartInfo(executable) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
@@ -182,13 +182,11 @@ public class CompletionTests
             Assert.True(process.ExitCode == 0, $"{shell} failed: {await stderr}\n{output}");
 
             var results = ParseResults(output);
-            for (var i = 0; i < cases.Length; i++)
-            {
-                Assert.True(results.TryGetValue(i, out var actual), $"{shell}: no result for '{cases[i].Line}'.\n{output}\n{await stderr}");
-                Assert.True(
-                    cases[i].Expected.Order(StringComparer.Ordinal).SequenceEqual(actual.Order(StringComparer.Ordinal)),
-                    $"{shell}: 'typewhisper {cases[i].Line}' completed [{string.Join(", ", actual)}], expected [{string.Join(", ", cases[i].Expected)}].");
-            }
+            var mismatches = cases.Select((item, index) => (item.Line, item.Expected, Actual: results.GetValueOrDefault(index) ?? []))
+                .Where(item => !item.Expected.Order(StringComparer.Ordinal).SequenceEqual(item.Actual.Order(StringComparer.Ordinal)))
+                .Select(item => $"'typewhisper {item.Line}' completed [{string.Join(", ", item.Actual)}], expected [{string.Join(", ", item.Expected)}]")
+                .ToList();
+            Assert.True(mismatches.Count == 0, $"{shell}:\n{string.Join("\n", mismatches)}\n\nOutput:\n{output}\n{await stderr}");
         }
         finally { root.Delete(recursive: true); }
     }
@@ -227,6 +225,11 @@ public class CompletionTests
                     Get-Content -Raw -LiteralPath '{{script}}' | Out-String | Invoke-Expression
                     Set-Location -LiteralPath '{{work}}'
                     function T([string]$line) { (TabExpansion2 -inputScript $line -cursorColumn $line.Length).CompletionMatches | ForEach-Object { $_.CompletionText } }
+                    # Diagnostic: does this PowerShell pass a word starting with '-' to a native completer?
+                    $global:probe = @()
+                    Register-ArgumentCompleter -Native -CommandName 'twprobe' -ScriptBlock { param($word) $global:probe += $word; [System.Management.Automation.CompletionResult]::new('x') }
+                    $null = TabExpansion2 -inputScript 'twprobe a --e' -cursorColumn 13
+                    "PROBE PowerShell $($PSVersionTable.PSVersion) native completer called for '--e': $($global:probe.Count -gt 0)"
 
                     """);
                 break;
@@ -265,13 +268,13 @@ public class CompletionTests
 
     private static string CreateFakeCommand(string root, string shell)
     {
-        var bin = Directory.CreateDirectory(Path.Combine(root, "bin")).FullName;
+        var bin = Directory.CreateDirectory(Path.Join(root, "bin")).FullName;
         if (OperatingSystem.IsWindows() && shell is "pwsh" or "powershell")
         {
-            File.WriteAllText(Path.Combine(bin, "typewhisper.cmd"), "@echo ARGS:%*\r\n@call :ids %2\r\n@exit /b 0\r\n:ids\r\n@if \"%1\"==\"engines\" (echo whisper& echo groq) else (echo large-v3& echo turbo)\r\n");
+            File.WriteAllText(Path.Join(bin, "typewhisper.cmd"), "@echo ARGS:%*\r\n@call :ids %2\r\n@exit /b 0\r\n:ids\r\n@if \"%1\"==\"engines\" (echo whisper& echo groq) else (echo large-v3& echo turbo)\r\n");
             return bin;
         }
-        var path = Path.Combine(bin, "typewhisper");
+        var path = Path.Join(bin, "typewhisper");
         File.WriteAllText(path, "#!/bin/sh\necho \"ARGS:$*\"\nif [ \"$2\" = engines ]; then echo whisper; echo groq; else echo large-v3; echo turbo; fi\n");
         if (!OperatingSystem.IsWindows())
             File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
@@ -289,7 +292,7 @@ public class CompletionTests
             // Only Git Bash: the System32 bash.exe launches WSL with a different file system.
             if (shell == "bash")
             {
-                var gitBash = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Git", "bin", "bash.exe");
+                var gitBash = Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Git", "bin", "bash.exe");
                 return File.Exists(gitBash) ? gitBash : null;
             }
             if (shell is "zsh" or "fish") return null;
@@ -299,14 +302,14 @@ public class CompletionTests
         var names = OperatingSystem.IsWindows() ? new[] { shell + ".exe" } : [shell];
         return (Environment.GetEnvironmentVariable("PATH") ?? "")
             .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
-            .SelectMany(directory => names.Select(name => Path.Combine(directory, name)))
+            .SelectMany(directory => names.Select(name => Path.Join(directory, name)))
             .FirstOrDefault(File.Exists);
     }
 
     private static async Task<(int Exit, string Output, string Error)> RunCliAsync(string[] args, Dictionary<string, string>? environment = null)
     {
         var start = new ProcessStartInfo("dotnet") { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
-        start.ArgumentList.Add(Path.Combine(AppContext.BaseDirectory, "TypeWhisper.Cli.dll"));
+        start.ArgumentList.Add(Path.Join(AppContext.BaseDirectory, "TypeWhisper.Cli.dll"));
         foreach (var arg in args) start.ArgumentList.Add(arg);
         start.Environment.Remove("TYPEWHISPER_API_TOKEN");
         start.Environment.Remove("TYPEWHISPER_PROFILE");
@@ -320,7 +323,7 @@ public class CompletionTests
 
     private static HttpListener Listen(out int port)
     {
-        var socket = new TcpListener(IPAddress.Loopback, 0);
+        using var socket = new TcpListener(IPAddress.Loopback, 0);
         socket.Start();
         port = ((IPEndPoint)socket.LocalEndpoint).Port;
         socket.Stop();

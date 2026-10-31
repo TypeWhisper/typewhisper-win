@@ -112,7 +112,10 @@ static class Program
             foreach (var id in CliCompletions.Ids(body, kind == "engines", options.Engine))
                 Console.WriteLine(id);
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // Completion offers no IDs instead of printing errors into the user's shell.
+        }
         return 0;
     }
 
