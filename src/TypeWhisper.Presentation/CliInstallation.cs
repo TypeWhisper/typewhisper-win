@@ -16,22 +16,27 @@ public sealed class CliInstallation
     private readonly Func<string> _readPath;
     private readonly Action<string> _writePath;
     private readonly string? _profileDirectory;
+    private readonly PowerShellCompletionProfiles? _completion;
     private string ManifestPath => Path.Combine(_destination, ManifestName);
 
     /// <summary>Uses the current application's bundle and the current user's environment.</summary>
     public CliInstallation(string? profileDirectory = null, string? installDirectory = null) : this(Path.Combine(AppContext.BaseDirectory, "Cli"),
         installDirectory ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "TypeWhisper", "1.1", "Cli"),
         () => Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.User) ?? "",
-        value => Environment.SetEnvironmentVariable("PATH", value, EnvironmentVariableTarget.User), profileDirectory) { }
+        value => Environment.SetEnvironmentVariable("PATH", value, EnvironmentVariableTarget.User), profileDirectory,
+        new PowerShellCompletionProfiles()) { }
 
     /// <summary>Uses explicit filesystem roots and environment delegates for isolated operation and testing.</summary>
-    public CliInstallation(string bundleDirectory, string installDirectory, Func<string> readUserPath, Action<string> writeUserPath, string? profileDirectory = null)
+    /// <remarks>PowerShell profiles only change when <paramref name="completionProfiles"/> is supplied.</remarks>
+    public CliInstallation(string bundleDirectory, string installDirectory, Func<string> readUserPath, Action<string> writeUserPath, string? profileDirectory = null,
+        PowerShellCompletionProfiles? completionProfiles = null)
     {
         _bundle = Path.GetFullPath(bundleDirectory);
         _destination = Path.GetFullPath(installDirectory);
         _readPath = readUserPath;
         _writePath = writeUserPath;
         _profileDirectory = profileDirectory;
+        _completion = completionProfiles;
     }
 
     /// <summary>Reads bundle, executable, and user PATH availability without changing them.</summary>
@@ -39,8 +44,9 @@ public sealed class CliInstallation
         File.Exists(Path.Combine(_destination, "typewhisper.exe")), File.Exists(ManifestPath),
         ContainsPath(_readPath()), Path.Combine(_destination, "typewhisper.exe"));
 
-    /// <summary>Copies the full runtime bundle and registers its directory in user PATH.</summary>
-    public void Install()
+    /// <summary>Copies the full runtime bundle, registers its directory in user PATH and adds PowerShell tab completion.</summary>
+    /// <returns>What the PowerShell completion setup changed, or null when this installation does not manage profiles.</returns>
+    public PowerShellCompletionSetup? Install()
     {
         if (!GetState().Bundled) throw new IOException(Loc.T("The CLI is not included in this build."));
         var previous = ReadManifest();
@@ -104,6 +110,7 @@ public sealed class CliInstallation
             _writePath(currentPath + (currentPath.Length == 0 || currentPath.EndsWith(';') ? "" : ";") + _destination);
         }
         Save(previous);
+        return _completion?.Register(Path.Combine(_destination, "typewhisper.exe"));
     }
 
     /// <summary>Whether the installed CLI is bound to <paramref name="profileDirectory"/>, the profile that installed it.</summary>
@@ -125,9 +132,11 @@ public sealed class CliInstallation
         }
     }
 
-    /// <summary>Removes unchanged owned files and the PATH entry added by this installation.</summary>
+    /// <summary>Removes this installation's PowerShell completion, unchanged owned files and the PATH entry it added.</summary>
     public void Remove()
     {
+        // A completion block left behind stays silent because it checks for the executable first.
+        _completion?.Unregister(_destination);
         if (!File.Exists(ManifestPath)) return;
         var manifest = ReadManifest();
         foreach (var file in manifest.Files.Keys.Union(manifest.PendingFiles.Keys, StringComparer.OrdinalIgnoreCase))

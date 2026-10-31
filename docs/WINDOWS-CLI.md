@@ -8,7 +8,7 @@ The `typewhisper` command controls the running Windows app through its [local HT
 2. Under **Settings > Advanced > HTTP API**, enable the server and select **Apply**. The server is off by default; the default port is `8978`.
 3. Open a new terminal and run `typewhisper status`.
 
-Installation copies the bundled CLI to `%LOCALAPPDATA%\TypeWhisper\1.1\Cli` and adds that directory to your user PATH. It does not require administrator access. If an older command takes precedence, inspect `Get-Command typewhisper -All` in PowerShell or invoke the new executable directly:
+Installation copies the bundled CLI to `%LOCALAPPDATA%\TypeWhisper\1.1\Cli`, adds that directory to your user PATH and sets up [PowerShell completion](#shell-completion). It does not require administrator access. If an older command takes precedence, inspect `Get-Command typewhisper -All` in PowerShell or invoke the new executable directly:
 
 ```powershell
 & "$env:LOCALAPPDATA\TypeWhisper\1.1\Cli\typewhisper.exe" status
@@ -86,18 +86,19 @@ typewhisper transcribe < audio.wav
 
 `typewhisper completions <shell>` prints a completion script for `powershell`, `bash`, `zsh` or `fish` to stdout. It works without a running app or HTTP API server.
 
-PowerShell (Windows PowerShell 5.1 and PowerShell 7):
+**Install** and **Update** under **Settings > Advanced > Command Line Tool** set up PowerShell completion automatically. They add a marked block to the all-hosts profile (`$PROFILE.CurrentUserAllHosts`) of Windows PowerShell 5.1 and, if installed, PowerShell 7. The block loads the completion from the installed `typewhisper.exe` and does nothing if that file is missing. **Remove** deletes the block again, and deletes a profile that only contained it. The rest of the profile stays unchanged.
+
+A profile only loads when the execution policy allows local scripts. Windows PowerShell 5.1 refuses them by default. If a profile does not exist yet and its policy would refuse it, TypeWhisper does not create it, because PowerShell would show an error in every session. The status after installing says so. Allow local scripts and select **Update**:
 
 ```powershell
-# Current session only
-typewhisper completions powershell | Out-String | Invoke-Expression
-
-# Every new session: add the same line to your profile
-if (-not (Test-Path $PROFILE)) { New-Item -ItemType File -Path $PROFILE -Force | Out-Null }
-Add-Content -Path $PROFILE -Value 'typewhisper completions powershell | Out-String | Invoke-Expression'
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 ```
 
-Windows PowerShell 5.1 and PowerShell 7 use separate profiles; run the profile commands in each shell you use. Profiles only load when the execution policy allows local scripts, for example after `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
+To load the completion yourself, for example for the current session only:
+
+```powershell
+typewhisper completions powershell | Out-String | Invoke-Expression
+```
 
 Git Bash, MSYS2 and other shells:
 
