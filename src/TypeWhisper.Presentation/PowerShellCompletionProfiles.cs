@@ -55,9 +55,8 @@ public sealed class PowerShellCompletionProfiles
         string? error = null;
         if (string.IsNullOrWhiteSpace(_documents)) return new(added, blocked, null);
         var directory = Path.GetDirectoryName(Path.GetFullPath(executable))!;
-        foreach (var edition in Enum.GetValues<PowerShellEdition>())
+        foreach (var (edition, profile) in Enum.GetValues<PowerShellEdition>().Select(edition => (edition, ProfilePath(edition))))
         {
-            var profile = ProfilePath(edition);
             try
             {
                 // A new profile under a policy that refuses scripts would only print an error in every session.
@@ -87,9 +86,8 @@ public sealed class PowerShellCompletionProfiles
         string? error = null;
         if (string.IsNullOrWhiteSpace(_documents)) return null;
         var directory = Path.GetFullPath(installDirectory);
-        foreach (var edition in Enum.GetValues<PowerShellEdition>())
+        foreach (var profile in Enum.GetValues<PowerShellEdition>().Select(ProfilePath))
         {
-            var profile = ProfilePath(edition);
             try
             {
                 if (!File.Exists(profile)) continue;

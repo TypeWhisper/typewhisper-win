@@ -12,7 +12,7 @@ public sealed class PowerShellCompletionProfilesTests : IDisposable
     private readonly string _beta;
     private bool _coreInstalled = true;
     private bool _windowsAllowsScripts;
-    private bool _coreAllowsScripts = true;
+    private readonly bool _coreAllowsScripts = true;
 
     public PowerShellCompletionProfilesTests()
     {

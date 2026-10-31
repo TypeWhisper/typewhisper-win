@@ -110,7 +110,7 @@ public sealed class CliInstallation
             _writePath(currentPath + (currentPath.Length == 0 || currentPath.EndsWith(';') ? "" : ";") + _destination);
         }
         Save(previous);
-        return _completion?.Register(Path.Combine(_destination, "typewhisper.exe"));
+        return _completion?.Register(Path.Join(_destination, "typewhisper.exe"));
     }
 
     /// <summary>Whether the installed CLI is bound to <paramref name="profileDirectory"/>, the profile that installed it.</summary>
