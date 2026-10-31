@@ -127,7 +127,6 @@
   "Add {0} entries": "{0}件の項目を追加",
   "Add {0} shortcut": "{0}のショートカットを追加",
   "Added {0} entries from {1}. Saved for the next dictation.": "{1} から{0}件の項目を追加しました。次回のディクテーションから適用されます。",
-  "Adds typewhisper to your user PATH. Open a new terminal after installing.": "typewhisper をユーザーの PATH に追加します。インストール後は新しいターミナルを開いてください。",
   "Advanced": "詳細",
   "After 1 hour": "1時間後",
   "After 10 minutes": "10分後",
@@ -3240,5 +3239,12 @@
   "Middle mouse button": "マウスの中ボタン",
   "Mouse back button": "マウスの戻るボタン",
   "Mouse forward button": "マウスの進むボタン",
-  "Mouse button shortcuts are unavailable (Windows error {0}). Restart TypeWhisper to retry.": "マウスボタンのショートカットは使用できません（Windows エラー {0}）。TypeWhisper を再起動してもう一度お試しください。"
+  "Mouse button shortcuts are unavailable (Windows error {0}). Restart TypeWhisper to retry.": "マウスボタンのショートカットは使用できません（Windows エラー {0}）。TypeWhisper を再起動してもう一度お試しください。",
+  "Adds typewhisper to your user PATH and tab completion to your PowerShell profile. Open a new terminal after installing.": "typewhisper をユーザーの PATH に、タブ補完を PowerShell プロファイルに追加します。インストール後は新しいターミナルを開いてください。",
+  "Installed. Open a new terminal to use typewhisper with PowerShell tab completion.": "インストールしました。新しいターミナルを開くと、PowerShell のタブ補完付きで typewhisper を使えます。",
+  "Installed. Open a new terminal to use typewhisper. PowerShell does not allow profile scripts, so tab completion was not added. The CLI documentation explains how to add it.": "インストールしました。typewhisper を使うには新しいターミナルを開いてください。PowerShell がプロファイル スクリプトを許可していないため、タブ補完は追加されませんでした。追加方法は CLI のドキュメントを参照してください。",
+  "Installed. Open a new terminal to use typewhisper. PowerShell tab completion could not be set up: {0}": "インストールしました。typewhisper を使うには新しいターミナルを開いてください。PowerShell のタブ補完を設定できませんでした: {0}",
+  "Installed. Open a new terminal to use typewhisper. {0} does not allow profile scripts, so it has no tab completion. The CLI documentation explains how to add it.": "インストールしました。typewhisper を使うには新しいターミナルを開いてください。{0} はプロファイル スクリプトを許可していないため、タブ補完がありません。追加方法は CLI のドキュメントを参照してください。",
+  "The PowerShell profile {0} is signed. Add the completion line yourself and sign the profile again.": "PowerShell プロファイル {0} は署名されています。補完の行を手動で追加し、プロファイルに再度署名してください。",
+  "The PowerShell profile {0} was downloaded from the internet, so PowerShell blocks it. Check and unblock it, then select Update.": "PowerShell プロファイル {0} はインターネットからダウンロードされたため、PowerShell によってブロックされています。内容を確認してブロックを解除してから、[更新] を選択してください。"
 }
