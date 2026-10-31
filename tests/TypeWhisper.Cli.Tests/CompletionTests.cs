@@ -196,6 +196,37 @@ public class CompletionTests
         finally { root.Delete(recursive: true); }
     }
 
+    [Theory]
+    [InlineData("\"some", "some dir")]
+    [InlineData("'some", "some dir")]
+    [InlineData("\"some dir/re", "some dir/rec.wav")]
+    [InlineData("some\\ dir/re", "some dir/rec.wav")]
+    public async Task BashLooksUpQuotedAndEscapedPathsLiterally(string word, string expected)
+    {
+        if (FindShell("bash") is not { } bash) return;
+        var root = Directory.CreateTempSubdirectory("typewhisper-completion-");
+        try
+        {
+            Directory.CreateDirectory(Path.Join(root.FullName, "some dir"));
+            File.WriteAllText(Path.Join(root.FullName, "some dir", "rec.wav"), "");
+            var script = Path.Join(root.FullName, "completion.bash");
+            File.WriteAllText(script, (await RunCliAsync(["completions", "bash"])).Output);
+            var start = new ProcessStartInfo(bash) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
+            foreach (var argument in new[] { "--norc", "--noprofile", "-c", """
+                source "$1"; cd "$2"
+                COMP_LINE="typewhisper transcribe $3"; COMP_POINT=${#COMP_LINE}
+                COMP_WORDS=(typewhisper transcribe "$3"); COMP_CWORD=2
+                _typewhisper; printf '%s\n' "${COMPREPLY[@]}"
+                """.ReplaceLineEndings("\n"), "bash", Unix(script, "bash"), Unix(root.FullName, "bash"), word })
+                start.ArgumentList.Add(argument);
+            using var process = Process.Start(start)!;
+            var output = await process.StandardOutput.ReadToEndAsync();
+            await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
+            Assert.Equal(expected, output.ReplaceLineEndings("\n").TrimEnd('\n'));
+        }
+        finally { root.Delete(recursive: true); }
+    }
+
     private static string Driver(string shell, string script, string work, string[] lines)
     {
         static string Single(string value) => "'" + value.Replace("'", "'\\''") + "'";

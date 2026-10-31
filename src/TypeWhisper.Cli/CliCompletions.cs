@@ -263,10 +263,17 @@ public static class CliCompletions
                     done
                     ;;
                 files|dirs)
+                    # COMP_WORDS keeps the user's quoting; look up the plain path without evaluating it.
+                    # Readline knows an opened quote and quotes inserted file names itself.
+                    case "$cur" in
+                        \"*) word="${cur#\"}" ;;
+                        \'*) word="${cur#\'}" ;;
+                        *) word="${cur//\\/}" ;;
+                    esac
                     type compopt >/dev/null 2>&1 && compopt -o filenames
                     while IFS= read -r line; do
                         COMPREPLY+=("$line")
-                    done < <(if [ "$kind" = dirs ]; then compgen -d -- "$cur"; else compgen -f -- "$cur"; fi)
+                    done < <(if [ "$kind" = dirs ]; then compgen -d -- "$word"; else compgen -f -- "$word"; fi)
                     ;;
             esac
             # Bash only replaces the text after the last ':' of the word being completed.

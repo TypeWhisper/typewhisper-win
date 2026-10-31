@@ -190,14 +190,17 @@ public sealed class PowerShellCompletionProfiles
         if (!OperatingSystem.IsWindows()) return false;
         if (edition == PowerShellEdition.Windows)
             return File.Exists(Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe"));
-        var candidates = new[]
-        {
-            Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "PowerShell", "7", "pwsh.exe"),
-            Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Microsoft", "WindowsApps", "pwsh.exe")
-        }.Concat((Environment.GetEnvironmentVariable("PATH") ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(directory => Path.Join(directory.Trim('"'), "pwsh.exe")));
-        return candidates.Any(File.Exists) || Directory.Exists(Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "PowerShell"));
+        return PowerShellCoreExecutables().Any(File.Exists)
+            || File.Exists(Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Microsoft", "WindowsApps", "pwsh.exe"))
+            || Directory.Exists(Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "PowerShell"));
     }
+
+    // Installed pwsh.exe files whose directory is $PSHOME. The Store app's alias has no readable $PSHOME.
+    private static IEnumerable<string> PowerShellCoreExecutables() =>
+        new[] { Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "PowerShell", "7", "pwsh.exe") }
+            .Concat((Environment.GetEnvironmentVariable("PATH") ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(directory => Path.Join(directory.Trim('"'), "pwsh.exe")))
+            .Where(path => !path.Contains(@"\WindowsApps\", StringComparison.OrdinalIgnoreCase));
 
     // Follows PowerShell's precedence: machine policy, user policy, current user, local machine, default.
     // The process scope does not apply to new sessions.
@@ -213,7 +216,10 @@ public sealed class PowerShellCompletionProfiles
                 const string shell = @"Software\Microsoft\PowerShell\1\ShellIds\Microsoft.PowerShell";
                 policy ??= Setting(Registry.CurrentUser, shell) ?? Setting(Registry.LocalMachine, shell) ?? "Restricted";
             }
-            else policy ??= CoreUserSetting() ?? "RemoteSigned";
+            // PowerShell 7 keeps the current-user and local-machine scopes in powershell.config.json files.
+            else policy ??= ConfigSetting(Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "PowerShell"))
+                ?? PowerShellCoreExecutables().Where(File.Exists).Select(path => ConfigSetting(Path.GetDirectoryName(path)!)).FirstOrDefault(value => value is not null)
+                ?? "RemoteSigned";
             return policy.Equals("RemoteSigned", StringComparison.OrdinalIgnoreCase)
                 || policy.Equals("Unrestricted", StringComparison.OrdinalIgnoreCase)
                 || policy.Equals("Bypass", StringComparison.OrdinalIgnoreCase);
@@ -236,11 +242,11 @@ public sealed class PowerShellCompletionProfiles
         return key?.GetValue("ExecutionPolicy") is string value && !value.Equals("Undefined", StringComparison.OrdinalIgnoreCase) ? value : null;
     }
 
-    private static string? CoreUserSetting()
+    private static string? ConfigSetting(string directory)
     {
         try
         {
-            var path = Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "PowerShell", "powershell.config.json");
+            var path = Path.Join(directory, "powershell.config.json");
             if (!File.Exists(path)) return null;
             using var document = JsonDocument.Parse(File.ReadAllText(path));
             return document.RootElement.TryGetProperty("Microsoft.PowerShell:ExecutionPolicy", out var value) && value.ValueKind == JsonValueKind.String
