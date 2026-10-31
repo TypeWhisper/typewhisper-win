@@ -227,6 +227,36 @@ public class CompletionTests
         finally { root.Delete(recursive: true); }
     }
 
+    [Theory]
+    [InlineData("some\\ dir")]
+    [InlineData("\"some dir\"")]
+    [InlineData("'some dir'")]
+    public async Task BashForwardsProfileValuesWithoutShellQuoting(string profile)
+    {
+        if (FindShell("bash") is not { } bash) return;
+        var root = Directory.CreateTempSubdirectory("typewhisper-completion-");
+        try
+        {
+            var bin = CreateFakeCommand(root.FullName, "bash");
+            var script = Path.Join(root.FullName, "completion.bash");
+            File.WriteAllText(script, (await RunCliAsync(["completions", "bash"])).Output);
+            var start = new ProcessStartInfo(bash) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
+            foreach (var argument in new[] { "--norc", "--noprofile", "-c", """
+                source "$1"
+                COMP_LINE="typewhisper --profile $2 models load --engine "; COMP_POINT=${#COMP_LINE}
+                COMP_WORDS=(typewhisper --profile "$2" models load --engine ""); COMP_CWORD=6
+                _typewhisper; printf '%s\n' "${COMPREPLY[@]}"
+                """.ReplaceLineEndings("\n"), "bash", Unix(script, "bash"), profile })
+                start.ArgumentList.Add(argument);
+            start.Environment["PATH"] = bin + Path.PathSeparator + Environment.GetEnvironmentVariable("PATH");
+            using var process = Process.Start(start)!;
+            var output = await process.StandardOutput.ReadToEndAsync();
+            await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
+            Assert.Contains("ARGS:__complete engines --profile some dir", output.ReplaceLineEndings("\n").Split('\n'));
+        }
+        finally { root.Delete(recursive: true); }
+    }
+
     private static string Driver(string shell, string script, string work, string[] lines)
     {
         static string Single(string value) => "'" + value.Replace("'", "'\\''") + "'";

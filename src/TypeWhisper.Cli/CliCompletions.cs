@@ -134,12 +134,7 @@ public static class CliCompletions
                     if [ -n "$pending" ]; then
                         case "$pending" in
                             --engine) engine="$word" ;;
-                            --profile)
-                                case "$word" in
-                                    \"*\"|\'*\') profile="${word#?}"; profile="${profile%?}" ;;
-                                    *) profile="$word" ;;
-                                esac
-                                ;;
+                            --profile) profile="$word" ;;
                             --port) port="$word" ;;
                             --api-token) token="$word" ;;
                         esac
@@ -252,9 +247,19 @@ public static class CliCompletions
                 fi
             done
             local cur="${words[${#words[@]}-1]}"
+            # COMP_WORDS keeps the user's quoting, so --profile some\ dir must reach the helper as "some dir".
+            # Remove simple quotes and escapes without evaluating the words.
+            local -a plain=()
+            for word in "${words[@]:1:${#words[@]}-2}"; do
+                case "$word" in
+                    \"*\"|\'*\') word="${word:1:${#word}-2}" ;;
+                    *) word="${word//\\/}" ;;
+                esac
+                plain+=("$word")
+            done
             while IFS= read -r line; do
                 if [ -z "$kind" ]; then kind="$line"; else candidates+=("$line"); fi
-            done < <(__typewhisper_candidates "${words[0]}" "$cur" "${words[@]:1:${#words[@]}-2}")
+            done < <(__typewhisper_candidates "${words[0]}" "$cur" ${plain[@]+"${plain[@]}"})
             case "$kind" in
                 words)
                     # Literal prefix matching: compgen -W would expand IDs from the app as shell words.
