@@ -88,7 +88,7 @@ typewhisper transcribe < audio.wav
 
 **Install** and **Update** under **Settings > Advanced > Command Line Tool** set up PowerShell completion automatically. They add a marked block to the all-hosts profile (`$PROFILE.CurrentUserAllHosts`) of Windows PowerShell 5.1 and, if installed, PowerShell 7. The block loads the completion from the installed `typewhisper.exe` and does nothing if that file is missing. **Remove** deletes the block again, and deletes a profile that only contained it. The rest of the profile stays unchanged.
 
-A profile only loads when the execution policy allows local scripts. Windows PowerShell 5.1 refuses them by default. If a profile does not exist yet and its policy would refuse it, TypeWhisper does not create it, because PowerShell would show an error in every session. The status after installing says so. Allow local scripts and select **Update**:
+A profile only loads when the execution policy allows local scripts. Windows PowerShell 5.1 refuses them by default. If a profile does not exist yet and its policy would refuse it, TypeWhisper does not create it, because PowerShell would show an error in every session. The status after installing names the PowerShell that got no completion. Allow local scripts and select **Update**:
 
 ```powershell
 Set-ExecutionPolicy -Scope CurrentUser RemoteSigned

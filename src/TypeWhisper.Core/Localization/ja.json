@@ -3243,5 +3243,6 @@
   "Adds typewhisper to your user PATH and tab completion to your PowerShell profile. Open a new terminal after installing.": "typewhisper をユーザーの PATH に、タブ補完を PowerShell プロファイルに追加します。インストール後は新しいターミナルを開いてください。",
   "Installed. Open a new terminal to use typewhisper with PowerShell tab completion.": "インストールしました。新しいターミナルを開くと、PowerShell のタブ補完付きで typewhisper を使えます。",
   "Installed. Open a new terminal to use typewhisper. PowerShell does not allow profile scripts, so tab completion was not added. The CLI documentation explains how to add it.": "インストールしました。typewhisper を使うには新しいターミナルを開いてください。PowerShell がプロファイル スクリプトを許可していないため、タブ補完は追加されませんでした。追加方法は CLI のドキュメントを参照してください。",
-  "Installed. Open a new terminal to use typewhisper. PowerShell tab completion could not be set up: {0}": "インストールしました。typewhisper を使うには新しいターミナルを開いてください。PowerShell のタブ補完を設定できませんでした: {0}"
+  "Installed. Open a new terminal to use typewhisper. PowerShell tab completion could not be set up: {0}": "インストールしました。typewhisper を使うには新しいターミナルを開いてください。PowerShell のタブ補完を設定できませんでした: {0}",
+  "Installed. Open a new terminal to use typewhisper. {0} does not allow profile scripts, so it has no tab completion. The CLI documentation explains how to add it.": "インストールしました。typewhisper を使うには新しいターミナルを開いてください。{0} はプロファイル スクリプトを許可していないため、タブ補完がありません。追加方法は CLI のドキュメントを参照してください。"
 }

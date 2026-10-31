@@ -88,6 +88,9 @@ internal sealed class CliSettingsView : UserControl
                 Refresh(!installing ? Loc.T("Removed.") : completion switch
                 {
                     { Error: { } error } => Loc.T("Installed. Open a new terminal to use typewhisper. PowerShell tab completion could not be set up: {0}", error),
+                    // Windows Terminal opens Windows PowerShell 5.1 by default, so a refused edition must not go unmentioned.
+                    { Added.Count: > 0, BlockedByPolicy: [var blocked, ..] } => Loc.T("Installed. Open a new terminal to use typewhisper. {0} does not allow profile scripts, so it has no tab completion. The CLI documentation explains how to add it.",
+                        blocked == PowerShellEdition.Windows ? "Windows PowerShell" : "PowerShell 7"),
                     { Added.Count: > 0 } => Loc.T("Installed. Open a new terminal to use typewhisper with PowerShell tab completion."),
                     { BlockedByPolicy.Count: > 0 } => Loc.T("Installed. Open a new terminal to use typewhisper. PowerShell does not allow profile scripts, so tab completion was not added. The CLI documentation explains how to add it."),
                     _ => Loc.T("Installed. Open a new terminal to use typewhisper.")
