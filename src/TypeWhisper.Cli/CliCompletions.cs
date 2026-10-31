@@ -87,11 +87,15 @@ public static class CliCompletions
             if (!engines && !string.IsNullOrWhiteSpace(engine) && !string.Equals(modelEngine, engine.Trim(), StringComparison.OrdinalIgnoreCase))
                 continue;
             var id = engines ? modelEngine : Text(model, "id");
-            // Shells read one ID per line, so an ID must not span or break lines.
-            if (!string.IsNullOrWhiteSpace(id) && !id.Any(char.IsControl) && seen.Add(id)) ids.Add(id);
+            // IDs come from plugins and remote servers. Shells read one per line and insert it unquoted,
+            // so an ID with line breaks, spaces or shell syntax is never offered.
+            if (!string.IsNullOrWhiteSpace(id) && !id.Any(c => char.IsControl(c) || char.IsWhiteSpace(c) || UnsafeIdCharacters.Contains(c)) && seen.Add(id))
+                ids.Add(id);
         }
         return ids;
     }
+
+    private const string UnsafeIdCharacters = "$`;|&<>(){}[]'\"\\*?!#~";
 
     private static string Text(JsonElement element, string name) =>
         element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() ?? "" : "";
@@ -229,17 +233,34 @@ public static class CliCompletions
 
     private const string BashGlue = """
         _typewhisper() {
-            local cur="${COMP_WORDS[COMP_CWORD]}" kind="" line=""
-            local -a candidates=()
+            local kind="" line="" word="" rest="" trimmed="" prefix="" i=0 offset=0 glued=0
+            local -a words=() candidates=()
             COMPREPLY=()
+            # Bash splits words at ':', so C:/Users arrives as C, : and /Users. Rejoin words that no space separates.
+            line="${COMP_LINE:0:COMP_POINT}"
+            for ((i = 0; i <= COMP_CWORD; i++)); do
+                word="${COMP_WORDS[i]}"
+                rest="${line:offset}"
+                trimmed="${rest#"${rest%%[![:space:]]*}"}"
+                glued=0
+                if [ "$i" -gt 0 ] && [ "${#trimmed}" -eq "${#rest}" ]; then glued=1; fi
+                offset=$((offset + ${#rest} - ${#trimmed} + ${#word}))
+                if [ "$glued" -eq 1 ] && { [ "$word" = ":" ] || [[ "${words[${#words[@]}-1]}" == *: ]]; }; then
+                    words[${#words[@]}-1]+="$word"
+                else
+                    words+=("$word")
+                fi
+            done
+            local cur="${words[${#words[@]}-1]}"
             while IFS= read -r line; do
                 if [ -z "$kind" ]; then kind="$line"; else candidates+=("$line"); fi
-            done < <(__typewhisper_candidates "${COMP_WORDS[0]}" "$cur" "${COMP_WORDS[@]:1:COMP_CWORD-1}")
+            done < <(__typewhisper_candidates "${words[0]}" "$cur" "${words[@]:1:${#words[@]}-2}")
             case "$kind" in
                 words)
-                    while IFS= read -r line; do
-                        COMPREPLY+=("$line")
-                    done < <(IFS=$'\n'; compgen -W "${candidates[*]}" -- "$cur")
+                    # Literal prefix matching: compgen -W would expand IDs from the app as shell words.
+                    for line in ${candidates[@]+"${candidates[@]}"}; do
+                        if [[ "$line" == "$cur"* ]]; then COMPREPLY+=("$line"); fi
+                    done
                     ;;
                 files|dirs)
                     type compopt >/dev/null 2>&1 && compopt -o filenames
@@ -248,6 +269,11 @@ public static class CliCompletions
                     done < <(if [ "$kind" = dirs ]; then compgen -d -- "$cur"; else compgen -f -- "$cur"; fi)
                     ;;
             esac
+            # Bash only replaces the text after the last ':' of the word being completed.
+            if [[ "$cur" == *:* && "$COMP_WORDBREAKS" == *:* ]]; then
+                prefix="${cur%"${cur##*:}"}"
+                for ((i = 0; i < ${#COMPREPLY[@]}; i++)); do COMPREPLY[i]="${COMPREPLY[i]#"$prefix"}"; done
+            fi
         }
 
         complete -F _typewhisper typewhisper typewhisper.exe

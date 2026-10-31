@@ -66,6 +66,12 @@ public sealed class PowerShellCompletionProfiles
                     continue;
                 }
                 var (text, encoding) = Read(profile);
+                // Appending would void the signature, and AllSigned would then refuse the whole profile.
+                if (IsSigned(text))
+                {
+                    error ??= Loc.T("The PowerShell profile {0} is signed. Add the completion line yourself and sign the profile again.", profile);
+                    continue;
+                }
                 text = WithoutBlock(text, directory);
                 if (text.Length > 0 && !text.EndsWith('\n')) text += "\r\n";
                 Write(profile, text + Block(executable, directory), encoding);
@@ -92,6 +98,7 @@ public sealed class PowerShellCompletionProfiles
             {
                 if (!File.Exists(profile)) continue;
                 var (text, encoding) = Read(profile);
+                if (IsSigned(text)) continue; // A block left in a signed profile stays silent once the CLI is gone.
                 var remaining = WithoutBlock(text, directory);
                 if (remaining == text) continue;
                 // A profile that only held the completion was created for it and goes with it.
@@ -105,6 +112,8 @@ public sealed class PowerShellCompletionProfiles
         }
         return error;
     }
+
+    private static bool IsSigned(string text) => text.Contains("# SIG # Begin signature block", StringComparison.OrdinalIgnoreCase);
 
     // The block stays ASCII: Windows PowerShell 5.1 reads a profile without byte order mark in the ANSI code page.
     private static string Begin(string directory) =>

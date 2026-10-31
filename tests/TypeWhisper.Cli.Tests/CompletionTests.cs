@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Text.RegularExpressions;
 using Xunit;
 
 namespace TypeWhisper.Cli.Tests;
@@ -15,6 +16,8 @@ public class CompletionTests
           {"id":"whisper-large-v3","engine":"groq"},
           {"id":"turbo","engine":"whisper"},
           {"id":"bad\nid","engine":"groq"},
+          {"id":"$(touch pwned)","engine":"groq"},
+          {"id":"has space","engine":"groq"},
           {"id":"","engine":""}
         ]}
         """;
@@ -51,7 +54,9 @@ public class CompletionTests
     [
         ("--dev --port 9 models load --engine ", ["ARGS:__complete engines --dev --port 9", "whisper", "groq"]),
         ("models load --engine whisper --model ", ["ARGS:__complete models --engine whisper", "large-v3", "turbo"]),
-        ("--api-token secret transcribe --model ", ["ARGS:__complete models --api-token secret", "large-v3", "turbo"])
+        ("--api-token secret transcribe --model ", ["ARGS:__complete models --api-token secret", "large-v3", "turbo"]),
+        // Bash splits C:/x at the colon; the script has to rejoin it.
+        ("--profile C:/x models load --engine ", ["ARGS:__complete engines --profile C:/x", "whisper", "groq"])
     ];
 
     [Theory]
@@ -66,7 +71,7 @@ public class CompletionTests
         Assert.Empty(result.Error);
         Assert.Contains(marker, result.Output);
         Assert.DoesNotContain("\r", result.Output);
-        Assert.DoesNotContain("##", result.Output);
+        Assert.DoesNotMatch("##[A-Z_]+##", result.Output);
         Assert.All(result.Output, character => Assert.True(character < 128, "Scripts stay ASCII for every console encoding."));
     }
 
@@ -201,7 +206,7 @@ public class CompletionTests
                 driver.Append($$"""
                     source {{Single(script)}}
                     cd {{Single(work)}}
-                    t() { COMP_WORDS=(typewhisper "$@"); COMP_CWORD=$((${#COMP_WORDS[@]} - 1)); COMPREPLY=(); _typewhisper; if [ ${#COMPREPLY[@]} -gt 0 ]; then printf '%s\n' "${COMPREPLY[@]}"; fi; }
+                    t() { COMP_LINE="$1"; COMP_POINT=${#COMP_LINE}; shift; COMP_WORDS=(typewhisper "$@"); COMP_CWORD=$((${#COMP_WORDS[@]} - 1)); COMPREPLY=(); _typewhisper; if [ ${#COMPREPLY[@]} -gt 0 ]; then printf '%s\n' "${COMPREPLY[@]}"; fi; }
 
                     """);
                 break;
@@ -242,7 +247,11 @@ public class CompletionTests
             driver.Append($"echo '@@{i}'\n");
             driver.Append(shell switch
             {
-                "bash" or "zsh" => "t " + string.Join(' ', words.Select(Single)) + "\n",
+                // Like bash with its default COMP_WORDBREAKS, the bash driver splits words at colons.
+                "bash" => $"t {Single(line)} " + string.Join(' ', words
+                    .SelectMany(word => word.Length == 0 ? [""] : Regex.Split(word, "(:)").Where(part => part.Length > 0))
+                    .Select(Single)) + "\n",
+                "zsh" => "t " + string.Join(' ', words.Select(Single)) + "\n",
                 "fish" => $"complete -C {Single(line)} | string replace -r '\\t.*' ''\n",
                 _ => $"T '{line}'\n"
             });

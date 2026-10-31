@@ -173,6 +173,27 @@ public sealed class PowerShellCompletionProfilesTests : IDisposable
     }
 
     [Fact]
+    public void SignedProfilesAreNeverChanged()
+    {
+        const string signed = "Set-Alias ll Get-ChildItem\r\n# SIG # Begin signature block\r\n# MIIFxx\r\n# SIG # End signature block\r\n";
+        Directory.CreateDirectory(Path.GetDirectoryName(WindowsProfile)!);
+        File.WriteAllText(WindowsProfile, signed);
+        var service = Service();
+
+        var setup = service.Register(Path.Join(_stable, "typewhisper.exe"));
+
+        Assert.Equal(signed, File.ReadAllText(WindowsProfile));
+        Assert.Contains(WindowsProfile, setup.Error);
+        Assert.Equal([CoreProfile], setup.Added);
+
+        // A block signed together with the profile also stays when the CLI is removed.
+        var withBlock = File.ReadAllText(CoreProfile) + "# SIG # Begin signature block\r\n# SIG # End signature block\r\n";
+        File.WriteAllText(CoreProfile, withBlock);
+        Assert.Null(service.Unregister(_stable));
+        Assert.Equal(withBlock, File.ReadAllText(CoreProfile));
+    }
+
+    [Fact]
     public void EditedBlockWithoutEndMarkerIsLeftAlone()
     {
         var service = Service();

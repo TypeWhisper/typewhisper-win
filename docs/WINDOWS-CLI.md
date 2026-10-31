@@ -86,7 +86,7 @@ typewhisper transcribe < audio.wav
 
 `typewhisper completions <shell>` prints a completion script for `powershell`, `bash`, `zsh` or `fish` to stdout. It works without a running app or HTTP API server.
 
-**Install** and **Update** under **Settings > Advanced > Command Line Tool** set up PowerShell completion automatically. They add a marked block to the all-hosts profile (`$PROFILE.CurrentUserAllHosts`) of Windows PowerShell 5.1 and, if installed, PowerShell 7. The block loads the completion from the installed `typewhisper.exe` and does nothing if that file is missing. **Remove** deletes the block again, and deletes a profile that only contained it. The rest of the profile stays unchanged.
+**Install** and **Update** under **Settings > Advanced > Command Line Tool** set up PowerShell completion automatically. They add a marked block to the all-hosts profile (`$PROFILE.CurrentUserAllHosts`) of Windows PowerShell 5.1 and, if installed, PowerShell 7. The block loads the completion from the installed `typewhisper.exe` and does nothing if that file is missing. **Remove** deletes the block again, and deletes a profile that only contained it. The rest of the profile stays unchanged. A signed profile is never changed, because the block would void its signature; add the line yourself and sign the profile again.
 
 A profile only loads when the execution policy allows local scripts. Windows PowerShell 5.1 refuses them by default. If a profile does not exist yet and its policy would refuse it, TypeWhisper does not create it, because PowerShell would show an error in every session. The status after installing names the PowerShell that got no completion. Allow local scripts and select **Update**:
 
@@ -116,7 +116,7 @@ typewhisper completions fish > ~/.config/fish/completions/typewhisper.fish
 
 The scripts complete commands, subcommands and options, and only offer options where the command accepts them, for example `--workflow` after `dictation start` or `--query` after `history`. Audio and backup arguments complete file paths, and `--profile` completes directories. `--task` offers `transcribe` and `translate`.
 
-`--engine` and `--model` complete IDs from the running app's `GET /v1/models`. `--model` only lists the models of the engine already given with `--engine`. The lookup respects `--dev`, `--profile`, `--port` and `--api-token` from the line being completed, waits at most 1.5 seconds and offers nothing when the app or API server is not available. The scripts use the hidden helper `typewhisper __complete engines` and `typewhisper __complete models [--engine <id>]`, which print one ID per line.
+`--engine` and `--model` complete IDs from the running app's `GET /v1/models`. `--model` only lists the models of the engine already given with `--engine`. The lookup respects `--dev`, `--profile`, `--port` and `--api-token` from the line being completed, waits at most 1.5 seconds and offers nothing when the app or API server is not available. IDs that contain spaces or shell syntax are not offered. The scripts use the hidden helper `typewhisper __complete engines` and `typewhisper __complete models [--engine <id>]`, which print one ID per line.
 
 ## Output and limits
 
