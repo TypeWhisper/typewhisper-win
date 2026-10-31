@@ -198,6 +198,8 @@ public sealed class PowerShellCompletionProfilesTests : IDisposable
     [Theory]
     [InlineData("[ZoneTransfer]\r\nZoneId=3\r\n", true)]
     [InlineData("[ZoneTransfer]\r\nZoneId=4\r\n", true)]
+    [InlineData("[ZoneTransfer]\r\nZoneId=99999999999999999999\r\n", true)]
+    [InlineData("[ZoneTransfer]\r\n", true)]
     [InlineData("[ZoneTransfer]\r\nZoneId=1\r\n", false)]
     public void ProfilesMarkedAsDownloadedAreNeverChanged(string zone, bool blocked)
     {
@@ -206,11 +208,20 @@ public sealed class PowerShellCompletionProfilesTests : IDisposable
         File.WriteAllText(WindowsProfile, original);
         // An NTFS alternate data stream on Windows; elsewhere a sibling file with the same name.
         File.WriteAllText(WindowsProfile + ":Zone.Identifier", zone);
+        var service = Service();
 
-        var setup = Service().Register(Path.Join(_stable, "typewhisper.exe"));
+        var setup = service.Register(Path.Join(_stable, "typewhisper.exe"));
 
         Assert.Equal(blocked, File.ReadAllText(WindowsProfile) == original);
         Assert.Equal(blocked, setup.Error?.Contains(WindowsProfile) == true);
+        Assert.Equal(zone, File.ReadAllText(WindowsProfile + ":Zone.Identifier"));
+
+        // Removal leaves a marked profile alone too, even with a block inside.
+        var withBlock = original + File.ReadAllText(CoreProfile);
+        File.WriteAllText(WindowsProfile, withBlock);
+        File.WriteAllText(WindowsProfile + ":Zone.Identifier", zone);
+        Assert.Null(service.Unregister(_stable));
+        Assert.Equal(blocked, File.ReadAllText(WindowsProfile) == withBlock);
         Assert.Equal(zone, File.ReadAllText(WindowsProfile + ":Zone.Identifier"));
     }
 

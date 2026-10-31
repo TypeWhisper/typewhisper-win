@@ -128,7 +128,7 @@ public sealed class PowerShellCompletionProfiles
         try
         {
             var zone = System.Text.RegularExpressions.Regex.Match(File.ReadAllText(stream), @"(?m)^\s*ZoneId\s*=\s*(\d+)");
-            return !zone.Success || int.Parse(zone.Groups[1].Value) >= 3;
+            return !zone.Success || !int.TryParse(zone.Groups[1].Value, out var zoneId) || zoneId >= 3;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return true; }
     }
