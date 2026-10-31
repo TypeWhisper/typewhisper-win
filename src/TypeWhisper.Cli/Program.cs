@@ -32,6 +32,8 @@ static class Program
     static async Task<int> RunAsync(string[] args)
     {
         var options = CliOptions.Parse(args);
+        // Shells call the hidden ID helper while completing, so it must stay silent even for bad input.
+        if (args.FirstOrDefault() == "__complete") return await CompleteIdsAsync(options);
         if (options.ShowHelp)
         {
             PrintUsage();
@@ -53,14 +55,12 @@ static class Program
             return 1;
         }
 
+        // Completion scripts are static, so they need neither the app nor its HTTP API.
+        if (options.Command == "completions") return PrintCompletions(options);
+
         if (Validate(options) is { } validationError) return Error(validationError);
 
-        var connection = CliConnectionResolver.Resolve(new CliConnectionOptions(
-            PortOverride: options.Port,
-            ApiTokenOverride: options.ApiToken,
-            EnvironmentApiToken: Environment.GetEnvironmentVariable("TYPEWHISPER_API_TOKEN"),
-            ProfileDirectory: options.DevMode ? null : options.ProfileDirectory ?? Environment.GetEnvironmentVariable("TYPEWHISPER_PROFILE"),
-            DevMode: options.DevMode));
+        var connection = ResolveConnection(options);
         var baseUrl = $"http://127.0.0.1:{connection.Port}";
 
         return options.Command switch
@@ -74,6 +74,46 @@ static class Program
             "audio" => await AudioSettingsAsync(baseUrl, options, connection.ApiToken),
             _ => Error($"Unknown command: {options.Command}")
         };
+    }
+
+    static CliConnection ResolveConnection(CliOptions options) => CliConnectionResolver.Resolve(new CliConnectionOptions(
+        PortOverride: options.Port,
+        ApiTokenOverride: options.ApiToken,
+        EnvironmentApiToken: Environment.GetEnvironmentVariable("TYPEWHISPER_API_TOKEN"),
+        ProfileDirectory: options.DevMode ? null : options.ProfileDirectory ?? Environment.GetEnvironmentVariable("TYPEWHISPER_PROFILE"),
+        DevMode: options.DevMode));
+
+    static int PrintCompletions(CliOptions options)
+    {
+        if (options.Flags.Count > 0 || options.Positionals.Count != 1 || CliCompletions.Script(options.Positionals[0]) is not { } script)
+            return Error($"Usage: typewhisper completions <{string.Join('|', CliCompletions.Shells)}>");
+        Console.Out.Write(script);
+        return 0;
+    }
+
+    /// <summary>
+    /// Prints engine or model IDs for shell completion, one per line. Prints nothing and succeeds when
+    /// the app is unavailable, so a shell never shows errors or waits long while completing.
+    /// </summary>
+    static async Task<int> CompleteIdsAsync(CliOptions options)
+    {
+        var kind = options.Positionals.FirstOrDefault();
+        if (options.Error is not null || options.Command != "__complete" || options.Positionals.Count != 1 || kind is not ("engines" or "models")
+            || options.DevMode && options.ProfileDirectory is not null)
+            return 0;
+        try
+        {
+            var connection = ResolveConnection(options);
+            using var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, UseProxy = false }) { Timeout = TimeSpan.FromSeconds(1.5) };
+            using var request = CliRequestBuilder.BuildGet($"http://127.0.0.1:{connection.Port}", "/v1/models", connection.ApiToken);
+            using var response = await http.SendAsync(request, Cancellation.Token);
+            if (!response.IsSuccessStatusCode) return 0;
+            var body = await response.Content.ReadAsStringAsync(Cancellation.Token);
+            foreach (var id in CliCompletions.Ids(body, kind == "engines", options.Engine))
+                Console.WriteLine(id);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { }
+        return 0;
     }
 
     static string? Validate(CliOptions o)
@@ -521,6 +561,7 @@ static class Program
               import <path>             Restore a portable settings backup
               audio [show]              Show microphones and audio settings
               audio set <file|->        Apply audio settings JSON, such as saved audio --json output
+              completions <shell>       Print a powershell, bash, zsh or fish completion script
 
             Global options:
               --port <N>                API server port (default: auto-discover, fallback 8978)
@@ -557,6 +598,7 @@ static class Program
               typewhisper import typewhisper-backup.json --json
               typewhisper audio --json > audio-settings.json
               typewhisper audio set audio-settings.json
+              typewhisper completions powershell | Out-String | Invoke-Expression
             """);
     }
 
