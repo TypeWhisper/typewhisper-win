@@ -3245,5 +3245,6 @@
   "Installed. Open a new terminal to use typewhisper. PowerShell does not allow profile scripts, so tab completion was not added. The CLI documentation explains how to add it.": "已安装。请打开新的终端以使用 typewhisper。PowerShell 不允许运行配置文件脚本，因此未添加 Tab 补全。CLI 文档介绍了添加方法。",
   "Installed. Open a new terminal to use typewhisper. PowerShell tab completion could not be set up: {0}": "已安装。请打开新的终端以使用 typewhisper。无法设置 PowerShell 的 Tab 补全：{0}",
   "Installed. Open a new terminal to use typewhisper. {0} does not allow profile scripts, so it has no tab completion. The CLI documentation explains how to add it.": "已安装。请打开新的终端以使用 typewhisper。{0} 不允许运行配置文件脚本，因此没有 Tab 补全。CLI 文档介绍了添加方法。",
-  "The PowerShell profile {0} is signed. Add the completion line yourself and sign the profile again.": "PowerShell 配置文件 {0} 已签名。请自行添加补全行，然后重新签名该配置文件。"
+  "The PowerShell profile {0} is signed. Add the completion line yourself and sign the profile again.": "PowerShell 配置文件 {0} 已签名。请自行添加补全行，然后重新签名该配置文件。",
+  "The PowerShell profile {0} was downloaded from the internet, so PowerShell blocks it. Check and unblock it, then select Update.": "PowerShell 配置文件 {0} 是从互联网下载的，因此被 PowerShell 阻止。请检查并解除阻止，然后选择“更新”。"
 }

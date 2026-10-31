@@ -72,6 +72,12 @@ public sealed class PowerShellCompletionProfiles
                     error ??= Loc.T("The PowerShell profile {0} is signed. Add the completion line yourself and sign the profile again.", profile);
                     continue;
                 }
+                // Rewriting would drop the mark of the web and let RemoteSigned run a downloaded profile.
+                if (IsFromInternet(profile))
+                {
+                    error ??= Loc.T("The PowerShell profile {0} was downloaded from the internet, so PowerShell blocks it. Check and unblock it, then select Update.", profile);
+                    continue;
+                }
                 text = WithoutBlock(text, directory);
                 if (text.Length > 0 && !text.EndsWith('\n')) text += "\r\n";
                 Write(profile, text + Block(executable, directory), encoding);
@@ -98,7 +104,8 @@ public sealed class PowerShellCompletionProfiles
             {
                 if (!File.Exists(profile)) continue;
                 var (text, encoding) = Read(profile);
-                if (IsSigned(text)) continue; // A block left in a signed profile stays silent once the CLI is gone.
+                // A block left in a signed or blocked profile stays silent once the CLI is gone.
+                if (IsSigned(text) || IsFromInternet(profile)) continue;
                 var remaining = WithoutBlock(text, directory);
                 if (remaining == text) continue;
                 // A profile that only held the completion was created for it and goes with it.
@@ -111,6 +118,19 @@ public sealed class PowerShellCompletionProfiles
             }
         }
         return error;
+    }
+
+    // The Zone.Identifier stream marks downloads; Internet (3) and Restricted (4) profiles are blocked by RemoteSigned.
+    private static bool IsFromInternet(string profile)
+    {
+        var stream = profile + ":Zone.Identifier";
+        if (!File.Exists(stream)) return false;
+        try
+        {
+            var zone = System.Text.RegularExpressions.Regex.Match(File.ReadAllText(stream), @"(?m)^\s*ZoneId\s*=\s*(\d+)");
+            return !zone.Success || int.Parse(zone.Groups[1].Value) >= 3;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return true; }
     }
 
     private static bool IsSigned(string text) => text.Contains("# SIG # Begin signature block", StringComparison.OrdinalIgnoreCase);
@@ -176,6 +196,9 @@ public sealed class PowerShellCompletionProfiles
     private static void Write(string path, string text, Encoding encoding)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        // Replacing the file drops its alternate data streams; keep the zone information it had.
+        var zoneStream = path + ":Zone.Identifier";
+        var zone = File.Exists(zoneStream) ? File.ReadAllBytes(zoneStream) : null;
         var temporary = Path.Join(Path.GetDirectoryName(path), $".typewhisper-profile-{Guid.NewGuid():N}.tmp");
         try
         {
@@ -183,6 +206,7 @@ public sealed class PowerShellCompletionProfiles
             File.Move(temporary, path, true);
         }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
+        if (zone is not null) File.WriteAllBytes(zoneStream, zone);
     }
 
     private static bool IsInstalled(PowerShellEdition edition)

@@ -195,6 +195,25 @@ public sealed class PowerShellCompletionProfilesTests : IDisposable
         Assert.Equal(withBlock, File.ReadAllText(CoreProfile));
     }
 
+    [Theory]
+    [InlineData("[ZoneTransfer]\r\nZoneId=3\r\n", true)]
+    [InlineData("[ZoneTransfer]\r\nZoneId=4\r\n", true)]
+    [InlineData("[ZoneTransfer]\r\nZoneId=1\r\n", false)]
+    public void ProfilesMarkedAsDownloadedAreNeverChanged(string zone, bool blocked)
+    {
+        const string original = "Set-Alias ll Get-ChildItem\r\n";
+        Directory.CreateDirectory(Path.GetDirectoryName(WindowsProfile)!);
+        File.WriteAllText(WindowsProfile, original);
+        // An NTFS alternate data stream on Windows; elsewhere a sibling file with the same name.
+        File.WriteAllText(WindowsProfile + ":Zone.Identifier", zone);
+
+        var setup = Service().Register(Path.Join(_stable, "typewhisper.exe"));
+
+        Assert.Equal(blocked, File.ReadAllText(WindowsProfile) == original);
+        Assert.Equal(blocked, setup.Error?.Contains(WindowsProfile) == true);
+        Assert.Equal(zone, File.ReadAllText(WindowsProfile + ":Zone.Identifier"));
+    }
+
     [Fact]
     public void EditedBlockWithoutEndMarkerIsLeftAlone()
     {
