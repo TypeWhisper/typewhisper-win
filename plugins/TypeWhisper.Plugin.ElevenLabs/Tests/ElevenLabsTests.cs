@@ -54,6 +54,7 @@ public sealed class ElevenLabsTests : IDisposable
             Assert.Equal("de", await Value("language_code"));
             Assert.Equal("false", await Value("no_verbatim"));
             Assert.Equal("true", await Value("tag_audio_events"));
+            Assert.Equal("word", await Value("timestamps_granularity"));
             Assert.DoesNotContain(parts, p => p.Headers.ContentDisposition!.Name!.Trim('"') == "num_speakers");
             Assert.Equal(new byte[] { 1, 2, 3 }, await parts.Single(p => p.Headers.ContentDisposition!.Name!.Trim('"') == "file").ReadAsByteArrayAsync(ct));
             var terms = await Task.WhenAll(parts.Where(p => p.Headers.ContentDisposition!.Name!.Trim('"') == "keyterms").Select(p => p.ReadAsStringAsync(ct)));
@@ -67,11 +68,12 @@ public sealed class ElevenLabsTests : IDisposable
         await plugin.SaveTextSettingAsync("numSpeakers", "0", default);
         var result = await LanguageHintTranscription.DecodeAsync(plugin, ReadOnlyMemory<float>.Empty, () => [1, 2, 3], "de", [], false, default, ["TypeWhisper", "Grüße", "typewhisper", "<invalid>"]);
         Assert.Equal("Guten Tag.", result.Text);
-        Assert.Equal("deu", result.DetectedLanguage);
+        Assert.Equal("de", result.DetectedLanguage);
         Assert.Equal(0.9, result.DurationSeconds);
-        Assert.Equal(2, result.Segments.Count);
-        Assert.Equal(0.1, result.Segments[0].Start);
-        Assert.Equal(0.9, result.Segments[1].End);
+        var segment = Assert.Single(result.Segments);
+        Assert.Equal("Guten Tag.", segment.Text);
+        Assert.Equal(0.1, segment.Start);
+        Assert.Equal(0.9, segment.End);
     }
 
     [Theory]
@@ -94,9 +96,17 @@ public sealed class ElevenLabsTests : IDisposable
         await plugin.ActivateAsync(Host);
         Assert.Equal("scribe_v2", plugin.SelectedModelId);
         Assert.Contains("de", plugin.SupportedLanguages);
-        Assert.Equal(plugin.SupportedLanguages, plugin.TranscriptionModels.Single().LanguageCodes);
+        Assert.Contains("jv", plugin.SupportedLanguages);
+        Assert.DoesNotContain("jw", plugin.SupportedLanguages);
+        Assert.DoesNotContain("haw", plugin.SupportedLanguages);
+        Assert.DoesNotContain("vo", plugin.SupportedLanguages);
+        Assert.Equal(new[] { "scribe_v2", "scribe_v2_medical" }, plugin.TranscriptionModels.Select(m => m.Id));
+        Assert.All(plugin.TranscriptionModels, m => Assert.Equal(plugin.SupportedLanguages, m.LanguageCodes));
+        Assert.True(plugin.TranscriptionModels.Single(m => m.Id == "scribe_v2").IsRecommended);
         Assert.True(plugin.SupportsStreaming);
         Assert.False(plugin.SupportsStreamingForPrompt("TypeWhisper"));
+        Assert.True(plugin.SupportsStreamingPreviewForPrompt("TypeWhisper"));
+        Assert.False(plugin.SupportsStreamingPreviewForPrompt(null));
         await plugin.SetApiKeyAsync("test-key");
         await plugin.SaveTextSettingAsync("transcriptionMode", "restOnly", default);
         await plugin.SaveTextSettingAsync("noVerbatim", "false", default);
@@ -145,7 +155,8 @@ public sealed class ElevenLabsTests : IDisposable
     [InlineData(200, null, null, null)]
     [InlineData(401, "missing_permissions", "The API key you used is missing the permission user_read to execute this operation.", PluginRequestFailureKind.Configuration)]
     [InlineData(401, "invalid_api_key", "Invalid key", PluginRequestFailureKind.Authentication)]
-    [InlineData(401, "missing_permissions", "Missing speech_to_text permission", PluginRequestFailureKind.Authentication)]
+    [InlineData(401, "missing_permissions", "Missing speech_to_text permission", PluginRequestFailureKind.Permission)]
+    [InlineData(401, "quota_exceeded", "This request exceeds your API key quota.", PluginRequestFailureKind.Permission)]
     public async Task ValidationDistinguishesSuccessIncompleteChecksAndRejectedKeys(int httpStatus, string? status, string? message, PluginRequestFailureKind? expected)
     {
         using var plugin = new ElevenLabsPlugin(new HttpClient(new Handler((request, _) =>
@@ -186,6 +197,102 @@ public sealed class ElevenLabsTests : IDisposable
     }
 
     [Fact]
+    public async Task MedicalModelUsesBatchRequestsWithKeytermsAndNoLiveText()
+    {
+        var calls = 0;
+        using var plugin = new ElevenLabsPlugin(new HttpClient(new Handler(async (request, ct) =>
+        {
+            calls++;
+            var parts = Assert.IsType<MultipartFormDataContent>(request.Content).ToArray();
+            Assert.Equal("scribe_v2_medical", await parts.Single(p => p.Headers.ContentDisposition!.Name!.Trim('"') == "model_id").ReadAsStringAsync(ct));
+            Assert.Equal("Metoprolol", await parts.Single(p => p.Headers.ContentDisposition!.Name!.Trim('"') == "keyterms").ReadAsStringAsync(ct));
+            return Ok(Transcript);
+        })));
+        var host = Host;
+        await plugin.ActivateAsync(host); await plugin.SetApiKeyAsync("test-key");
+        Assert.True(plugin.SupportsStreaming);
+        plugin.SelectModel("scribe_v2_medical");
+        Assert.False(plugin.SupportsStreaming);
+        await Assert.ThrowsAsync<NotSupportedException>(() => plugin.StartStreamingAsync(null, default));
+        Assert.False(plugin.SupportsStreamingPreviewForPrompt("Metoprolol"));
+        await plugin.TranscribeAsync([1], null, false, "Metoprolol", default);
+        Assert.Equal(1, calls);
+        await plugin.DeactivateAsync(); await plugin.ActivateAsync(host);
+        Assert.Equal("scribe_v2_medical", plugin.SelectedModelId);
+        Assert.False(plugin.SupportsStreaming);
+    }
+
+    [Fact]
+    public async Task RetiredModelSelectionMovesToScribeV2()
+    {
+        var host = Host;
+        host.SetSetting("selectedModel", "scribe_v1");
+        using var plugin = new ElevenLabsPlugin();
+        await plugin.ActivateAsync(host);
+        Assert.Equal("scribe_v2", plugin.SelectedModelId);
+    }
+
+    [Theory]
+    [InlineData("quota_exceeded", PluginRequestFailureKind.Permission, "credit quota")]
+    [InlineData("missing_permissions", PluginRequestFailureKind.Permission, "Speech to Text permission")]
+    [InlineData("invalid_api_key", PluginRequestFailureKind.Authentication, "rejected the API key")]
+    public async Task UnauthorizedTranscriptionsNameTheCauseWithoutProviderText(string status, PluginRequestFailureKind expected, string message)
+    {
+        using var plugin = new ElevenLabsPlugin(new HttpClient(new Handler((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.Unauthorized)
+        { Content = new StringContent(JsonSerializer.Serialize(new { detail = new { status, message = "private provider text" } })) }))));
+        await plugin.ActivateAsync(Host); await plugin.SetApiKeyAsync("test-key");
+        var ex = await Assert.ThrowsAsync<PluginRequestException>(() => plugin.TranscribeAsync([1], null, false, null, default));
+        Assert.Equal(expected, ex.FailureKind);
+        Assert.Equal(401, ex.HttpStatusCode);
+        Assert.False(ex.IsTransient);
+        Assert.Contains(message, ex.Message);
+        Assert.DoesNotContain("private", ex.ToString());
+    }
+
+    [Fact]
+    public void SegmentsFollowSentencesAndPausesAndKeepAudioEvents()
+    {
+        var result = ElevenLabsPlugin.ParseRestResponse("""
+            {"text":"Ja. Das ist gut. (lacht) Weiter geht es","language_code":"cmn","words":[
+              {"type":"word","text":"Ja.","start":0.0,"end":0.3},
+              {"type":"spacing","text":" ","start":0.3,"end":0.4},
+              {"type":"word","text":"Das","start":0.4,"end":0.6},
+              {"type":"spacing","text":" ","start":0.6,"end":0.6},
+              {"type":"word","text":"ist","start":0.6,"end":0.8},
+              {"type":"spacing","text":" ","start":0.8,"end":0.8},
+              {"type":"word","text":"gut.","start":0.8,"end":1.1},
+              {"type":"spacing","text":" ","start":1.1,"end":1.2},
+              {"type":"audio_event","text":"(lacht)","start":1.2,"end":1.8},
+              {"type":"spacing","text":" ","start":1.8,"end":3.5},
+              {"type":"word","text":"Weiter","start":3.5,"end":3.8},
+              {"type":"spacing","text":" ","start":3.8,"end":3.8},
+              {"type":"word","text":"geht","start":3.8,"end":4.0},
+              {"type":"spacing","text":" ","start":4.0,"end":4.0},
+              {"type":"word","text":"es","start":4.0,"end":4.2}]}
+            """, null);
+        Assert.Equal("zh", result.DetectedLanguage);
+        Assert.Equal(new[] { "Ja. Das ist gut.", "(lacht)", "Weiter geht es" }, result.Segments.Select(s => s.Text));
+        Assert.Equal((0.0, 1.1), (result.Segments[0].Start, result.Segments[0].End));
+        Assert.Equal((1.2, 1.8), (result.Segments[1].Start, result.Segments[1].End));
+        Assert.Equal((3.5, 4.2), (result.Segments[2].Start, result.Segments[2].End));
+        Assert.Equal(4.2, result.DurationSeconds);
+    }
+
+    [Fact]
+    public void LongSpeechWithoutSentenceEndOrPauseSplitsAfterThirtySeconds()
+    {
+        var words = Enumerable.Range(0, 70).Select(n => new { type = "word", text = "wort", start = n * 0.5, end = n * 0.5 + 0.4 });
+        var result = ElevenLabsPlugin.ParseRestResponse(JsonSerializer.Serialize(new { text = "x", words }), "de");
+        Assert.Equal(2, result.Segments.Count);
+        Assert.Equal(30.0, result.Segments[1].Start);
+    }
+
+    [Theory]
+    [InlineData("deu", "de")] [InlineData("eng", "en")] [InlineData("cmn", "zh")] [InlineData("de", "de")] [InlineData(" YUE ", "yue")]
+    public void LanguageCodesUseTwoLettersWhereTheyExist(string provider, string expected) =>
+        Assert.Equal(expected, ElevenLabsLanguageCode.AppCode(provider));
+
+    [Fact]
     public async Task PackageLoadsThroughPortableContractWithoutWpf()
     {
         var directory = Path.Combine(_root, "package");
@@ -220,7 +327,7 @@ public sealed class ElevenLabsTests : IDisposable
         { Content = new ByteArrayContent(payload), RequestMessage = request })));
         var entry = new PortableCatalogEntry
         {
-            Id = id, Name = "ElevenLabs", Version = "1.1.2", MinHostVersion = "1.1.5",
+            Id = id, Name = "ElevenLabs", Version = "1.2.0", MinHostVersion = "1.1.5",
             DownloadUrl = "https://packages.test/elevenlabs.zip", Size = payload.Length,
             Sha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(payload)),
             SupportedArchitectures = [PortablePluginCatalog.Architecture]

@@ -64,6 +64,27 @@ public sealed class ElevenLabsStreamingTests
     }
 
     [Theory]
+    [InlineData("invalid_request")] [InlineData("quota_exceeded")] [InlineData("commit_throttled")] [InlineData("transcriber_error")]
+    public void DocumentedRealtimeErrorTypesEndTheSession(string type) => Assert.True(ElevenLabsStreamingSession.IsRealtimeError(type));
+
+    [Theory]
+    [InlineData("session_started")] [InlineData("partial_transcript")] [InlineData("committed_transcript_with_timestamps")]
+    public void TranscriptMessagesAreNotErrors(string type) => Assert.False(ElevenLabsStreamingSession.IsRealtimeError(type));
+
+    [Fact]
+    public async Task InvalidRequestFailsFinalizationWithoutWaitingForTheAcknowledgementTimeout()
+    {
+        var socket = new Socket();
+        await using var session = new ElevenLabsStreamingSession(socket);
+        await session.SendAudioAsync(new byte[3200], default);
+        var finish = session.FinalizeAsync(default);
+        await socket.Commits.Reader.ReadAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(2));
+        socket.Text("""{"message_type":"invalid_request","error":"private details"}""");
+        var ex = await Assert.ThrowsAsync<IOException>(() => finish.WaitAsync(TimeSpan.FromSeconds(2)));
+        Assert.DoesNotContain("private", ex.Message);
+    }
+
+    [Theory]
     [InlineData(false)] [InlineData(true)]
     public async Task TransportFailureCannotReturnPartialSuccess(bool error)
     {

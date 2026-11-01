@@ -10,8 +10,8 @@ public sealed partial class ElevenLabsPlugin
     public IReadOnlyList<PluginTextSetting> TextSettings =>
     [
         new(TranscriptionModeSettingName, L("Transcription mode", "Transkriptionsmodus"),
-            L("Automatic shows live text. Audio events, multiple speakers or dictionary terms use the complete recording.",
-              "Automatisch zeigt Live-Text. Audioereignisse, mehrere Sprecher oder Wörterbuchbegriffe verwenden die vollständige Aufnahme."),
+            L("Automatic shows live text. Scribe v2 Medical, audio events or multiple speakers use the complete recording. With dictionary terms, the final text comes from the complete recording.",
+              "Automatisch zeigt Live-Text. Scribe v2 Medical, Audioereignisse oder mehrere Sprecher verwenden die vollständige Aufnahme. Mit Wörterbuchbegriffen kommt der endgültige Text aus der vollständigen Aufnahme."),
             FormatTranscriptionMode(_transcriptionMode))
         { Choices = [new("automatic", L("Automatic", "Automatisch")), new("restOnly", L("After recording", "Nach der Aufnahme"))] },
         Toggle(NoVerbatimSettingName, L("Clean transcript", "Bereinigtes Transkript"),

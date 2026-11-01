@@ -1,6 +1,6 @@
 # AssemblyAI for the portable host
 
-Portable .NET 10 implementation of `com.typewhisper.assemblyai`, version `1.1.3`, requiring host `1.1.5` or later.
+Portable .NET 10 implementation of `com.typewhisper.assemblyai`, version `1.1.4`, requiring host `1.1.5` or later.
 
 ## Features
 
@@ -18,7 +18,7 @@ Windows currently exposes text/start/end segments, without separate speaker iden
 
 Opening settings performs no requests. Connection validation lists at most one transcript and uploads no audio. A draft key can be tested without saving. All configuration fields and the encrypted-key reference commit together; failed writes retain the preceding active configuration. Credentials and settings remain after uninstall.
 
-Streaming sends 50–1,000 ms PCM16 frames, pads only a short final tail, sends `{"type":"Terminate"}`, and awaits the server's `Termination`. Only formatted final turns are committed; repeated messages for the same turn are not appended twice, while repeated speech in a new turn is retained. Broken, malformed or incomplete streams fail so the host can retry the complete recording. A dictionary exceeding streaming limits uses the recorded-audio path instead of silently dropping terms. Polling has a five-minute wall-clock deadline after job submission. Cancellation stops local requests; it does not promise deletion or cancellation of an already submitted provider job.
+Streaming sends 50–1,000 ms PCM16 frames, pads only a short final tail, sends `{"type":"Terminate"}`, and awaits the server's `Termination`. Only formatted final turns are committed; repeated messages for the same turn are not appended twice, while repeated speech in a new turn is retained. Broken, malformed or incomplete streams fail so the host can retry the complete recording. A dictionary exceeding streaming limits uses the recorded-audio path for the final text instead of silently dropping terms; hosts that support preview streams still show live text from a stream without the dictionary. Polling has a five-minute wall-clock deadline after job submission. Cancellation stops local requests; it does not promise deletion or cancellation of an already submitted provider job.
 
 ## Verification
 
