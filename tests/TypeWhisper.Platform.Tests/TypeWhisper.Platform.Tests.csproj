@@ -26,6 +26,9 @@
     <Compile Include="../../src/TypeWhisper.WinUI/Platform/AppReleaseGithubSource.cs" Link="AppReleaseGithubSource.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/Platform/WindowsClipboardTransaction.cs" Link="WindowsClipboardTransaction.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/Platform/NativeMethods.Clipboard.cs" Link="NativeMethods.Clipboard.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/Platform/NativeMethods.Input.cs" Link="NativeMethods.Input.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/Platform/OwnKeyboardInput.cs" Link="OwnKeyboardInput.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/Platform/SyntheticKeys.cs" Link="SyntheticKeys.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/LicenseText.cs" Link="LicenseText.cs" />
     <EmbeddedResource Include="../../src/TypeWhisper.WinUI/Resources/LicenseStrings.json" LogicalName="TypeWhisper.LicenseStrings.json" />
     <EmbeddedResource Include="../../src/TypeWhisper.Windows.StorePackage/StoreProducts.json" LogicalName="TypeWhisper.StoreProducts.json" />

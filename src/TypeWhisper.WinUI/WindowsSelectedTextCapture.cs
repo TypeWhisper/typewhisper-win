@@ -67,11 +67,12 @@ internal sealed class WindowsSelectedTextCapture(IntPtr ownerHandle)
         public uint SendCopy()
         {
             if (!TargetStillCurrent) return 0;
-            NativeMethods.Input[] inputs = [Key(0x11, false), Key(0x43, false), Key(0x43, true), Key(0x11, true)];
+            var keys = new SyntheticKeys(NativeMethods.GetWindowThreadProcessId(target, out _));
+            NativeMethods.Input[] inputs = [keys.Down(0x11), keys.Down(0x43), keys.Up(0x43), keys.Up(0x11)];
             var sent = NativeMethods.SendInput(4, inputs, Marshal.SizeOf<NativeMethods.Input>());
             if (sent is > 0 and < 4)
             {
-                NativeMethods.Input[] release = [Key(0x43, true), Key(0x11, true)];
+                NativeMethods.Input[] release = [keys.Up(0x43), keys.Up(0x11)];
                 NativeMethods.SendInput(2, release, Marshal.SizeOf<NativeMethods.Input>());
             }
             return sent;
@@ -97,10 +98,4 @@ internal sealed class WindowsSelectedTextCapture(IntPtr ownerHandle)
             _ = await clipboard.RestoreAsync(((Lease)lease).Inner, CancellationToken.None);
         public Task DelayAsync(TimeSpan delay, CancellationToken ct) => Task.Delay(delay, ct);
     }
-
-    private static NativeMethods.Input Key(ushort key, bool up) => new()
-    {
-        Type = NativeMethods.INPUT_KEYBOARD,
-        Data = new NativeMethods.InputUnion { Keyboard = new NativeMethods.KeyboardInput { Key = key, Flags = up ? NativeMethods.KEYEVENTF_KEYUP : 0u, Extra = OwnKeyboardInput.Marker } }
-    };
 }
