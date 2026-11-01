@@ -74,32 +74,30 @@ internal sealed class ClipboardTextInserter(IntPtr owner) : IDisposable
             _landing = null;
             using (landing) return await landing.WaitAsync();
         }
+        private SyntheticKeys Keys => new(NativeMethods.GetWindowThreadProcessId(target, out _));
         public uint SendSubmit()
         {
-            NativeMethods.Input[] inputs = [Key(0x0D, false), Key(0x0D, true)];
+            var keys = Keys;
+            NativeMethods.Input[] inputs = [keys.Down(0x0D), keys.Up(0x0D)];
             var sent = NativeMethods.SendInput(2, inputs, Marshal.SizeOf<NativeMethods.Input>());
             if (sent == 1)
             {
-                NativeMethods.Input[] release = [Key(0x0D, true)];
+                NativeMethods.Input[] release = [keys.Up(0x0D)];
                 NativeMethods.SendInput(1, release, Marshal.SizeOf<NativeMethods.Input>());
             }
             return sent;
         }
         public uint SendPaste()
         {
-            NativeMethods.Input[] inputs = [Key(0x11, false), Key(0x56, false), Key(0x56, true), Key(0x11, true)];
+            var keys = Keys;
+            NativeMethods.Input[] inputs = [keys.Down(0x11), keys.Down(0x56), keys.Up(0x56), keys.Up(0x11)];
             var sent = NativeMethods.SendInput(4, inputs, Marshal.SizeOf<NativeMethods.Input>());
             if (sent is > 0 and < 4)
             {
-                NativeMethods.Input[] release = [Key(0x56, true), Key(0x11, true)];
+                NativeMethods.Input[] release = [keys.Up(0x56), keys.Up(0x11)];
                 NativeMethods.SendInput(2, release, Marshal.SizeOf<NativeMethods.Input>());
             }
             return sent;
         }
     }
-    private static NativeMethods.Input Key(ushort key, bool up) => new()
-    {
-        Type = NativeMethods.INPUT_KEYBOARD,
-        Data = new NativeMethods.InputUnion { Keyboard = new NativeMethods.KeyboardInput { Key = key, Flags = up ? NativeMethods.KEYEVENTF_KEYUP : 0u, Extra = OwnKeyboardInput.Marker } }
-    };
 }

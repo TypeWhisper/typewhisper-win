@@ -5,7 +5,9 @@ namespace TypeWhisper.WinUI.Platform;
 internal static partial class NativeMethods
 {
     public const uint INPUT_KEYBOARD = 1;
+    public const uint KEYEVENTF_EXTENDEDKEY = 0x0001;
     public const uint KEYEVENTF_KEYUP = 0x0002;
+    public const uint MAPVK_VK_TO_VSC_EX = 4;
 
     // INPUT and its union. The layouts match the native structs byte for byte; SendInput rejects
     // a size that differs from what Windows expects.
@@ -20,4 +22,10 @@ internal static partial class NativeMethods
 
     [LibraryImport("user32.dll", SetLastError = true)]
     public static partial uint SendInput(uint count, Input[] inputs, int size);
+
+    [LibraryImport("user32.dll")]
+    public static partial IntPtr GetKeyboardLayout(uint threadId);
+
+    [LibraryImport("user32.dll", EntryPoint = "MapVirtualKeyExW")]
+    public static partial uint MapVirtualKeyEx(uint code, uint mapType, IntPtr layout);
 }
