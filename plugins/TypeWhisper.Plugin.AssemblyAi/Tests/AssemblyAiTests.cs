@@ -216,6 +216,7 @@ public partial class AssemblyAiTests
         var terms = string.Join(",", Enumerable.Range(0, 1100).Select(i => "term" + i));
         Assert.Equal(1000, AssemblyAiModels.Terms(terms, AssemblyAiModels.All[0]).Count);
         Assert.False(plugin.SupportsStreamingForPrompt(terms)); Assert.False(plugin.SupportsStreamingForPrompt(new string('a', 51)));
+        Assert.True(plugin.SupportsStreamingPreviewForPrompt(terms)); Assert.False(plugin.SupportsStreamingPreviewForPrompt("TypeWhisper"));
         Assert.Empty(AssemblyAiModels.Terms("one two three four five six seven", AssemblyAiModels.All[0]));
         plugin.SelectModel("universal-2"); Assert.Equal(100, plugin.DictionaryTermsBudget.MaxTerms);
         Assert.Equal(100, AssemblyAiModels.Terms(terms, AssemblyAiModels.All[1]).Count);

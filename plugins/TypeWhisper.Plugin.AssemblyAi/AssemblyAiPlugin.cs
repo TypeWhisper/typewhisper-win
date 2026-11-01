@@ -33,7 +33,7 @@ public sealed partial class AssemblyAiPlugin : ITranscriptionEnginePlugin, IApiK
     /// <inheritdoc />
     public string PluginName => "AssemblyAI";
     /// <inheritdoc />
-    public string PluginVersion => "1.1.3";
+    public string PluginVersion => "1.1.4";
     /// <inheritdoc />
     public string ProviderId => "assemblyai";
     /// <inheritdoc />
@@ -87,6 +87,10 @@ public sealed partial class AssemblyAiPlugin : ITranscriptionEnginePlugin, IApiK
         // Preserve the complete REST dictionary if it exceeds the streaming protocol budget.
         return SupportsStreaming && terms.Count <= 100 && terms.All(t => t.Length <= 50);
     }
+
+    /// <inheritdoc />
+    /// <remarks>A dictionary beyond the streaming budget still gets live text; the complete recording keeps every term.</remarks>
+    public bool SupportsStreamingPreviewForPrompt(string? prompt) => SupportsStreaming && !SupportsStreamingForPrompt(prompt);
 
     /// <inheritdoc />
     public Task<IStreamingSession> StartStreamingAsync(string? language, CancellationToken ct) => StartStreamAsync(language, null, ct);

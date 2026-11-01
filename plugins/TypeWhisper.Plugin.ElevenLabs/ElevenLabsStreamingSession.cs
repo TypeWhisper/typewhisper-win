@@ -27,6 +27,19 @@ internal sealed class ElevenLabsStreamingSession : IStreamingSession
         _receiver = ReceiveAsync(_lifetime.Token);
     }
 
+    // Realtime errors that end the session. Not all of them say "error", such as invalid_request
+    // for an unknown language code; without this list the host would retry the complete recording
+    // only after the commit acknowledgement timed out.
+    private static readonly HashSet<string> RealtimeErrorTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "auth_error", "quota_exceeded", "commit_throttled", "unaccepted_terms", "rate_limited",
+        "queue_overflow", "resource_exhausted", "session_time_limit_exceeded", "input_error",
+        "invalid_request", "chunk_size_exceeded", "insufficient_audio_activity", "transcriber_error",
+    };
+
+    internal static bool IsRealtimeError(string messageType) =>
+        RealtimeErrorTypes.Contains(messageType) || messageType.Contains("error", StringComparison.OrdinalIgnoreCase);
+
     internal static Uri BuildRealtimeUri(string model, string? language, bool noVerbatim)
     {
         var query = "model_id=" + Uri.EscapeDataString(model) +
@@ -153,7 +166,7 @@ internal sealed class ElevenLabsStreamingSession : IStreamingSession
             using var doc = JsonDocument.Parse(message.GetBuffer().AsMemory(0, (int)message.Length));
             var root = doc.RootElement;
             var type = root.GetProperty("message_type").GetString() ?? "";
-            if (type.Contains("error", StringComparison.OrdinalIgnoreCase))
+            if (IsRealtimeError(type))
                 throw new IOException("ElevenLabs rejected the live transcription request.");
             if (type is not ("partial_transcript" or "committed_transcript_with_timestamps")) continue;
             var final = type == "committed_transcript_with_timestamps";
@@ -161,7 +174,7 @@ internal sealed class ElevenLabsStreamingSession : IStreamingSession
             if (final && acknowledgement is null)
                 throw new IOException("ElevenLabs returned an unexpected transcript commit.");
             var text = root.GetProperty("text").GetString() ?? "";
-            var language = root.TryGetProperty("language_code", out var value) ? value.GetString() : null;
+            var language = root.TryGetProperty("language_code", out var value) ? ElevenLabsLanguageCode.AppCode(value.GetString()) : null;
             TranscriptReceived?.Invoke(new(text, final) { DetectedLanguage = language });
             acknowledgement?.TrySetResult();
         }
