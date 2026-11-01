@@ -173,23 +173,23 @@
     {
       "id": "com.typewhisper.elevenlabs",
       "name": "ElevenLabs",
-      "version": "1.1.2",
+      "version": "1.2.0",
       "minHostVersion": "1.1.5",
       "author": "TypeWhisper",
-      "description": "Scribe v2 transcription with live text and dictionary terms",
+      "description": "Scribe v2 and Scribe v2 Medical transcription with live text, sentence timings and dictionary terms",
       "categories": [
         "transcription"
       ],
-      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-elevenlabs-v1.1.2/com.typewhisper.elevenlabs-1.1.2-win-x64.zip",
-      "sha256": "8a277a284e0f874a4d9b7d5617181264588f6423697fe302af20317af317767d",
-      "size": 25358,
+      "locality": "cloud",
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-elevenlabs-v1.2.0/com.typewhisper.elevenlabs-1.2.0-win-x64.zip",
+      "sha256": "dbd12afabf371009dbf864d67c6b0ca21da20abf0dcbf65c0256dc1aa7788e1f",
+      "size": 28709,
       "platforms": [
         "windows"
       ],
       "supportedArchitectures": [
         "x64"
-      ],
-      "locality": "cloud"
+      ]
     },
     {
       "id": "com.typewhisper.file-memory",
