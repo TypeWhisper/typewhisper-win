@@ -230,6 +230,15 @@ Live text disabled keeps the existing post-recording request path. Groq remains 
 `SupportsStreamingCompletion` opts into the host's complete-result contract in addition to
 `SupportsStreaming`: `FinalizeAsync` must await all final segments, and an interrupted stream
 must fail. Older packages without this capability remain on the post-recording path.
+
+When `SupportsStreamingForPrompt` rejects the dictionary prompt, a provider can still return
+true from `SupportsStreamingPreviewForPrompt`. The host then opens the live session without
+the prompt and uses it only for live text; after stopping it transcribes the complete
+recording with the dictionary for the final text. ElevenLabs uses this because its realtime
+API quotes transcripts with keyterms, and AssemblyAI for dictionaries beyond its streaming
+limits. Hosts that predate the member never call it, so such dictations keep the
+post-recording path without live text and no new minimum host version is needed.
+
 Deepgram uses `language=multi` for Auto in streaming, and the explicit language otherwise.
 
 Protocol references: [CloseStream](https://developers.deepgram.com/docs/close-stream),
