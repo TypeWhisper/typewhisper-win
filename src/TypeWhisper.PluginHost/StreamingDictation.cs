@@ -74,7 +74,10 @@ public sealed class StreamingDictation : IAsyncDisposable
                     // A preview stream runs without the prompt; the final text comes from the complete recording.
                     if (!engine.SupportsStreamingPreviewForPrompt(prompt)) throw new NotSupportedException("Live transcription is unavailable.");
                     prompt = null;
-                    Volatile.Write(ref _previewOnly, 1);
+                    // Publish the preview state before checking for a stop: FinishAsync sets _closed before it
+                    // reads _previewOnly, so either it cancels this preview or no connection opens after the stop.
+                    Interlocked.Exchange(ref _previewOnly, 1);
+                    if (Volatile.Read(ref _closed) != 0) return "";
                 }
                 using var connect = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 connect.CancelAfter(TimeSpan.FromSeconds(15));

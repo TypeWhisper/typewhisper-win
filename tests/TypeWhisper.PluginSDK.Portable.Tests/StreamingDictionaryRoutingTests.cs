@@ -87,14 +87,44 @@ public sealed class StreamingDictionaryRoutingTests
             try { return await use(engine.Object, ct); }
             finally { leaseReleased = true; }
         }, ["de"], _ => { }, () => { }, default, ["TypeWhisper"]);
-        stream.Append(new float[160]);
-        await firstAudio.Task.WaitAsync(TimeSpan.FromSeconds(2));
-        var finish = stream.FinishAsync(160);
-        await Task.Delay(100);
-        Assert.False(finish.IsCompleted);
-        release.SetResult();
+        try
+        {
+            stream.Append(new float[160]);
+            await firstAudio.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            var finish = stream.FinishAsync(160);
+            await Task.Delay(100);
+            Assert.False(finish.IsCompleted);
+            release.SetResult();
+            Assert.Null(await finish.WaitAsync(TimeSpan.FromSeconds(2)));
+            Assert.True(leaseReleased);
+        }
+        // A failed assertion must not leave stream disposal waiting for the gate.
+        finally { release.TrySetResult(); }
+    }
+
+    [Fact]
+    public async Task StoppingBeforeThePreviewIsClassifiedOpensNoConnection()
+    {
+        var engine = new Mock<ITranscriptionEnginePlugin>();
+        engine.SetupGet(e => e.SupportsStreaming).Returns(true);
+        engine.SetupGet(e => e.SupportsStreamingCompletion).Returns(true);
+        engine.SetupGet(e => e.SupportsDictionaryTerms).Returns(true);
+        engine.SetupGet(e => e.DictionaryTermsBudget).Returns(DictionaryTermsBudget.Default);
+        engine.Setup(e => e.SupportsStreamingForPrompt("TypeWhisper")).Returns(false);
+        engine.Setup(e => e.SupportsStreamingPreviewForPrompt("TypeWhisper")).Returns(true);
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var failed = false;
+        await using var stream = new StreamingDictation(async (use, ct) =>
+        {
+            await gate.Task;
+            return await use(engine.Object, ct);
+        }, ["de"], _ => { }, () => failed = true, default, ["TypeWhisper"]);
+        var finish = stream.FinishAsync();
+        gate.SetResult();
         Assert.Null(await finish.WaitAsync(TimeSpan.FromSeconds(2)));
-        Assert.True(leaseReleased);
+        Assert.False(failed);
+        engine.Verify(e => e.StartStreamingWithLanguageHintsAndPromptAsync(
+            It.IsAny<IReadOnlyList<string>>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never());
     }
 
     [Fact]
