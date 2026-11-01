@@ -108,6 +108,14 @@ public interface ITranscriptionEnginePlugin : ITypeWhisperPlugin
     bool SupportsStreamingForPrompt(string? prompt) => SupportsStreaming;
 
     /// <summary>
+    /// Whether the host may stream a dictation whose prompt <see cref="SupportsStreamingForPrompt"/> rejects,
+    /// only to show live preview text. The host then opens the stream without the prompt and transcribes the
+    /// complete recording with the prompt for the final text, so prompt terms are never lost.
+    /// Defaults to false; hosts that predate this member keep transcribing such dictations without preview.
+    /// </summary>
+    bool SupportsStreamingPreviewForPrompt(string? prompt) => false;
+
+    /// <summary>
     /// Opens a real-time streaming session (e.g. WebSocket). The host feeds PCM16 audio via the session.
     /// Only called when <see cref="SupportsStreaming"/> is true.
     /// </summary>

@@ -97,7 +97,7 @@ public sealed partial class DiagnosticLogFile
     {
         // Focus, target and capture state.
         ["accepted"] = Flag, ["current"] = Flag, ["empty"] = Flag, ["focusable"] = Flag, ["foreground"] = Flag,
-        ["originalElement"] = Flag, ["ownProcess"] = Flag, ["setup"] = Flag, ["streaming"] = Flag, ["target"] = Flag,
+        ["originalElement"] = Flag, ["ownProcess"] = Flag, ["previewOnly"] = Flag, ["setup"] = Flag, ["streaming"] = Flag, ["target"] = Flag,
         ["targetProcess"] = Flag, ["targetWindow"] = Flag, ["writable"] = Flag,
         // UI Automation control type ids and settings values.
         ["control"] = Number, ["retentionDays"] = Number,

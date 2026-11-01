@@ -14,8 +14,13 @@ internal sealed partial class LocalDictationSession
         var dictionary = _dictionarySnapshot is null ? null : await _dictionarySnapshot;
         var terms = PromptTermsFor(selection, dictionary?.EnabledTerms);
         // Judged again under the lease: the wait for the gate may have outlasted a text-policy change.
+        // A provider that cannot stream with the dictionary prompt may still offer a preview stream; the final
+        // text then comes from the complete recording with the dictionary (see StreamingDictation.IsPreviewOnly).
         var canStream = await PluginRuntime.UseTranscriptionAsync(selection, (engine, _) =>
-            Task.FromResult(engine.SupportsStreamingForPrompt(LanguageHintTranscription.CreateDictionaryPrompt(engine, PromptTermsFor(selection, terms)))), _operationCancellation.Token);
+        {
+            var prompt = LanguageHintTranscription.CreateDictionaryPrompt(engine, PromptTermsFor(selection, terms));
+            return Task.FromResult(engine.SupportsStreamingForPrompt(prompt) || engine.SupportsStreamingPreviewForPrompt(prompt));
+        }, _operationCancellation.Token);
         if (!canStream) return;
         var languages = _languageAtStart != "auto" ? new[] { _languageAtStart }
             : ActiveRegistryProvider.SupportsLanguageHints
