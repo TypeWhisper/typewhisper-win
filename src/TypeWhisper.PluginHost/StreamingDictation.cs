@@ -74,7 +74,10 @@ public sealed class StreamingDictation : IAsyncDisposable
                     // A preview stream runs without the prompt; the final text comes from the complete recording.
                     if (!engine.SupportsStreamingPreviewForPrompt(prompt)) throw new NotSupportedException("Live transcription is unavailable.");
                     prompt = null;
-                    Volatile.Write(ref _previewOnly, 1);
+                    // Publish the preview state before checking for a stop: FinishAsync sets _closed before it
+                    // reads _previewOnly, so either it cancels this preview or no connection opens after the stop.
+                    Interlocked.Exchange(ref _previewOnly, 1);
+                    if (Volatile.Read(ref _closed) != 0) return "";
                 }
                 using var connect = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 connect.CancelAfter(TimeSpan.FromSeconds(15));
@@ -129,10 +132,10 @@ public sealed class StreamingDictation : IAsyncDisposable
         Interlocked.Exchange(ref _closed, 1);
         if (IsPreviewOnly)
         {
-            // The final text comes from the complete recording, so the preview session just closes.
+            // The final text comes from the complete recording. Cancellation closes the session at once;
+            // waiting for it releases the provider lease before the host starts that decode.
             Cancel();
-            try { await _result.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false); }
-            catch (TimeoutException) { }
+            await _result.ConfigureAwait(false);
             return null;
         }
         if (expectedSamples is { } expected && expected != Interlocked.Read(ref _acceptedSamples))
