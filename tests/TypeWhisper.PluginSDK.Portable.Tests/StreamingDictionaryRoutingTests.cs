@@ -66,6 +66,38 @@ public sealed class StreamingDictionaryRoutingTests
     }
 
     [Fact]
+    public async Task StoppingAPreviewWaitsUntilTheSessionReleasedTheProvider()
+    {
+        var engine = new Mock<ITranscriptionEnginePlugin>();
+        engine.SetupGet(e => e.SupportsStreaming).Returns(true);
+        engine.SetupGet(e => e.SupportsStreamingCompletion).Returns(true);
+        engine.SetupGet(e => e.SupportsDictionaryTerms).Returns(true);
+        engine.SetupGet(e => e.DictionaryTermsBudget).Returns(DictionaryTermsBudget.Default);
+        engine.Setup(e => e.SupportsStreamingForPrompt("TypeWhisper")).Returns(false);
+        engine.Setup(e => e.SupportsStreamingPreviewForPrompt("TypeWhisper")).Returns(true);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var session = new Session { DisposeGate = release.Task };
+        engine.Setup(e => e.StartStreamingWithLanguageHintsAndPromptAsync(
+            It.IsAny<IReadOnlyList<string>>(), null, It.IsAny<CancellationToken>())).ReturnsAsync(session);
+        var firstAudio = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        session.Sent += () => firstAudio.TrySetResult();
+        var leaseReleased = false;
+        await using var stream = new StreamingDictation(async (use, ct) =>
+        {
+            try { return await use(engine.Object, ct); }
+            finally { leaseReleased = true; }
+        }, ["de"], _ => { }, () => { }, default, ["TypeWhisper"]);
+        stream.Append(new float[160]);
+        await firstAudio.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        var finish = stream.FinishAsync(160);
+        await Task.Delay(100);
+        Assert.False(finish.IsCompleted);
+        release.SetResult();
+        Assert.Null(await finish.WaitAsync(TimeSpan.FromSeconds(2)));
+        Assert.True(leaseReleased);
+    }
+
+    [Fact]
     public async Task ProviderWithoutPreviewSupportKeepsRejectingAPromptItCannotStream()
     {
         var engine = new Mock<ITranscriptionEnginePlugin>();
@@ -98,6 +130,7 @@ public sealed class StreamingDictionaryRoutingTests
             TranscriptReceived?.Invoke(new("Complete.", true));
             return Task.CompletedTask;
         }
-        public ValueTask DisposeAsync() { Disposed = true; return ValueTask.CompletedTask; }
+        public Task DisposeGate = Task.CompletedTask;
+        public async ValueTask DisposeAsync() { await DisposeGate; Disposed = true; }
     }
 }

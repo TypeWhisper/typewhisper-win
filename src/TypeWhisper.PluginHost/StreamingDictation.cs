@@ -129,10 +129,10 @@ public sealed class StreamingDictation : IAsyncDisposable
         Interlocked.Exchange(ref _closed, 1);
         if (IsPreviewOnly)
         {
-            // The final text comes from the complete recording, so the preview session just closes.
+            // The final text comes from the complete recording. Cancellation closes the session at once;
+            // waiting for it releases the provider lease before the host starts that decode.
             Cancel();
-            try { await _result.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false); }
-            catch (TimeoutException) { }
+            await _result.ConfigureAwait(false);
             return null;
         }
         if (expectedSamples is { } expected && expected != Interlocked.Read(ref _acceptedSamples))
