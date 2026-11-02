@@ -11,13 +11,15 @@ public sealed record ApplicationActivationRequest(string? Route, IReadOnlyList<s
     public string? SettingsCategory { get; init; }
     /// <summary>The row the page scrolls to, given as --page &lt;page&gt;/&lt;row key&gt; with a settings search key.</summary>
     public string? SettingsRowKey { get; init; }
+    /// <summary>The History entry to open, given as --history &lt;entry id&gt;.</summary>
+    public string? HistoryRecordId { get; init; }
     /// <summary>Only opens a window or a settings page: no files, account callback or error to handle.</summary>
     public bool OnlyNavigates => ShowWindow && Files.Count == 0 && AccountCallback is null && Error is null;
     /// <summary>Redacts authorization callback data from diagnostic output.</summary>
     public override string ToString() => $"Activation: {Route ?? "default"}; account callback: {AccountCallback is not null}";
     /// <summary>Maximum files in one activation.</summary>
     public const int MaximumFiles = 20;
-    private static readonly string[] Routes = ["--account", "--sync-backup", "--dashboard", "--statistics", "--dictionary", "--snippets", "--files", "--setup", "--compare-selects", "--settings"];
+    private static readonly string[] Routes = ["--account", "--sync-backup", "--dashboard", "--statistics", "--history", "--dictionary", "--snippets", "--files", "--setup", "--compare-selects", "--settings"];
     // Page names stay English and stable; the categories are the settings window's own.
     private static readonly Dictionary<string, string> SettingsPages = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -49,6 +51,7 @@ public sealed record ApplicationActivationRequest(string? Route, IReadOnlyList<s
         string? route = null;
         string? category = null;
         string? rowKey = null;
+        string? historyId = null;
         var paths = new List<string>();
         bool minimized = startup;
         for (int i = 0; i < args.Length; i++)
@@ -59,7 +62,15 @@ public sealed record ApplicationActivationRequest(string? Route, IReadOnlyList<s
             {
                 var next = value.ToLowerInvariant();
                 if (route is not null && route != next) return Failure(Loc.T("Choose one navigation destination per activation."));
-                route = next; continue;
+                route = next;
+                // "--history <entry id>" opens History on that entry.
+                if (next == "--history" && i + 1 < args.Length && !args[i + 1].StartsWith("--", StringComparison.Ordinal))
+                {
+                    var id = args[++i];
+                    if (id.Length is 0 or > 64 || !id.All(c => char.IsAsciiLetterOrDigit(c) || c == '-')) return Failure(Loc.T("Unknown activation argument: {0}", id));
+                    historyId = id;
+                }
+                continue;
             }
             if (value.Equals("--page", StringComparison.OrdinalIgnoreCase))
             {
@@ -100,7 +111,8 @@ public sealed record ApplicationActivationRequest(string? Route, IReadOnlyList<s
         }
         if (paths.Count > 0 && route is not null && route != "--files") return Failure(Loc.T("File activation cannot be combined with another destination."));
         return new(paths.Count > 0 ? "--files" : route, Array.AsReadOnly(paths.Distinct(StringComparer.OrdinalIgnoreCase).ToArray()), null,
-            paths.Count > 0 || route is not null || !minimized) { SettingsCategory = paths.Count > 0 ? null : category, SettingsRowKey = paths.Count > 0 ? null : rowKey };
+            paths.Count > 0 || route is not null || !minimized) { SettingsCategory = paths.Count > 0 ? null : category, SettingsRowKey = paths.Count > 0 ? null : rowKey,
+            HistoryRecordId = paths.Count > 0 ? null : historyId };
     }
 
     private static bool AbsoluteWindowsPath(string path) =>

@@ -148,7 +148,12 @@ public sealed partial class HistoryWindow
             Grid.SetRow(text, grid.RowDefinitions.Count - 1); Grid.SetColumn(text, 1);
             grid.Children.Add(name); grid.Children.Add(text);
         }
-        return new Expander { Header = Loc.T("Details"), Content = grid, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch };
+        var details = new Expander { Header = Loc.T("Details"), Content = grid, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch };
+#if DEBUG
+        // Screenshots of a test profile show the details without a click.
+        if (WinUIProfile.IsTestProfile && Environment.GetEnvironmentVariable("TYPEWHISPER_WINUI_HISTORY_DETAILS_OPEN") == "1") details.IsExpanded = true;
+#endif
+        return details;
     }
 
     private static UIElement FailureStrip(TranscriptionRecord record)
