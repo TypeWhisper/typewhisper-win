@@ -127,7 +127,6 @@
   "Add {0} entries": "{0} Einträge hinzufügen",
   "Add {0} shortcut": "Tastenkürzel für {0} hinzufügen",
   "Added {0} entries from {1}. Saved for the next dictation.": "{0} Einträge aus {1} hinzugefügt. Für das nächste Diktat gespeichert.",
-  "Adds typewhisper to your user PATH. Open a new terminal after installing.": "Fügt typewhisper deinem Benutzer-PATH hinzu. Öffne nach der Installation ein neues Terminal.",
   "Advanced": "Erweitert",
   "After 1 hour": "Nach 1 Stunde",
   "After 10 minutes": "Nach 10 Minuten",
@@ -3240,5 +3239,12 @@
   "Middle mouse button": "Mittlere Maustaste",
   "Mouse back button": "Maustaste Zurück",
   "Mouse forward button": "Maustaste Vorwärts",
-  "Mouse button shortcuts are unavailable (Windows error {0}). Restart TypeWhisper to retry.": "Tastenkürzel mit Maustasten sind nicht verfügbar (Windows-Fehler {0}). Starte TypeWhisper neu, um es erneut zu versuchen."
+  "Mouse button shortcuts are unavailable (Windows error {0}). Restart TypeWhisper to retry.": "Tastenkürzel mit Maustasten sind nicht verfügbar (Windows-Fehler {0}). Starte TypeWhisper neu, um es erneut zu versuchen.",
+  "Adds typewhisper to your user PATH and tab completion to your PowerShell profile. Open a new terminal after installing.": "Fügt typewhisper deinem Benutzer-PATH und die Tab-Vervollständigung deinem PowerShell-Profil hinzu. Öffne nach der Installation ein neues Terminal.",
+  "Installed. Open a new terminal to use typewhisper with PowerShell tab completion.": "Installiert. Öffne ein neues Terminal, um typewhisper mit Tab-Vervollständigung in PowerShell zu verwenden.",
+  "Installed. Open a new terminal to use typewhisper. PowerShell does not allow profile scripts, so tab completion was not added. The CLI documentation explains how to add it.": "Installiert. Öffne ein neues Terminal, um typewhisper zu verwenden. PowerShell erlaubt keine Profilskripte, daher wurde die Tab-Vervollständigung nicht hinzugefügt. Die CLI-Dokumentation erklärt, wie du sie einrichtest.",
+  "Installed. Open a new terminal to use typewhisper. PowerShell tab completion could not be set up: {0}": "Installiert. Öffne ein neues Terminal, um typewhisper zu verwenden. Die Tab-Vervollständigung für PowerShell konnte nicht eingerichtet werden: {0}",
+  "Installed. Open a new terminal to use typewhisper. {0} does not allow profile scripts, so it has no tab completion. The CLI documentation explains how to add it.": "Installiert. Öffne ein neues Terminal, um typewhisper zu verwenden. {0} erlaubt keine Profilskripte und hat daher keine Tab-Vervollständigung. Die CLI-Dokumentation erklärt, wie du sie einrichtest.",
+  "The PowerShell profile {0} is signed. Add the completion line yourself and sign the profile again.": "Das PowerShell-Profil {0} ist signiert. Füge die Zeile für die Vervollständigung selbst hinzu und signiere das Profil erneut.",
+  "The PowerShell profile {0} was downloaded from the internet, so PowerShell blocks it. Check and unblock it, then select Update.": "Das PowerShell-Profil {0} wurde aus dem Internet heruntergeladen, daher blockiert PowerShell es. Prüfe es, gib es frei und wähle dann Aktualisieren."
 }

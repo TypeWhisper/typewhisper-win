@@ -8,7 +8,7 @@ The `typewhisper` command controls the running Windows app through its [local HT
 2. Under **Settings > Advanced > HTTP API**, enable the server and select **Apply**. The server is off by default; the default port is `8978`.
 3. Open a new terminal and run `typewhisper status`.
 
-Installation copies the bundled CLI to `%LOCALAPPDATA%\TypeWhisper\1.1\Cli` and adds that directory to your user PATH. It does not require administrator access. If an older command takes precedence, inspect `Get-Command typewhisper -All` in PowerShell or invoke the new executable directly:
+Installation copies the bundled CLI to `%LOCALAPPDATA%\TypeWhisper\1.1\Cli`, adds that directory to your user PATH and sets up [PowerShell completion](#shell-completion). It does not require administrator access. If an older command takes precedence, inspect `Get-Command typewhisper -All` in PowerShell or invoke the new executable directly:
 
 ```powershell
 & "$env:LOCALAPPDATA\TypeWhisper\1.1\Cli\typewhisper.exe" status
@@ -82,6 +82,42 @@ typewhisper transcribe - < audio.wav
 typewhisper transcribe < audio.wav
 ```
 
+## Shell completion
+
+`typewhisper completions <shell>` prints a completion script for `powershell`, `bash`, `zsh` or `fish` to stdout. It works without a running app or HTTP API server.
+
+**Install** and **Update** under **Settings > Advanced > Command Line Tool** set up PowerShell completion automatically. They add a marked block to the all-hosts profile (`$PROFILE.CurrentUserAllHosts`) of Windows PowerShell 5.1 and, if installed, PowerShell 7. The block loads the completion from the installed `typewhisper.exe` and does nothing if that file is missing. **Remove** deletes the block again, and deletes a profile that only contained it. The rest of the profile stays unchanged. A signed profile is never changed, because the block would void its signature; add the line yourself and sign the profile again. A profile marked as downloaded from the internet stays unchanged too, because PowerShell blocks it; check and unblock it, then select **Update**.
+
+A profile only loads when the execution policy allows local scripts. Windows PowerShell 5.1 refuses them by default. If a profile does not exist yet and its policy would refuse it, TypeWhisper does not create it, because PowerShell would show an error in every session. The status after installing names the PowerShell that got no completion. Allow local scripts and select **Update**:
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+```
+
+To load the completion yourself, for example for the current session only:
+
+```powershell
+typewhisper completions powershell | Out-String | Invoke-Expression
+```
+
+Git Bash, MSYS2 and other shells:
+
+```bash
+# bash: add to ~/.bashrc
+source <(typewhisper completions bash)
+# zsh: add to ~/.zshrc after compinit
+source <(typewhisper completions zsh)
+```
+
+```fish
+# fish: save once
+typewhisper completions fish > ~/.config/fish/completions/typewhisper.fish
+```
+
+The scripts complete commands, subcommands and options, and only offer options where the command accepts them, for example `--workflow` after `dictation start` or `--query` after `history`. Audio and backup arguments complete file paths, and `--profile` completes directories. `--task` offers `transcribe` and `translate`.
+
+`--engine` and `--model` complete IDs from the running app's `GET /v1/models`. `--model` only lists the models of the engine already given with `--engine`. The lookup respects `--dev`, `--profile`, `--port` and `--api-token` from the line being completed, waits at most 1.5 seconds and offers nothing when the app or API server is not available. IDs that contain spaces or shell syntax are not offered. The scripts use the hidden helper `typewhisper __complete engines` and `typewhisper __complete models [--engine <id>]`, which print one ID per line.
+
 ## Output and limits
 
 - `--json` writes the API response as JSON to stdout; export instead returns `{ "file": "<absolute destination>", "bytes": <byte count> }`, matching the Mac CLI. Plain transcription and `last` output print the text. Errors go to stderr.
@@ -110,4 +146,5 @@ Compared with the Mac source at commit [`357fe6f`](https://github.com/TypeWhispe
 | Profiles | Both accept `--dev`. Mac normally discovers Production; an unbound Windows CLI checks Production before WinUI Dev. Windows additionally supports `--profile`, `TYPEWHISPER_PROFILE`, and an installed profile binding. `--dev` explicitly selects each platform's development profile. | [Windows discovery](../src/TypeWhisper.Cli/CliSupport.cs), [Mac discovery](https://github.com/TypeWhisper/typewhisper-mac/blob/357fe6f70a463ae376e485e5c1ef4f4d24db2c1e/typewhisper-cli/PortDiscovery.swift) |
 | Authentication | Both support `--api-token`, `TYPEWHISPER_API_TOKEN`, and discovery. Windows only forwards a discovery token to its matching port and respects optional authentication. | [Windows discovery](../src/TypeWhisper.Cli/CliSupport.cs), [Mac commands](https://github.com/TypeWhisper/typewhisper-mac/blob/357fe6f70a463ae376e485e5c1ef4f4d24db2c1e/typewhisper-cli/main.swift) |
 | Installation | Mac creates an administrator-authorized `/usr/local/bin/typewhisper` symlink into its app bundle, following app updates. Windows copies a user-local bundle, manages its user PATH entry and profile binding, and offers an explicit Update action. Check command precedence if another installation already exists. | [Windows installer](../src/TypeWhisper.Presentation/CliInstallation.cs), [Mac installation](https://github.com/TypeWhisper/typewhisper-mac/blob/357fe6f70a463ae376e485e5c1ef4f4d24db2c1e/TypeWhisper/Views/AdvancedSettingsView.swift#L702) |
+| Shell completion | Windows provides `typewhisper completions <powershell\|bash\|zsh\|fish>` and the hidden `__complete engines\|models` helper for live engine and model IDs, following the design planned for the Mac CLI in [typewhisper-mac#1803](https://github.com/TypeWhisper/typewhisper-mac/issues/1803). Windows adds PowerShell; the completed commands and options follow each platform's command set. | [Windows completions](../src/TypeWhisper.Cli/CliCompletions.cs) |
 | Backup results | Export output is shared. Import summaries and backup contents follow each platform's API; Windows may acknowledge a restart with HTTP 202 before the restore completes. | [Windows commands](../src/TypeWhisper.Cli/Program.cs), [Mac formatter](https://github.com/TypeWhisper/typewhisper-mac/blob/357fe6f70a463ae376e485e5c1ef4f4d24db2c1e/typewhisper-cli/OutputFormatter.swift) |
