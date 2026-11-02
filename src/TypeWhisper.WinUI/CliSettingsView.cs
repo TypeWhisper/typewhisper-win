@@ -25,7 +25,7 @@ internal sealed class CliSettingsView : UserControl
             Loc.T("Use typewhisper from your terminal. Commands that connect to TypeWhisper require its HTTP API to be running. Installation adds it to your user PATH. Open a new terminal after installing. If an older CLI appears earlier in PATH, Windows will still use that version. You can run this version directly:\n{0}",
             installation.GetState().InstallPath), actions);
         body.Children.Add(command);
-        ToolTipService.SetToolTip(install, Loc.T("Adds typewhisper to your user PATH. Open a new terminal after installing."));
+        ToolTipService.SetToolTip(install, Loc.T("Adds typewhisper to your user PATH and tab completion to your PowerShell profile. Open a new terminal after installing."));
         var exampleList = new StackPanel { Spacing = 10 };
         var examples = new SettingsRow().Set(Loc.T("PowerShell examples"), "",
             Loc.T("Copy a command into a new PowerShell terminal. Enable the HTTP API under API server first. Replace the example audio path with your own file."));
@@ -64,6 +64,14 @@ internal sealed class CliSettingsView : UserControl
         Example(Loc.T("Copy to clipboard"), @"typewhisper transcribe ""C:\Audio\recording.wav"" | Set-Clipboard");
         Example(Loc.T("Last transcript"), "typewhisper last");
         Example(Loc.T("List models"), "typewhisper models");
+        var refreshes = 0;
+        async Task ShowUpdateIfNeededAsync(int refresh)
+        {
+            bool needed;
+            try { needed = await Task.Run(installation.NeedsUpdate); }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { needed = true; }
+            if (refresh == refreshes) install.Visibility = needed ? Visibility.Visible : Visibility.Collapsed;
+        }
         void Refresh(string? message = null)
         {
             var state = installation.GetState();
@@ -72,6 +80,11 @@ internal sealed class CliSettingsView : UserControl
             documentation.NavigateUri = new Uri("https://www.typewhisper.com/en/docs/windows/cli/");
             install.Content = state.Installed ? Loc.T("Update") : Loc.T("Install");
             install.IsEnabled = state.Bundled;
+            // An installed CLI offers Update only when it would change something. The check hashes the bundle,
+            // so the button stays hidden until the background check says so.
+            var refresh = ++refreshes;
+            install.Visibility = state.Installed ? Visibility.Collapsed : Visibility.Visible;
+            if (state.Installed && state.Bundled) _ = ShowUpdateIfNeededAsync(refresh);
             remove.IsEnabled = state.CanRemove;
             remove.Visibility = state.CanRemove ? Visibility.Visible : Visibility.Collapsed;
             command.Description = message ?? (state.Installed
@@ -81,10 +94,21 @@ internal sealed class CliSettingsView : UserControl
         async Task RunAsync(bool installing)
         {
             install.IsEnabled = remove.IsEnabled = false;
+            refreshes++;
             try
             {
-                await Task.Run(() => { if (installing) installation.Install(); else installation.Remove(); });
-                Refresh(installing ? Loc.T("Installed. Open a new terminal to use typewhisper.") : Loc.T("Removed."));
+                PowerShellCompletionSetup? completion = null;
+                await Task.Run(() => { if (installing) completion = installation.Install(); else installation.Remove(); });
+                Refresh(!installing ? Loc.T("Removed.") : completion switch
+                {
+                    { Error: { } error } => Loc.T("Installed. Open a new terminal to use typewhisper. PowerShell tab completion could not be set up: {0}", error),
+                    // Windows Terminal opens Windows PowerShell 5.1 by default, so a refused edition must not go unmentioned.
+                    { Added.Count: > 0, BlockedByPolicy: [var blocked, ..] } => Loc.T("Installed. Open a new terminal to use typewhisper. {0} does not allow profile scripts, so it has no tab completion. The CLI documentation explains how to add it.",
+                        blocked == PowerShellEdition.Windows ? "Windows PowerShell" : "PowerShell 7"),
+                    { Added.Count: > 0 } => Loc.T("Installed. Open a new terminal to use typewhisper with PowerShell tab completion."),
+                    { BlockedByPolicy.Count: > 0 } => Loc.T("Installed. Open a new terminal to use typewhisper. PowerShell does not allow profile scripts, so tab completion was not added. The CLI documentation explains how to add it."),
+                    _ => Loc.T("Installed. Open a new terminal to use typewhisper.")
+                });
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {

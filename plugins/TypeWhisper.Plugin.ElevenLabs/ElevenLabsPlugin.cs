@@ -38,24 +38,31 @@ public sealed partial class ElevenLabsPlugin : ITranscriptionEnginePlugin, IApiK
         MaxCharsPerTerm: 49,
         MaxWordsPerTerm: 5);
 
+    internal const string MedicalModelId = "scribe_v2_medical";
+
+    // Scribe v2 Medical is a batch model with Scribe v2's request shape and price; it has no realtime variant.
     private static readonly IReadOnlyList<ElevenLabsModelEntry> ModelEntries =
     [
         new(DefaultModelId, "Scribe v2", "scribe_v2", "scribe_v2_realtime"),
+        new(MedicalModelId, "Scribe v2 Medical", MedicalModelId, RealtimeModelId: null),
     ];
 
+    // Scribe's documented languages and the further codes its API accepts.
+    // It rejects "jw", "haw" and "vo"; Javanese is "jv".
     private static readonly IReadOnlyList<string> Languages =
     [
-        "af", "am", "ar", "as", "az", "ba", "be", "bg", "bn", "bo",
-        "br", "bs", "ca", "cs", "cy", "da", "de", "el", "en", "es",
-        "et", "eu", "fa", "fi", "fo", "fr", "gl", "gu", "ha", "haw",
-        "he", "hi", "hr", "ht", "hu", "hy", "id", "is", "it", "ja",
-        "jw", "ka", "kk", "km", "kn", "ko", "la", "lb", "ln", "lo",
-        "lt", "lv", "mg", "mi", "mk", "ml", "mn", "mr", "ms", "mt",
-        "my", "ne", "nl", "nn", "no", "oc", "pa", "pl", "ps", "pt",
+        "af", "am", "ar", "as", "ast", "az", "ba", "be", "bg", "bn",
+        "bo", "br", "bs", "ca", "ceb", "cs", "cy", "da", "de", "el",
+        "en", "es", "et", "eu", "fa", "fi", "fo", "fr", "ga", "gl",
+        "gu", "ha", "he", "hi", "hr", "ht", "hu", "hy", "id", "ig",
+        "is", "it", "ja", "jv", "ka", "kea", "kk", "km", "kn", "ko",
+        "ku", "ky", "la", "lb", "lg", "ln", "lo", "lt", "luo", "lv",
+        "mg", "mi", "mk", "ml", "mn", "mr", "ms", "mt", "my", "ne",
+        "nl", "nn", "no", "nso", "oc", "or", "pa", "pl", "ps", "pt",
         "ro", "ru", "sa", "sd", "si", "sk", "sl", "sn", "so", "sq",
         "sr", "su", "sv", "sw", "ta", "te", "tg", "th", "tk", "tl",
-        "tr", "tt", "uk", "ur", "uz", "vi", "vo", "yi", "yo", "yue",
-        "zh",
+        "tr", "tt", "uk", "umb", "ur", "uz", "vi", "wo", "xh", "yi",
+        "yo", "yue", "zh", "zu",
     ];
 
     private readonly HttpClient _httpClient;
@@ -94,7 +101,7 @@ public sealed partial class ElevenLabsPlugin : ITranscriptionEnginePlugin, IApiK
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.1.2";
+    public string PluginVersion => "1.2.0";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
@@ -144,7 +151,7 @@ public sealed partial class ElevenLabsPlugin : ITranscriptionEnginePlugin, IApiK
     /// Gets the transcription models exposed by this provider.
     /// </summary>
     public IReadOnlyList<PluginModelInfo> TranscriptionModels { get; } =
-        ModelEntries.Select(m => new PluginModelInfo(m.Id, m.DisplayName) { IsRecommended = true, LanguageCodes = Languages, LanguageCount = Languages.Count }).ToList();
+        ModelEntries.Select(m => new PluginModelInfo(m.Id, m.DisplayName) { IsRecommended = m.Id == DefaultModelId, LanguageCodes = Languages, LanguageCount = Languages.Count }).ToList();
 
     /// <summary>
     /// Gets the currently selected provider model identifier.
@@ -158,7 +165,9 @@ public sealed partial class ElevenLabsPlugin : ITranscriptionEnginePlugin, IApiK
     /// <summary>
     /// Gets whether the provider supports live streaming transcription.
     /// </summary>
-    public bool SupportsStreaming => _transcriptionMode == ElevenLabsTranscriptionMode.Automatic && !_tagAudioEvents && _speakerCount == 1;
+    public bool SupportsStreaming =>
+        _transcriptionMode == ElevenLabsTranscriptionMode.Automatic && !_tagAudioEvents && _speakerCount == 1
+        && ModelStreams(_selectedModelId);
     /// <inheritdoc />
     public bool SupportsStreamingCompletion => true;
     /// <inheritdoc />
@@ -178,6 +187,13 @@ public sealed partial class ElevenLabsPlugin : ITranscriptionEnginePlugin, IApiK
     public bool SupportsStreamingForPrompt(string? prompt) =>
         SupportsStreaming && ExtractKeyterms(prompt).Count == 0;
     /// <summary>
+    /// Realtime accepts keyterms, but with them it often wraps the whole transcript in quotation marks.
+    /// With dictionary terms the live stream therefore runs without them as a preview, and the batch API
+    /// transcribes the complete recording with the terms for the final text.
+    /// </summary>
+    public bool SupportsStreamingPreviewForPrompt(string? prompt) =>
+        SupportsStreaming && ExtractKeyterms(prompt).Count > 0;
+    /// <summary>
     /// Gets the language codes accepted by the provider.
     /// </summary>
     public IReadOnlyList<string> SupportedLanguages => Languages;
@@ -188,8 +204,11 @@ public sealed partial class ElevenLabsPlugin : ITranscriptionEnginePlugin, IApiK
     public void SelectModel(string modelId)
     {
         var entry = ResolveModelEntry(modelId);
+        var streamedBefore = SupportsStreaming;
         _host?.SetSetting(SelectedModelSettingName, entry.Id);
         _selectedModelId = entry.Id;
+        if (SupportsStreaming != streamedBefore)
+            _host?.NotifyCapabilitiesChanged();
     }
 
     /// <summary>
@@ -216,6 +235,7 @@ public sealed partial class ElevenLabsPlugin : ITranscriptionEnginePlugin, IApiK
         if (NormalizeLanguage(language) is { } normalizedLanguage)
             form.Add(new StringContent(normalizedLanguage), "language_code");
 
+        form.Add(new StringContent("word"), "timestamps_granularity");
         form.Add(new StringContent(FormatBoolean(_tagAudioEvents)), "tag_audio_events");
         form.Add(new StringContent(FormatBoolean(_noVerbatim)), "no_verbatim");
 
@@ -228,7 +248,7 @@ public sealed partial class ElevenLabsPlugin : ITranscriptionEnginePlugin, IApiK
         request.Content = form;
 
         using var response = await SendAsync(request, ct);
-        ThrowIfRejected(response);
+        await ThrowIfRejectedAsync(response, ct);
         var json = await response.Content.ReadAsStringAsync(ct);
         ct.ThrowIfCancellationRequested();
         return ParseRestResponse(json, NormalizeLanguage(language));
@@ -247,7 +267,7 @@ public sealed partial class ElevenLabsPlugin : ITranscriptionEnginePlugin, IApiK
         var entry = ResolveModelEntry(_selectedModelId);
         return await ElevenLabsStreamingSession.ConnectAsync(
             _apiKey!,
-            entry.RealtimeModelId,
+            entry.RealtimeModelId!,
             NormalizeLanguage(language),
             _noVerbatim,
             ct);
@@ -287,21 +307,54 @@ public sealed partial class ElevenLabsPlugin : ITranscriptionEnginePlugin, IApiK
             var body = await response.Content.ReadAsStringAsync(ct);
             if (IsUserReadPermissionOnly(body))
                 throw new PluginRequestException("The key is saved, but speech access could not be verified because user_read is disabled. Try a dictation to verify Speech-to-Text access.", PluginRequestFailureKind.Configuration);
+            ThrowUnauthorized(body);
         }
-        ThrowIfRejected(response);
+        await ThrowIfRejectedAsync(response, ct);
     }
 
     internal static bool IsUserReadPermissionOnly(string json)
     {
+        var (status, message) = ReadErrorDetail(json);
+        return status == "missing_permissions"
+            && string.Equals(message?.Trim(),
+                "The API key you used is missing the permission user_read to execute this operation.", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static (string? Status, string? Message) ReadErrorDetail(string json)
+    {
         try
         {
             using var doc = JsonDocument.Parse(json);
-            var detail = doc.RootElement.GetProperty("detail");
-            return detail.GetProperty("status").GetString() == "missing_permissions"
-                && string.Equals(detail.GetProperty("message").GetString()?.Trim(),
-                    "The API key you used is missing the permission user_read to execute this operation.", StringComparison.OrdinalIgnoreCase);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object
+                || !doc.RootElement.TryGetProperty("detail", out var detail)
+                || detail.ValueKind != JsonValueKind.Object)
+            {
+                return (null, null);
+            }
+
+            return (
+                detail.TryGetProperty("status", out var status) && status.ValueKind == JsonValueKind.String ? status.GetString() : null,
+                detail.TryGetProperty("message", out var message) && message.ValueKind == JsonValueKind.String ? message.GetString() : null);
         }
-        catch (Exception ex) when (ex is JsonException or InvalidOperationException or KeyNotFoundException) { return false; }
+        catch (JsonException) { return (null, null); }
+    }
+
+    // ElevenLabs answers HTTP 401 not only for a wrong key but also when the key's own credit
+    // quota is used up or it lacks a permission. Provider texts are not passed on; the status
+    // selects a fixed message instead of reporting every 401 as an invalid key.
+    private static void ThrowUnauthorized(string body)
+    {
+        var (status, _) = ReadErrorDetail(body);
+        throw status switch
+        {
+            "quota_exceeded" => new PluginRequestException(
+                "This ElevenLabs API key has used up its credit quota. Raise the key's limit or add credits in your ElevenLabs account.",
+                PluginRequestFailureKind.Permission, 401),
+            "missing_permissions" => new PluginRequestException(
+                "This ElevenLabs API key lacks the Speech to Text permission.",
+                PluginRequestFailureKind.Permission, 401),
+            _ => new PluginRequestException("ElevenLabs rejected the API key.", PluginRequestFailureKind.Authentication, 401),
+        };
     }
 
     private async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
@@ -313,10 +366,12 @@ public sealed partial class ElevenLabsPlugin : ITranscriptionEnginePlugin, IApiK
         { throw new PluginRequestException("Could not reach ElevenLabs.", PluginRequestFailureKind.Network); }
     }
 
-    private static void ThrowIfRejected(HttpResponseMessage response)
+    private static async Task ThrowIfRejectedAsync(HttpResponseMessage response, CancellationToken ct)
     {
         if (response.IsSuccessStatusCode) return;
         var status = (int)response.StatusCode;
+        if (status == 401)
+            ThrowUnauthorized(await response.Content.ReadAsStringAsync(ct));
         var kind = status switch
         {
             401 => PluginRequestFailureKind.Authentication, 403 => PluginRequestFailureKind.Permission,
@@ -382,43 +437,65 @@ public sealed partial class ElevenLabsPlugin : ITranscriptionEnginePlugin, IApiK
         var text = root.TryGetProperty("text", out var textEl)
             ? textEl.GetString()?.Trim() ?? ""
             : "";
-        var detectedLanguage = root.TryGetProperty("language_code", out var langEl)
-            ? langEl.GetString()
+        var detectedLanguage = root.TryGetProperty("language_code", out var langEl) && langEl.ValueKind == JsonValueKind.String
+            ? ElevenLabsLanguageCode.AppCode(langEl.GetString()) ?? fallbackLanguage
             : fallbackLanguage;
 
-        var duration = 0.0;
-        var segments = new List<PluginTranscriptionSegment>();
+        var entries = new List<ElevenLabsTranscriptEntry>();
         if (root.TryGetProperty("words", out var wordsEl) && wordsEl.ValueKind == JsonValueKind.Array)
         {
             foreach (var wordEl in wordsEl.EnumerateArray())
             {
-                if (wordEl.TryGetProperty("type", out var typeEl)
-                    && !string.Equals(typeEl.GetString(), "word", StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                var wordText = wordEl.TryGetProperty("text", out var wordTextEl)
-                    ? wordTextEl.GetString() ?? ""
-                    : "";
-
-                if (string.IsNullOrWhiteSpace(wordText)
-                    || !TryGetDouble(wordEl, "start", out var start)
-                    || !TryGetDouble(wordEl, "end", out var end)
-                    || !double.IsFinite(start) || !double.IsFinite(end) || start < 0 || end < start)
-                {
-                    continue;
-                }
-
-                segments.Add(new PluginTranscriptionSegment(wordText, start, end));
-                duration = Math.Max(duration, end);
+                if (ReadEntry(wordEl) is { } entry)
+                    entries.Add(entry);
             }
         }
 
+        var segments = ElevenLabsSegmentBuilder.Build(entries);
+        var duration = segments.Count == 0 ? 0 : segments.Max(segment => segment.End);
         return new PluginTranscriptionResult(text, detectedLanguage, duration, NoSpeechProbability: null)
         {
             Segments = segments
         };
+    }
+
+    // Scribe returns one entry per word, per space between words and per tagged audio event.
+    // Entries with missing or inconsistent times are dropped; spacing keeps its text so the
+    // segment texts join to the transcript.
+    private static ElevenLabsTranscriptEntry? ReadEntry(JsonElement element)
+    {
+        if (element.ValueKind != JsonValueKind.Object
+            || !element.TryGetProperty("text", out var textEl)
+            || textEl.ValueKind != JsonValueKind.String)
+        {
+            return null;
+        }
+
+        var kind = element.TryGetProperty("type", out var typeEl) && typeEl.ValueKind == JsonValueKind.String
+            ? typeEl.GetString() switch
+            {
+                "spacing" => ElevenLabsEntryKind.Spacing,
+                "audio_event" => ElevenLabsEntryKind.AudioEvent,
+                "word" => ElevenLabsEntryKind.Word,
+                _ => (ElevenLabsEntryKind?)null,
+            }
+            : ElevenLabsEntryKind.Word;
+        if (kind is null)
+            return null;
+
+        var text = textEl.GetString() ?? "";
+        if (kind == ElevenLabsEntryKind.Spacing)
+            return new(kind.Value, text, 0, 0);
+
+        if (string.IsNullOrWhiteSpace(text)
+            || !TryGetDouble(element, "start", out var start)
+            || !TryGetDouble(element, "end", out var end)
+            || !double.IsFinite(start) || !double.IsFinite(end) || start < 0 || end < start)
+        {
+            return null;
+        }
+
+        return new(kind.Value, text, start, end);
     }
 
     internal static IReadOnlyList<string> ExtractKeyterms(string? prompt)
@@ -460,6 +537,9 @@ public sealed partial class ElevenLabsPlugin : ITranscriptionEnginePlugin, IApiK
         string.IsNullOrWhiteSpace(language) || language.Equals("auto", StringComparison.OrdinalIgnoreCase)
             ? null
             : language;
+
+    internal static bool ModelStreams(string? modelId) =>
+        ModelEntries.FirstOrDefault(m => m.Id == modelId)?.RealtimeModelId is not null;
 
     private static string NormalizeModelId(string? modelId) =>
         ModelEntries.Any(m => m.Id == modelId) ? modelId! : DefaultModelId;
@@ -504,5 +584,5 @@ public sealed partial class ElevenLabsPlugin : ITranscriptionEnginePlugin, IApiK
         string Id,
         string DisplayName,
         string RestModelId,
-        string RealtimeModelId);
+        string? RealtimeModelId);
 }

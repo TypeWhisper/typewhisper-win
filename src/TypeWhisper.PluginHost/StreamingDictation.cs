@@ -13,9 +13,16 @@ public sealed class StreamingDictation : IAsyncDisposable
     private readonly Task<string?> _result;
     private int _closed;
     private int _inputFailed;
+    private int _previewOnly;
     private long _acceptedSamples;
     /// <summary>Unambiguous language reported by a finalized segment.</summary>
     public string? DetectedLanguage { get; private set; }
+
+    /// <summary>
+    /// True once the provider accepted the stream only as a preview for the dictionary prompt. The stream then
+    /// never supplies the final text: <see cref="FinishAsync"/> returns null without reporting a failure.
+    /// </summary>
+    public bool IsPreviewOnly => Volatile.Read(ref _previewOnly) != 0;
 
     /// <summary>
     /// The callback must retain the provider for the entire streaming operation. <paramref name="promptAllowed"/> is
@@ -58,10 +65,20 @@ public sealed class StreamingDictation : IAsyncDisposable
     {
         try
         {
-            return await use(async (engine, ct) =>
+            var streamed = await use(async (engine, ct) =>
             {
                 var prompt = promptAllowed?.Invoke() == false ? null : LanguageHintTranscription.CreateDictionaryPrompt(engine, dictionaryTerms);
-                if (!engine.SupportsStreaming || !engine.SupportsStreamingCompletion || !engine.SupportsStreamingForPrompt(prompt)) throw new NotSupportedException("Live transcription is unavailable.");
+                if (!engine.SupportsStreaming || !engine.SupportsStreamingCompletion) throw new NotSupportedException("Live transcription is unavailable.");
+                if (!engine.SupportsStreamingForPrompt(prompt))
+                {
+                    // A preview stream runs without the prompt; the final text comes from the complete recording.
+                    if (!engine.SupportsStreamingPreviewForPrompt(prompt)) throw new NotSupportedException("Live transcription is unavailable.");
+                    prompt = null;
+                    // Publish the preview state before checking for a stop: FinishAsync sets _closed before it
+                    // reads _previewOnly, so either it cancels this preview or no connection opens after the stop.
+                    Interlocked.Exchange(ref _previewOnly, 1);
+                    if (Volatile.Read(ref _closed) != 0) return "";
+                }
                 using var connect = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 connect.CancelAfter(TimeSpan.FromSeconds(15));
                 await using var session = await engine.StartStreamingWithLanguageHintsAndPromptAsync(languages, prompt, connect.Token).ConfigureAwait(false);
@@ -81,10 +98,13 @@ public sealed class StreamingDictation : IAsyncDisposable
                 {
                     await foreach (var pcm in _audio.Reader.ReadAllAsync(ct).ConfigureAwait(false))
                     {
+                        // A stopped preview has nothing left to show; skip the remaining backlog.
+                        if (IsPreviewOnly && Volatile.Read(ref _closed) != 0) return "";
                         using var send = CancellationTokenSource.CreateLinkedTokenSource(ct);
                         send.CancelAfter(TimeSpan.FromSeconds(10));
                         await session.SendAudioAsync(pcm, send.Token).ConfigureAwait(false);
                     }
+                    if (IsPreviewOnly) return "";
                     using var finish = CancellationTokenSource.CreateLinkedTokenSource(ct);
                     finish.CancelAfter(TimeSpan.FromSeconds(15));
                     await session.FinalizeAsync(finish.Token).ConfigureAwait(false);
@@ -93,6 +113,8 @@ public sealed class StreamingDictation : IAsyncDisposable
                 }
                 finally { session.TranscriptReceived -= OnTranscript; }
             }, _cancel.Token).ConfigureAwait(false);
+            // A preview never supplies the final text.
+            return IsPreviewOnly ? null : streamed;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -101,10 +123,21 @@ public sealed class StreamingDictation : IAsyncDisposable
         }
     }
 
-    /// <summary>Drains every accepted chunk and the final provider response. Null requires full-recording fallback.</summary>
+    /// <summary>
+    /// Drains every accepted chunk and the final provider response. Null requires full-recording fallback,
+    /// which is always the case for a preview-only stream.
+    /// </summary>
     public async Task<string?> FinishAsync(int? expectedSamples = null)
     {
         Interlocked.Exchange(ref _closed, 1);
+        if (IsPreviewOnly)
+        {
+            // The final text comes from the complete recording. Cancellation closes the session at once;
+            // waiting for it releases the provider lease before the host starts that decode.
+            Cancel();
+            await _result.ConfigureAwait(false);
+            return null;
+        }
         if (expectedSamples is { } expected && expected != Interlocked.Read(ref _acceptedSamples))
             FailInput();
         else _audio.Writer.TryComplete();

@@ -1062,7 +1062,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             var rawDuration = (samples?.Length ?? 0) / 16000.0;
             var captureDecision = ShortClipCapturePolicy.Classify(rawDuration, preGainPeakRms,
                 _hasConfirmedPreviewText, _textAtStart.TranscribeShortQuietClipsAggressively);
-            AppDiagnostics.Write($"dictation.captured decision={captureDecision} streaming={_cloudStream is not null}");
+            AppDiagnostics.Write($"dictation.captured decision={captureDecision} streaming={_cloudStream is not null} previewOnly={_cloudStream?.IsPreviewOnly == true}");
             if (samples is null || captureDecision == ShortClipCaptureDecision.TooShort)
             { SetStatus(Loc.T("Recording was too short. Hold the shortcut a little longer.")); return; }
             if (captureDecision == ShortClipCaptureDecision.NoSpeech)

@@ -146,6 +146,45 @@ public sealed class CliInstallationTests : IDisposable
     }
 
     [Fact]
+    public void UpdateIsNeededOnlyWhenInstallWouldChangeSomething()
+    {
+        var service = Service();
+        Assert.False(service.NeedsUpdate());
+        service.Install();
+        Assert.False(service.NeedsUpdate());
+
+        File.WriteAllText(Path.Join(_bundle, "typewhisper.exe"), "new cli");
+        Assert.True(service.NeedsUpdate());
+        service.Install();
+        Assert.False(service.NeedsUpdate());
+
+        File.WriteAllText(Path.Join(_bundle, "extra.dll"), "new file");
+        Assert.True(service.NeedsUpdate());
+        service.Install();
+        Assert.False(service.NeedsUpdate());
+
+        File.Delete(Path.Join(_install, "typewhisper.runtimeconfig.json"));
+        Assert.True(service.NeedsUpdate());
+        service.Install();
+
+        _userPath = "C:\\Other";
+        Assert.True(service.NeedsUpdate());
+        service.Install();
+        Assert.False(service.NeedsUpdate());
+
+        // Another profile's app shares the folder; updating from it moves the binding there.
+        Assert.True(new CliInstallation(_bundle, _install, () => _userPath, value => _userPath = value, Path.Join(_root, "other-profile")).NeedsUpdate());
+    }
+
+    [Fact]
+    public void UpdateStaysOfferedForAnInstallationWithoutRecord()
+    {
+        Directory.CreateDirectory(_install);
+        File.WriteAllText(Path.Join(_install, "typewhisper.exe"), "cli");
+        Assert.True(Service().NeedsUpdate());
+    }
+
+    [Fact]
     public void PreexistingPathIsNotRemoved()
     {
         _userPath += ";\"" + _install.ToUpperInvariant() + "\\\"";
