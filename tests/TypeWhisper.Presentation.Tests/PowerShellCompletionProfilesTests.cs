@@ -261,6 +261,29 @@ public sealed class PowerShellCompletionProfilesTests : IDisposable
     }
 
     [Fact]
+    public void LinkedProfilesAreChangedAtTheirTargetAndKept()
+    {
+        var target = Path.Join(_root, "dotfiles", "profile.ps1");
+        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+        File.WriteAllText(target, "");
+        Directory.CreateDirectory(Path.GetDirectoryName(CoreProfile)!);
+        try { File.CreateSymbolicLink(CoreProfile, target); }
+        // Windows without Developer Mode or elevation cannot create symbolic links; there is nothing to check then.
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return; }
+        var executable = Path.Join(_stable, "typewhisper.exe");
+        var service = Service();
+
+        service.Register(executable);
+
+        Assert.NotNull(new FileInfo(CoreProfile).LinkTarget);
+        Assert.Contains(executable, File.ReadAllText(target));
+        Assert.False(service.NeedsRegistration(executable));
+        Assert.Null(service.Unregister(_stable));
+        Assert.NotNull(new FileInfo(CoreProfile).LinkTarget);
+        Assert.Equal("", File.ReadAllText(target));
+    }
+
+    [Fact]
     public void RegistrationIsNeededOnlyWhereRegisterWouldChangeAProfile()
     {
         var executable = Path.Join(_stable, "typewhisper.exe");

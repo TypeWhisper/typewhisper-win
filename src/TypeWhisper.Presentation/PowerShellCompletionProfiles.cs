@@ -65,7 +65,8 @@ public sealed class PowerShellCompletionProfiles
                     if (_isInstalled(edition)) blocked.Add(edition);
                     continue;
                 }
-                var (text, encoding) = Read(profile);
+                var target = LinkTarget(profile);
+                var (text, encoding) = Read(target);
                 // Appending would void the signature, and AllSigned would then refuse the whole profile.
                 if (IsSigned(text))
                 {
@@ -73,14 +74,14 @@ public sealed class PowerShellCompletionProfiles
                     continue;
                 }
                 // Rewriting would drop the mark of the web and let RemoteSigned run a downloaded profile.
-                if (IsFromInternet(profile))
+                if (IsFromInternet(target))
                 {
                     error ??= Loc.T("The PowerShell profile {0} was downloaded from the internet, so PowerShell blocks it. Check and unblock it, then select Update.", profile);
                     continue;
                 }
                 text = WithoutBlock(text, directory);
                 if (text.Length > 0 && !text.EndsWith('\n')) text += "\r\n";
-                Write(profile, text + Block(executable, directory), encoding);
+                Write(target, text + Block(executable, directory), encoding);
                 added.Add(profile);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
@@ -106,8 +107,9 @@ public sealed class PowerShellCompletionProfiles
                     if (_isInstalled(edition) && _allowsProfileScripts(edition)) return true;
                     continue;
                 }
-                var (text, _) = Read(profile);
-                if (IsSigned(text) || IsFromInternet(profile)) continue;
+                var target = LinkTarget(profile);
+                var (text, _) = Read(target);
+                if (IsSigned(text) || IsFromInternet(target)) continue;
                 if (!text.Contains(block, StringComparison.Ordinal)) return true;
             }
             // Register would report the failure, so it stays offered.
@@ -128,14 +130,16 @@ public sealed class PowerShellCompletionProfiles
             try
             {
                 if (!File.Exists(profile)) continue;
-                var (text, encoding) = Read(profile);
+                var target = LinkTarget(profile);
+                var (text, encoding) = Read(target);
                 // A block left in a signed or blocked profile stays silent once the CLI is gone.
-                if (IsSigned(text) || IsFromInternet(profile)) continue;
+                if (IsSigned(text) || IsFromInternet(target)) continue;
                 var remaining = WithoutBlock(text, directory);
                 if (remaining == text) continue;
-                // A profile that only held the completion was created for it and goes with it.
-                if (string.IsNullOrWhiteSpace(remaining)) File.Delete(profile);
-                else Write(profile, remaining, encoding);
+                // A profile that only held the completion was created for it and goes with it. A linked
+                // profile was set up by the user, so the link and its target stay.
+                if (string.IsNullOrWhiteSpace(remaining) && target == profile) File.Delete(profile);
+                else Write(target, remaining, encoding);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
             {
@@ -143,6 +147,14 @@ public sealed class PowerShellCompletionProfiles
             }
         }
         return error;
+    }
+
+    // A profile linked from elsewhere, such as a dotfiles repository, is changed at its target. Replacing the
+    // link itself would cut it off from that target.
+    private static string LinkTarget(string profile)
+    {
+        try { return new FileInfo(profile).ResolveLinkTarget(true)?.FullName ?? profile; }
+        catch (IOException) { return profile; }
     }
 
     // The Zone.Identifier stream marks downloads; Internet (3) and Restricted (4) profiles are blocked by RemoteSigned.
