@@ -26,6 +26,32 @@ public sealed class ApplicationActivationTests
         Assert.False(ApplicationActivationRequest.ParseLaunchArguments("", @"C:\TypeWhisper.exe", true).ShowWindow);
     }
 
+    [Fact]
+    public void HistoryRouteOpensTheHistoryWindow()
+    {
+        var request = ApplicationActivationRequest.Parse(["--history"], startup: true);
+        Assert.Null(request.Error);
+        Assert.Equal("--history", request.Route);
+        Assert.Null(request.SettingsCategory);
+        Assert.True(request.ShowWindow);
+        Assert.True(request.OnlyNavigates);
+        Assert.Null(request.HistoryRecordId);
+        Assert.NotNull(ApplicationActivationRequest.Parse(["--history", "--statistics"]).Error);
+    }
+
+    [Fact]
+    public void HistoryRouteCanOpenOneEntry()
+    {
+        var request = ApplicationActivationRequest.Parse(["--history", "b7838317-e9bc-4ff3-8c1a-ebe3b7b93105"]);
+        Assert.Null(request.Error);
+        Assert.Equal("--history", request.Route);
+        Assert.Equal("b7838317-e9bc-4ff3-8c1a-ebe3b7b93105", request.HistoryRecordId);
+        var restored = "backup:" + new string('a', 64);
+        Assert.Equal(restored, ApplicationActivationRequest.Parse(["--history", restored]).HistoryRecordId);
+        Assert.NotNull(ApplicationActivationRequest.Parse(["--history", @"..\entry"]).Error);
+        Assert.NotNull(ApplicationActivationRequest.Parse(["--history", "one", "two"]).Error);
+    }
+
     [Theory]
     [InlineData("advanced", "Advanced")]
     [InlineData("History", "Privacy")]

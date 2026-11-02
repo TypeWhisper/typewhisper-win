@@ -90,13 +90,14 @@ public sealed partial class MainWindow
         }
         if (request.Error is { } error) { ShowActivationNotice(error); return; }
         if (request.SettingsCategory is { } category) { OpenSettingsPage(category, rowKey: request.SettingsRowKey); return; }
-        // Every route opens a settings page; the page keeps any unsaved work of its own.
+        // Routes open a settings page, which keeps any unsaved work of its own, or the History window.
         switch (request.Route)
         {
             case "--account": OpenAccount(); break;
             case "--sync-backup": OpenSyncBackup(); break;
             case "--dashboard": OpenSettingsPage("Home"); break;
             case "--statistics": OpenStatistics(); break;
+            case "--history": OpenHistory(request.HistoryRecordId); break;
             case "--dictionary": OpenLexicon(); break;
             case "--snippets": OpenLexicon(true); break;
             case "--files":

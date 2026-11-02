@@ -28,6 +28,7 @@ public class StartupPresentationTests
     [InlineData("--setup")]
     [InlineData("--settings")]
     [InlineData("--files")]
+    [InlineData("--history")]
     [InlineData("--unknown")]
     public void ExplicitRoutesAndErrorsAreNotHidden(string argument)
     {

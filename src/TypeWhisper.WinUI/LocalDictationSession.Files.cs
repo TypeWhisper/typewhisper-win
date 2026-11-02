@@ -81,6 +81,7 @@ internal sealed partial class LocalDictationSession
             ct.ThrowIfCancellationRequested();
             Report(Loc.T("Transcribing with {0}…", modelName));
             if (!registryProvider) DenyLocalTranscriptionIfRefused();
+            var transcriptionStarted = System.Diagnostics.Stopwatch.GetTimestamp();
             var decoded = registryProvider
                 ? await PluginRuntime.UseTranscriptionAsync(providerSelection, (engine, token) =>
                     LanguageHintTranscription.DecodeAsync(engine, samples,
@@ -88,6 +89,7 @@ internal sealed partial class LocalDictationSession
                         language == "auto" ? null : language,
                         hints, translate, token, PromptTermsFor(providerSelection, lexicon.Dictionary?.EnabledTerms)), ct)
                 : await _transcriptionPlugin.DecodeResultAsync(samples, language == "auto" ? null : language, translate, ct);
+            var transcriptionSeconds = System.Diagnostics.Stopwatch.GetElapsedTime(transcriptionStarted).TotalSeconds;
             // Keep the gate until non-interruptible native work has actually drained.
             ct.ThrowIfCancellationRequested();
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -148,7 +150,7 @@ internal sealed partial class LocalDictationSession
                         Status = processed.TextProcessors?.Any(item => item.Status == "failed") == true ? TranscriptionRecordStatus.TextProcessorFailed : TranscriptionRecordStatus.Succeeded,
                         SourceKind = "file", RawText = decoded.Text, FinalText = processed.Text, DurationSeconds = duration,
                         EngineUsed = engineId, ModelUsed = modelId,
-                        TranscriptionTaskUsed = translate ? "translate" : "transcribe",
+                        TranscriptionTaskUsed = translate ? "translate" : "transcribe", TranscriptionSeconds = transcriptionSeconds,
                         Language = DictationProvenance.ResolveLanguage(decoded.DetectedLanguage, language)
                     };
                 }

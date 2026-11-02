@@ -129,10 +129,14 @@ public sealed partial class HistoryWindow
         var rows = new List<(string, string)>
         {
             (Loc.T("Language"), string.IsNullOrWhiteSpace(record.Language) ? Loc.T("Automatic") : record.Language!),
-            (Loc.T("Engine"), HistoryWorkspace.ModelLabel(record.EngineUsed, record.ModelUsed)),
-            (Loc.T("Words"), record.WordCount.ToString("N0")),
-            (Loc.T("Origin"), OriginName(record))
+            (Loc.T("Engine"), HistoryWorkspace.ModelLabel(record.EngineUsed, record.ModelUsed))
         };
+        // Older entries and entries from other devices have no processing details; their rows are left out.
+        if (HistoryWorkspace.ProcessingTime(record.TranscriptionSeconds) is { } transcriptionTime) rows.Add((Loc.T("Transcription Time"), transcriptionTime));
+        if (HistoryWorkspace.LlmLabel(record.LlmProvider, record.LlmModel) is { } llm) rows.Add((Loc.T("LLM"), llm));
+        if (HistoryWorkspace.ProcessingTime(record.LlmSeconds) is { } llmTime) rows.Add((Loc.T("LLM Time"), llmTime));
+        rows.Add((Loc.T("Words"), record.WordCount.ToString("N0")));
+        rows.Add((Loc.T("Origin"), OriginName(record)));
         if (!string.IsNullOrWhiteSpace(record.ProfileName)) rows.Add((Loc.T("Workflow"), record.ProfileName!));
         if (!string.IsNullOrWhiteSpace(record.AppUrl)) rows.Add((Loc.T("Website"), record.AppUrl!));
         foreach (var (label, value) in rows)
@@ -144,7 +148,12 @@ public sealed partial class HistoryWindow
             Grid.SetRow(text, grid.RowDefinitions.Count - 1); Grid.SetColumn(text, 1);
             grid.Children.Add(name); grid.Children.Add(text);
         }
-        return new Expander { Header = Loc.T("Details"), Content = grid, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch };
+        var details = new Expander { Header = Loc.T("Details"), Content = grid, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch };
+#if DEBUG
+        // Screenshots of a test profile show the details without a click.
+        if (WinUIProfile.IsTestProfile && Environment.GetEnvironmentVariable("TYPEWHISPER_WINUI_HISTORY_DETAILS_OPEN") == "1") details.IsExpanded = true;
+#endif
+        return details;
     }
 
     private static UIElement FailureStrip(TranscriptionRecord record)

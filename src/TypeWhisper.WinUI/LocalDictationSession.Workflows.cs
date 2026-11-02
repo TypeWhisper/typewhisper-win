@@ -97,12 +97,21 @@ internal sealed partial class LocalDictationSession
         }
     }
 
-    private Func<string, CancellationToken, Task<string>>? WorkflowProcessor(string? configuredLanguage, string? detectedLanguage)
+    private Func<string, CancellationToken, Task<string>>? WorkflowProcessor(string? configuredLanguage, string? detectedLanguage,
+        WorkflowLlmUsage? usage = null)
     {
         var snapshot = _workflowAtStart;
         var memory = _workflowMemoryAtStart;
         return snapshot is null ? null : (text, ct) => snapshot.ProcessAsync(text, configuredLanguage, detectedLanguage,
-            LlmAvailableForWorkflow, ProcessLlmAsync, ct, (id, query, token) => RecallMemoryAsync(memory, id, query, token));
+            LlmAvailableForWorkflow, usage is null ? ProcessLlmAsync : usage.Wrap(ProcessLlmAsync), ct,
+            (id, query, token) => RecallMemoryAsync(memory, id, query, token));
+    }
+
+    // Display names for History, resolved when the LLM runs so a later uninstall does not change the entry.
+    private (string Provider, string Model) LlmDisplayNames(string selectionId, string model)
+    {
+        var provider = LlmProviders.FirstOrDefault(item => item.SelectionId == selectionId);
+        return (provider?.Name ?? selectionId, provider?.Models.FirstOrDefault(item => item.Id == model)?.DisplayName ?? model);
     }
 
     // Whether a workflow's LLM is ready. One the policy refuses, or whose package the policy unloaded, reports the

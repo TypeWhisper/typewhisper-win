@@ -111,6 +111,21 @@ public sealed record TranscriptionRecord
     /// </summary>
     public bool UsedTranscriptionFallback { get; init; }
     /// <summary>
+    /// Gets how many seconds speech-to-text took after the recording ended. Missing for older entries and entries
+    /// from other devices. Saved only with local History.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? TranscriptionSeconds { get; init; }
+    /// <summary>Gets the display name of the LLM provider a workflow used, if one ran.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? LlmProvider { get; init; }
+    /// <summary>Gets the display name of the LLM model a workflow used, if one ran.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? LlmModel { get; init; }
+    /// <summary>Gets how many seconds the workflow's LLM took, including retries; missing when it failed or did not run.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? LlmSeconds { get; init; }
+    /// <summary>
     /// Gets or sets the created at value.
     /// </summary>
     public DateTime CreatedAt { get; init; } = DateTime.UtcNow;

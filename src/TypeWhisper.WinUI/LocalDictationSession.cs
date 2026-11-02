@@ -1068,11 +1068,13 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             if (captureDecision == ShortClipCaptureDecision.NoSpeech)
             { SetStatus(Loc.T("No speech energy detected. Speak closer to the microphone or enable Recognize short, quiet clips.")); return; }
             SetStatus(Loc.T("Transcribing with {0}…", ActiveModelName), DictationPhase.Processing);
+            var transcriptionStarted = System.Diagnostics.Stopwatch.GetTimestamp();
             var streamedText = _cloudStream is null ? null : await _cloudStream.FinishAsync(samples.Length);
             _operationCancellation.Token.ThrowIfCancellationRequested();
             var decoded = streamedText is null
                 ? await DecodeFinalAsync(ShortClipCapturePolicy.PadForFinalDecode(samples))
                 : (Text: streamedText, Timings: Array.Empty<VocabularyTokenTiming>(), DetectedLanguage: _cloudStream?.DetectedLanguage, NoSpeechProbability: (float?)null);
+            var transcriptionSeconds = System.Diagnostics.Stopwatch.GetElapsedTime(transcriptionStarted).TotalSeconds;
             _operationCancellation.Token.ThrowIfCancellationRequested();
             var rawText = decoded.Text;
             AppDiagnostics.Write($"dictation.transcribed empty={string.IsNullOrWhiteSpace(rawText)}");
@@ -1107,10 +1109,11 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             refinedText = autoEnter.Text;
             var boostVocabulary = _boostVocabulary && !_ctcAtStart;
             var snippets = _snippetSnapshot is null ? null : await _snippetSnapshot;
+            var llmUsage = new WorkflowLlmUsage(LlmDisplayNames);
             var processed = await new DictationLexiconSnapshot(dictionary, snippets).ProcessAsync(refinedText, _textAtStart, _languageAtStart,
                 DictationProvenance.ResolveLanguage(decoded.DetectedLanguage, _languageAtStart), boostVocabulary,
                 ReadSnippetClipboardAsync, _operationCancellation.Token, _taskAtStart, _targetApp, _engineAtStart, _modelAtStart,
-                WorkflowProcessor(_languageAtStart, decoded.DetectedLanguage),
+                WorkflowProcessor(_languageAtStart, decoded.DetectedLanguage, llmUsage),
                 BindTextProcessors(_processorsAtStart, DictationProvenance.ResolveLanguage(decoded.DetectedLanguage, _languageAtStart),
                     _targetApp, _workflowAtStart?.Name, rawDuration));
             var notices = processed.Warnings.ToList();
@@ -1132,6 +1135,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 WorkflowFailureMessage = processed.WorkflowError,
                 RawText = rawText, FinalText = text, DurationSeconds = rawDuration,
                 EngineUsed = _engineAtStart, ModelUsed = _modelAtStart, TranscriptionTaskUsed = _taskAtStart == TranscriptionTask.Translate ? "translate" : "transcribe",
+                TranscriptionSeconds = transcriptionSeconds,
+                LlmProvider = llmUsage.Provider, LlmModel = llmUsage.Model, LlmSeconds = llmUsage.Seconds,
                 Language = DictationProvenance.ResolveLanguage(decoded.DetectedLanguage, _languageAtStart),
                 AppName = _targetApp == "Target app" ? null : _targetApp,
                 AppProcessName = _targetApp == "Target app" ? null : _targetApp,
