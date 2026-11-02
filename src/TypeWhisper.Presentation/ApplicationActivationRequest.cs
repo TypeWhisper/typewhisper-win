@@ -63,11 +63,12 @@ public sealed record ApplicationActivationRequest(string? Route, IReadOnlyList<s
                 var next = value.ToLowerInvariant();
                 if (route is not null && route != next) return Failure(Loc.T("Choose one navigation destination per activation."));
                 route = next;
-                // "--history <entry id>" opens History on that entry.
+                // "--history <entry id>" opens History on that entry. Restored entries use "backup:<fingerprint>".
                 if (next == "--history" && i + 1 < args.Length && !args[i + 1].StartsWith("--", StringComparison.Ordinal))
                 {
                     var id = args[++i];
-                    if (id.Length is 0 or > 64 || !id.All(c => char.IsAsciiLetterOrDigit(c) || c == '-')) return Failure(Loc.T("Unknown activation argument: {0}", id));
+                    if (id.Length is 0 or > 128 || !id.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or ':'))
+                        return Failure(Loc.T("Unknown activation argument: {0}", id));
                     historyId = id;
                 }
                 continue;

@@ -46,6 +46,8 @@ public sealed class ApplicationActivationTests
         Assert.Null(request.Error);
         Assert.Equal("--history", request.Route);
         Assert.Equal("b7838317-e9bc-4ff3-8c1a-ebe3b7b93105", request.HistoryRecordId);
+        var restored = "backup:" + new string('a', 64);
+        Assert.Equal(restored, ApplicationActivationRequest.Parse(["--history", restored]).HistoryRecordId);
         Assert.NotNull(ApplicationActivationRequest.Parse(["--history", @"..\entry"]).Error);
         Assert.NotNull(ApplicationActivationRequest.Parse(["--history", "one", "two"]).Error);
     }
