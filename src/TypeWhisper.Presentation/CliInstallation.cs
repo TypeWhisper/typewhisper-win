@@ -50,12 +50,7 @@ public sealed class CliInstallation
     {
         if (!GetState().Bundled) throw new IOException(Loc.T("The CLI is not included in this build."));
         var previous = ReadManifest();
-        var sources = ReadBundleSources();
-        var files = sources.ToDictionary(file => file.Key, file => file.Value.Hash, StringComparer.OrdinalIgnoreCase);
-        var profileBytes = _profileDirectory is null ? null : System.Text.Encoding.UTF8.GetBytes(
-            JsonSerializer.Serialize(new { profile_directory = Path.GetFullPath(_profileDirectory) }));
-        if (profileBytes is not null) files["cli-profile.json"] = Convert.ToHexString(SHA256.HashData(profileBytes));
-        if (files.ContainsKey(ManifestName)) throw new IOException(Loc.T("The CLI bundle contains a reserved file."));
+        var (sources, files, profileBytes) = ReadPayload();
         foreach (var file in files)
         {
             var target = OwnedPath(file.Key);
@@ -113,6 +108,31 @@ public sealed class CliInstallation
         return _completion?.Register(Path.Join(_destination, "typewhisper.exe"));
     }
 
+    /// <summary>
+    /// Whether Install would change an existing installation: a different bundle or profile binding, missing files,
+    /// a missing PATH entry, or a PowerShell profile that could load the completion but does not.
+    /// </summary>
+    /// <remarks>Hashes the bundle, so callers on a UI thread should run it in the background.</remarks>
+    public bool NeedsUpdate()
+    {
+        var state = GetState();
+        if (!state.Bundled || !state.Installed) return false;
+        // Without its own record the installation's contents are unknown, so updating stays offered.
+        if (!state.CanRemove || !state.InPath) return true;
+        try
+        {
+            var manifest = ReadManifest();
+            var (_, files, _) = ReadPayload();
+            if (manifest.PendingFiles.Count > 0 || manifest.Files.Count != files.Count) return true;
+            foreach (var (name, hash) in files)
+                if (!manifest.Files.TryGetValue(name, out var installed) || !string.Equals(installed, hash, StringComparison.OrdinalIgnoreCase)
+                    || !File.Exists(OwnedPath(name))) return true;
+        }
+        // Install reports the same problem, so it stays reachable.
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException) { return true; }
+        return _completion?.NeedsRegistration(Path.Join(_destination, "typewhisper.exe")) ?? false;
+    }
+
     /// <summary>Whether the installed CLI is bound to <paramref name="profileDirectory"/>, the profile that installed it.</summary>
     /// <remarks>Development and release builds share the install folder, so a reset removes only its own profile's CLI.</remarks>
     /// <returns>False when there is no binding or it names another profile; null when it exists but cannot be read.</returns>
@@ -151,6 +171,18 @@ public sealed class CliInstallation
         Environment.ExpandEnvironmentVariables(value.Trim().Trim('"')).TrimEnd('\\', '/'),
         _destination.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
     private static string Hash(string path) => Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path)));
+
+    // The files an installation of this bundle consists of, with their hashes and the profile binding's content.
+    private (Dictionary<string, (string Source, string Hash)> Sources, Dictionary<string, string> Files, byte[]? ProfileBytes) ReadPayload()
+    {
+        var sources = ReadBundleSources();
+        var files = sources.ToDictionary(file => file.Key, file => file.Value.Hash, StringComparer.OrdinalIgnoreCase);
+        var profileBytes = _profileDirectory is null ? null : System.Text.Encoding.UTF8.GetBytes(
+            JsonSerializer.Serialize(new { profile_directory = Path.GetFullPath(_profileDirectory) }));
+        if (profileBytes is not null) files["cli-profile.json"] = Convert.ToHexString(SHA256.HashData(profileBytes));
+        if (files.ContainsKey(ManifestName)) throw new IOException(Loc.T("The CLI bundle contains a reserved file."));
+        return (sources, files, profileBytes);
+    }
     private Dictionary<string, (string Source, string Hash)> ReadBundleSources()
     {
         var sources = Directory.EnumerateFiles(_bundle, "*", SearchOption.AllDirectories)

@@ -64,6 +64,14 @@ internal sealed class CliSettingsView : UserControl
         Example(Loc.T("Copy to clipboard"), @"typewhisper transcribe ""C:\Audio\recording.wav"" | Set-Clipboard");
         Example(Loc.T("Last transcript"), "typewhisper last");
         Example(Loc.T("List models"), "typewhisper models");
+        var refreshes = 0;
+        async Task ShowUpdateIfNeededAsync(int refresh)
+        {
+            bool needed;
+            try { needed = await Task.Run(installation.NeedsUpdate); }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { needed = true; }
+            if (refresh == refreshes) install.Visibility = needed ? Visibility.Visible : Visibility.Collapsed;
+        }
         void Refresh(string? message = null)
         {
             var state = installation.GetState();
@@ -72,6 +80,11 @@ internal sealed class CliSettingsView : UserControl
             documentation.NavigateUri = new Uri("https://www.typewhisper.com/en/docs/windows/cli/");
             install.Content = state.Installed ? Loc.T("Update") : Loc.T("Install");
             install.IsEnabled = state.Bundled;
+            // An installed CLI offers Update only when it would change something. The check hashes the bundle,
+            // so the button stays hidden until the background check says so.
+            var refresh = ++refreshes;
+            install.Visibility = state.Installed ? Visibility.Collapsed : Visibility.Visible;
+            if (state.Installed && state.Bundled) _ = ShowUpdateIfNeededAsync(refresh);
             remove.IsEnabled = state.CanRemove;
             remove.Visibility = state.CanRemove ? Visibility.Visible : Visibility.Collapsed;
             command.Description = message ?? (state.Installed
@@ -81,6 +94,7 @@ internal sealed class CliSettingsView : UserControl
         async Task RunAsync(bool installing)
         {
             install.IsEnabled = remove.IsEnabled = false;
+            refreshes++;
             try
             {
                 PowerShellCompletionSetup? completion = null;

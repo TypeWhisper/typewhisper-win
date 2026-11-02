@@ -91,6 +91,31 @@ public sealed class PowerShellCompletionProfiles
         return new(added, blocked, error);
     }
 
+    /// <summary>Whether <see cref="Register"/> would add or refresh a block for <paramref name="executable"/>.</summary>
+    /// <remarks>Profiles Register leaves alone, such as signed, downloaded or policy-blocked new ones, do not count.</remarks>
+    public bool NeedsRegistration(string executable)
+    {
+        if (string.IsNullOrWhiteSpace(_documents)) return false;
+        var block = Block(executable, Path.GetDirectoryName(Path.GetFullPath(executable))!);
+        foreach (var (edition, profile) in Enum.GetValues<PowerShellEdition>().Select(edition => (edition, ProfilePath(edition))))
+        {
+            try
+            {
+                if (!File.Exists(profile))
+                {
+                    if (_isInstalled(edition) && _allowsProfileScripts(edition)) return true;
+                    continue;
+                }
+                var (text, _) = Read(profile);
+                if (IsSigned(text) || IsFromInternet(profile)) continue;
+                if (!text.Contains(block, StringComparison.Ordinal)) return true;
+            }
+            // Register would report the failure, so it stays offered.
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException) { return true; }
+        }
+        return false;
+    }
+
     /// <summary>Removes the completion block of <paramref name="installDirectory"/> from both editions' profiles.</summary>
     /// <returns>Why a profile could not be changed, or null.</returns>
     public string? Unregister(string installDirectory)

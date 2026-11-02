@@ -251,7 +251,40 @@ public sealed class PowerShellCompletionProfilesTests : IDisposable
         Assert.NotNull(setup);
         Assert.Equal([CoreProfile], setup.Added);
         Assert.Contains(Path.Join(_stable, "typewhisper.exe"), File.ReadAllText(CoreProfile, Encoding.UTF8));
+        Assert.False(installation.NeedsUpdate());
+        File.Delete(CoreProfile);
+        Assert.True(installation.NeedsUpdate());
+        installation.Install();
+        Assert.False(installation.NeedsUpdate());
         installation.Remove();
         Assert.False(File.Exists(CoreProfile));
+    }
+
+    [Fact]
+    public void RegistrationIsNeededOnlyWhereRegisterWouldChangeAProfile()
+    {
+        var executable = Path.Join(_stable, "typewhisper.exe");
+        var service = Service();
+        Assert.True(service.NeedsRegistration(executable));
+        service.Register(executable);
+        // Windows PowerShell refuses new profiles, so updating would not help there.
+        Assert.False(service.NeedsRegistration(executable));
+
+        _windowsAllowsScripts = true;
+        service = Service();
+        Assert.True(service.NeedsRegistration(executable));
+        service.Register(executable);
+        Assert.False(service.NeedsRegistration(executable));
+
+        // Another installation's block does not count for this one.
+        Assert.True(service.NeedsRegistration(Path.Join(_beta, "typewhisper.exe")));
+
+        File.WriteAllText(CoreProfile, "Set-Alias ll Get-ChildItem\r\n");
+        Assert.True(service.NeedsRegistration(executable));
+        File.WriteAllText(CoreProfile, "Set-Alias ll Get-ChildItem\r\n# SIG # Begin signature block\r\n# SIG # End signature block\r\n");
+        Assert.False(service.NeedsRegistration(executable));
+        File.WriteAllText(CoreProfile, "Set-Alias ll Get-ChildItem\r\n");
+        File.WriteAllText(CoreProfile + ":Zone.Identifier", "[ZoneTransfer]\r\nZoneId=3\r\n");
+        Assert.False(service.NeedsRegistration(executable));
     }
 }
