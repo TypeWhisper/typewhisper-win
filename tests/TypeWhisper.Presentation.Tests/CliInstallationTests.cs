@@ -153,17 +153,17 @@ public sealed class CliInstallationTests : IDisposable
         service.Install();
         Assert.False(service.NeedsUpdate());
 
-        File.WriteAllText(Path.Combine(_bundle, "typewhisper.exe"), "new cli");
+        File.WriteAllText(Path.Join(_bundle, "typewhisper.exe"), "new cli");
         Assert.True(service.NeedsUpdate());
         service.Install();
         Assert.False(service.NeedsUpdate());
 
-        File.WriteAllText(Path.Combine(_bundle, "extra.dll"), "new file");
+        File.WriteAllText(Path.Join(_bundle, "extra.dll"), "new file");
         Assert.True(service.NeedsUpdate());
         service.Install();
         Assert.False(service.NeedsUpdate());
 
-        File.Delete(Path.Combine(_install, "typewhisper.runtimeconfig.json"));
+        File.Delete(Path.Join(_install, "typewhisper.runtimeconfig.json"));
         Assert.True(service.NeedsUpdate());
         service.Install();
 
@@ -173,14 +173,14 @@ public sealed class CliInstallationTests : IDisposable
         Assert.False(service.NeedsUpdate());
 
         // Another profile's app shares the folder; updating from it moves the binding there.
-        Assert.True(new CliInstallation(_bundle, _install, () => _userPath, value => _userPath = value, Path.Combine(_root, "other-profile")).NeedsUpdate());
+        Assert.True(new CliInstallation(_bundle, _install, () => _userPath, value => _userPath = value, Path.Join(_root, "other-profile")).NeedsUpdate());
     }
 
     [Fact]
     public void UpdateStaysOfferedForAnInstallationWithoutRecord()
     {
         Directory.CreateDirectory(_install);
-        File.WriteAllText(Path.Combine(_install, "typewhisper.exe"), "cli");
+        File.WriteAllText(Path.Join(_install, "typewhisper.exe"), "cli");
         Assert.True(Service().NeedsUpdate());
     }
 
