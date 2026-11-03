@@ -114,7 +114,9 @@ internal static class WowIntegrationSettings
                 var picker = new FolderPicker(choose.XamlRoot.ContentIslandEnvironment.AppWindowId) { Title = Loc.T("Choose the World of Warcraft folder") };
                 var folder = await picker.PickSingleFolderAsync();
                 if (folder is null) return;
-                if (!WowAddOn.FindInstallRoots(folder.Path, detect: false).SelectMany(WowAddOn.VersionFolders).Any())
+                // A slow network folder must not freeze the window.
+                var path = folder.Path;
+                if (!await Task.Run(() => WowAddOn.FindInstallRoots(path, detect: false).SelectMany(WowAddOn.VersionFolders).Any()))
                 {
                     addOnRow.Status = Loc.T("This folder contains no World of Warcraft version. Choose the folder that holds _retail_, _classic_ or _forever_.");
                     return;
@@ -122,7 +124,8 @@ internal static class WowIntegrationSettings
                 addOnRow.Status = Save(wow => wow with { Folder = folder.Path }) ?? "";
             }
             catch (Exception ex) when (ex is not OutOfMemoryException) { addOnRow.Status = Loc.T("Could not select folder: {0}", ex.Message); }
-            finally { busy = false; }
+            // A canceled picker or a folder without the game returns early; the buttons must come back either way.
+            finally { busy = false; Refresh(); }
             await ScanAsync();
         };
 

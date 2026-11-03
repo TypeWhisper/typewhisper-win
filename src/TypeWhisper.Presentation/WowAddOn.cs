@@ -132,16 +132,25 @@ public static partial class WowAddOn
     /// <summary>Lists the game versions installed under <paramref name="root"/>; a version needs a game executable.</summary>
     public static IReadOnlyList<WowVersionFolder> VersionFolders(string root)
     {
+        string[] candidates;
         try
         {
-            return Directory.EnumerateDirectories(root)
-                .Where(path => VersionFolderPattern().IsMatch(System.IO.Path.GetFileName(path))
-                    && Directory.EnumerateFiles(path, "Wow*.exe").Any())
+            candidates = Directory.EnumerateDirectories(root)
+                .Where(path => VersionFolderPattern().IsMatch(System.IO.Path.GetFileName(path)))
                 .Order(StringComparer.OrdinalIgnoreCase)
-                .Select(path => new WowVersionFolder(System.IO.Path.GetFileName(path), path, InstalledVersion(path)))
                 .ToArray();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return []; }
+        // One unreadable version folder must not hide the others.
+        return candidates.Where(HasGameExecutable)
+            .Select(path => new WowVersionFolder(System.IO.Path.GetFileName(path), path, InstalledVersion(path)))
+            .ToArray();
+    }
+
+    private static bool HasGameExecutable(string versionFolder)
+    {
+        try { return Directory.EnumerateFiles(versionFolder, "Wow*.exe").Any(); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
     }
 
     /// <summary>Writes the bundled add-on into every version folder; returns the folders that failed with their error.</summary>
