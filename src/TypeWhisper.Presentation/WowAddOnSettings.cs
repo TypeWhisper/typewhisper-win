@@ -40,10 +40,10 @@ public sealed partial record WowAddOnSettings(bool Send = true, bool ShowBar = t
         if (string.IsNullOrWhiteSpace(versionFolder)) return Default;
         try
         {
-            var accounts = Path.Combine(versionFolder, "WTF", "Account");
+            var accounts = Path.Join(versionFolder, "WTF", "Account");
             if (!Directory.Exists(accounts)) return Default;
             var newest = Directory.EnumerateDirectories(accounts)
-                .Select(account => new FileInfo(Path.Combine(account, "SavedVariables", FileName)))
+                .Select(account => new FileInfo(Path.Join(account, "SavedVariables", FileName)))
                 .Where(file => file.Exists)
                 .OrderByDescending(file => file.LastWriteTimeUtc)
                 .FirstOrDefault();

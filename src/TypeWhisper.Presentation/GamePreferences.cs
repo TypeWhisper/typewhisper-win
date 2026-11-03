@@ -67,8 +67,11 @@ public sealed class GamePreferencesStore
             if (loaded?.WorldOfWarcraft is null) throw new JsonException("Invalid game settings.");
             _current = loaded;
         }
-        catch (FileNotFoundException) { }
-        catch (DirectoryNotFoundException) { }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+        {
+            // No settings saved yet: every game stays off.
+            _current = new();
+        }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or NotSupportedException)
         {
             Error = Loc.T("Game settings could not be loaded. Game chat is off until you save them again.");

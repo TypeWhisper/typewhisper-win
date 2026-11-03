@@ -8,7 +8,7 @@ public class ChatDeliveryOperationTests
 
     private sealed class Fake : IChatDeliveryPlatform
     {
-        public List<string> Calls = [];
+        public readonly List<string> Calls = [];
         public bool InsertSucceeds = true;
         public Action<string>? OnCall;
         public bool Ready = true;
