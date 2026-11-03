@@ -243,6 +243,45 @@ public partial class Reson8PluginTests
     }
 
     [Fact]
+    public async Task DictionaryModel_SendsTheTermsOfAFailedAddAgain()
+    {
+        var api = new FakeCustomModelApi { FailAdds = true };
+        var saved = new List<Reson8DictionaryModelState>();
+        using var sync = new Reson8DictionaryModelSync(new Reson8DictionaryModelState("model-1", ["A"]), api, saved.Add);
+
+        // A is gone from the model, and Reson8 may or may not hold B.
+        await Assert.ThrowsAsync<TimeoutException>(() => sync.ModelIdForAsync(["B"], default));
+        Assert.Empty(saved[^1].Terms);
+        Assert.Equal(["B"], saved[^1].Unconfirmed);
+
+        api.FailAdds = false;
+        Assert.Equal("model-1", await sync.ModelIdForAsync(["A"], default));
+
+        Assert.Equal(["delete model-1 A", "add model-1 B", "delete model-1 B", "add model-1 A"], api.Calls);
+        Assert.Equal(["A"], saved[^1].Terms);
+        Assert.True(saved[^1].Unconfirmed is null or { Count: 0 });
+    }
+
+    [Fact]
+    public async Task DictionaryModel_SendsTheTermsOfAFailedDeleteAgainForTheSameDictionary()
+    {
+        var api = new FakeCustomModelApi { FailDeletes = true };
+        var saved = new List<Reson8DictionaryModelState>();
+        using var sync = new Reson8DictionaryModelSync(new Reson8DictionaryModelState("model-1", ["A", "B"]), api, saved.Add);
+
+        await Assert.ThrowsAsync<TimeoutException>(() => sync.ModelIdForAsync(["A"], default));
+        Assert.Equal(["A"], saved[^1].Terms);
+        Assert.Equal(["B"], saved[^1].Unconfirmed);
+
+        api.FailDeletes = false;
+        Assert.Equal("model-1", await sync.ModelIdForAsync(["A"], default));
+        Assert.Equal("model-1", await sync.ModelIdForAsync(["A"], default));
+
+        Assert.Equal(["delete model-1 B", "delete model-1 B"], api.Calls);
+        Assert.True(sync.State.Unconfirmed is null or { Count: 0 });
+    }
+
+    [Fact]
     public async Task DictionaryModel_DeletedInTheConsoleIsCreatedAgainAndTheRequestRetried()
     {
         var api = new FakeCustomModelApi();
@@ -312,6 +351,18 @@ public partial class Reson8PluginTests
         Assert.Throws<ArgumentException>(() => Reson8Catalog.ParsePatternSets("Only a name", []));
         Assert.Throws<ArgumentException>(() => Reson8Catalog.ParsePatternSets("Same\nA\n\nsame\nB", []));
         Assert.Empty(Reson8Catalog.ParsePatternSets("  \n\n ", []));
+    }
+
+    [Fact]
+    public void PatternSets_ANewSetNeverTakesTheIdOfAKeptOne()
+    {
+        var previous = new[] { new Reson8PatternSet("orders", "Orders", ["OLD[0-9]"]) };
+
+        // "Orders!" gives the slug "orders" too, and comes first.
+        var sets = Reson8Catalog.ParsePatternSets("Orders!\nNEW[0-9]\n\nOrders\nOLD[0-9]", previous);
+
+        Assert.Equal(["orders-2", "orders"], sets.Select(set => set.Id));
+        Assert.Equal(["OLD[0-9]"], sets.Single(set => set.Id == "orders").Patterns);
     }
 
     [Fact]
@@ -490,6 +541,8 @@ public partial class Reson8PluginTests
         private int _created;
         public List<string> Calls { get; } = [];
         public Task Gate { get; init; } = Task.CompletedTask;
+        public bool FailAdds { get; set; }
+        public bool FailDeletes { get; set; }
 
         public async Task<string> CreateModelAsync(string name, string description, IReadOnlyList<string> phrases, CancellationToken ct)
         {
@@ -502,13 +555,13 @@ public partial class Reson8PluginTests
         public Task AddPhrasesAsync(string modelId, IReadOnlyList<string> phrases, CancellationToken ct)
         {
             Calls.Add($"add {modelId} {string.Join(",", phrases)}");
-            return Task.CompletedTask;
+            return FailAdds ? Task.FromException(new TimeoutException("Reson8 did not answer.")) : Task.CompletedTask;
         }
 
         public Task DeletePhrasesAsync(string modelId, IReadOnlyList<string> phrases, CancellationToken ct)
         {
             Calls.Add($"delete {modelId} {string.Join(",", phrases)}");
-            return Task.CompletedTask;
+            return FailDeletes ? Task.FromException(new TimeoutException("Reson8 did not answer.")) : Task.CompletedTask;
         }
     }
 }

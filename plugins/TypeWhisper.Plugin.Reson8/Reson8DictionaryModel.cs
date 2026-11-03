@@ -5,8 +5,11 @@ using System.Text.Json;
 
 namespace TypeWhisper.Plugin.Reson8;
 
-/// <summary>The custom model that holds the dictionary, and the terms it held after the last sync.</summary>
-internal sealed record Reson8DictionaryModelState(string? ModelId, IReadOnlyList<string> Terms)
+/// <summary>
+/// The custom model that holds the dictionary and the terms it is known to hold. <paramref name="Unconfirmed"/> are
+/// terms of a call that failed or was interrupted, so Reson8 may or may not hold them.
+/// </summary>
+internal sealed record Reson8DictionaryModelState(string? ModelId, IReadOnlyList<string> Terms, IReadOnlyList<string>? Unconfirmed = null)
 {
     internal static Reson8DictionaryModelState Empty { get; } = new(null, []);
 }
@@ -50,7 +53,8 @@ internal sealed class Reson8DictionaryModelSync(
         try
         {
             var current = State;
-            if (current.ModelId is { } modelId && current.Terms.ToHashSet(StringComparer.Ordinal).SetEquals(terms))
+            if (current.ModelId is { } modelId && current.Unconfirmed is null or { Count: 0 }
+                && current.Terms.ToHashSet(StringComparer.Ordinal).SetEquals(terms))
                 return modelId;
             return await SyncAsync(current, terms, ct).ConfigureAwait(false);
         }
@@ -81,12 +85,17 @@ internal sealed class Reson8DictionaryModelSync(
         {
             try
             {
-                var synced = current.Terms.ToHashSet(StringComparer.Ordinal);
+                var confirmed = current.Terms.ToHashSet(StringComparer.Ordinal);
+                var unconfirmed = (current.Unconfirmed ?? []).Where(term => !confirmed.Contains(term)).ToHashSet(StringComparer.Ordinal);
                 var wanted = terms.ToHashSet(StringComparer.Ordinal);
-                foreach (var batch in Batches(current.Terms.Where(term => !wanted.Contains(term)).ToArray()))
-                    await api.DeletePhrasesAsync(modelId, batch, ct).ConfigureAwait(false);
-                foreach (var batch in Batches(terms.Where(term => !synced.Contains(term)).ToArray()))
-                    await api.AddPhrasesAsync(modelId, batch, ct).ConfigureAwait(false);
+                // Reson8 skips phrases that are already present or already gone, so unconfirmed terms simply go
+                // again in the direction the dictionary needs now.
+                var deletions = confirmed.Concat(unconfirmed).Where(term => !wanted.Contains(term)).ToArray();
+                var additions = terms.Where(term => !confirmed.Contains(term)).ToArray();
+                foreach (var batch in Batches(deletions))
+                    await SendBatchAsync(modelId, batch, add: false, confirmed, unconfirmed, ct).ConfigureAwait(false);
+                foreach (var batch in Batches(additions))
+                    await SendBatchAsync(modelId, batch, add: true, confirmed, unconfirmed, ct).ConfigureAwait(false);
                 Save(new Reson8DictionaryModelState(modelId, terms.ToArray()));
                 return modelId;
             }
@@ -100,16 +109,36 @@ internal sealed class Reson8DictionaryModelSync(
         if (batches.Count == 0)
             throw new InvalidOperationException("Reson8 creates no custom model without terms.");
         var created = await api.CreateModelAsync(ModelName, ModelDescription, batches[0], ct).ConfigureAwait(false);
-        var syncedTerms = batches[0].ToList();
-        Save(new Reson8DictionaryModelState(created, syncedTerms.ToArray()));
+        Save(new Reson8DictionaryModelState(created, batches[0].ToArray()));
+        var createdTerms = batches[0].ToHashSet(StringComparer.Ordinal);
+        var pending = new HashSet<string>(StringComparer.Ordinal);
         foreach (var batch in batches.Skip(1))
-        {
-            await api.AddPhrasesAsync(created, batch, ct).ConfigureAwait(false);
-            syncedTerms.AddRange(batch);
-            Save(new Reson8DictionaryModelState(created, syncedTerms.ToArray()));
-        }
-
+            await SendBatchAsync(created, batch, add: true, createdTerms, pending, ct).ConfigureAwait(false);
+        if (batches.Count > 1)
+            Save(new Reson8DictionaryModelState(created, terms.ToArray()));
         return created;
+    }
+
+    /// <summary>
+    /// Sends one batch. Its terms are saved as unconfirmed while the call runs, so a call that fails, times out or is
+    /// interrupted leaves them to the next sync instead of a saved state that no longer matches the model.
+    /// </summary>
+    private async Task SendBatchAsync(
+        string modelId, IReadOnlyList<string> batch, bool add, HashSet<string> confirmed, HashSet<string> unconfirmed, CancellationToken ct)
+    {
+        confirmed.ExceptWith(batch);
+        unconfirmed.UnionWith(batch);
+        Save(new Reson8DictionaryModelState(modelId, confirmed.ToArray(), unconfirmed.ToArray()));
+
+        if (add)
+            await api.AddPhrasesAsync(modelId, batch, ct).ConfigureAwait(false);
+        else
+            await api.DeletePhrasesAsync(modelId, batch, ct).ConfigureAwait(false);
+
+        unconfirmed.ExceptWith(batch);
+        if (add)
+            confirmed.UnionWith(batch);
+        Save(new Reson8DictionaryModelState(modelId, confirmed.ToArray(), unconfirmed.ToArray()));
     }
 
     private void Save(Reson8DictionaryModelState next)

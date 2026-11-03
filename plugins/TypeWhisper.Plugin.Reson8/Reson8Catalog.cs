@@ -146,9 +146,8 @@ internal static partial class Reson8Catalog
         if (blocks.Count > MaximumPatternSets)
             throw new ArgumentException($"Use at most {MaximumPatternSets} pattern sets.");
 
-        var used = new HashSet<string>(StringComparer.Ordinal);
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var sets = new List<Reson8PatternSet>();
+        var parsed = new List<(string Name, string[] Patterns)>();
         foreach (var block in blocks)
         {
             var name = block[0];
@@ -163,18 +162,23 @@ internal static partial class Reson8Catalog
                 throw new ArgumentException($"A pattern set has at most {MaximumPatternsPerSet} patterns.");
             if (patterns.FirstOrDefault(pattern => pattern.Length > MaximumPatternLength) is { } longPattern)
                 throw new ArgumentException($"The pattern “{longPattern[..20]}…” is longer than {MaximumPatternLength} characters.");
-
-            var id = previous.FirstOrDefault(set => set.Name.Equals(name, StringComparison.OrdinalIgnoreCase))?.Id;
-            if (id is null || !used.Add(id))
-            {
-                id = UniqueSlug(name, used);
-                used.Add(id);
-            }
-
-            sets.Add(new Reson8PatternSet(id, name, patterns));
+            parsed.Add((name, patterns));
         }
 
-        return sets;
+        // Sets that keep their name reserve their ids first, so a new set whose name gives the same slug cannot
+        // take one, wherever it is inserted.
+        var used = new HashSet<string>(StringComparer.Ordinal);
+        var ids = parsed.Select(set => previous.FirstOrDefault(old => old.Name.Equals(set.Name, StringComparison.OrdinalIgnoreCase))?.Id)
+            .Select(id => id is not null && used.Add(id) ? id : null).ToArray();
+        for (var index = 0; index < ids.Length; index++)
+        {
+            if (ids[index] is not null)
+                continue;
+            ids[index] = UniqueSlug(parsed[index].Name, used);
+            used.Add(ids[index]!);
+        }
+
+        return parsed.Select((set, index) => new Reson8PatternSet(ids[index]!, set.Name, set.Patterns)).ToArray();
     }
 
     internal static string FormatPatternSets(IReadOnlyList<Reson8PatternSet> sets) =>
