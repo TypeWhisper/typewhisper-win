@@ -303,6 +303,30 @@ public sealed class SonioxFeatureTests
     }
 
     [Fact]
+    public void ParseTranscript_TranslationSeparatesChunksButKeepsWordTokensTogether()
+    {
+        const string chunks = """
+            {
+              "text": "Hallo. Danke. Honestly.",
+              "tokens": [
+                { "text": "Hallo.", "start_ms": 0, "end_ms": 600, "translation_status": "original", "language": "de" },
+                { "text": "Hel", "translation_status": "translation", "language": "en" },
+                { "text": "lo.", "translation_status": "translation", "language": "en" },
+                { "text": "Danke.", "start_ms": 700, "end_ms": 1200, "translation_status": "original", "language": "de" },
+                { "text": "Thank you.", "translation_status": "translation", "language": "en" },
+                { "text": "Hon", "start_ms": 1300, "end_ms": 1500, "translation_status": "none", "language": "en" },
+                { "text": "estly.", "start_ms": 1500, "end_ms": 1900, "translation_status": "none", "language": "en" }
+              ]
+            }
+            """;
+        using var details = JsonDocument.Parse("""{ "audio_duration_ms": 2000 }""");
+
+        var result = SonioxPlugin.ParseTranscript(chunks, details.RootElement, "de", translated: true);
+
+        Assert.Equal("Hello. Thank you. Honestly.", result.Text);
+    }
+
+    [Fact]
     public void ParseTranscript_TranslationKeepsEnglishPassagesOfMixedSpeech()
     {
         // Shape of a real Soniox transcript of German, then English, then German speech with language identification.

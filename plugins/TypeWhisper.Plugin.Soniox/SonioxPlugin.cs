@@ -961,10 +961,12 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
             spanEnd = 0;
         }
 
-        // A translated chunk that follows kept speech (or the other way round) may start without a space.
+        // A new translated chunk or kept passage may start without a space; tokens within one stay joined,
+        // because Soniox splits words into several tokens.
         void AppendResultText(string piece, bool translation)
         {
-            if (previousWasTranslation is { } previous && previous != translation && text.Length > 0
+            var startsChunk = translation ? run.Length == 0 : previousWasTranslation == true;
+            if (startsChunk && text.Length > 0
                 && !char.IsWhiteSpace(text[^1]) && !char.IsWhiteSpace(piece[0]))
             {
                 text.Append(' ');
