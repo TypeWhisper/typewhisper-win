@@ -37,9 +37,8 @@ public static class ChatMessageSplitter
     private static string Flatten(string text)
     {
         var builder = new StringBuilder(text.Length);
-        foreach (var raw in text)
+        foreach (var c in text.Select(raw => raw == '|' ? '/' : raw))
         {
-            var c = raw == '|' ? '/' : raw;
             var space = char.IsWhiteSpace(c) || char.IsControl(c);
             if (!space) builder.Append(c);
             else if (builder.Length > 0 && builder[^1] != ' ') builder.Append(' ');
