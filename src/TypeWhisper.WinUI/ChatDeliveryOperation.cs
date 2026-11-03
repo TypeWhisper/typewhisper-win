@@ -17,7 +17,8 @@ internal interface IChatDeliveryPlatform
     Task PauseAsync(int milliseconds);
 }
 
-internal enum ChatDeliveryStage { Open, Insert, Submit }
+// TooLong: without Enter the text needs more than the one message the chat field holds, so nothing was inserted.
+internal enum ChatDeliveryStage { Open, Insert, Submit, TooLong }
 
 /// <summary><paramref name="Sent"/> messages were fully delivered; <paramref name="FailedAt"/> names the step that stopped the rest.</summary>
 internal readonly record struct ChatDeliveryResult(int Sent, int Total, ChatDeliveryStage? FailedAt)
@@ -37,8 +38,10 @@ internal static class ChatDeliveryOperation
     internal static async Task<ChatDeliveryResult> RunAsync(IChatDeliveryPlatform platform, string text, ChatDeliveryOptions options,
         CancellationToken ct = default)
     {
-        // Without Enter every part would land in the same field, so only sent messages are split.
-        var parts = ChatMessageSplitter.Split(text, options.Submit ? options.MaxMessageBytes : null);
+        var parts = ChatMessageSplitter.Split(text, options.MaxMessageBytes);
+        // Without Enter every part would land in the same field, which keeps only one message. Inserting a longer text
+        // would cut it while reporting success, so it is not inserted; the caller keeps it on the clipboard and in review.
+        if (!options.Submit && parts.Count > 1) return new(0, parts.Count, ChatDeliveryStage.TooLong);
         IReadOnlyList<ushort> open = options.OpenKey switch
         {
             ChatOpenKey.Enter => Enter,
