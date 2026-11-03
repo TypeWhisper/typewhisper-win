@@ -1,0 +1,4 @@
+TypeWhisper 1.2.2 позволяет диктовать в чат World of Warcraft.
+
+- Включите World of Warcraft в разделе Settings > Advanced > Integrations и установите дополнение. Чат открывается сам, а полоса заклинания в игре показывает, что делает TypeWhisper.
+- Вставка текста в приложения на Flutter теперь работает.
