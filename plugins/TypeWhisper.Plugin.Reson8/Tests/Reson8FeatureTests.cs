@@ -354,6 +354,20 @@ public partial class Reson8PluginTests
     }
 
     [Fact]
+    public void PatternSets_ThatWouldNotFitIntoARequestAreRejected()
+    {
+        // 50 patterns of about 100 characters are within the per-pattern limits but take about 10 KB once encoded.
+        var pattern = string.Concat(Enumerable.Repeat("[A-Z]{2}", 12)) + "[0-9]";
+        var text = "Long\n" + string.Join("\n", Enumerable.Range(0, Reson8Catalog.MaximumPatternsPerSet).Select(index => pattern + index % 10));
+
+        var error = Assert.Throws<ArgumentException>(() => Reson8Catalog.ParsePatternSets(text, []));
+
+        Assert.Contains("“Long” is too long for a Reson8 request", error.Message);
+        Assert.Empty(Reson8Catalog.SanitizePatternSets([new Reson8PatternSet("long", "Long", Enumerable.Repeat(pattern, 50).ToArray())]));
+        Assert.Single(Reson8Catalog.ParsePatternSets("Short\n" + pattern, []));
+    }
+
+    [Fact]
     public void PatternSets_ANewSetNeverTakesTheIdOfAKeptOne()
     {
         var previous = new[] { new Reson8PatternSet("orders", "Orders", ["OLD[0-9]"]) };

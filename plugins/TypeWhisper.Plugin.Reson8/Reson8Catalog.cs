@@ -55,6 +55,8 @@ internal static partial class Reson8Catalog
     internal const int MaximumPatternsPerSet = 50;
     internal const int MaximumPatternLength = 120;
     internal const int MaximumPatternSetNameLength = 60;
+    /// <summary>Patterns take the place of phrases in the query string, so they share its budget below Reson8's 414.</summary>
+    internal const int MaximumEncodedPatternsLength = Reson8Plugin.MaximumEncodedPhrasesLength;
 
     /// <summary>
     /// Query parameters a model rejects, as Reson8's model documentation lists them; <c>GET /v1/model</c> does not.
@@ -162,6 +164,9 @@ internal static partial class Reson8Catalog
                 throw new ArgumentException($"A pattern set has at most {MaximumPatternsPerSet} patterns.");
             if (patterns.FirstOrDefault(pattern => pattern.Length > MaximumPatternLength) is { } longPattern)
                 throw new ArgumentException($"The pattern “{longPattern[..20]}…” is longer than {MaximumPatternLength} characters.");
+            if (EncodedPatternsLength(patterns) is var encoded && encoded > MaximumEncodedPatternsLength)
+                throw new ArgumentException(
+                    $"The pattern set “{name}” is too long for a Reson8 request ({encoded} of {MaximumEncodedPatternsLength} characters once encoded). Shorten its patterns or split it into two sets.");
             parsed.Add((name, patterns));
         }
 
@@ -195,12 +200,15 @@ internal static partial class Reson8Catalog
                 continue;
             var patterns = (set.Patterns ?? []).Where(pattern => !string.IsNullOrWhiteSpace(pattern) && pattern.Length <= MaximumPatternLength)
                 .Select(pattern => pattern.Trim()).Take(MaximumPatternsPerSet).ToArray();
-            if (patterns.Length > 0 && result.Count < MaximumPatternSets)
+            if (patterns.Length > 0 && result.Count < MaximumPatternSets && EncodedPatternsLength(patterns) <= MaximumEncodedPatternsLength)
                 result.Add(set with { Name = set.Name.Trim(), Patterns = patterns });
         }
 
         return result;
     }
+
+    /// <summary>The length of the patterns in the query string, measured like the phrases.</summary>
+    internal static int EncodedPatternsLength(IEnumerable<string> patterns) => Reson8Query.Escape(string.Join(",", patterns)).Length;
 
     private static string UniqueSlug(string name, ISet<string> used)
     {

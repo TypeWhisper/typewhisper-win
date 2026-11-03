@@ -37,7 +37,7 @@ Active dictionary terms arrive as a structured list. They go as `phrases` in the
 
 ## Pattern sets
 
-**Pattern sets** is a text field: the set's name on one line, one pattern per line below it, sets separated by an empty line. Each set appears as a model named "Name (patterns)" with the ID `patterns:<id>`, so a workflow can select it where such tokens are spoken; the ID stays the same while the name does, and a new set never takes the ID of a kept one. Patterns replace dictionary terms. **Check patterns with Reson8** sends half a second of silence with each set and reports Reson8's answer, for example that an API client with a custom model configured takes no patterns.
+**Pattern sets** is a text field: the set's name on one line, one pattern per line below it, sets separated by an empty line. Each set appears as a model named "Name (patterns)" with the ID `patterns:<id>`, so a workflow can select it where such tokens are spoken; the ID stays the same while the name does, and a new set never takes the ID of a kept one. A set has to fit into the query string like the phrases: its encoded patterns stay within 2,500 characters, and a longer set is rejected when saving. Patterns replace dictionary terms. **Check patterns with Reson8** sends half a second of silence with each set and reports Reson8's answer, for example that an API client with a custom model configured takes no patterns.
 
 ## Not included
 
