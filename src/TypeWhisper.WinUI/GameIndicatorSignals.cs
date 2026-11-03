@@ -27,8 +27,9 @@ internal sealed class GameIndicatorSignals(GameIndicatorChords chords, Func<IRea
     internal DateTimeOffset? ExpiresAt => _stage is Stage.Recording or Stage.Transcribing && Shown ? _shownUntil : null;
 
     /// <summary>Observes the visible phase; <paramref name="recording"/> tells whether the microphone is still open, and
-    /// <paramref name="copied"/> whether a completed dictation was copied instead of pasted, so it never reaches the chat.</summary>
-    internal void Observe(DictationPhase phase, bool recording, bool copied = false)
+    /// <paramref name="reachedChat"/> whether the dictation's text went into the game's chat. A dictation can complete
+    /// without it: copied instead of pasted, or handled by a workflow action.</summary>
+    internal void Observe(DictationPhase phase, bool recording, bool reachedChat = true)
     {
         if (_stage == Stage.Finished) return;
         switch (phase)
@@ -41,14 +42,17 @@ internal sealed class GameIndicatorSignals(GameIndicatorChords chords, Func<IRea
             case DictationPhase.Processing or DictationPhase.LoadingModel:
                 if (_stage is Stage.None or Stage.Recording) Show(Move(Stage.Transcribing, chords.Transcribing), TranscribingLimit);
                 break;
-            case DictationPhase.Completed when !copied:
-                // The add-on completes and fades its bar by itself, so a shown bar stays the indicator for this result.
+            case DictationPhase.Completed when reachedChat:
+                // The add-on sees the chat open, completes and fades its bar by itself, so a shown bar stays the
+                // indicator for this result.
                 _stage = Stage.Finished;
                 if (Shown) _shownUntil = DateTimeOffset.MaxValue;
                 break;
             default:
-                // Canceled, failed, copied, or nothing was said: no text reaches the chat, so the bar stops instead of
-                // waiting for it. Before the first signal the add-on shows nothing to stop.
+                // Canceled, failed, copied, handled by an action, or nothing was said: no text reaches the chat, so the
+                // bar stops instead of waiting for it, and TypeWhisper's own indicator says what happened. Before the
+                // first signal the add-on shows nothing to stop.
+                _shownUntil = DateTimeOffset.MinValue;
                 if (_stage == Stage.None) break;
                 Move(Stage.Finished, chords.Stopped);
                 break;

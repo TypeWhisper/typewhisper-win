@@ -50,15 +50,17 @@ public class GameIndicatorSignalsTests
     }
 
     [Fact]
-    public void ChosenCopy_StopsTheBar_SinceNoTextReachesTheChat()
+    public void CompletionWithoutChatText_StopsTheBarAndTheClaim()
     {
         var (signals, sent) = Create();
 
         signals.Observe(DictationPhase.Recording, recording: true);
         signals.Observe(DictationPhase.Processing, recording: false);
-        signals.Observe(DictationPhase.Completed, recording: false, copied: true);
+        signals.Observe(DictationPhase.Completed, recording: false, reachedChat: false);
 
+        // Copied instead of pasted, or handled by a workflow action: TypeWhisper's own confirmation shows.
         Assert.Equal(["recording", "transcribing", "stopped"], sent);
+        Assert.False(signals.Shown);
     }
 
     [Fact]
