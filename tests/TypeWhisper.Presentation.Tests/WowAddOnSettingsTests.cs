@@ -10,15 +10,15 @@ public sealed class WowAddOnSettingsTests : IDisposable
         TypeWhisperDB = {
         ["send"] = false,
         ["log"] = {
-        	"12.50 signal recording via chat in state nil", -- [1]
-        	"[\"send\"] = true,", -- [2]
+            "12.50 signal recording via chat in state nil", -- [1]
+            "[\"send\"] = true,", -- [2]
         },
         ["translateTo"] = "German",
         ["point"] = {
-        	"CENTER", -- [1]
-        	"CENTER", -- [2]
-        	0, -- [3]
-        	-180, -- [4]
+            "CENTER", -- [1]
+            "CENTER", -- [2]
+            0, -- [3]
+            -180, -- [4]
         },
         ["showBar"] = false,
         }

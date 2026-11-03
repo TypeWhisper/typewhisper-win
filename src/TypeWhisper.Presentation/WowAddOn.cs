@@ -89,7 +89,8 @@ public static partial class WowAddOn
         foreach (var candidate in candidates)
         {
             string full;
-            try { full = System.IO.Path.GetFullPath(candidate.Replace('/', '\\')).TrimEnd('\\'); }
+            // GetFullPath turns the database's forward slashes into the platform separator.
+            try { full = System.IO.Path.TrimEndingDirectorySeparator(System.IO.Path.GetFullPath(candidate)); }
             catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException) { continue; }
             // A chosen version folder, such as "_retail_", stands for its installation.
             if (VersionFolderPattern().IsMatch(System.IO.Path.GetFileName(full)) && System.IO.Path.GetDirectoryName(full) is { } parent) full = parent;
