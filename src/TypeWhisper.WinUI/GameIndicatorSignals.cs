@@ -8,14 +8,23 @@ namespace TypeWhisper.WinUI;
 /// its bar itself. <paramref name="send"/> may fail, for example while the game is not in front or Alt is held; the
 /// stage still moves on, and <see cref="Shown"/> says whether the game shows the dictation.
 /// </summary>
-internal sealed class GameIndicatorSignals(GameIndicatorChords chords, Func<IReadOnlyList<ushort>, bool> send)
+internal sealed class GameIndicatorSignals(GameIndicatorChords chords, Func<IReadOnlyList<ushort>, bool> send, TimeProvider? time = null)
 {
-    private enum Stage { None, Recording, Transcribing, Finished }
-    private Stage _stage;
+    /// <summary>How long the add-on keeps its bar without a new chord before it fades it out, so a lost chord cannot
+    /// leave a bar behind. They match RECORDING_TIMEOUT and TRANSCRIBING_TIMEOUT in the add-on.</summary>
+    internal static readonly TimeSpan RecordingLimit = TimeSpan.FromSeconds(300), TranscribingLimit = TimeSpan.FromSeconds(60);
 
-    /// <summary>Whether the last recording or transcribing chord reached the game. Until one does, or after one
-    /// fails, TypeWhisper keeps its own indicator.</summary>
-    internal bool Shown { get; private set; }
+    private enum Stage { None, Recording, Transcribing, Finished }
+    private readonly TimeProvider _time = time ?? TimeProvider.System;
+    private Stage _stage;
+    private DateTimeOffset _shownUntil = DateTimeOffset.MinValue;
+
+    /// <summary>Whether the game shows the dictation: the last recording or transcribing chord reached it and its bar
+    /// has not timed out. Otherwise TypeWhisper keeps its own indicator.</summary>
+    internal bool Shown => _time.GetUtcNow() < _shownUntil;
+
+    /// <summary>When the game's bar times out while the dictation is still recording or transcribing, or null.</summary>
+    internal DateTimeOffset? ExpiresAt => _stage is Stage.Recording or Stage.Transcribing && Shown ? _shownUntil : null;
 
     /// <summary>Observes the visible phase; <paramref name="recording"/> tells whether the microphone is still open.</summary>
     internal void Observe(DictationPhase phase, bool recording)
@@ -26,13 +35,15 @@ internal sealed class GameIndicatorSignals(GameIndicatorChords chords, Func<IRea
             // A model that loads while the user still speaks belongs to the recording.
             case DictationPhase.Recording:
             case DictationPhase.LoadingModel when recording:
-                if (_stage == Stage.None) Shown = Move(Stage.Recording, chords.Recording);
+                if (_stage == Stage.None) Show(Move(Stage.Recording, chords.Recording), RecordingLimit);
                 break;
             case DictationPhase.Processing or DictationPhase.LoadingModel:
-                if (_stage is Stage.None or Stage.Recording) Shown = Move(Stage.Transcribing, chords.Transcribing);
+                if (_stage is Stage.None or Stage.Recording) Show(Move(Stage.Transcribing, chords.Transcribing), TranscribingLimit);
                 break;
             case DictationPhase.Completed:
+                // The add-on completes and fades its bar by itself, so a shown bar stays the indicator for this result.
                 _stage = Stage.Finished;
+                if (Shown) _shownUntil = DateTimeOffset.MaxValue;
                 break;
             default:
                 // Canceled, failed, copied, or nothing was said. Before the first signal the add-on shows nothing to stop.
@@ -41,6 +52,8 @@ internal sealed class GameIndicatorSignals(GameIndicatorChords chords, Func<IRea
                 break;
         }
     }
+
+    private void Show(bool sent, TimeSpan limit) => _shownUntil = sent ? _time.GetUtcNow() + limit : DateTimeOffset.MinValue;
 
     private bool Move(Stage stage, IReadOnlyList<ushort> chord)
     {

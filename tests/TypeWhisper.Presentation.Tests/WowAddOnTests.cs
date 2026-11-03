@@ -95,6 +95,9 @@ public sealed class WowAddOnTests : IDisposable
         var stopped = lua.IndexOf($"key = \"{WowKeyName(indicator.Stopped)}\", button = \"TypeWhisperStoppedButton\", signal = \"stopped\"", StringComparison.Ordinal);
 
         Assert.True(recording >= 0 && transcribing >= 0 && stopped >= 0, "Each chord TypeWhisper presses is bound to its signal.");
+        // TypeWhisper brings its own indicator back when the add-on's bar times out, so both use the same limits.
+        Assert.Contains($"RECORDING_TIMEOUT, TRANSCRIBING_TIMEOUT = {TypeWhisper.WinUI.GameIndicatorSignals.RecordingLimit.TotalSeconds}, "
+            + $"{TypeWhisper.WinUI.GameIndicatorSignals.TranscribingLimit.TotalSeconds}", lua);
     }
 
     // The game's name for a chord: modifiers as CTRL and SHIFT, then the function key.
