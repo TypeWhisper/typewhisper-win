@@ -324,6 +324,7 @@ public sealed class SonioxFeatureTests
         var result = SonioxPlugin.ParseTranscript(chunks, details.RootElement, "de", translated: true);
 
         Assert.Equal("Hello. Thank you. Honestly.", result.Text);
+        Assert.Equal("Hello. Thank you. Honestly.", Assert.Single(result.Segments).Text);
     }
 
     [Fact]
@@ -602,6 +603,28 @@ public sealed class SonioxFeatureTests
 
         Assert.Equal(1, modelRequests);
         Assert.Equal(time.GetUtcNow(), sut.CurrentCatalog!.FetchedAt);
+    }
+
+    [Fact]
+    public async Task Speak_RefreshesTheListBeforeRejectingAVoiceItLacks()
+    {
+        var handler = new RoutingHandler(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/v1/models" => Json(ModelsJson),
+            "/v1/tts-models" => Json("""{ "models": [ { "id": "tts-rt-v2", "languages": [], "voices": [ { "id": "Bryce" } ] } ] }"""),
+            _ => throw new InvalidOperationException(request.RequestUri.ToString())
+        });
+        var host = new FeatureHost();
+        host.Secrets["api-key"] = "key";
+        using var sut = new SonioxPlugin(new HttpClient(handler), backgroundCatalogRefresh: true);
+        sut.SpeechPlaybackFactory = (_, _) => new FakePlayback();
+        await sut.ActivateAsync(host);
+
+        // "Bryce" is not among the built-in voices, but the loaded list names him.
+        await Assert.ThrowsAsync<ArgumentException>(() => sut.SpeakAsync(new TtsSpeakRequest("Hallo") { VoiceId = "Bryce" }, default));
+        await sut.LastCleanupTask;
+
+        Assert.Equal(["Bryce"], sut.AvailableVoices.Select(voice => voice.Id));
     }
 
     [Fact]

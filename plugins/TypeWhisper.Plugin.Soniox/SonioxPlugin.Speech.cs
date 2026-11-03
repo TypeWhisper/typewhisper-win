@@ -177,13 +177,14 @@ public sealed partial class SonioxPlugin : ITtsProviderPlugin
         if (text.Length > MaximumSpeechTextCharacters)
             throw new ArgumentException("Speech text must not exceed 5,000 characters.", nameof(request));
 
+        // Spoken feedback alone keeps the voices current. The refresh starts before the voice check, so a voice
+        // missing from a stale list becomes available for the next request; this request uses the current list.
+        RefreshCatalogInBackgroundIfStale();
         var voice = string.IsNullOrWhiteSpace(request.VoiceId) ? SelectedVoiceId ?? DefaultVoiceId : request.VoiceId.Trim();
         if (!SpeechVoices().Contains(voice, StringComparer.Ordinal))
             throw new ArgumentException("The requested Soniox voice is unavailable.", nameof(request));
 
         var body = CreateSpeechRequestBody(text, voice, ResolveSpeechLanguage(request.Language), EffectiveTtsModelId);
-        // Spoken feedback alone keeps the voices current; this request keeps the model and voice chosen above.
-        RefreshCatalogInBackgroundIfStale();
         using var message = new HttpRequestMessage(HttpMethod.Post, ResolveRegion(_region).TtsUrl);
         AddAuthorization(message, key);
         message.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");

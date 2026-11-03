@@ -893,8 +893,7 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
 
             if (IsTranslationToken(token))
             {
-                AppendResultText(tokenText, translation: true);
-                run.Append(tokenText);
+                run.Append(AppendResultText(tokenText, translation: true));
                 continue;
             }
 
@@ -907,15 +906,15 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
                 && endMs > startMs;
             if (keepsUntranslatedSpeech && HasTranslationStatus(token, "none"))
             {
-                AppendResultText(tokenText, translation: false);
+                var kept = AppendResultText(tokenText, translation: false);
                 if (hasTiming)
                 {
-                    timed.Add(new SonioxTimedToken(tokenText, startMs / 1000.0, endMs / 1000.0));
+                    timed.Add(new SonioxTimedToken(kept, startMs / 1000.0, endMs / 1000.0));
                     duration = Math.Max(duration, endMs / 1000.0);
                 }
                 else
                 {
-                    untimed.Append(tokenText);
+                    untimed.Append(kept);
                 }
 
                 continue;
@@ -962,20 +961,18 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
         }
 
         // A new translated chunk or kept passage may start without a space; tokens within one stay joined,
-        // because Soniox splits words into several tokens.
-        void AppendResultText(string piece, bool translation)
+        // because Soniox splits words into several tokens. Returns the piece as appended, so subtitles get
+        // the same separator as the text.
+        string AppendResultText(string piece, bool translation)
         {
             var startsChunk = translation ? run.Length == 0 : previousWasTranslation == true;
             if (startsChunk && text.Length > 0
                 && !char.IsWhiteSpace(text[^1]) && !char.IsWhiteSpace(piece[0]))
-            {
-                text.Append(' ');
-                if (translation)
-                    run.Append(' ');
-            }
+                piece = " " + piece;
 
             text.Append(piece);
             previousWasTranslation = translation;
+            return piece;
         }
     }
 
