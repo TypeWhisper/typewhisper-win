@@ -28,7 +28,7 @@ public sealed record WowVersionFolder(string Folder, string Path, string? Instal
     };
 
     /// <summary>The add-on folder inside this version.</summary>
-    public string AddOnPath => System.IO.Path.Combine(Path, "Interface", "AddOns", WowAddOn.FolderName);
+    public string AddOnPath => System.IO.Path.Join(Path, "Interface", "AddOns", WowAddOn.FolderName);
 }
 
 /// <summary>One file of the bundled add-on, copied byte for byte.</summary>
@@ -75,15 +75,11 @@ public static partial class WowAddOn
         if (!string.IsNullOrWhiteSpace(chosenFolder)) candidates.Add(chosenFolder);
         if (detect)
         {
-            productDatabase ??= System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+            productDatabase ??= System.IO.Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
                 "Battle.net", "Agent", "product.db");
-            try { candidates.AddRange(PathsInProductDatabase(File.ReadAllBytes(productDatabase))); }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { }
-            foreach (var programs in new[] { Environment.SpecialFolder.ProgramFilesX86, Environment.SpecialFolder.ProgramFiles })
-            {
-                var folder = Environment.GetFolderPath(programs);
-                if (folder.Length > 0) candidates.Add(System.IO.Path.Combine(folder, "World of Warcraft"));
-            }
+            candidates.AddRange(ProductDatabasePaths(productDatabase));
+            foreach (var folder in new[] { Environment.SpecialFolder.ProgramFilesX86, Environment.SpecialFolder.ProgramFiles }.Select(Environment.GetFolderPath))
+                if (folder.Length > 0) candidates.Add(System.IO.Path.Join(folder, "World of Warcraft"));
         }
         var roots = new List<string>();
         foreach (var candidate in candidates)
@@ -97,6 +93,13 @@ public static partial class WowAddOn
             if (Directory.Exists(full) && !roots.Contains(full, StringComparer.OrdinalIgnoreCase)) roots.Add(full);
         }
         return roots;
+    }
+
+    // Without Battle.net's database, a chosen folder and the default install folders still apply.
+    private static IReadOnlyList<string> ProductDatabasePaths(string path)
+    {
+        try { return PathsInProductDatabase(File.ReadAllBytes(path)); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { return []; }
     }
 
     /// <summary>
@@ -152,7 +155,7 @@ public static partial class WowAddOn
             {
                 Directory.CreateDirectory(folder.AddOnPath);
                 foreach (var file in files)
-                    AtomicFileWriter.WriteAllBytes(System.IO.Path.Combine(folder.AddOnPath, file.Name), file.Data);
+                    AtomicFileWriter.WriteAllBytes(System.IO.Path.Join(folder.AddOnPath, file.Name), file.Data);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { failures.Add((folder, ex.Message)); }
         }
@@ -170,7 +173,7 @@ public static partial class WowAddOn
     public static bool WriteStatus(string? versionFolder, string? translationLlm, bool translationReady)
     {
         if (!IsInstalledIn(versionFolder)) return false;
-        var path = System.IO.Path.Combine(versionFolder!, "Interface", "AddOns", FolderName, StatusFileName);
+        var path = System.IO.Path.Join(versionFolder!, "Interface", "AddOns", FolderName, StatusFileName);
         var content = StatusContent(translationLlm, translationReady);
         try
         {
@@ -206,7 +209,7 @@ public static partial class WowAddOn
     public static bool IsInstalledIn(string? versionFolder)
     {
         if (string.IsNullOrWhiteSpace(versionFolder)) return false;
-        try { return File.Exists(System.IO.Path.Combine(versionFolder, "Interface", "AddOns", FolderName, FolderName + ".toc")); }
+        try { return File.Exists(System.IO.Path.Join(versionFolder, "Interface", "AddOns", FolderName, FolderName + ".toc")); }
         catch (Exception ex) when (ex is ArgumentException or NotSupportedException) { return false; }
     }
 
@@ -214,7 +217,7 @@ public static partial class WowAddOn
     {
         try
         {
-            var toc = System.IO.Path.Combine(versionFolder, "Interface", "AddOns", FolderName, FolderName + ".toc");
+            var toc = System.IO.Path.Join(versionFolder, "Interface", "AddOns", FolderName, FolderName + ".toc");
             return File.Exists(toc) ? ReadVersion(File.ReadAllText(toc)) ?? "0" : null;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return "0"; }
