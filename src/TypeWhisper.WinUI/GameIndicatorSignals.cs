@@ -26,8 +26,9 @@ internal sealed class GameIndicatorSignals(GameIndicatorChords chords, Func<IRea
     /// <summary>When the game's bar times out while the dictation is still recording or transcribing, or null.</summary>
     internal DateTimeOffset? ExpiresAt => _stage is Stage.Recording or Stage.Transcribing && Shown ? _shownUntil : null;
 
-    /// <summary>Observes the visible phase; <paramref name="recording"/> tells whether the microphone is still open.</summary>
-    internal void Observe(DictationPhase phase, bool recording)
+    /// <summary>Observes the visible phase; <paramref name="recording"/> tells whether the microphone is still open, and
+    /// <paramref name="copied"/> whether a completed dictation was copied instead of pasted, so it never reaches the chat.</summary>
+    internal void Observe(DictationPhase phase, bool recording, bool copied = false)
     {
         if (_stage == Stage.Finished) return;
         switch (phase)
@@ -40,13 +41,14 @@ internal sealed class GameIndicatorSignals(GameIndicatorChords chords, Func<IRea
             case DictationPhase.Processing or DictationPhase.LoadingModel:
                 if (_stage is Stage.None or Stage.Recording) Show(Move(Stage.Transcribing, chords.Transcribing), TranscribingLimit);
                 break;
-            case DictationPhase.Completed:
+            case DictationPhase.Completed when !copied:
                 // The add-on completes and fades its bar by itself, so a shown bar stays the indicator for this result.
                 _stage = Stage.Finished;
                 if (Shown) _shownUntil = DateTimeOffset.MaxValue;
                 break;
             default:
-                // Canceled, failed, copied, or nothing was said. Before the first signal the add-on shows nothing to stop.
+                // Canceled, failed, copied, or nothing was said: no text reaches the chat, so the bar stops instead of
+                // waiting for it. Before the first signal the add-on shows nothing to stop.
                 if (_stage == Stage.None) break;
                 Move(Stage.Finished, chords.Stopped);
                 break;

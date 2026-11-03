@@ -50,6 +50,18 @@ public class GameIndicatorSignalsTests
     }
 
     [Fact]
+    public void ChosenCopy_StopsTheBar_SinceNoTextReachesTheChat()
+    {
+        var (signals, sent) = Create();
+
+        signals.Observe(DictationPhase.Recording, recording: true);
+        signals.Observe(DictationPhase.Processing, recording: false);
+        signals.Observe(DictationPhase.Completed, recording: false, copied: true);
+
+        Assert.Equal(["recording", "transcribing", "stopped"], sent);
+    }
+
+    [Fact]
     public void ModelLoading_CountsAsRecordingWhileTheMicrophoneIsOpen()
     {
         var (signals, sent) = Create();

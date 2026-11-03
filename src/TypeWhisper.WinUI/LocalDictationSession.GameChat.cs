@@ -84,7 +84,8 @@ internal sealed partial class LocalDictationSession
     private void ObserveGameIndicator()
     {
         if (_gameIndicator is not { } indicator) return;
-        indicator.Observe(OverlayState.Phase, _audio.IsRecording);
+        var state = OverlayState;
+        indicator.Observe(state.Phase, _audio.IsRecording, state.CopyChosen);
         if (indicator.ExpiresAt is not { } expires || _gameIndicatorTimer is not { } timer) return;
         timer.Stop();
         timer.Interval = TimeSpan.FromMilliseconds(Math.Max(0, (expires - DateTimeOffset.UtcNow).TotalMilliseconds) + 250);

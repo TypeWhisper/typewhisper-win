@@ -251,9 +251,9 @@ public sealed partial class MainWindow : Window
         var revision = ++_overlayRevision;
         _settingsWindow?.SetLiveTranscriptionAvailability(_dictation.SupportsLiveTranscription);
         DictationChanged?.Invoke(_dictation.Status, _dictation.IsRecording);
-        // The game add-on shows recording and transcribing in the game. Errors, copies and the Escape warning still
-        // show here, since the game's bar cannot say what happened to the text.
-        if (_dictation.ShowsGameIndicator && _dictation.OverlayState is { ShowsCancelWarning: false, ShowsCancelled: false } gameState
+        // The game add-on shows recording and transcribing in the game. Errors, copies (also a chosen copy instead of
+        // pasting) and the Escape warning still show here, since the game's bar cannot say what happened to the text.
+        if (_dictation.ShowsGameIndicator && _dictation.OverlayState is { ShowsCancelWarning: false, ShowsCancelled: false, CopyChosen: false } gameState
             && gameState.Phase is DictationPhase.Recording or DictationPhase.Processing or DictationPhase.LoadingModel or DictationPhase.Completed)
         {
             _liveOverlay?.HidePreview();
