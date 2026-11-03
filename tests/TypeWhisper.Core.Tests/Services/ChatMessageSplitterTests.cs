@@ -15,9 +15,21 @@ public class ChatMessageSplitterTests
     [InlineData("/dance now", "dance now")]
     [InlineData("  // quit", "quit")]
     [InlineData("and/or", "and/or")]
+    [InlineData("/ /logout", "logout")]
+    [InlineData(" /\t/\n/ dance", "dance")]
     public void Split_LeadingSlash_IsNeverSentAsCommand(string text, string expected)
     {
         Assert.Equal([expected], ChatMessageSplitter.Split(text, null));
+    }
+
+    [Fact]
+    public void Split_LaterMessage_NeverStartsWithASlashEither()
+    {
+        // The second message would begin with "/ /logout" after the cut at the space.
+        var parts = ChatMessageSplitter.Split("first part / /logout now", 12);
+
+        Assert.All(parts, part => Assert.False(part.StartsWith('/'), part));
+        Assert.Contains("logout now", string.Join(" ", parts));
     }
 
     [Theory]
