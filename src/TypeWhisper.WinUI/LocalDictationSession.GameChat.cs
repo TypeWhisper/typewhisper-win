@@ -16,8 +16,9 @@ internal sealed partial class LocalDictationSession
     private Workflow? _gameTranslationAtStart;
 
     /// <summary>Whether the game add-on shows the current dictation, so TypeWhisper's own indicator stays hidden. A
-    /// signal that did not reach the game, such as while Alt is held, keeps TypeWhisper's indicator.</summary>
-    internal bool ShowsGameIndicator => _gameIndicator is { Shown: true };
+    /// signal that did not reach the game, such as while Alt is held, keeps TypeWhisper's indicator, and so does a game
+    /// that is no longer in front: a minimized game cannot show that the microphone is still open.</summary>
+    internal bool ShowsGameIndicator => _gameIndicator is { Shown: true } && NativeMethods.GetForegroundWindow() == _target;
 
     // Once per dictation, after capture began. The add-on's page in the game decides sending, the cast bar and
     // translation; the game saves it on /reload or logout, and TypeWhisper reads it from there.
