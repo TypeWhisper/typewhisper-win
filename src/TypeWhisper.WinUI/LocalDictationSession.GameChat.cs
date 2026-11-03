@@ -11,6 +11,8 @@ internal sealed partial class LocalDictationSession
     // Fires when the game's bar times out during a long recording or transcription, so TypeWhisper's indicator returns.
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _gameIndicatorTimer;
     private bool _gameCaptured;
+    // Whether this dictation's text went into the game's chat; a copy or a workflow action completes without it.
+    private bool _gameChatReached;
     private Workflow? _gameTranslationAtStart;
 
     /// <summary>Whether the game add-on shows the current dictation, so TypeWhisper's own indicator stays hidden. A
@@ -23,6 +25,7 @@ internal sealed partial class LocalDictationSession
     {
         if (_gameCaptured) return;
         _gameCaptured = true;
+        _gameChatReached = false;
         _chatAtStart = null;
         _gameIndicator = null;
         _gameTranslationAtStart = null;
@@ -85,7 +88,7 @@ internal sealed partial class LocalDictationSession
     private void ObserveGameIndicator()
     {
         if (_gameIndicator is not { } indicator) return;
-        indicator.Observe(OverlayState.Phase, _audio.IsRecording);
+        indicator.Observe(OverlayState.Phase, _audio.IsRecording, _gameChatReached);
         if (indicator.ExpiresAt is not { } expires || _gameIndicatorTimer is not { } timer) return;
         timer.Stop();
         timer.Interval = TimeSpan.FromMilliseconds(Math.Max(0, (expires - DateTimeOffset.UtcNow).TotalMilliseconds) + 250);
@@ -119,6 +122,7 @@ internal sealed partial class LocalDictationSession
             !_disposed && !_operationCancellation.Token.IsCancellationRequested
             && _outputAtStart.RestrictedBy(OutputPreferences.Current).AutoPaste)).Inserted, chat.SettleMilliseconds);
         var result = await ChatDeliveryOperation.RunAsync(platform, text, chat, _operationCancellation.Token);
+        _gameChatReached = result.Sent > 0;
         AppDiagnostics.Write(result.Completed
             ? $"chat.sent messages={result.Sent}"
             : $"chat.stopped stage={result.FailedAt} messages={result.Sent} total={result.Total}");
