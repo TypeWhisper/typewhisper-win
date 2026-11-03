@@ -36,7 +36,8 @@ public sealed class SonioxFeatureTests
         }
         """;
 
-    // Shape of a real Soniox async transcript with one-way translation to English: "text" keeps the spoken words.
+    // Shape of a real Soniox async transcript with one-way translation to English and without language
+    // identification: "text" keeps the spoken words, and every spoken token is "none".
     private const string TranslatedTranscriptJson = """
         {
           "id": "t1",
@@ -302,6 +303,37 @@ public sealed class SonioxFeatureTests
     }
 
     [Fact]
+    public void ParseTranscript_TranslationKeepsEnglishPassagesOfMixedSpeech()
+    {
+        // Shape of a real Soniox transcript of German, then English, then German speech with language identification.
+        const string mixed = """
+            {
+              "text": "Die Rechnung beträgt 1.234 Euro 56. Honestly, the result is better than I expected. Bitte schick mir den Entwurf.",
+              "tokens": [
+                { "text": "Die Rechnung beträgt 1.234 Euro 56.", "start_ms": 1350, "end_ms": 5430, "translation_status": "original", "language": "de" },
+                { "text": "The bill comes to 1,234 euros and 56 cents.", "start_ms": 0, "end_ms": 0, "translation_status": "translation", "language": "en" },
+                { "text": " Honestly,", "start_ms": 7710, "end_ms": 8400, "translation_status": "none", "language": "en" },
+                { "text": " the result is better than I expected.", "start_ms": 8400, "end_ms": 9990, "translation_status": "none", "language": "en" },
+                { "text": " Bitte schick mir den Entwurf.", "start_ms": 12030, "end_ms": 13830, "translation_status": "original", "language": "de" },
+                { "text": "Please send me the draft.", "start_ms": 0, "end_ms": 0, "translation_status": "translation", "language": "en" }
+              ]
+            }
+            """;
+        using var details = JsonDocument.Parse("""{ "audio_duration_ms": 14000 }""");
+
+        var result = SonioxPlugin.ParseTranscript(mixed, details.RootElement, "de", translated: true);
+
+        Assert.Equal("The bill comes to 1,234 euros and 56 cents. Honestly, the result is better than I expected. Please send me the draft.", result.Text);
+        Assert.Equal("en", result.DetectedLanguage);
+        Assert.Equal(
+            ["The bill comes to 1,234 euros and 56 cents.", "Honestly, the result is better than I expected.", "Please send me the draft."],
+            result.Segments.Select(segment => segment.Text));
+        Assert.Equal((1.35, 5.43), (result.Segments[0].Start, result.Segments[0].End));
+        Assert.Equal((7.71, 9.99), (result.Segments[1].Start, result.Segments[1].End));
+        Assert.Equal((12.03, 13.83), (result.Segments[2].Start, result.Segments[2].End));
+    }
+
+    [Fact]
     public void StreamingConfiguration_IncludesContextOnlyWhenPresent()
     {
         var context = SonioxPlugin.CreateRequestContext(PluginDictionaryTerms.CreateStructuredPrompt(["Soniox"]), "Standup");
@@ -517,6 +549,35 @@ public sealed class SonioxFeatureTests
         Assert.Contains("Missing required field: language", error.Message);
         Assert.False((await sut.SpeakAsync(new TtsSpeakRequest("   "), default)).IsActive);
         await Assert.ThrowsAsync<ArgumentException>(() => sut.SpeakAsync(new TtsSpeakRequest(new string('a', 5_001)), default));
+    }
+
+    [Fact]
+    public async Task Speak_RefreshesAStaleModelListInTheBackground()
+    {
+        var modelRequests = 0;
+        var handler = new RoutingHandler(request =>
+        {
+            switch (request.RequestUri!.AbsolutePath)
+            {
+                case "/tts": return new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent([1, 0]) };
+                case "/v1/models": modelRequests++; return Json(ModelsJson);
+                case "/v1/tts-models": return Json(TtsModelsJson);
+                default: throw new InvalidOperationException(request.RequestUri.ToString());
+            }
+        });
+        var host = new FeatureHost();
+        host.Secrets["api-key"] = "key";
+        var time = new ManualTime(new DateTimeOffset(2026, 11, 3, 12, 0, 0, TimeSpan.Zero));
+        host.SetSetting("catalog", Catalog("us") with { FetchedAt = time.GetUtcNow() - TimeSpan.FromDays(2) });
+        using var sut = new SonioxPlugin(new HttpClient(handler), time: time, backgroundCatalogRefresh: true);
+        sut.SpeechPlaybackFactory = (_, _) => new FakePlayback();
+        await sut.ActivateAsync(host);
+
+        await sut.SpeakAsync(new TtsSpeakRequest("Hallo") { VoiceId = "Nina" }, default);
+        await sut.LastCleanupTask;
+
+        Assert.Equal(1, modelRequests);
+        Assert.Equal(time.GetUtcNow(), sut.CurrentCatalog!.FetchedAt);
     }
 
     [Fact]

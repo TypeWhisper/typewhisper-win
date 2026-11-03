@@ -171,6 +171,8 @@ public sealed partial class SonioxPlugin : ITtsProviderPlugin
             throw new ArgumentException("The requested Soniox voice is unavailable.", nameof(request));
 
         var body = CreateSpeechRequestBody(text, voice, ResolveSpeechLanguage(request.Language), EffectiveTtsModelId);
+        // Spoken feedback alone keeps the voices current; this request keeps the model and voice chosen above.
+        RefreshCatalogInBackgroundIfStale();
         using var message = new HttpRequestMessage(HttpMethod.Post, ResolveRegion(_region).TtsUrl);
         AddAuthorization(message, key);
         message.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");

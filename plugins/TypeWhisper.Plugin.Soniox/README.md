@@ -22,7 +22,7 @@ Active dictionary terms arrive as a structured list and go to Soniox as `context
 
 ## Translation
 
-Translate to English uses Soniox's one-way translation for recorded audio. Soniox keeps the spoken words in the transcript's `text` and returns the English text as translation tokens; the plugin returns those tokens and times each translated chunk by the spoken tokens before it. Speech that is already English has no translation tokens and keeps its transcript. The host transcribes translation tasks from the complete recording, never over the live stream.
+Translate to English uses Soniox's one-way translation for recorded audio. Soniox keeps the spoken words in the transcript's `text` and returns the English text as translation tokens; the plugin returns those tokens and times each translated chunk by the spoken tokens before it. With language identification Soniox marks speech it leaves untranslated, such as English passages in mixed speech, and those passages stay in the result. Speech that is entirely English has no translation tokens and keeps its transcript. The host transcribes translation tasks from the complete recording, never over the live stream.
 
 ## Long recordings
 

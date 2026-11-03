@@ -862,13 +862,17 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
         };
     }
 
-    private static bool IsTranslationToken(JsonElement token) =>
+    private static bool IsTranslationToken(JsonElement token) => HasTranslationStatus(token, "translation");
+
+    private static bool HasTranslationStatus(JsonElement token, string status) =>
         token.ValueKind == JsonValueKind.Object
-        && string.Equals(GetString(token, "translation_status"), "translation", StringComparison.Ordinal);
+        && string.Equals(GetString(token, "translation_status"), status, StringComparison.Ordinal);
 
     /// <summary>
     /// Builds the English result. Translation tokens carry no timing; each translated chunk follows the spoken
-    /// tokens it translates, so it takes their time span for subtitles.
+    /// tokens it translates, so it takes their time span for subtitles. With language identification, Soniox marks
+    /// translated speech "original" and speech it leaves as is, such as English passages, "none"; those passages
+    /// stay in the result. Without "original" marks every spoken token is "none" and only translations count.
     /// </summary>
     private static PluginTranscriptionResult ParseTranslatedTranscript(JsonElement tokens, double duration)
     {
@@ -878,6 +882,8 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
         var timed = new List<SonioxTimedToken>();
         double? spanStart = null;
         var spanEnd = 0.0;
+        var keepsUntranslatedSpeech = tokens.EnumerateArray().Any(token => HasTranslationStatus(token, "original"));
+        bool? previousWasTranslation = null;
 
         foreach (var token in tokens.EnumerateArray())
         {
@@ -887,7 +893,7 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
 
             if (IsTranslationToken(token))
             {
-                text.Append(tokenText);
+                AppendResultText(tokenText, translation: true);
                 run.Append(tokenText);
                 continue;
             }
@@ -895,9 +901,27 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
             if (run.Length > 0)
                 FlushRun();
 
-            if (TryGetDouble(token, "start_ms", out var startMs)
-                && TryGetDouble(token, "end_ms", out var endMs)
-                && endMs > startMs)
+            double startMs = 0, endMs = 0;
+            var hasTiming = TryGetDouble(token, "start_ms", out startMs)
+                && TryGetDouble(token, "end_ms", out endMs)
+                && endMs > startMs;
+            if (keepsUntranslatedSpeech && HasTranslationStatus(token, "none"))
+            {
+                AppendResultText(tokenText, translation: false);
+                if (hasTiming)
+                {
+                    timed.Add(new SonioxTimedToken(tokenText, startMs / 1000.0, endMs / 1000.0));
+                    duration = Math.Max(duration, endMs / 1000.0);
+                }
+                else
+                {
+                    untimed.Append(tokenText);
+                }
+
+                continue;
+            }
+
+            if (hasTiming)
             {
                 spanStart ??= startMs / 1000.0;
                 spanEnd = Math.Max(spanEnd, endMs / 1000.0);
@@ -935,6 +959,21 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
             run.Clear();
             spanStart = null;
             spanEnd = 0;
+        }
+
+        // A translated chunk that follows kept speech (or the other way round) may start without a space.
+        void AppendResultText(string piece, bool translation)
+        {
+            if (previousWasTranslation is { } previous && previous != translation && text.Length > 0
+                && !char.IsWhiteSpace(text[^1]) && !char.IsWhiteSpace(piece[0]))
+            {
+                text.Append(' ');
+                if (translation)
+                    run.Append(' ');
+            }
+
+            text.Append(piece);
+            previousWasTranslation = translation;
         }
     }
 
