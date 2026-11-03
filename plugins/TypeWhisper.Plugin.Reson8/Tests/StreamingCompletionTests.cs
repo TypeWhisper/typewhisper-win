@@ -22,8 +22,8 @@ public sealed class StreamingCompletionTests
             var flush = await Receive(socket, default); Assert.Contains("flush_request", Encoding.UTF8.GetString(flush));
             await finished.Task.WaitAsync(TimeSpan.FromSeconds(5));
         });
-        await using var session = await Reson8StreamingSession.ConnectAsync("fixture", "https://api.reson8.dev", "Authorization",
-            null, null, default, new Uri($"ws://127.0.0.1:{port}/"), finalizationTimeout: TimeSpan.FromMilliseconds(250));
+        await using var session = await Reson8StreamingSession.ConnectAsync("fixture", "Authorization",
+            new Uri($"ws://127.0.0.1:{port}/"), null, default, finalizationTimeout: TimeSpan.FromMilliseconds(250));
         await Assert.ThrowsAsync<TimeoutException>(() => session.FinalizeAsync(default));
         finished.TrySetResult(); await server.WaitAsync(TimeSpan.FromSeconds(5));
     }
@@ -35,8 +35,8 @@ public sealed class StreamingCompletionTests
         var port = ((IPEndPoint)tcp.LocalEndpoint).Port; tcp.Stop();
         using var listener = new HttpListener(); listener.Prefixes.Add($"http://127.0.0.1:{port}/"); listener.Start();
         var request = listener.GetContextAsync();
-        await Assert.ThrowsAsync<TimeoutException>(() => Reson8StreamingSession.ConnectAsync("fixture", "https://api.reson8.dev",
-            "Authorization", null, null, default, new Uri($"ws://127.0.0.1:{port}/"), TimeSpan.FromMilliseconds(250)));
+        await Assert.ThrowsAsync<TimeoutException>(() => Reson8StreamingSession.ConnectAsync("fixture",
+            "Authorization", new Uri($"ws://127.0.0.1:{port}/"), null, default, TimeSpan.FromMilliseconds(250)));
         var context = await request.WaitAsync(TimeSpan.FromSeconds(5)); context.Response.Close();
     }
 
@@ -56,8 +56,8 @@ public sealed class StreamingCompletionTests
             await Send(socket, """{"type":"error","message":"Fixture failure"}""", ct);
             await finished.Task.WaitAsync(ct);
         }, ct);
-        await using var session = await Reson8StreamingSession.ConnectAsync("fixture", "https://api.reson8.dev",
-            "Authorization", null, null, ct, new Uri($"ws://127.0.0.1:{port}/"));
+        await using var session = await Reson8StreamingSession.ConnectAsync("fixture",
+            "Authorization", new Uri($"ws://127.0.0.1:{port}/"), null, ct);
         await Assert.ThrowsAsync<InvalidOperationException>(() => session.FinalizeAsync(ct));
         await Assert.ThrowsAsync<InvalidOperationException>(() => session.SendAudioAsync(new byte[] { 0, 0 }, ct));
         finished.TrySetResult(); await server.WaitAsync(ct);
@@ -79,8 +79,8 @@ public sealed class StreamingCompletionTests
             await Send(socket, """{"type":"transcript","text":"Hello","is_final":true}""", ct);
             await finished.Task.WaitAsync(ct);
         }, ct);
-        await using var session = await Reson8StreamingSession.ConnectAsync("fixture", "https://api.reson8.dev",
-            "Authorization", null, "en", ct, new Uri($"ws://127.0.0.1:{port}/"));
+        await using var session = await Reson8StreamingSession.ConnectAsync("fixture",
+            "Authorization", new Uri($"ws://127.0.0.1:{port}/"), "en", ct);
         session.TranscriptReceived += _ => throw new ApplicationException("Callback failed");
         await session.SendAudioAsync(new byte[] { 0, 0 }, ct);
         await Assert.ThrowsAsync<ApplicationException>(() => session.FinalizeAsync(ct));
@@ -110,7 +110,7 @@ public sealed class StreamingCompletionTests
             if(prematureClose) await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure,null,ct);
             await clientFinished.Task.WaitAsync(ct);
         },ct);
-        await using var session=await Reson8StreamingSession.ConnectAsync("fixture","https://api.reson8.dev","Authorization",null,"de",ct,uri);var events=new ConcurrentQueue<StreamingTranscriptEvent>();session.TranscriptReceived+=events.Enqueue;
+        await using var session=await Reson8StreamingSession.ConnectAsync("fixture","Authorization",uri,"de",ct);var events=new ConcurrentQueue<StreamingTranscriptEvent>();session.TranscriptReceived+=events.Enqueue;
         await session.SendAudioAsync(new byte[]{1,2,3,4},ct);
         var finish=session.FinalizeAsync(ct);await endReceived.Task.WaitAsync(ct);Assert.False(finish.IsCompleted);release.TrySetResult();
         if(prematureClose) await Assert.ThrowsAnyAsync<WebSocketException>(()=>finish);
