@@ -106,6 +106,49 @@ public class GameIndicatorSignalsTests
         Assert.False(lost.Shown);
     }
 
+    private sealed class ManualTime : TimeProvider
+    {
+        internal DateTimeOffset Now = new(2026, 11, 4, 12, 0, 0, TimeSpan.Zero);
+        public override DateTimeOffset GetUtcNow() => Now;
+    }
+
+    [Fact]
+    public void Shown_EndsWhenTheGamesBarTimesOut()
+    {
+        var time = new ManualTime();
+        var signals = new GameIndicatorSignals(Chords, _ => true, time);
+
+        signals.Observe(DictationPhase.Recording, recording: true);
+        Assert.Equal(time.Now + GameIndicatorSignals.RecordingLimit, signals.ExpiresAt);
+        time.Now += GameIndicatorSignals.RecordingLimit;
+        // The add-on faded its bar after a very long recording: TypeWhisper's indicator comes back.
+        Assert.False(signals.Shown);
+        Assert.Null(signals.ExpiresAt);
+
+        signals.Observe(DictationPhase.Processing, recording: false);
+        Assert.True(signals.Shown);
+        time.Now += GameIndicatorSignals.TranscribingLimit - TimeSpan.FromSeconds(1);
+        Assert.True(signals.Shown);
+        time.Now += TimeSpan.FromSeconds(2);
+        Assert.False(signals.Shown);
+    }
+
+    [Fact]
+    public void Shown_StaysForAFinishedDictation()
+    {
+        var time = new ManualTime();
+        var signals = new GameIndicatorSignals(Chords, _ => true, time);
+        signals.Observe(DictationPhase.Recording, recording: true);
+        signals.Observe(DictationPhase.Processing, recording: false);
+
+        signals.Observe(DictationPhase.Completed, recording: false);
+        time.Now += TimeSpan.FromHours(1);
+
+        // The add-on completes its bar itself; a late recheck must not bring back TypeWhisper's finished bubble.
+        Assert.True(signals.Shown);
+        Assert.Null(signals.ExpiresAt);
+    }
+
     [Fact]
     public void IndicatorFor_NeedsTheAddOnWithItsBarOn()
     {

@@ -583,6 +583,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         _retentionTimer = dispatcher.CreateTimer();
         _retentionTimer.Interval = TimeSpan.FromMinutes(1);
         _retentionTimer.Tick += async (_, _) => await ApplyHistoryRetentionAsync();
+        CreateGameIndicatorTimer(dispatcher);
         _silenceTimer = dispatcher.CreateTimer();
         _silenceTimer.Interval = TimeSpan.FromMilliseconds(100);
         _silenceTimer.Tick += async (_, _) =>
@@ -1318,7 +1319,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         Status = status;
         _phase = phase ?? (_audio.IsRecording ? DictationPhase.Recording : DictationPhase.Idle);
         if (_phase != DictationPhase.Completed) _copyChosen = false;
-        _gameIndicator?.Observe(OverlayState.Phase, _audio.IsRecording);
+        ObserveGameIndicator();
         Changed?.Invoke();
     }
 

@@ -29,7 +29,9 @@ local LOG_LINES = 40
 -- Offsets are kept in screen units, so the bar stays in place when its size changes.
 local DEFAULT_POINT = { "CENTER", "CENTER", 0, -180 }
 local MIN_SCALE, MAX_SCALE, SCALE_STEP = 0.5, 2, 0.1
-local RECORDING_TIMEOUT, TRANSCRIBING_TIMEOUT = 300, 30
+-- Without a new key for this long the bar fades out, so a lost key cannot leave it behind. TypeWhisper shows its own
+-- indicator again after the same times (GameIndicatorSignals).
+local RECORDING_TIMEOUT, TRANSCRIBING_TIMEOUT = 300, 60
 local WAVE_BARS = 36
 
 -- Texts --------------------------------------------------------------------------------------------------------------
