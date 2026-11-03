@@ -54,7 +54,6 @@ public sealed class ApplicationActivationTests
 
     [Theory]
     [InlineData("advanced", "Advanced")]
-    [InlineData("games", "Games")]
     [InlineData("History", "Privacy")]
     [InlineData("recovery", "Files & recovery")]
     [InlineData("plugin:com.typewhisper.sherpa-onnx", "plugin:com.typewhisper.sherpa-onnx")]

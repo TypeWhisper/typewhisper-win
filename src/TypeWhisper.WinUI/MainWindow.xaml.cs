@@ -531,7 +531,6 @@ public sealed partial class MainWindow : Window
                 {
                     AdvancedSettingsPage.Render(content, pickers, _dictation, _httpApi);
                 }
-                if (category == "Games") GamesSettingsPage.Render(content, pickers, _dictation.GamePreferences, _dictation.GameTranslationLlm);
                 if (category == "Shortcuts" && _cancelProcessingShortcut?.Error is { } shortcutError)
                     content.Children.Add(new TextBlock { Text = shortcutError, TextWrapping = TextWrapping.Wrap });
                 if (category == "Files & recovery")

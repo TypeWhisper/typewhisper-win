@@ -30,7 +30,7 @@ Sending stays with Blizzard's own code, so it also works during encounters. The 
 
 ## Install
 
-In TypeWhisper, open **Settings › Games**, turn on **Dictate into the chat** and click **Install add-on**. TypeWhisper finds World of Warcraft through Battle.net and copies the add-on into every installed version (Retail, Classic, Forever). If the game is running, type `/reload`.
+In TypeWhisper, open **Settings › Advanced › Integrations**, turn on **World of Warcraft** and click **Install add-on**. TypeWhisper finds World of Warcraft through Battle.net and copies the add-on into every installed version (Retail, Classic, Forever). If the game is running, type `/reload`.
 
 For a manual install, copy the `TypeWhisper` folder into `World of Warcraft\<version>\Interface\AddOns\`.
 
@@ -44,7 +44,7 @@ Everything about dictating in the game is set on the add-on's page in **Options 
 
 The add-on cannot reach TypeWhisper, so TypeWhisper reads these settings from the file the game saves them in. The game writes it when you type `/reload` or log out. After a change, the page offers a **Reload now** button.
 
-The other way round, TypeWhisper writes `Status.lua` into the add-on folder when you dictate into the game or open **Settings › Games**. It names the translating LLM. The game loads it on the next `/reload`.
+The other way round, TypeWhisper writes `Status.lua` into the add-on folder when you dictate into the game or open **Settings › Advanced**. It names the translating LLM. The game loads it on the next `/reload`.
 
 To answer a whisper, press the game's Reply key (R by default), then dictate. The page names your Reply key.
 

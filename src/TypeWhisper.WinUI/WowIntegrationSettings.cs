@@ -7,30 +7,24 @@ using TypeWhisper.Presentation;
 
 namespace TypeWhisper.WinUI;
 
-// Settings › Games: dictation into a game's text chat. Sending, the cast bar and translation are set on the add-on's own
-// page in the game, so this page only turns chat dictation on and installs the add-on. Row tags match the settings search keys.
-internal static class GamesSettingsPage
+// Advanced › Integrations: dictation into the World of Warcraft chat. Sending, the cast bar and translation are set on
+// the add-on's own page in the game, so TypeWhisper only turns chat dictation on and installs the add-on. Row tags
+// match the settings search keys.
+internal static class WowIntegrationSettings
 {
     internal const string WowChatKey = "WowChat", WowAddOnKey = "WowAddOn";
 
     /// <param name="translationLlm">The shared workflow LLM that translates game chat and whether it can run; a
     /// translation chosen in the game is skipped without it.</param>
-    internal static void Render(StackPanel content, List<ChoicePicker> pickers, GamePreferencesStore store,
-        Func<(string? Name, bool Ready)> translationLlm)
+    internal static void AddTo(SettingsRows rows, GamePreferencesStore store, Func<(string? Name, bool Ready)> translationLlm)
     {
-        content.Children.Clear(); pickers.Clear();
-        content.Children.Add(SettingsCard.PageTitle(Loc.T("Games"),
-            Loc.T("Dictate into a game's chat while the game is in front. Your dictation shortcut starts and stops recording as usual.")));
-        var card = new SettingsCard(GameCatalog.WorldOfWarcraft.Name);
-        content.Children.Add(card);
-
         var enabled = AppToggleSwitch.Create(store.Current.WorldOfWarcraft.Enabled);
         AutomationProperties.SetName(enabled, Loc.T("Dictate into the World of Warcraft chat"));
-        var enabledRow = new SettingsRow(WowChatKey).Set(Loc.T("Dictate into the chat"),
+        var enabledRow = new SettingsRow(WowChatKey).Icon("gamepad").Set(GameCatalog.WorldOfWarcraft.Name,
             Loc.T("While World of Warcraft is in front, dictation opens the chat, inserts the text and sends it."),
             Loc.T("Works in all World of Warcraft versions, including Classic and Forever. Long text is sent as several messages of up to 255 bytes. Text never starts with a slash, so a dictation cannot run a game command."),
             enabled);
-        card.Add(enabledRow);
+        rows.Children.Add(enabledRow);
 
         var install = new HandCursorButton { Content = Loc.T("Install add-on"), Style = (Style)Application.Current.Resources["PrimaryButtonStyle"] };
         AutomationProperties.SetName(install, Loc.T("Install the TypeWhisper add-on into World of Warcraft"));
@@ -41,7 +35,7 @@ internal static class GamesSettingsPage
         var addOnRow = new SettingsRow(WowAddOnKey).Set(Loc.T("TypeWhisper add-on"), "",
             Loc.T("The add-on opens the chat without closing an open one and shows your dictation as a cast bar. Set sending, the cast bar and translation on its page in the game: type /tw. TypeWhisper reads them when you type /reload or log out. To answer a whisper, press the game's reply key, then dictate."),
             actions);
-        card.Add(addOnRow);
+        rows.Children.Add(addOnRow);
 
         IReadOnlyList<WowVersionFolder>? versions = null;
         string? chosenTranslation = null;

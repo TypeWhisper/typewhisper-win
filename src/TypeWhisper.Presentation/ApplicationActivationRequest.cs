@@ -26,7 +26,7 @@ public sealed record ApplicationActivationRequest(string? Route, IReadOnlyList<s
         ["home"] = "Home", ["general"] = "General", ["appearance"] = "Appearance", ["dictation"] = "Dictation", ["audio"] = "Audio",
         ["recovery"] = "Files & recovery", ["shortcuts"] = "Shortcuts", ["file-transcription"] = "File transcription",
         ["recorder"] = "Recorder", ["history"] = "Privacy", ["statistics"] = "Statistics", ["dictionary"] = "Dictionary",
-        ["snippets"] = "Snippets", ["workflows"] = "Workflows", ["games"] = "Games", ["premium"] = "Premium", ["plugins"] = "Integrations",
+        ["snippets"] = "Snippets", ["workflows"] = "Workflows", ["premium"] = "Premium", ["plugins"] = "Integrations",
         ["sync-backup"] = "Sync & backup", ["advanced"] = "Advanced", ["about"] = "Account & about"
     };
 
