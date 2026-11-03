@@ -29,6 +29,14 @@ internal static partial class NativeMethods
     [LibraryImport("user32.dll")]
     public static partial short GetAsyncKeyState(int virtualKey);
 
+    [LibraryImport("user32.dll", EntryPoint = "SendMessageTimeoutW")]
+    public static partial IntPtr SendMessageTimeout(IntPtr window, uint message, IntPtr wParam, IntPtr lParam, uint flags, uint timeout,
+        out IntPtr result);
+
+    [LibraryImport("kernel32.dll", EntryPoint = "QueryFullProcessImageNameW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool QueryFullProcessImageName(IntPtr process, uint flags, [Out] char[] buffer, ref uint size);
+
     // PointInt32 comes from the Windows SDK projection, which source-generated marshalling does not accept.
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]

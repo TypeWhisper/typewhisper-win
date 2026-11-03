@@ -30,7 +30,16 @@ internal sealed partial class LocalDictationSession
                 _targetHostAtStart = await BrowserContext.CaptureHostAsync((int)_targetProcessId, _targetApp,
                     () => WindowsBrowserTargetReader.CaptureAsync(_target, (int)_targetProcessId, _targetApp, _operationCancellation.Token));
             _operationCancellation.Token.ThrowIfCancellationRequested();
-            _workflowAtStart = AutomaticWorkflowSnapshot.Select(workflows, _targetApp, _targetHostAtStart, WorkflowDefaults.Resolve);
+            // A language chosen in the game's add-on joins as the lowest-ranked App rule for the game.
+            CaptureGameAtStart();
+            var candidates = workflows.AsEnumerable();
+            if (_gameTranslationAtStart is { } translation)
+            {
+                var ready = TranslationLlmReady(translation);
+                AppDiagnostics.Write($"game.translation ready={ready}");
+                if (ready) candidates = workflows.Append(translation);
+            }
+            _workflowAtStart = AutomaticWorkflowSnapshot.Select(candidates, _targetApp, _targetHostAtStart, WorkflowDefaults.Resolve);
         }
         catch (OperationCanceledException) when (_operationCancellation.Token.IsCancellationRequested) { throw; }
         catch (Exception ex) when (ex is not OutOfMemoryException)

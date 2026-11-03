@@ -109,6 +109,9 @@ public sealed partial class DiagnosticLogFile
         // Plugin settings actions: the action name without its profile, and the innermost error's codes.
         ["action"] = Token, ["innerCode"] = Number, ["innerHResult"] = value => HResultValue().IsMatch(value),
         ["inner"] = value => TypeName().IsMatch(value),
+        // Game chat: how the chat opens, message counts, and the add-on signals and whether they reached the game.
+        ["indicator"] = Flag, ["open"] = Token, ["ready"] = Flag, ["sent"] = Flag, ["signal"] = Token, ["stage"] = Token, ["submit"] = Flag, ["translate"] = Flag,
+        ["messages"] = Number, ["total"] = Number,
     }.ToFrozenDictionary(StringComparer.Ordinal);
     private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
     private static readonly JsonSerializerOptions Options = new()

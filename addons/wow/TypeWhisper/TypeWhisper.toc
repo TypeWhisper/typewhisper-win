@@ -1,0 +1,12 @@
+## Interface: 16001, 120105, 50503, 50504, 20506, 11508, 11509
+## Title: TypeWhisper
+## Notes: Lets TypeWhisper dictation open the chat reliably and shows the dictation as a cast bar.
+## Author: TypeWhisper
+## Version: 1.0.0
+## IconTexture: Interface\AddOns\TypeWhisper\Icon.tga
+## AddonCompartmentFunc: TypeWhisper_OnAddonCompartmentClick
+## SavedVariables: TypeWhisperDB
+## X-Website: https://www.typewhisper.com
+
+Status.lua
+TypeWhisper.lua

@@ -32,6 +32,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     private Task<DictationSnippetSnapshot>? _snippetSnapshot;
     private bool _boostVocabulary;
     internal DictationOutputPreferencesStore OutputPreferences { get; } = new(WinUIProfile.DataPath("dictation-output.json"));
+    internal GamePreferencesStore GamePreferences { get; } = new(WinUIProfile.DataPath("games.json"));
     internal RecordingModePreferencesStore RecordingModePreferences { get; } = new(WinUIProfile.DataPath("recording-mode.json"));
     internal string? SelectRecordingMode(RecordingMode mode)
     {
@@ -208,6 +209,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     private bool _hasConfirmedPreviewText;
     private string _targetApp = "";
     private uint _targetProcessId;
+    // Set when the dictation started in a game whose chat TypeWhisper writes into.
+    private ChatDeliveryOptions? _chatAtStart;
     private bool _showModelLoadingForDictation;
     internal void ShowLoadingForDictationAttempt()
     {
@@ -580,6 +583,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         _retentionTimer = dispatcher.CreateTimer();
         _retentionTimer.Interval = TimeSpan.FromMinutes(1);
         _retentionTimer.Tick += async (_, _) => await ApplyHistoryRetentionAsync();
+        CreateGameIndicatorTimer(dispatcher);
         _silenceTimer = dispatcher.CreateTimer();
         _silenceTimer.Interval = TimeSpan.FromMilliseconds(100);
         _silenceTimer.Tick += async (_, _) =>
@@ -864,6 +868,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 _engineAtStart = ActiveEngineId;
                 _modelAtStart = ActiveModelId;
                 if (_originalField is not null) await _originalField.DisposeAsync(); _originalField = null;
+                _gameIndicator = null;
+                _gameCaptured = false;
                 _target = adoptEarlyCapture ? _earlyTarget : NativeMethods.GetForegroundWindow();
                 NativeMethods.GetWindowThreadProcessId(_target, out var processId);
                 _setupOutputAtStart = processId == Environment.ProcessId ? SetupTestTarget?.Invoke(_target) : null;
@@ -944,6 +950,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 PrepareTranscriptionModel();
                 _targetProcessId = processId;
                 _targetApp = TargetProcessName(processId);
+                CaptureGameAtStart();
                 BeginApiDictationGeneration();
                 captureStarted?.Invoke(ApiDictationGeneration);
                 _started = DateTime.UtcNow - _audio.RecordingDuration;
@@ -954,7 +961,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 _operationCancellation.Token.ThrowIfCancellationRequested();
                 if (_disposed) return;
                 AppDiagnostics.Write("dictation.start");
-                if (OutputPreferences.Current is { AutoPaste: true, LockPasteToFocusedField: true } && _setupOutputAtStart is null)
+                // A game's chat field only exists once the chat is open, and UI Automation queries against games only fail slowly.
+                if (OutputPreferences.Current is { AutoPaste: true, LockPasteToFocusedField: true } && _setupOutputAtStart is null && _chatAtStart is null)
                     _originalField = await OriginalDictationField.CaptureAsync(_target, processId, _operationCancellation.Token);
                 if (_setupOutputAtStart is not null) { _targetHostAtStart = null; _workflowAtStart = null; }
                 else if (workflow is null) { if (!ruleMatched) await CaptureWorkflowAtStartAsync(); }
@@ -1153,7 +1161,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     _operationCancellation.Token.ThrowIfCancellationRequested();
                     if (_disposed || !_outputAtStart.RestrictedBy(OutputPreferences.Current).AutoPaste ||
                         ModifiersHeld()) { AppDiagnostics.Write("delivery.blocked-settings-modifiers-or-disposed"); return false; }
-                    var lockField = _outputAtStart.RestrictedBy(OutputPreferences.Current).LockPasteToFocusedField;
+                    var chat = _chatAtStart;
+                    var lockField = chat is null && _outputAtStart.RestrictedBy(OutputPreferences.Current).LockPasteToFocusedField;
                     if (lockField)
                     {
                         if (_originalField is null) { AppDiagnostics.Write("delivery.no-captured-field"); return false; }
@@ -1162,6 +1171,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                         if (!await _originalField.IsCurrentAsync(_operationCancellation.Token)) { AppDiagnostics.Write("delivery.field-not-current"); return false; }
                     }
                     if (NativeMethods.GetForegroundWindow() != _target) { AppDiagnostics.Write("delivery.target-not-foreground"); return false; }
+                    // The game chat sends its own Enter per message and has no field to read context from.
+                    if (chat is not null) return await DeliverToChatAsync(text, chat);
                     // Spacing and casing for the cursor position only reach the target field; history, API and
                     // actions keep the final text. A field without readable context gets the text unchanged.
                     var context = _textAtStart.AppAwareFormattingEnabled ? await InsertionContextReader.ReadAsync(_target) : null;
@@ -1308,6 +1319,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         Status = status;
         _phase = phase ?? (_audio.IsRecording ? DictationPhase.Recording : DictationPhase.Idle);
         if (_phase != DictationPhase.Completed) _copyChosen = false;
+        ObserveGameIndicator();
         Changed?.Invoke();
     }
 

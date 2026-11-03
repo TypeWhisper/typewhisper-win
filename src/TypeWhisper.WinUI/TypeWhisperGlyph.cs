@@ -181,6 +181,11 @@ public sealed class TypeWhisperGlyph : UserControl
                     for (var col = 0; col < 4; col++) drawing.FillCircle(5 + col * 3.3f, 7 + row * 3, .65f, Accent);
                 Line(drawing, 6, 13, 14, 13);
                 break;
+            case "gamepad":
+                drawing.DrawRoundedRectangle(2, 5, 16, 10, 5, 5, Accent, 1.4f);
+                Line(drawing, 6.5f, 8, 6.5f, 12); Line(drawing, 4.5f, 10, 8.5f, 10);
+                drawing.FillCircle(13, 8.8f, .9f, Accent); drawing.FillCircle(15, 11.2f, .9f, Accent);
+                break;
             case "chip":
                 drawing.DrawRoundedRectangle(5, 5, 10, 10, 1.5f, 1.5f, Accent, 1.4f);
                 drawing.DrawRectangle(8, 8, 4, 4, Accent, 1.2f);
