@@ -236,9 +236,9 @@ public partial class Reson8PluginTests
     }
 
     [Fact]
-    public void RealtimePreservesProxyPathAndPort()
+    public async Task RealtimePreservesProxyPathAndPort()
     {
-        var uri = Reson8StreamingSession.BuildRealtimeUri("https://proxy.example.test:8443/reson8/", null, "de");
+        var uri = await RealtimeUriAsync("https://proxy.example.test:8443/reson8/", null, "de");
         Assert.Equal("wss", uri.Scheme); Assert.Equal(8443, uri.Port);
         Assert.Equal("/reson8/v1/speech-to-text/realtime", uri.AbsolutePath);
     }

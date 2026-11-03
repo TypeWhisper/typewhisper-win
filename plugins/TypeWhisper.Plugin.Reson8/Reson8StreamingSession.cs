@@ -9,6 +9,9 @@ namespace TypeWhisper.Plugin.Reson8;
 
 internal sealed class Reson8StreamingSession : IStreamingSession
 {
+    /// <summary>256 ms of audio, like the macOS plugin; Reson8 closes the connection on frames above 64 KiB.</summary>
+    internal const int MaximumFrameBytes = 8_192;
+
     private readonly ClientWebSocket _ws;
     private readonly Reson8TranscriptCollector _collector;
     private readonly CancellationTokenSource _receiveCts = new();
@@ -36,63 +39,66 @@ internal sealed class Reson8StreamingSession : IStreamingSession
     /// </summary>
     public static async Task<Reson8StreamingSession> ConnectAsync(
         string apiKey,
-        string baseUrl,
         string authHeader,
-        string? modelId,
-        string? language,
-        CancellationToken ct, Uri? endpoint = null, TimeSpan? connectionTimeout = null, TimeSpan? finalizationTimeout = null)
+        Uri endpoint,
+        string? requestedLanguage,
+        CancellationToken ct, TimeSpan? connectionTimeout = null, TimeSpan? finalizationTimeout = null)
     {
         var ws = new ClientWebSocket();
         foreach (var header in CreateStreamingHeaders(apiKey, authHeader))
             ws.Options.SetRequestHeader(header.Key, header.Value);
+        // Reson8 names the reason for a rejected connection, such as an unknown custom model, in X-Error-Message.
+        ws.Options.CollectHttpResponseDetails = true;
 
         using var timeout = new CancellationTokenSource(connectionTimeout ?? TimeSpan.FromSeconds(15));
         using var connection = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token);
-        try { await ws.ConnectAsync(endpoint ?? BuildRealtimeUri(baseUrl, modelId, language), connection.Token); }
+        try { await ws.ConnectAsync(endpoint, connection.Token); }
         catch (OperationCanceledException ex) when (!ct.IsCancellationRequested && timeout.IsCancellationRequested)
         { ws.Dispose(); throw new TimeoutException("The Reson8 streaming connection timed out.", ex); }
+        catch (WebSocketException ex) when (RejectionOf(ws, ex) is { } rejection)
+        { ws.Dispose(); throw rejection; }
         catch { ws.Dispose(); throw; }
 
-        var session = new Reson8StreamingSession(ws, new Reson8TranscriptCollector(), finalizationTimeout);
+        var session = new Reson8StreamingSession(ws, new Reson8TranscriptCollector(requestedLanguage), finalizationTimeout);
         session._receiveTask = session.ReceiveLoopAsync(session._receiveCts.Token);
         return session;
     }
 
     /// <summary>
-    /// Builds realtime uri.
+    /// The realtime endpoint of a server with the query the plugin built.
     /// </summary>
-    public static Uri BuildRealtimeUri(string baseUrl, string? modelId, string? language)
+    public static Uri BuildRealtimeUri(string baseUrl, Reson8Query query)
     {
         var normalizedBase = baseUrl.Trim().TrimEnd('/');
         var baseUri = new Uri(normalizedBase);
         var builder = new UriBuilder(baseUri)
         {
             Scheme = baseUri.Scheme.Equals("http", StringComparison.OrdinalIgnoreCase) ? "ws" : "wss",
-            Path = baseUri.AbsolutePath.TrimEnd('/') + "/v1/speech-to-text/realtime"
+            Path = baseUri.AbsolutePath.TrimEnd('/') + "/v1/speech-to-text/realtime",
+            Query = query.ToString()
         };
-
-        var query = new List<string>
-        {
-            "encoding=pcm_s16le",
-            "sample_rate=16000",
-            "channels=1",
-            "include_interim=true"
-        };
-
-        if (!string.IsNullOrWhiteSpace(language)
-            && !language.Equals("auto", StringComparison.OrdinalIgnoreCase))
-        {
-            query.Add($"language={Uri.EscapeDataString(language.Trim())}");
-        }
-
-        if (!string.IsNullOrWhiteSpace(modelId)
-            && !string.Equals(modelId, Reson8Plugin.DefaultModelId, StringComparison.Ordinal))
-        {
-            query.Add($"custom_model_id={Uri.EscapeDataString(modelId.Trim())}");
-        }
-
-        builder.Query = string.Join("&", query);
         return builder.Uri;
+    }
+
+    /// <summary>A rejected upgrade with Reson8's status and reason, or null for other connection failures.</summary>
+    internal static PluginRequestException? RejectionOf(ClientWebSocket ws, WebSocketException exception)
+    {
+        var status = (int)ws.HttpStatusCode;
+        if (status is < 400 or > 599)
+            return null;
+        var reason = ws.HttpResponseHeaders is { } headers
+            && headers.TryGetValue("X-Error-Message", out var values) && values.FirstOrDefault() is { Length: > 0 } value
+                ? value.Length > 300 ? value[..300] : value
+                : "no reason given";
+        var kind = status switch
+        {
+            401 => PluginRequestFailureKind.Authentication,
+            402 or 403 => PluginRequestFailureKind.Permission,
+            429 => PluginRequestFailureKind.RateLimit,
+            >= 500 => PluginRequestFailureKind.ServerError,
+            _ => PluginRequestFailureKind.InvalidRequest
+        };
+        return new PluginRequestException($"Reson8 rejected the live connection ({status}): {reason}", kind, status, innerException: exception);
     }
 
     /// <summary>
@@ -119,8 +125,14 @@ internal sealed class Reson8StreamingSession : IStreamingSession
         {
             if (_flushConfirmed.Task.IsFaulted) await _flushConfirmed.Task;
             if (_ws.State != WebSocketState.Open) throw new WebSocketException("The streaming connection is no longer open.");
-            await _ws.SendAsync(pcm16Audio, WebSocketMessageType.Binary, true, ct);
-            Interlocked.Add(ref _sentAudioBytes, pcm16Audio.Length);
+            // Reson8 closes the connection on frames above 64 KiB; the host may hand over seconds of buffered audio at once.
+            for (var remaining = pcm16Audio; !remaining.IsEmpty;)
+            {
+                var frame = remaining[..Math.Min(MaximumFrameBytes, remaining.Length)];
+                await _ws.SendAsync(frame, WebSocketMessageType.Binary, true, ct);
+                Interlocked.Add(ref _sentAudioBytes, frame.Length);
+                remaining = remaining[frame.Length..];
+            }
             if (_flushConfirmed.Task.IsFaulted) await _flushConfirmed.Task;
         }
         finally
@@ -297,10 +309,16 @@ internal sealed class Reson8StreamingSession : IStreamingSession
     }
 }
 
-internal sealed class Reson8TranscriptCollector
+internal sealed class Reson8TranscriptCollector(string? requestedLanguage = null)
 {
     private readonly List<string> _finals = [];
+    private readonly List<string> _languages = [];
     private string _interim = "";
+
+    /// <summary>The language most final transcripts were detected as.</summary>
+    public string? DetectedLanguage =>
+        _languages.GroupBy(language => language, StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(group => group.Count()).Select(group => group.Key).FirstOrDefault();
 
     /// <summary>
     /// Gets or sets the is flush confirmed value.
@@ -340,17 +358,21 @@ internal sealed class Reson8TranscriptCollector
             return null;
 
         var isFinal = GetBool(root, "is_final");
+        string? language = null;
         if (isFinal)
         {
             _finals.Add(text);
             _interim = "";
+            language = Reson8Transcript.DetectedLanguage(GetString(root, "language"), requestedLanguage);
+            if (language is not null)
+                _languages.Add(language);
         }
         else
         {
             _interim = text;
         }
 
-        return new StreamingTranscriptEvent(text, isFinal);
+        return new StreamingTranscriptEvent(text, isFinal) { DetectedLanguage = language };
     }
 
     /// <summary>
@@ -363,6 +385,8 @@ internal sealed class Reson8TranscriptCollector
             var trimmed = evt.Text.Trim();
             if (!string.IsNullOrWhiteSpace(trimmed))
                 _finals.Add(trimmed);
+            if (!string.IsNullOrWhiteSpace(evt.DetectedLanguage))
+                _languages.Add(evt.DetectedLanguage);
             _interim = "";
         }
         else

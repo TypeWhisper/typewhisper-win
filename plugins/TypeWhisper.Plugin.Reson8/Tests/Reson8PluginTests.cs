@@ -212,7 +212,7 @@ public partial class Reson8PluginTests
         var handler = new CapturingHandler((request, _) =>
         {
             Assert.Equal("https://proxy.example.test/v1/speech-to-text/prerecorded", request.RequestUri?.GetLeftPart(UriPartial.Path));
-            Assert.DoesNotContain("language=", request.RequestUri?.Query);
+            Assert.DoesNotContain("&language=", request.RequestUri?.Query);
             Assert.DoesNotContain("custom_model_id=", request.RequestUri?.Query);
             Assert.True(request.Headers.TryGetValues("X-Api-Key", out var values));
             Assert.Equal("reson-key", Assert.Single(values));
@@ -255,7 +255,7 @@ public partial class Reson8PluginTests
 
         var wav = BuildPcm16Wav([0x00, 0x00]);
 
-        foreach (var expected in new[] { "Invalid Reson8 API key", "custom model not found", "file too large", "rate limit exceeded" })
+        foreach (var expected in new[] { "Invalid Reson8 API key", "Reson8 model not found", "file too large", "rate limit exceeded" })
         {
             var error = await Assert.ThrowsAsync<PluginRequestException>(() => sut.TranscribeAsync(wav, null, false, null, CancellationToken.None));
             Assert.Contains(expected, error.Message);
@@ -295,9 +295,9 @@ public partial class Reson8PluginTests
     }
 
     [Fact]
-    public void StreamingSession_BuildsExpectedUrisHeadersAndCollectsTranscriptEvents()
+    public async Task StreamingSession_BuildsExpectedUrisHeadersAndCollectsTranscriptEvents()
     {
-        var uri = Reson8StreamingSession.BuildRealtimeUri("https://api.reson8.dev", "domain-model", "de");
+        var uri = await RealtimeUriAsync("https://api.reson8.dev", "domain-model", "de");
         Assert.Equal("wss", uri.Scheme);
         Assert.Equal("api.reson8.dev", uri.Host);
         Assert.Equal("/v1/speech-to-text/realtime", uri.AbsolutePath);
@@ -308,10 +308,10 @@ public partial class Reson8PluginTests
         Assert.Contains("language=de", uri.Query);
         Assert.Contains("custom_model_id=domain-model", uri.Query);
 
-        var localUri = Reson8StreamingSession.BuildRealtimeUri("http://localhost:8080/base", "__default__", "auto");
+        var localUri = await RealtimeUriAsync("http://localhost:8080/base", "__default__", "auto");
         Assert.Equal("ws", localUri.Scheme);
         Assert.Equal(8080, localUri.Port);
-        Assert.DoesNotContain("language=", localUri.Query);
+        Assert.DoesNotContain("&language=", localUri.Query);
         Assert.DoesNotContain("custom_model_id=", localUri.Query);
 
         var headers = Reson8StreamingSession.CreateStreamingHeaders("reson-key", "Authorization");
@@ -393,6 +393,24 @@ public partial class Reson8PluginTests
         {
             Content = new StringContent(json, Encoding.UTF8, "application/json")
         };
+
+    /// <summary>The realtime URI a plugin with this server, selected model and language opens.</summary>
+    internal static async Task<Uri> RealtimeUriAsync(string baseUrl, string? modelId, string? language)
+    {
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "reson-key";
+        host.SetSetting("customBaseURL", baseUrl);
+        if (modelId is not null)
+        {
+            host.SetSetting("selectedModel", modelId);
+            if (modelId != Reson8Plugin.DefaultModelId)
+                host.SetSetting("fetchedCustomModels", new[] { new Reson8CustomModel(modelId, modelId, null, null) });
+        }
+
+        using var sut = new Reson8Plugin(new HttpClient());
+        await sut.ActivateAsync(host);
+        return Reson8StreamingSession.BuildRealtimeUri(baseUrl, sut.BuildQuery(Reson8Plugin.NormalizeLanguage(language), null, null, realtime: true));
+    }
 
     private sealed class CapturingHandler(
         Func<HttpRequestMessage, byte[]?, HttpResponseMessage> responder) : HttpMessageHandler
