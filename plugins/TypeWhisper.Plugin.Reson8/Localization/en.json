@@ -47,6 +47,7 @@
   "{0} models and {1} custom models loaded.": "{0} models and {1} custom models loaded.",
   "Save a pattern set first.": "Save a pattern set first.",
   "Reson8 accepts these patterns.": "Reson8 accepts these patterns.",
+  "Reson8 did not answer in time.": "Reson8 did not answer in time.",
   "Default model": "Default model",
   "{0} (patterns)": "{0} (patterns)",
   "One list could not be loaded and keeps its previous entries: {0}": "One list could not be loaded and keeps its previous entries: {0}"

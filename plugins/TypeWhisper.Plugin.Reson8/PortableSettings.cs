@@ -195,6 +195,9 @@ public sealed partial class Reson8Plugin : IApiKeyPlugin, IPluginTextSettings, I
         return (models?.Count ?? _fetchedModels.Count, CustomModels.Count(), failure?.Message);
     }
 
+    // Half a second of audio needs no longer; HttpClient's own 120 seconds would add up over 20 sets.
+    private static readonly TimeSpan PatternCheckTimeout = TimeSpan.FromSeconds(30);
+
     /// <summary>
     /// Sends half a second of silence with each pattern set. Reson8 checks the syntax and refuses patterns for an
     /// API client with a custom model configured, and names its reason.
@@ -214,16 +217,23 @@ public sealed partial class Reson8Plugin : IApiKeyPlugin, IPluginTextSettings, I
             request.Content = new ByteArrayContent(new byte[16_000]);
             request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
             string outcome;
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(PatternCheckTimeout);
             try
             {
-                using var response = await _httpClient.SendAsync(request, ct);
+                using var response = await _httpClient.SendAsync(request, timeout.Token);
                 outcome = response.IsSuccessStatusCode
                     ? L("Reson8 accepts these patterns.", "Reson8 akzeptiert diese Muster.")
-                    : ExtractApiError(await response.Content.ReadAsStringAsync(ct));
+                    : ExtractApiError(await response.Content.ReadAsStringAsync(timeout.Token));
             }
             catch (HttpRequestException ex)
             {
                 outcome = ex.Message;
+            }
+            // A set without an answer in time is one more outcome, so the other sets are still checked.
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                outcome = L("Reson8 did not answer in time.", "Reson8 hat nicht rechtzeitig geantwortet.");
             }
 
             results.Add($"{set.Name}: {outcome}");

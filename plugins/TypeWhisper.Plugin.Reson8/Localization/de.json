@@ -47,6 +47,7 @@
   "{0} models and {1} custom models loaded.": "{0} Modelle und {1} eigene Modelle geladen.",
   "Save a pattern set first.": "Speichere zuerst eine Mustergruppe.",
   "Reson8 accepts these patterns.": "Reson8 akzeptiert diese Muster.",
+  "Reson8 did not answer in time.": "Reson8 hat nicht rechtzeitig geantwortet.",
   "Default model": "Standardmodell",
   "{0} (patterns)": "{0} (Muster)",
   "One list could not be loaded and keeps its previous entries: {0}": "Eine Liste konnte nicht geladen werden und behält ihre bisherigen Einträge: {0}"

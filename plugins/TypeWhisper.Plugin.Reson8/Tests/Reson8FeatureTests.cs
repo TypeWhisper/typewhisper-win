@@ -440,6 +440,25 @@ public partial class Reson8PluginTests
     }
 
     [Fact]
+    public async Task CheckPatterns_ReportsASetWithoutAnswerAndChecksTheNextOne()
+    {
+        using var sut = new Reson8Plugin(new HttpClient(new CapturingHandler((request, _) =>
+            request.RequestUri!.Query.Contains("SLOW", StringComparison.Ordinal)
+                ? throw new TaskCanceledException("The request timed out.")
+                : JsonResponse("""{"text":""}"""))));
+        var host = CatalogHost();
+        host.SetSetting("patternSets", new[] { new Reson8PatternSet("slow", "Slow", ["SLOW[0-9]"]), new Reson8PatternSet("good", "Good", ["AMZ[0-9]{6}"]) });
+        await sut.ActivateAsync(host);
+
+        var result = await sut.ExecuteSettingsActionAsync("check-patterns", default);
+
+        Assert.Equal("Slow: Reson8 did not answer in time.\nGood: Reson8 accepts these patterns.", result);
+        using var cancelled = new CancellationTokenSource();
+        await cancelled.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => sut.ExecuteSettingsActionAsync("check-patterns", cancelled.Token));
+    }
+
+    [Fact]
     public async Task Realtime_RejectionNamesReson8sReason()
     {
         using var tcp = new TcpListener(IPAddress.Loopback, 0);
