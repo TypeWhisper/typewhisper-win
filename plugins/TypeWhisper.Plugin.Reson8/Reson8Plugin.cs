@@ -646,31 +646,41 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
             !string.IsNullOrEmpty(endpoint.Query) || !string.IsNullOrEmpty(endpoint.Fragment) || !string.IsNullOrEmpty(endpoint.UserInfo))
             throw new ArgumentException("Enter an absolute HTTP(S) server URL without credentials, query or fragment.", nameof(url));
         if (string.Equals(normalized, _customBaseUrl, StringComparison.Ordinal)) return;
-        PersistConnectionChange(CustomBaseUrlSettingName, normalized == DefaultBaseUrl ? null : normalized);
+        // Another server lists its own models, so it starts from the built-in ones until they are loaded.
+        PersistConnectionChange(CustomBaseUrlSettingName, normalized == DefaultBaseUrl ? null : normalized, otherServer: true);
         _customBaseUrl = normalized;
         _host?.NotifyCapabilitiesChanged();
     }
 
-    private void PersistConnectionChange(string settingName, string? value)
+    private void PersistConnectionChange(string settingName, string? value, bool otherServer = false)
     {
         if (_host is { } host)
         {
             var oldSelection = host.GetSetting<string>(SelectedModelSettingName);
             var oldModels = host.GetSetting<List<Reson8CustomModel>>(FetchedCustomModelsSettingName);
+            var oldListedModels = otherServer ? host.GetSetting<List<Reson8Model>>(FetchedModelsSettingName) : null;
             var selectionWritten = false;
             var modelsWritten = false;
+            var listedModelsWritten = false;
             try
             {
                 host.SetSetting(SelectedModelSettingName, DefaultModelId);
                 selectionWritten = true;
                 host.SetSetting(FetchedCustomModelsSettingName, Array.Empty<Reson8CustomModel>());
                 modelsWritten = true;
+                if (otherServer)
+                {
+                    host.SetSetting(FetchedModelsSettingName, Array.Empty<Reson8Model>());
+                    listedModelsWritten = true;
+                }
                 // Commit connection identity only after dependent settings succeed.
                 host.SetSetting(settingName, value);
             }
             catch (Exception failure) when (failure is not OutOfMemoryException)
             {
                 var errors = new List<Exception> { failure };
+                try { if (listedModelsWritten) host.SetSetting(FetchedModelsSettingName, oldListedModels); }
+                catch (Exception rollback) when (rollback is not OutOfMemoryException) { errors.Add(rollback); }
                 try { if (modelsWritten) host.SetSetting(FetchedCustomModelsSettingName, oldModels); }
                 catch (Exception rollback) when (rollback is not OutOfMemoryException) { errors.Add(rollback); }
                 try { if (selectionWritten) host.SetSetting(SelectedModelSettingName, oldSelection); }
@@ -681,6 +691,8 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
         }
         _selectedModelId = DefaultModelId;
         _fetchedCustomModels = [];
+        if (otherServer)
+            _fetchedModels = [];
         // Another server or account does not have the dictionary's custom model.
         ForgetDictionaryModel();
     }

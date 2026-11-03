@@ -57,6 +57,26 @@ public partial class Reson8PluginTests
     }
 
     [Fact]
+    public async Task Models_FromTheOldServerAreDroppedWhenTheServerChanges()
+    {
+        var host = CatalogHost();
+        host.SetSetting("selectedModel", "rumble-2-flash");
+        using var sut = new Reson8Plugin(new HttpClient());
+        await sut.ActivateAsync(host);
+
+        // A header name belongs to the same server, whose model list stays.
+        sut.SetCustomAuthHeader("X-Api-Key");
+        Assert.Contains(sut.TranscriptionModels, model => model.Id == "rumble-2-flash");
+
+        sut.SetCustomBaseUrl("https://proxy.example.test");
+
+        Assert.Empty(sut.FetchedModels);
+        Assert.Empty(host.GetSetting<List<Reson8Model>>("fetchedModels")!);
+        Assert.DoesNotContain(sut.TranscriptionModels, model => model.Id == "rumble-2-flash");
+        Assert.Equal("__default__", sut.SelectedModelId);
+    }
+
+    [Fact]
     public async Task SelectingRumble_TurnsOffStreamingAndDictionaryAndNotifiesTheHost()
     {
         var host = CatalogHost();

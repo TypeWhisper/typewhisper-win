@@ -14,7 +14,7 @@ authentication failures and caller cancellation are not retried.
 
 ## Models
 
-The model list shows Reson8's models from `GET /v1/model` next to the custom models from `GET /v1/custom-model` and the pattern sets. The default model keeps the ID `__default__`, so saved selections keep working; it is named after Reson8's default model (Resonant-1). A listed model is sent as `model`, a custom model as `custom_model_id`; custom models and pattern sets run on the default model. **Refresh models** loads both lists; a list that cannot be loaded keeps its previous entries and the selection.
+The model list shows Reson8's models from `GET /v1/model` next to the custom models from `GET /v1/custom-model` and the pattern sets. The default model keeps the ID `__default__`, so saved selections keep working; it is named after Reson8's default model (Resonant-1). A listed model is sent as `model`, a custom model as `custom_model_id`; custom models and pattern sets run on the default model. **Refresh models** loads both lists; a list that cannot be loaded keeps its previous entries and the selection. Another server URL drops both lists of the previous server, so the new one starts with the built-in model until its lists are loaded.
 
 Per model, the supported languages follow its `languages` and live text follows its `endpoints`. `GET /v1/model` does not say which parameters a model rejects, so the plugin keeps the table from Reson8's model documentation: Rumble-2-Flash rejects `diarize`, `include_timestamps`, `include_words`, `phrases`, `custom_model_id`, `patterns` and `filler_mode`. With Rumble-2-Flash the plugin sends none of them, reports no dictionary support and no live text, and the host transcribes the complete recording.
 
