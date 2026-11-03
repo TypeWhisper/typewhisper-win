@@ -3,7 +3,7 @@ using Xunit;
 
 public sealed class WowAddOnSettingsTests : IDisposable
 {
-    private readonly string _directory = Path.Combine(Path.GetTempPath(), "typewhisper-wow-settings-" + Guid.NewGuid().ToString("N"));
+    private readonly string _directory = Path.Join(Path.GetTempPath(), "typewhisper-wow-settings-" + Guid.NewGuid().ToString("N"));
 
     // The way the game writes saved variables: one top-level value per line, nested tables indented.
     private const string Saved = """
@@ -49,13 +49,13 @@ public sealed class WowAddOnSettingsTests : IDisposable
     [Fact]
     public void Read_TakesTheAccountSavedLast()
     {
-        var retail = Path.Combine(_directory, "_retail_");
+        var retail = Path.Join(_directory, "_retail_");
         var older = Save(retail, "WOW1", "TypeWhisperDB = {\n[\"translateTo\"] = \"French\",\n}");
         Save(retail, "WOW2", Saved);
         File.SetLastWriteTimeUtc(older, DateTime.UtcNow.AddDays(-1));
 
         Assert.Equal("German", WowAddOnSettings.Read(retail).TranslateTo);
-        Assert.Equal(WowAddOnSettings.Default, WowAddOnSettings.Read(Path.Combine(_directory, "_classic_")));
+        Assert.Equal(WowAddOnSettings.Default, WowAddOnSettings.Read(Path.Join(_directory, "_classic_")));
         Assert.Equal(WowAddOnSettings.Default, WowAddOnSettings.Read(null));
     }
 
@@ -81,10 +81,10 @@ public sealed class WowAddOnSettingsTests : IDisposable
     [Fact]
     public void IsInstalledIn_LooksForTheTocFile()
     {
-        var retail = Path.Combine(_directory, "_retail_");
+        var retail = Path.Join(_directory, "_retail_");
         Assert.False(WowAddOn.IsInstalledIn(retail));
-        Directory.CreateDirectory(Path.Combine(retail, "Interface", "AddOns", "TypeWhisper"));
-        File.WriteAllText(Path.Combine(retail, "Interface", "AddOns", "TypeWhisper", "TypeWhisper.toc"), "## Version: 1.0.0");
+        Directory.CreateDirectory(Path.Join(retail, "Interface", "AddOns", "TypeWhisper"));
+        File.WriteAllText(Path.Join(retail, "Interface", "AddOns", "TypeWhisper", "TypeWhisper.toc"), "## Version: 1.0.0");
 
         Assert.True(WowAddOn.IsInstalledIn(retail));
         Assert.False(WowAddOn.IsInstalledIn(null));
@@ -92,9 +92,9 @@ public sealed class WowAddOnSettingsTests : IDisposable
 
     private static string Save(string versionFolder, string account, string content)
     {
-        var folder = Path.Combine(versionFolder, "WTF", "Account", account, "SavedVariables");
+        var folder = Path.Join(versionFolder, "WTF", "Account", account, "SavedVariables");
         Directory.CreateDirectory(folder);
-        var path = Path.Combine(folder, "TypeWhisper.lua");
+        var path = Path.Join(folder, "TypeWhisper.lua");
         File.WriteAllText(path, content);
         return path;
     }
