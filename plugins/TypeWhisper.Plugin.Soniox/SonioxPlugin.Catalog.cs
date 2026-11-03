@@ -120,8 +120,8 @@ public sealed partial class SonioxPlugin
 
     internal static string NormalizeModelSelection(string? selection)
     {
-        var trimmed = selection?.Trim();
-        return trimmed is not null && SonioxModels.IsValidVersionKey(trimmed) ? trimmed : SonioxModels.Automatic;
+        // A stored full model id such as "stt-rt-v5" becomes its version, so no doubled prefix reaches Soniox.
+        return SonioxModels.SelectionVersion(selection) ?? SonioxModels.Automatic;
     }
 
     internal static string? NormalizeContextText(string? text)

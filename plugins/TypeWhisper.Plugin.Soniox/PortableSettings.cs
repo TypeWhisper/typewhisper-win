@@ -176,10 +176,11 @@ public sealed partial class SonioxPlugin : IApiKeyPlugin, IPluginTextSettings, I
     internal void SetModelSelection(string selection)
     {
         var trimmed = selection.Trim();
-        if (trimmed != SonioxModels.Automatic && !SonioxModels.IsValidVersionKey(trimmed))
-            throw new ArgumentException("Unknown Soniox model.", nameof(selection));
-        _host?.SetSetting(ModelSettingKey, trimmed);
-        _modelSelection = trimmed;
+        var normalized = trimmed == SonioxModels.Automatic
+            ? trimmed
+            : SonioxModels.SelectionVersion(trimmed) ?? throw new ArgumentException("Unknown Soniox model.", nameof(selection));
+        _host?.SetSetting(ModelSettingKey, normalized);
+        _modelSelection = normalized;
     }
 
     internal void SetTranscriptionContext(string text)

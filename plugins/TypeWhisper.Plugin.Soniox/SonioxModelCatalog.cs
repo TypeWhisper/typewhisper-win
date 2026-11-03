@@ -136,7 +136,17 @@ internal static partial class SonioxModels
         : id.StartsWith(AsyncPrefix, StringComparison.Ordinal) ? id[AsyncPrefix.Length..]
         : null;
 
-    internal static bool IsValidVersionKey(string? key) => key is { Length: > 0 } && IsValidModelId(RealtimePrefix + key);
+    /// <summary>A bare version such as "v6"; a full model id like "stt-rt-v6" is not a version key.</summary>
+    internal static bool IsValidVersionKey(string? key) =>
+        key is { Length: > 0 } && VersionKey(key) is null && IsValidModelId(RealtimePrefix + key);
+
+    /// <summary>The version a selection names, accepting a full model id such as "stt-async-v5" for "v5".</summary>
+    internal static string? SelectionVersion(string? selection)
+    {
+        var trimmed = selection?.Trim();
+        var key = trimmed is null ? null : VersionKey(trimmed) ?? trimmed;
+        return IsValidVersionKey(key) ? key : null;
+    }
 
     /// <summary>Versions offered in settings: every model Soniox lists that is not an alias of another one, newest first.</summary>
     internal static IReadOnlyList<string> SelectableVersions(IReadOnlyList<SonioxSttModel>? models) =>

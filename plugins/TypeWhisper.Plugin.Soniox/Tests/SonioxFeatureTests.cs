@@ -147,6 +147,26 @@ public sealed class SonioxFeatureTests
     }
 
     [Fact]
+    public async Task ModelSelection_TurnsAFullModelIdIntoItsVersion()
+    {
+        var host = new FeatureHost();
+        host.SetSetting("model", "stt-rt-v5");
+        using var sut = new SonioxPlugin(new HttpClient(new FailingHandler()));
+        await sut.ActivateAsync(host);
+
+        Assert.Equal("v5", sut.ModelSelection);
+        Assert.Equal("stt-async-v5", sut.EffectiveAsyncModelId);
+        Assert.Equal("stt-rt-v5", sut.EffectiveRealtimeModelId);
+
+        await sut.SaveTextSettingAsync("model", "stt-async-v6", default);
+
+        Assert.Equal("v6", host.GetSetting<string>("model"));
+        Assert.Equal("stt-async-v6", sut.EffectiveAsyncModelId);
+        Assert.False(SonioxModels.IsValidVersionKey("stt-rt-v5"));
+        Assert.Equal("stt-async-v6", SonioxModels.ResolveSttModelId("stt-rt-v6", null, SonioxModels.AsyncMode));
+    }
+
+    [Fact]
     public async Task Activate_IgnoresUnreadableCatalog()
     {
         var host = new FeatureHost();
