@@ -602,6 +602,9 @@ public sealed class SonioxFeatureTests
 
         Assert.Equal("fr", sut.ResolveSpeechLanguage("fr-CA"));
         Assert.Equal("zh", sut.ResolveSpeechLanguage("zh-Hans"));
+        Assert.Equal("no", sut.ResolveSpeechLanguage("nb-NO"));
+        Assert.Equal("no", sut.ResolveSpeechLanguage("nn"));
+        Assert.Equal("tl", sut.ResolveSpeechLanguage("fil-PH"));
         Assert.Equal("de", sut.ResolveSpeechLanguage(null));
         Assert.Equal("de", sut.ResolveSpeechLanguage("xx"));
     }

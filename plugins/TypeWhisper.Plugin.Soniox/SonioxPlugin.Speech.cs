@@ -127,14 +127,25 @@ public sealed partial class SonioxPlugin : ITtsProviderPlugin
             var code = candidate?.Trim();
             if (string.IsNullOrEmpty(code) || code.Equals("auto", StringComparison.OrdinalIgnoreCase))
                 continue;
+            var primary = code.Split('-', '_')[0];
+            if (SpeechLanguageAliases.TryGetValue(primary, out var alias))
+                primary = alias;
             var match = supported.FirstOrDefault(language => language.Equals(code, StringComparison.OrdinalIgnoreCase))
-                ?? supported.FirstOrDefault(language => language.Equals(code.Split('-', '_')[0], StringComparison.OrdinalIgnoreCase));
+                ?? supported.FirstOrDefault(language => language.Equals(primary, StringComparison.OrdinalIgnoreCase));
             if (match is not null)
                 return match;
         }
 
         return "en";
     }
+
+    // Windows names Norwegian nb/nn and Filipino fil; Soniox lists them as no and tl.
+    private static readonly Dictionary<string, string> SpeechLanguageAliases = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["nb"] = "no",
+        ["nn"] = "no",
+        ["fil"] = "tl",
+    };
 
     internal static Dictionary<string, object> CreateSpeechRequestBody(string text, string voice, string language, string modelId) => new(StringComparer.Ordinal)
     {
