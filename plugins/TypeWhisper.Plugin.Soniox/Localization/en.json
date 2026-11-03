@@ -1,0 +1,20 @@
+{
+  "United States": "United States",
+  "European Union": "European Union",
+  "Japan": "Japan",
+  "Region": "Region",
+  "Choose the region of the Soniox project your API key belongs to.": "Choose the region of the Soniox project your API key belongs to.",
+  "Model": "Model",
+  "Automatic uses Soniox's newest model for live text and recordings. Choose a version to stay on it.": "Automatic uses Soniox's newest model for live text and recordings. Choose a version to stay on it.",
+  "Transcription context": "Transcription context",
+  "Optional background such as topic, names or setting. It is sent to Soniox with every transcription; dictionary terms are added automatically.": "Optional background such as topic, names or setting. It is sent to Soniox with every transcription; dictionary terms are added automatically.",
+  "Speech model": "Speech model",
+  "Automatic uses Soniox's newest text-to-speech model.": "Automatic uses Soniox's newest text-to-speech model.",
+  "Default speech voice": "Default speech voice",
+  "Used when no voice is selected under Advanced > Spoken feedback > Voice.": "Used when no voice is selected under Advanced > Spoken feedback > Voice.",
+  "Automatic (currently {0})": "Automatic (currently {0})",
+  "Refresh models": "Refresh models",
+  "Loads the current transcription models and voices for the selected region from Soniox.": "Loads the current transcription models and voices for the selected region from Soniox.",
+  "Save a Soniox API key first.": "Save a Soniox API key first.",
+  "Models refreshed. Automatic uses {0} for live text and {1} for recordings.": "Models refreshed. Automatic uses {0} for live text and {1} for recordings."
+}

@@ -28,8 +28,8 @@ public class SonioxPluginTests
         var manifest = LoadManifest();
         var sut = new SonioxPlugin();
 
-        Assert.Equal("1.3.3", manifest.GetProperty("version").GetString());
-        Assert.Equal("1.3.3", sut.PluginVersion);
+        Assert.Equal("1.4.0", manifest.GetProperty("version").GetString());
+        Assert.Equal("1.4.0", sut.PluginVersion);
     }
 
     [WindowsMediaFoundationFact]
@@ -57,7 +57,7 @@ public class SonioxPluginTests
         Assert.Equal("com.typewhisper.soniox", manifest.GetProperty("id").GetString());
         Assert.Equal("Soniox", manifest.GetProperty("name").GetString());
         Assert.Equal("transcription", manifest.GetProperty("category").GetString());
-        Assert.Equal(["transcription"], manifest.GetProperty("categories").EnumerateArray().Select(e => e.GetString()!).ToArray());
+        Assert.Equal(["transcription", "tts"], manifest.GetProperty("categories").EnumerateArray().Select(e => e.GetString()!).ToArray());
         Assert.False(manifest.GetProperty("isLocal").GetBoolean());
         Assert.True(manifest.GetProperty("requiresApiKey").GetBoolean());
     }
@@ -76,7 +76,7 @@ public class SonioxPluginTests
         Assert.Equal("soniox", sut.ProviderId);
         Assert.Equal("Soniox", sut.ProviderDisplayName);
         Assert.True(sut.IsConfigured);
-        Assert.False(sut.SupportsTranslation);
+        Assert.True(sut.SupportsTranslation);
         Assert.Equal("default", sut.SelectedModelId);
         Assert.Equal(["default"], sut.TranscriptionModels.Select(m => m.Id).ToArray());
     }
@@ -253,7 +253,10 @@ public class SonioxPluginTests
             {
                 using var doc = JsonDocument.Parse(body ?? throw new InvalidOperationException("Missing body"));
                 var root = doc.RootElement;
-                Assert.Equal("stt-async-v5", root.GetProperty("model").GetString());
+                Assert.Equal("stt-async-v6", root.GetProperty("model").GetString());
+                Assert.True(root.GetProperty("enable_language_identification").GetBoolean());
+                Assert.False(root.TryGetProperty("translation", out _));
+                Assert.False(root.TryGetProperty("context", out _));
                 Assert.Equal("84c32fc6-4fb5-4e7a-b656-b5ec70493753", root.GetProperty("file_id").GetString());
                 Assert.Equal(["de", "en"], root.GetProperty("language_hints").EnumerateArray().Select(e => e.GetString()!).ToArray());
                 return JsonResponse("""{ "id": "73d4357d-cad2-4338-a60d-ec6f2044f721", "status": "queued" }""", HttpStatusCode.Created);
@@ -630,8 +633,8 @@ public class SonioxPluginTests
 
         using var firstCreate = JsonDocument.Parse(createBodies[0]);
         using var secondCreate = JsonDocument.Parse(createBodies[1]);
-        Assert.Equal("stt-async-v5", firstCreate.RootElement.GetProperty("model").GetString());
-        Assert.Equal("stt-async-v5", secondCreate.RootElement.GetProperty("model").GetString());
+        Assert.Equal("stt-async-v6", firstCreate.RootElement.GetProperty("model").GetString());
+        Assert.Equal("stt-async-v6", secondCreate.RootElement.GetProperty("model").GetString());
         Assert.Equal(["de", "en"], firstCreate.RootElement.GetProperty("language_hints").EnumerateArray().Select(e => e.GetString()!).ToArray());
         Assert.Equal(["de", "en"], secondCreate.RootElement.GetProperty("language_hints").EnumerateArray().Select(e => e.GetString()!).ToArray());
         Assert.Equal("file-m4a", firstCreate.RootElement.GetProperty("file_id").GetString());
@@ -1040,20 +1043,6 @@ public class SonioxPluginTests
 
         Assert.Equal("Hello", result.Text);
         Assert.Null(result.DetectedLanguage);
-    }
-
-    [Fact]
-    public async Task TranscribeAsync_RejectsTranslation()
-    {
-        var host = new TestPluginHostServices();
-        host.Secrets["api-key"] = "soniox-key";
-        var sut = new SonioxPlugin();
-        await sut.ActivateAsync(host);
-
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            sut.TranscribeAsync([1, 2, 3], "en", translate: true, prompt: null, CancellationToken.None));
-
-        Assert.Contains("does not support translation", ex.Message);
     }
 
     [Fact]

@@ -38,16 +38,27 @@ internal sealed class SonioxStreamingSession : IStreamingSession
     });
 
     // The key travels in the Authorization header, not here: Soniox refuses keys in the start message from 2027-01-15.
-    internal static byte[] Configuration(IReadOnlyList<string> languages) => JsonSerializer.SerializeToUtf8Bytes(new
+    internal static byte[] Configuration(SonioxStreamingConfiguration configuration)
     {
-        model = "stt-rt-v5", audio_format = "pcm_s16le", sample_rate = 16000, num_channels = 1,
-        language_hints = languages, enable_language_identification = true, enable_endpoint_detection = true
-    });
+        var start = new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            ["model"] = configuration.ModelId,
+            ["audio_format"] = "pcm_s16le",
+            ["sample_rate"] = 16000,
+            ["num_channels"] = 1,
+            ["language_hints"] = configuration.Languages,
+            ["enable_language_identification"] = true,
+            ["enable_endpoint_detection"] = true,
+        };
+        if (configuration.Context is not null)
+            start["context"] = configuration.Context;
+        return JsonSerializer.SerializeToUtf8Bytes(start);
+    }
 
-    internal static Task<IStreamingSession> ConnectAsync(string key, string region, IReadOnlyList<string> languages, CancellationToken ct) =>
-        ConnectAsync(key, Endpoint(region), languages, ct);
+    internal static Task<IStreamingSession> ConnectAsync(string key, string region, SonioxStreamingConfiguration configuration, CancellationToken ct) =>
+        ConnectAsync(key, Endpoint(region), configuration, ct);
 
-    internal static async Task<IStreamingSession> ConnectAsync(string key, Uri uri, IReadOnlyList<string> languages, CancellationToken ct)
+    internal static async Task<IStreamingSession> ConnectAsync(string key, Uri uri, SonioxStreamingConfiguration configuration, CancellationToken ct)
     {
         var socket = new ClientWebSocket();
         try
@@ -56,7 +67,7 @@ internal sealed class SonioxStreamingSession : IStreamingSession
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
             timeout.CancelAfter(TimeSpan.FromSeconds(15));
             await socket.ConnectAsync(uri, timeout.Token).ConfigureAwait(false);
-            await socket.SendAsync(Configuration(languages).AsMemory(), WebSocketMessageType.Text, true, timeout.Token).ConfigureAwait(false);
+            await socket.SendAsync(Configuration(configuration).AsMemory(), WebSocketMessageType.Text, true, timeout.Token).ConfigureAwait(false);
             return new SonioxStreamingSession(socket);
         }
         catch { socket.Dispose(); throw; }
@@ -203,3 +214,9 @@ internal sealed class SonioxStreamingSession : IStreamingSession
         finally { _sendLock.Release(); }
     }
 }
+
+/// <summary>What a live session asks Soniox for: the real-time model, ordered language hints and an optional context.</summary>
+internal sealed record SonioxStreamingConfiguration(
+    string ModelId,
+    IReadOnlyList<string> Languages,
+    IReadOnlyDictionary<string, object>? Context = null);
