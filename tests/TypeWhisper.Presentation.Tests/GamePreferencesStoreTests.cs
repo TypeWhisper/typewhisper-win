@@ -3,8 +3,8 @@ using Xunit;
 
 public sealed class GamePreferencesStoreTests : IDisposable
 {
-    private readonly string _directory = Path.Combine(Path.GetTempPath(), "typewhisper-games-" + Guid.NewGuid().ToString("N"));
-    private string PreferencesPath => Path.Combine(_directory, "games.json");
+    private readonly string _directory = Path.Join(Path.GetTempPath(), "typewhisper-games-" + Guid.NewGuid().ToString("N"));
+    private string PreferencesPath => Path.Join(_directory, "games.json");
 
     [Fact]
     public void MissingProfileLeavesGamesOffWithoutCreatingFiles()

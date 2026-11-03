@@ -4,7 +4,7 @@ using Xunit;
 
 public sealed class WowAddOnTests : IDisposable
 {
-    private readonly string _directory = Path.Combine(Path.GetTempPath(), "typewhisper-wow-" + Guid.NewGuid().ToString("N"));
+    private readonly string _directory = Path.Join(Path.GetTempPath(), "typewhisper-wow-" + Guid.NewGuid().ToString("N"));
 
     [Fact]
     public void BundledAddOn_HasTocAndLuaWithMatchingVersionAndBinding()
@@ -46,13 +46,13 @@ public sealed class WowAddOnTests : IDisposable
     [Fact]
     public void Install_CopiesTheIconByteForByte()
     {
-        var retail = Path.Combine(_directory, "_retail_");
+        var retail = Path.Join(_directory, "_retail_");
         Directory.CreateDirectory(retail);
-        File.WriteAllBytes(Path.Combine(retail, "Wow.exe"), []);
+        File.WriteAllBytes(Path.Join(retail, "Wow.exe"), []);
 
         Assert.Empty(WowAddOn.Install(WowAddOn.VersionFolders(_directory)));
 
-        var installed = File.ReadAllBytes(Path.Combine(retail, "Interface", "AddOns", "TypeWhisper", "Icon.tga"));
+        var installed = File.ReadAllBytes(Path.Join(retail, "Interface", "AddOns", "TypeWhisper", "Icon.tga"));
         Assert.Equal(WowAddOn.BundledFiles().Single(file => file.Name == "Icon.tga").Data, installed);
     }
 
@@ -69,17 +69,17 @@ public sealed class WowAddOnTests : IDisposable
     [Fact]
     public void WriteStatus_OnlyIntoAnInstalledAddOnAndOnlyWhenChanged()
     {
-        var retail = Path.Combine(_directory, "_retail_");
+        var retail = Path.Join(_directory, "_retail_");
         Assert.False(WowAddOn.WriteStatus(retail, "Groq · Llama", true));
 
-        var addOn = Path.Combine(retail, "Interface", "AddOns", "TypeWhisper");
+        var addOn = Path.Join(retail, "Interface", "AddOns", "TypeWhisper");
         Directory.CreateDirectory(addOn);
-        File.WriteAllText(Path.Combine(addOn, "TypeWhisper.toc"), "## Version: 1.0.0");
+        File.WriteAllText(Path.Join(addOn, "TypeWhisper.toc"), "## Version: 1.0.0");
 
         Assert.True(WowAddOn.WriteStatus(retail, "Groq · Llama", true));
         Assert.False(WowAddOn.WriteStatus(retail, "Groq · Llama", true));
         Assert.True(WowAddOn.WriteStatus(retail, "Groq · Llama", false));
-        Assert.Contains("ready = false", File.ReadAllText(Path.Combine(addOn, "Status.lua")));
+        Assert.Contains("ready = false", File.ReadAllText(Path.Join(addOn, "Status.lua")));
     }
 
     private static string StatusTable(string content) => content[content.IndexOf("TypeWhisperStatus", StringComparison.Ordinal)..];
@@ -130,15 +130,15 @@ public sealed class WowAddOnTests : IDisposable
         var forever = CreateVersion("_forever_", "Wow.exe");
         CreateVersion("_classic_era_", "WowClassic.exe");
         // A beta that was uninstalled leaves its folder without the game.
-        Directory.CreateDirectory(Path.Combine(_directory, "_classic_beta_", "Interface"));
-        Directory.CreateDirectory(Path.Combine(_directory, "Data"));
+        Directory.CreateDirectory(Path.Join(_directory, "_classic_beta_", "Interface"));
+        Directory.CreateDirectory(Path.Join(_directory, "Data"));
 
         var versions = WowAddOn.VersionFolders(_directory);
 
         Assert.Equal(["_classic_era_", "_forever_"], versions.Select(version => version.Folder));
         Assert.Equal(["Classic Era", "Forever"], versions.Select(version => version.Name));
         Assert.All(versions, version => Assert.Null(version.InstalledVersion));
-        Assert.Equal(Path.Combine(forever, "Interface", "AddOns", "TypeWhisper"), versions[1].AddOnPath);
+        Assert.Equal(Path.Join(forever, "Interface", "AddOns", "TypeWhisper"), versions[1].AddOnPath);
     }
 
     [Fact]
@@ -154,7 +154,7 @@ public sealed class WowAddOnTests : IDisposable
         Assert.All(versions, version =>
         {
             Assert.Equal(WowAddOn.BundledVersion, version.InstalledVersion);
-            Assert.True(File.Exists(Path.Combine(version.AddOnPath, "TypeWhisper.lua")));
+            Assert.True(File.Exists(Path.Join(version.AddOnPath, "TypeWhisper.lua")));
         });
     }
 
@@ -166,14 +166,14 @@ public sealed class WowAddOnTests : IDisposable
         var roots = WowAddOn.FindInstallRoots(forever, detect: false);
 
         Assert.Equal([_directory.TrimEnd('\\')], roots);
-        Assert.Empty(WowAddOn.FindInstallRoots(Path.Combine(_directory, "missing"), detect: false));
+        Assert.Empty(WowAddOn.FindInstallRoots(Path.Join(_directory, "missing"), detect: false));
     }
 
     private string CreateVersion(string folder, string executable)
     {
-        var path = Path.Combine(_directory, folder);
+        var path = Path.Join(_directory, folder);
         Directory.CreateDirectory(path);
-        File.WriteAllText(Path.Combine(path, executable), "");
+        File.WriteAllText(Path.Join(path, executable), "");
         return path;
     }
 

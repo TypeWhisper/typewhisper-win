@@ -78,8 +78,9 @@ public static partial class WowAddOn
             productDatabase ??= System.IO.Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
                 "Battle.net", "Agent", "product.db");
             candidates.AddRange(ProductDatabasePaths(productDatabase));
-            foreach (var folder in new[] { Environment.SpecialFolder.ProgramFilesX86, Environment.SpecialFolder.ProgramFiles }.Select(Environment.GetFolderPath))
-                if (folder.Length > 0) candidates.Add(System.IO.Path.Join(folder, "World of Warcraft"));
+            candidates.AddRange(new[] { Environment.SpecialFolder.ProgramFilesX86, Environment.SpecialFolder.ProgramFiles }
+                .Select(Environment.GetFolderPath).Where(folder => folder.Length > 0)
+                .Select(folder => System.IO.Path.Join(folder, "World of Warcraft")));
         }
         var roots = new List<string>();
         foreach (var candidate in candidates)
