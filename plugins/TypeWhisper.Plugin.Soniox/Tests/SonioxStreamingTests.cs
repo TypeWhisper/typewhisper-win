@@ -19,10 +19,11 @@ public sealed class SonioxStreamingTests
     public void ConfigurationPreservesRegionAndOrderedLanguages(string region, string host)
     {
         Assert.Equal(new Uri("wss://" + host + "/transcribe-websocket"), SonioxStreamingSession.Endpoint(region));
-        using var doc = JsonDocument.Parse(SonioxStreamingSession.Configuration(["de", "en"]));
+        using var doc = JsonDocument.Parse(SonioxStreamingSession.Configuration(new("stt-rt-v6", ["de", "en"])));
         var config = doc.RootElement;
         Assert.False(config.TryGetProperty("api_key", out _));
-        Assert.Equal("stt-rt-v5", config.GetProperty("model").GetString());
+        Assert.False(config.TryGetProperty("context", out _));
+        Assert.Equal("stt-rt-v6", config.GetProperty("model").GetString());
         Assert.Equal("pcm_s16le", config.GetProperty("audio_format").GetString());
         Assert.Equal(16000, config.GetProperty("sample_rate").GetInt32());
         Assert.Equal(1, config.GetProperty("num_channels").GetInt32());
@@ -61,12 +62,12 @@ public sealed class SonioxStreamingTests
             var frame = await socket.ReceiveAsync(new ArraySegment<byte>(buffer), ct);
             return (authorization, Encoding.UTF8.GetString(buffer, 0, frame.Count));
         }, ct);
-        await using (var session = await SonioxStreamingSession.ConnectAsync("fixture-key", new Uri($"ws://127.0.0.1:{port}/"), ["de"], ct))
+        await using (var session = await SonioxStreamingSession.ConnectAsync("fixture-key", new Uri($"ws://127.0.0.1:{port}/"), new("stt-rt-v6", ["de"]), ct))
         {
             var (authorization, start) = await server;
             Assert.Equal("Bearer fixture-key", authorization);
             Assert.DoesNotContain("fixture-key", start);
-            Assert.Equal("stt-rt-v5", JsonDocument.Parse(start).RootElement.GetProperty("model").GetString());
+            Assert.Equal("stt-rt-v6", JsonDocument.Parse(start).RootElement.GetProperty("model").GetString());
         }
     }
 

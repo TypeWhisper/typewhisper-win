@@ -253,7 +253,7 @@ whatever endpoint the user enters.
 | OpenRouter | `openrouter.ai` |
 | Reson8 | `api.reson8.dev` |
 | Smallest.ai | `api.smallest.ai` |
-| Soniox | `api.soniox.com`, `api.eu.soniox.com`, `api.jp.soniox.com` |
+| Soniox | `api.soniox.com`, `api.eu.soniox.com`, `api.jp.soniox.com`; `stt-rt.soniox.com`, `stt-rt.eu.soniox.com`, `stt-rt.jp.soniox.com` for live transcription; `tts-rt.soniox.com`, `tts-rt.eu.soniox.com`, `tts-rt.jp.soniox.com` for speech |
 | Speechmatics | `eu1.asr.api.speechmatics.com`, `us1.asr.api.speechmatics.com` |
 | Voxtral (Mistral) | `api.mistral.ai` |
 | xAI | `api.x.ai` |

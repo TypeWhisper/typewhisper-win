@@ -12,10 +12,17 @@ public sealed partial class SonioxPlugin
 
     /// <inheritdoc />
     public Task<IStreamingSession> StartStreamingAsync(string? language, CancellationToken ct) =>
-        StartStreamingWithLanguageHintsAsync(language is null ? [] : [language], ct);
+        StartStreamingWithLanguageHintsAndPromptAsync(language is null ? [] : [language], prompt: null, ct);
 
     /// <inheritdoc />
-    public Task<IStreamingSession> StartStreamingWithLanguageHintsAsync(IReadOnlyList<string> languageHints, CancellationToken ct)
+    public Task<IStreamingSession> StartStreamingWithLanguageHintsAsync(IReadOnlyList<string> languageHints, CancellationToken ct) =>
+        StartStreamingWithLanguageHintsAndPromptAsync(languageHints, prompt: null, ct);
+
+    /// <summary>Opens a live session that sends dictionary terms and the transcription context in Soniox's context.</summary>
+    public Task<IStreamingSession> StartStreamingWithLanguageHintsAndPromptAsync(
+        IReadOnlyList<string> languageHints,
+        string? prompt,
+        CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
         var key = _apiKey;
@@ -23,6 +30,9 @@ public sealed partial class SonioxPlugin
             throw new PluginRequestException("Soniox API key required.", PluginRequestFailureKind.Configuration);
         var languages = languageHints.Select(NormalizeLanguage).Where(x => x is not null)
             .Select(x => x!).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-        return SonioxStreamingSession.ConnectAsync(key, _region, languages, ct);
+        var configuration = new SonioxStreamingConfiguration(
+            EffectiveRealtimeModelId, languages, CreateRequestContext(prompt, _transcriptionContext));
+        RefreshCatalogInBackgroundIfStale();
+        return SonioxStreamingSession.ConnectAsync(key, _region, configuration, ct);
     }
 }

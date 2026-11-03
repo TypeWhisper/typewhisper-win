@@ -2,16 +2,20 @@
   "id": "com.typewhisper.soniox",
   "locality": "cloud",
   "name": "Soniox",
-  "version": "1.3.3",
+  "version": "1.4.0",
   "author": "TypeWhisper",
-  "description": "Soniox speech-to-text transcription engine",
+  "description": "Soniox speech-to-text with live transcription, translation to English and text-to-speech",
+  "descriptions": {
+    "de": "Soniox Speech-to-Text mit Live-Transkription, Übersetzung ins Englische und Sprachausgabe"
+  },
   "category": "transcription",
   "categories": [
-    "transcription"
+    "transcription",
+    "tts"
   ],
   "isLocal": false,
   "requiresApiKey": true,
   "assemblyName": "TypeWhisper.Plugin.Soniox.dll",
   "pluginClass": "TypeWhisper.Plugin.Soniox.SonioxPlugin",
-  "minHostVersion": "1.1.2"
+  "minHostVersion": "1.1.5"
 }

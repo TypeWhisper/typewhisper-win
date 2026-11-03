@@ -1,0 +1,20 @@
+{
+  "United States": "Vereinigte Staaten",
+  "European Union": "Europäische Union",
+  "Japan": "Japan",
+  "Region": "Region",
+  "Choose the region of the Soniox project your API key belongs to.": "Wähle die Region des Soniox-Projekts, zu dem dein API-Key gehört.",
+  "Model": "Modell",
+  "Automatic uses Soniox's newest model for live text and recordings. Choose a version to stay on it.": "Automatisch nutzt das neueste Soniox-Modell für Live-Text und Aufnahmen. Wähle eine Version, um dabei zu bleiben.",
+  "Transcription context": "Transkriptionskontext",
+  "Optional background such as topic, names or setting. It is sent to Soniox with every transcription; dictionary terms are added automatically.": "Optionaler Hintergrund wie Thema, Namen oder Situation. Er wird bei jeder Transkription an Soniox gesendet; Wörterbuchbegriffe kommen automatisch dazu.",
+  "Speech model": "Sprachausgabe-Modell",
+  "Automatic uses Soniox's newest text-to-speech model.": "Automatisch nutzt das neueste Sprachausgabe-Modell von Soniox.",
+  "Default speech voice": "Standardstimme",
+  "Used when no voice is selected under Advanced > Spoken feedback > Voice.": "Wird verwendet, wenn unter „Erweitert“ > „Sprachfeedback“ > „Stimme“ keine Stimme gewählt ist.",
+  "Automatic (currently {0})": "Automatisch (derzeit {0})",
+  "Refresh models": "Modelle aktualisieren",
+  "Loads the current transcription models and voices for the selected region from Soniox.": "Lädt die aktuellen Transkriptionsmodelle und Stimmen für die gewählte Region von Soniox.",
+  "Save a Soniox API key first.": "Speichere zuerst einen Soniox-API-Key.",
+  "Models refreshed. Automatic uses {0} for live text and {1} for recordings.": "Modelle aktualisiert. Automatisch nutzt {0} für Live-Text und {1} für Aufnahmen."
+}

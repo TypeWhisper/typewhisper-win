@@ -22,8 +22,18 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
 
     internal const string DefaultRegionId = "us";
     private const string RegionSettingKey = "region";
+    internal const string ModelSettingKey = "model";
+    internal const string ContextSettingKey = "transcriptionContext";
+    internal const string CatalogSettingKey = "catalog";
     private const string ApiKeySecretName = "api-key";
-    private const string SonioxAsyncModelId = "stt-async-v5";
+    // Soniox rejects a context above about 10,000 characters; the custom text shares that allowance with
+    // the dictionary terms, and keeps at least 4,000 characters for them.
+    internal const int MaximumContextCharacters = 10_000;
+    internal const int MaximumContextTextCharacters = 6_000;
+    // Soniox accepts files up to 300 minutes. The host splits longer recordings at this WAV size
+    // (16 kHz mono PCM16), so each part stays at four and a half hours like on the Mac.
+    internal const int MaximumUploadBytes = 270 * 60 * 16_000 * 2 + 44;
+    private const string TranslationTargetLanguage = "en";
     private const string InvalidAudioFileErrorType = "invalid_audio_file";
     private const string ErrorTypeDataKey = "TypeWhisper.Soniox.ErrorType";
     private const string IsFileUploadDataKey = "TypeWhisper.Soniox.IsFileUpload";
@@ -54,14 +64,17 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
     // project created in that region. https://soniox.com/docs/stt/data-residency
     private static readonly IReadOnlyList<SonioxRegion> Regions =
     [
-        new(DefaultRegionId, "United States", "https://api.soniox.com"),
-        new("eu", "European Union", "https://api.eu.soniox.com"),
-        new("jp", "Japan", "https://api.jp.soniox.com"),
+        new(DefaultRegionId, "United States", "https://api.soniox.com", "https://tts-rt.soniox.com/tts"),
+        new("eu", "European Union", "https://api.eu.soniox.com", "https://tts-rt.eu.soniox.com/tts"),
+        new("jp", "Japan", "https://api.jp.soniox.com", "https://tts-rt.jp.soniox.com/tts"),
     ];
 
     // Each auto-detect probe is bounded so an unreachable region fails fast rather than
     // blocking the settings Test flow for the full HttpClient timeout.
     private static readonly TimeSpan RegionProbeTimeout = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan CatalogRequestTimeout = TimeSpan.FromSeconds(10);
+    // A cached model list older than this is reloaded in the background when Soniox is used.
+    internal static readonly TimeSpan CatalogMaximumAge = TimeSpan.FromHours(24);
 
     private readonly HttpClient _httpClient;
     private readonly TimeSpan _initialPollDelay;
@@ -69,11 +82,18 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
     private readonly int _maxPollAttempts;
     private readonly Func<byte[], SonioxTranscriptionUpload> _compressedUploadFactory;
     private readonly SemaphoreSlim _apiKeyWriteLock = new(1, 1);
+    private readonly SemaphoreSlim _catalogLock = new(1, 1);
+    private readonly TimeProvider _time;
+    private readonly bool _backgroundCatalogRefresh;
 
     private IPluginHostServices? _host;
     private string? _apiKey;
     private string _selectedModelId = DefaultModelId;
     private string _region = DefaultRegionId;
+    private string _modelSelection = SonioxModels.Automatic;
+    private string _transcriptionContext = "";
+    private SonioxCatalog? _catalog;
+    private CancellationTokenSource _backgroundCancellation = new();
     private readonly object _cleanupLock = new();
     private readonly List<Task> _cleanupTasks = [];
     private int _disposed;
@@ -82,20 +102,25 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
     /// Initializes a new instance of the SonioxPlugin class.
     /// </summary>
     public SonioxPlugin()
-        : this(CreateHttpClient())
+        : this(CreateHttpClient(), backgroundCatalogRefresh: true)
     {
     }
 
+    // Tests opt into the background model list refresh, so request fixtures only see the calls they expect.
     internal SonioxPlugin(
         HttpClient httpClient,
         TimeSpan? pollDelay = null,
         int maxPollAttempts = DefaultMaxPollAttempts,
-        Func<byte[], SonioxTranscriptionUpload>? compressedUploadFactory = null)
+        Func<byte[], SonioxTranscriptionUpload>? compressedUploadFactory = null,
+        TimeProvider? time = null,
+        bool backgroundCatalogRefresh = false)
     {
         if (maxPollAttempts <= 0)
             throw new ArgumentOutOfRangeException(nameof(maxPollAttempts), "Poll attempts must be positive.");
 
         _httpClient = httpClient;
+        _time = time ?? TimeProvider.System;
+        _backgroundCatalogRefresh = backgroundCatalogRefresh;
         // A caller-supplied pollDelay (used by tests for determinism) pins both bounds to a
         // fixed interval; otherwise poll with an adaptive initial delay that backs off to a cap.
         _initialPollDelay = pollDelay ?? DefaultInitialPollDelay;
@@ -119,18 +144,28 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.3.3";
+    public string PluginVersion => "1.4.0";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
     /// </summary>
     public async Task ActivateAsync(IPluginHostServices host)
     {
+        if (_backgroundCancellation.IsCancellationRequested)
+        {
+            _backgroundCancellation.Dispose();
+            _backgroundCancellation = new CancellationTokenSource();
+        }
+
         _host = host;
         _apiKey = NormalizeApiKey(await host.LoadSecretAsync(ApiKeySecretName));
         _selectedModelId = DefaultModelId;
         _region = NormalizeRegionId(host.GetSetting<string>(RegionSettingKey));
-        host.Log(PluginLogLevel.Info, $"Activated (configured={IsConfigured}, region={_region})");
+        _modelSelection = NormalizeModelSelection(ReadSetting<string>(host, ModelSettingKey));
+        _transcriptionContext = NormalizeContextText(ReadSetting<string>(host, ContextSettingKey)) ?? "";
+        Volatile.Write(ref _catalog, SonioxModels.Sanitize(ReadSetting<SonioxCatalog>(host, CatalogSettingKey)));
+        RestoreSpeechSettings(host);
+        host.Log(PluginLogLevel.Info, $"Activated (configured={IsConfigured}, region={_region}, model={_modelSelection})");
     }
 
     /// <summary>
@@ -138,8 +173,18 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
     /// </summary>
     public async Task DeactivateAsync()
     {
+        _backgroundCancellation.Cancel();
         await LastCleanupTask.ConfigureAwait(false);
         _host = null;
+    }
+
+    // A damaged or outdated settings value must not keep the plugin from activating.
+    private static T? ReadSetting<T>(IPluginHostServices host, string key)
+    {
+        try { return host.GetSetting<T>(key); }
+        catch (JsonException) { return default; }
+        catch (NotSupportedException) { return default; }
+        catch (InvalidOperationException) { return default; }
     }
 
 
@@ -164,9 +209,19 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
     public bool IsConfigured => !string.IsNullOrEmpty(_apiKey);
 
     /// <summary>
-    /// Gets the transcription models exposed by this provider.
+    /// Gets the transcription models exposed by this provider. The single host model keeps existing
+    /// selections valid; the Soniox model version is a plugin setting.
     /// </summary>
-    public IReadOnlyList<PluginModelInfo> TranscriptionModels => Models;
+    public IReadOnlyList<PluginModelInfo> TranscriptionModels
+    {
+        get
+        {
+            var languages = RealtimeModelLanguages();
+            return languages.Count == 0
+                ? Models
+                : [Models[0] with { LanguageCount = languages.Count, LanguageCodes = languages }];
+        }
+    }
 
     /// <summary>
     /// Gets the currently selected provider model identifier.
@@ -174,9 +229,44 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
     public string? SelectedModelId => _selectedModelId;
 
     /// <summary>
-    /// Gets whether the provider supports translation requests.
+    /// Gets whether the provider supports translation requests. Soniox translates recorded audio to English.
     /// </summary>
-    public bool SupportsTranslation => false;
+    public bool SupportsTranslation => true;
+
+    /// <summary>Recordings longer than four and a half hours are split by the host before upload.</summary>
+    public int MaximumAudioUploadBytes => MaximumUploadBytes;
+
+    /// <summary>Active dictionary terms are sent to Soniox as context terms.</summary>
+    public bool SupportsDictionaryTerms => true;
+
+    /// <summary>Terms arrive as a structured list, so commas inside a term survive.</summary>
+    public bool SupportsStructuredDictionaryTerms => true;
+
+    /// <summary>The terms share Soniox's context allowance with the transcription context text.</summary>
+    public DictionaryTermsBudget DictionaryTermsBudget =>
+        new(MaxTotalChars: MaximumContextCharacters - _transcriptionContext.Length);
+
+    /// <summary>The model id used for live transcription with the current selection.</summary>
+    internal string EffectiveRealtimeModelId =>
+        SonioxModels.ResolveSttModelId(_modelSelection, CurrentCatalog?.SttModels, SonioxModels.RealtimeMode);
+
+    /// <summary>The model id used for recorded audio with the current selection.</summary>
+    internal string EffectiveAsyncModelId =>
+        SonioxModels.ResolveSttModelId(_modelSelection, CurrentCatalog?.SttModels, SonioxModels.AsyncMode);
+
+    internal string ModelSelection => _modelSelection;
+
+    internal string TranscriptionContext => _transcriptionContext;
+
+    /// <summary>The cached model list, but only for the region it was loaded from.</summary>
+    internal SonioxCatalog? CurrentCatalog =>
+        Volatile.Read(ref _catalog) is { } catalog && catalog.Region == _region ? catalog : null;
+
+    private IReadOnlyList<string> RealtimeModelLanguages()
+    {
+        var modelId = EffectiveRealtimeModelId;
+        return CurrentCatalog?.SttModels.FirstOrDefault(model => model.Id == modelId)?.Languages ?? [];
+    }
 
     /// <summary>
     /// Selects the provider model used for subsequent requests.
@@ -215,9 +305,6 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
         string? prompt,
         CancellationToken ct)
     {
-        if (translate)
-            throw new InvalidOperationException("Soniox does not support translation.");
-
         var apiKey = _apiKey;
         if (string.IsNullOrEmpty(apiKey))
             throw new InvalidOperationException("Plugin not configured. API key required.");
@@ -231,8 +318,11 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
         var context = new SonioxTranscriptionContext(
             BaseUrl,
             apiKey,
-            SonioxAsyncModelId,
-            normalizedLanguageHints);
+            EffectiveAsyncModelId,
+            normalizedLanguageHints,
+            CreateRequestContext(prompt, _transcriptionContext),
+            translate);
+        RefreshCatalogInBackgroundIfStale();
         var preferredUpload = await Task.Run(() => CreatePreferredUpload(wavAudio, ct), ct);
 
         try
@@ -268,7 +358,8 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
             var result = ParseTranscript(
                 transcriptJson,
                 completedDetails,
-                context.LanguageHints.FirstOrDefault());
+                context.LanguageHints.FirstOrDefault(),
+                context.Translate);
 
             // Deleting the uploaded file and the transcription is best-effort housekeeping the
             // caller does not need to wait for. Run it off the critical path so the two extra
@@ -307,6 +398,8 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
 
         _host?.SetSetting(RegionSettingKey, normalized);
         _region = normalized;
+        // The cached list belongs to the previous region. CurrentCatalog ignores it, and the next
+        // use, key test or explicit refresh loads the new region's list.
     }
 
     /// <summary>
@@ -343,8 +436,8 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
     }
 
     /// <summary>
-    /// All outstanding best-effort cleanup tasks from successful transcriptions.
-    /// Exposed so tests can await background cleanup deterministically.
+    /// All outstanding background tasks: best-effort cleanup after transcriptions and model list refreshes.
+    /// Exposed so tests can await background work deterministically.
     /// </summary>
     internal Task LastCleanupTask
     {
@@ -526,10 +619,20 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
         {
             ["model"] = context.ModelId,
             ["file_id"] = fileId,
+            // Reports the spoken language per token, so the result carries a detected language.
+            ["enable_language_identification"] = true,
         };
 
         if (context.LanguageHints.Count > 0)
             payload["language_hints"] = context.LanguageHints;
+        if (context.RequestContext is not null)
+            payload["context"] = context.RequestContext;
+        if (context.Translate)
+            payload["translation"] = new Dictionary<string, string>
+            {
+                ["type"] = "one_way",
+                ["target_language"] = TranslationTargetLanguage,
+            };
 
         using var request = new HttpRequestMessage(HttpMethod.Post, $"{context.BaseUrl}/v1/transcriptions");
         AddAuthorization(request, context.ApiKey);
@@ -704,7 +807,8 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
     internal static PluginTranscriptionResult ParseTranscript(
         string transcriptJson,
         JsonElement completedDetails,
-        string? fallbackLanguage)
+        string? fallbackLanguage,
+        bool translated = false)
     {
         using var doc = JsonDocument.Parse(transcriptJson);
         var root = doc.RootElement;
@@ -720,10 +824,15 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
         if (root.TryGetProperty("tokens", out var tokens)
             && tokens.ValueKind == JsonValueKind.Array)
         {
+            // With translation, "text" still holds the spoken words; the English text exists only as
+            // translation tokens. Speech that is already English has none, so its transcript is the result.
+            if (translated && tokens.EnumerateArray().Any(IsTranslationToken))
+                return ParseTranslatedTranscript(tokens, duration);
+
             foreach (var token in tokens.EnumerateArray())
             {
                 var tokenText = GetString(token, "text");
-                if (string.IsNullOrWhiteSpace(tokenText))
+                if (string.IsNullOrWhiteSpace(tokenText) || IsTranslationToken(token))
                     continue;
 
                 detectedLanguage ??= GetString(token, "language");
@@ -751,6 +860,120 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
         {
             Segments = BuildSubtitleSegments(segmentTokens)
         };
+    }
+
+    private static bool IsTranslationToken(JsonElement token) => HasTranslationStatus(token, "translation");
+
+    private static bool HasTranslationStatus(JsonElement token, string status) =>
+        token.ValueKind == JsonValueKind.Object
+        && string.Equals(GetString(token, "translation_status"), status, StringComparison.Ordinal);
+
+    /// <summary>
+    /// Builds the English result. Translation tokens carry no timing; each translated chunk follows the spoken
+    /// tokens it translates, so it takes their time span for subtitles. With language identification, Soniox marks
+    /// translated speech "original" and speech it leaves as is, such as English passages, "none"; those passages
+    /// stay in the result. Without "original" marks every spoken token is "none" and only translations count.
+    /// </summary>
+    private static PluginTranscriptionResult ParseTranslatedTranscript(JsonElement tokens, double duration)
+    {
+        var text = new StringBuilder();
+        var run = new StringBuilder();
+        var untimed = new StringBuilder();
+        var timed = new List<SonioxTimedToken>();
+        double? spanStart = null;
+        var spanEnd = 0.0;
+        var keepsUntranslatedSpeech = tokens.EnumerateArray().Any(token => HasTranslationStatus(token, "original"));
+        bool? previousWasTranslation = null;
+
+        foreach (var token in tokens.EnumerateArray())
+        {
+            var tokenText = GetString(token, "text");
+            if (string.IsNullOrEmpty(tokenText))
+                continue;
+
+            if (IsTranslationToken(token))
+            {
+                run.Append(AppendResultText(tokenText, translation: true));
+                continue;
+            }
+
+            if (run.Length > 0)
+                FlushRun();
+
+            double startMs = 0, endMs = 0;
+            var hasTiming = TryGetDouble(token, "start_ms", out startMs)
+                && TryGetDouble(token, "end_ms", out endMs)
+                && endMs > startMs;
+            if (keepsUntranslatedSpeech && HasTranslationStatus(token, "none"))
+            {
+                var kept = AppendResultText(tokenText, translation: false);
+                if (hasTiming)
+                {
+                    timed.Add(new SonioxTimedToken(kept, startMs / 1000.0, endMs / 1000.0));
+                    duration = Math.Max(duration, endMs / 1000.0);
+                }
+                else
+                {
+                    untimed.Append(kept);
+                }
+
+                continue;
+            }
+
+            if (hasTiming)
+            {
+                spanStart ??= startMs / 1000.0;
+                spanEnd = Math.Max(spanEnd, endMs / 1000.0);
+                duration = Math.Max(duration, spanEnd);
+            }
+        }
+
+        if (run.Length > 0)
+            FlushRun();
+        if (untimed.Length > 0)
+        {
+            if (timed.Count > 0)
+                timed[^1] = timed[^1] with { Text = timed[^1].Text + untimed };
+            else if (duration > 0)
+                timed.Add(new SonioxTimedToken(untimed.ToString(), 0, duration));
+        }
+
+        return new PluginTranscriptionResult(text.ToString().Trim(), TranslationTargetLanguage, duration, NoSpeechProbability: null)
+        {
+            Segments = BuildSubtitleSegments(timed)
+        };
+
+        void FlushRun()
+        {
+            if (spanStart is { } start && spanEnd > start)
+            {
+                timed.Add(new SonioxTimedToken(untimed.ToString() + run, start, spanEnd));
+                untimed.Clear();
+            }
+            else
+            {
+                untimed.Append(run);
+            }
+
+            run.Clear();
+            spanStart = null;
+            spanEnd = 0;
+        }
+
+        // A new translated chunk or kept passage may start without a space; tokens within one stay joined,
+        // because Soniox splits words into several tokens. Returns the piece as appended, so subtitles get
+        // the same separator as the text.
+        string AppendResultText(string piece, bool translation)
+        {
+            var startsChunk = translation ? run.Length == 0 : previousWasTranslation == true;
+            if (startsChunk && text.Length > 0
+                && !char.IsWhiteSpace(text[^1]) && !char.IsWhiteSpace(piece[0]))
+                piece = " " + piece;
+
+            text.Append(piece);
+            previousWasTranslation = translation;
+            return piece;
+        }
     }
 
     private static List<PluginTranscriptionSegment> BuildSubtitleSegments(IReadOnlyList<SonioxTimedToken> tokens)
@@ -995,14 +1218,16 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
         string BaseUrl,
         string ApiKey,
         string ModelId,
-        IReadOnlyList<string> LanguageHints);
+        IReadOnlyList<string> LanguageHints,
+        IReadOnlyDictionary<string, object>? RequestContext,
+        bool Translate);
 
     private sealed record SonioxErrorDetails(string? ErrorType, string Message, string? RequestId);
 
     private sealed record SonioxTimedToken(string Text, double Start, double End);
 
-    /// <summary>A Soniox data-residency region and its REST base URL.</summary>
-    internal sealed record SonioxRegion(string Id, string DisplayName, string BaseUrl);
+    /// <summary>A Soniox data-residency region with its REST base URL and text-to-speech endpoint.</summary>
+    internal sealed record SonioxRegion(string Id, string DisplayName, string BaseUrl, string TtsUrl);
 
     /// <summary>
     /// Releases resources held by the instance.
@@ -1010,8 +1235,15 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        _backgroundCancellation.Cancel();
         try { LastCleanupTask.GetAwaiter().GetResult(); }
-        finally { _httpClient.Dispose(); _apiKeyWriteLock.Dispose(); }
+        finally
+        {
+            _httpClient.Dispose();
+            _apiKeyWriteLock.Dispose();
+            _catalogLock.Dispose();
+            // The token source stays undisposed: a later DeactivateAsync may still cancel it.
+        }
     }
 }
 
