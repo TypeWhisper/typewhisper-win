@@ -1,0 +1,107 @@
+using TypeWhisper.Core.Models;
+using TypeWhisper.Presentation;
+using TypeWhisper.WinUI.Platform;
+
+namespace TypeWhisper.WinUI;
+
+internal sealed partial class LocalDictationSession
+{
+    // Set when the current dictation's game add-on shows it in the game; cleared when the next capture starts.
+    private GameIndicatorSignals? _gameIndicator;
+    private bool _gameCaptured;
+    private Workflow? _gameTranslationAtStart;
+
+    /// <summary>Whether the game add-on shows the current dictation, so TypeWhisper's own indicator stays hidden.</summary>
+    internal bool ShowsGameIndicator => _gameIndicator is not null;
+
+    // Once per dictation, after capture began. The add-on's page in the game decides sending, the cast bar and
+    // translation; the game saves it on /reload or logout, and TypeWhisper reads it from there.
+    private void CaptureGameAtStart()
+    {
+        if (_gameCaptured) return;
+        _gameCaptured = true;
+        _chatAtStart = null;
+        _gameIndicator = null;
+        _gameTranslationAtStart = null;
+        if (_setupOutputAtStart is not null || GamePreferences.Current.GameFor(_targetApp) is null) return;
+        var versionFolder = Path.GetDirectoryName(ProcessImagePath(_targetProcessId));
+        var addOn = WowAddOnSettings.Read(versionFolder);
+        var installed = WowAddOn.IsInstalledIn(versionFolder);
+        _chatAtStart = GamePreferences.Current.ChatFor(_targetApp, addOn, installed);
+        _gameIndicator = CreateGameIndicator(GamePreferences.Current.IndicatorFor(_targetApp, addOn, installed));
+        _gameTranslationAtStart = addOn.TranslationWorkflow();
+        AppDiagnostics.Write($"dictation.game-chat open={_chatAtStart?.OpenKey} submit={addOn.Send} indicator={_gameIndicator is not null} translate={addOn.TranslateTo is not null}");
+        // The add-on page names the translating LLM after the next /reload.
+        var llm = GameTranslationLlm();
+        WowAddOn.WriteStatus(versionFolder, llm.Name, llm.Ready);
+    }
+
+    /// <summary>The shared workflow LLM that translates game chat, by display name, and whether it can run now. Without
+    /// it the add-on's translation is skipped and messages go out as dictated: a failed translation would open review
+    /// over the game for every message.</summary>
+    internal (string? Name, bool Ready) GameTranslationLlm()
+    {
+        try
+        {
+            var behavior = WorkflowDefaults.Resolve(new WowAddOnSettings(TranslateTo: "English").TranslationWorkflow()!).Behavior;
+            if (behavior.ProviderOverride is not { Length: > 0 } provider || provider == WorkflowLlmDefaults.Inherit
+                || behavior.ModelOverride is not { Length: > 0 } model) return (null, false);
+            var item = LlmProviders.FirstOrDefault(candidate => candidate.SelectionId == provider);
+            var modelName = item?.Models.FirstOrDefault(candidate => candidate.Id == model)?.DisplayName ?? model;
+            var ready = item is { Ready: true } && item.Models.Any(candidate => candidate.Id == model);
+            return ($"{item?.Name ?? provider} · {modelName}", ready);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return (null, false); }
+    }
+
+    private bool TranslationLlmReady(Workflow translation)
+    {
+        try
+        {
+            var behavior = WorkflowDefaults.Resolve(translation).Behavior;
+            return behavior.ProviderOverride is { Length: > 0 } provider && behavior.ModelOverride is { Length: > 0 } model
+                && LlmProviders.Any(item => item.SelectionId == provider && item.Ready && item.Models.Any(candidate => candidate.Id == model));
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return false; }
+    }
+
+    // The executable's path with the least access a process grants, so the game is never opened for reading memory.
+    private static string? ProcessImagePath(uint processId)
+    {
+        var process = NativeMethods.OpenProcess(NativeMethods.PROCESS_QUERY_LIMITED_INFORMATION, false, processId);
+        if (process == IntPtr.Zero) return null;
+        try
+        {
+            var buffer = new char[1024];
+            var size = (uint)buffer.Length;
+            return NativeMethods.QueryFullProcessImageName(process, 0, buffer, ref size) ? new string(buffer, 0, (int)size) : null;
+        }
+        finally { NativeMethods.CloseHandle(process); }
+    }
+
+    private GameIndicatorSignals? CreateGameIndicator(GameIndicatorChords? chords)
+    {
+        if (chords is null) return null;
+        var target = _target;
+        return new(chords, chord =>
+        {
+            var sent = WindowsChatDeliveryPlatform.Signal(target, chord);
+            var signal = chord == chords.Recording ? "Recording" : chord == chords.Transcribing ? "Transcribing" : "Stopped";
+            AppDiagnostics.Write($"game.indicator signal={signal} sent={sent}");
+            return sent;
+        });
+    }
+
+    // Partial delivery reports failure, so the review and the clipboard keep the full text for the messages that were not sent.
+    private async Task<bool> DeliverToChatAsync(string text, ChatDeliveryOptions chat)
+    {
+        var platform = new WindowsChatDeliveryPlatform(_target, async part => (await _inserter.InsertAsync(part, _target, () =>
+            !_disposed && !_operationCancellation.Token.IsCancellationRequested
+            && _outputAtStart.RestrictedBy(OutputPreferences.Current).AutoPaste)).Inserted, chat.SettleMilliseconds);
+        var result = await ChatDeliveryOperation.RunAsync(platform, text, chat, _operationCancellation.Token);
+        AppDiagnostics.Write(result.Completed
+            ? $"chat.sent messages={result.Sent}"
+            : $"chat.stopped stage={result.FailedAt} messages={result.Sent} total={result.Total}");
+        return result.Completed && result.Sent > 0;
+    }
+}
