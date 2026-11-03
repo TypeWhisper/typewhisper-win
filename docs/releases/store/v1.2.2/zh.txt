@@ -1,0 +1,4 @@
+TypeWhisper 1.2.2 支持在 World of Warcraft 聊天中听写。
+
+- 在“设置”>“高级”>“集成”中开启 World of Warcraft 并安装插件。聊天框会自动打开，游戏中的施法条会显示 TypeWhisper 当前的状态。
+- 现在可以粘贴到使用 Flutter 构建的应用中。

@@ -1,0 +1,4 @@
+Mit TypeWhisper 1.2.2 diktierst du in den Chat von World of Warcraft.
+
+- Schalte World of Warcraft unter Einstellungen > Erweitert > Integrationen ein und installiere das Add-on. Der Chat öffnet sich von selbst, und ein Zauberbalken im Spiel zeigt, was TypeWhisper gerade macht.
+- Einfügen in Apps, die mit Flutter gebaut sind, funktioniert jetzt.
