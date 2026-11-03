@@ -2,7 +2,7 @@
 ## Title: TypeWhisper
 ## Notes: Lets TypeWhisper dictation open the chat reliably and shows the dictation as a cast bar.
 ## Author: TypeWhisper
-## Version: 1.0.1
+## Version: 1.0.0
 ## IconTexture: Interface\AddOns\TypeWhisper\Icon.tga
 ## AddonCompartmentFunc: TypeWhisper_OnAddonCompartmentClick
 ## SavedVariables: TypeWhisperDB
