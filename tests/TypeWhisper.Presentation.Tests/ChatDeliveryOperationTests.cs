@@ -74,13 +74,26 @@ public class ChatDeliveryOperationTests
     public async Task WithoutOpenKeyOrSubmit_OnlyInsertsTheWholeText()
     {
         var platform = new Fake();
-        var text = new string('a', 40) + " " + new string('b', 40);
+        var text = new string('a', 20) + " " + new string('b', 20);
 
         var result = await ChatDeliveryOperation.RunAsync(platform, text,
             new() { OpenKey = ChatOpenKey.None, Submit = false, MaxMessageBytes = 50 });
 
         Assert.True(result.Completed);
         Assert.Equal(["paste:" + text], platform.Calls);
+    }
+
+    [Fact]
+    public async Task WithoutSubmit_TextLongerThanOneMessage_IsNotInserted()
+    {
+        // The chat field holds one message; cutting the rest would lose it while reporting success.
+        var platform = new Fake();
+        var text = new string('a', 40) + " " + new string('b', 40);
+
+        var result = await ChatDeliveryOperation.RunAsync(platform, text, AddOn with { Submit = false, MaxMessageBytes = 50 });
+
+        Assert.Equal(new ChatDeliveryResult(0, 2, ChatDeliveryStage.TooLong), result);
+        Assert.Empty(platform.Calls);
     }
 
     [Fact]
