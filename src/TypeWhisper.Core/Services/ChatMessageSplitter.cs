@@ -46,7 +46,8 @@ public static class ChatMessageSplitter
         return builder.ToString();
     }
 
-    private static string Clean(string text) => text.Trim().TrimStart('/').TrimStart();
+    // Flatten leaves single spaces, so slashes and spaces are stripped together: "/ /logout" must not become "/logout".
+    private static string Clean(string text) => text.TrimStart('/', ' ').TrimEnd();
 
     // The number of leading UTF-16 characters whose UTF-8 form fits into max bytes, never splitting a surrogate pair
     // and always at least one character, so a tiny limit still makes progress.
