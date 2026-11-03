@@ -608,11 +608,17 @@ public sealed class SonioxFeatureTests
     [Fact]
     public async Task Speak_RefreshesTheListBeforeRejectingAVoiceItLacks()
     {
-        var handler = new RoutingHandler(request => request.RequestUri!.AbsolutePath switch
+        // The model list answers only after the rejection is checked, so the refresh cannot win the race.
+        var releaseCatalog = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var handler = new AsyncRoutingHandler(async request =>
         {
-            "/v1/models" => Json(ModelsJson),
-            "/v1/tts-models" => Json("""{ "models": [ { "id": "tts-rt-v2", "languages": [], "voices": [ { "id": "Bryce" } ] } ] }"""),
-            _ => throw new InvalidOperationException(request.RequestUri.ToString())
+            await releaseCatalog.Task;
+            return request.RequestUri!.AbsolutePath switch
+            {
+                "/v1/models" => Json(ModelsJson),
+                "/v1/tts-models" => Json("""{ "models": [ { "id": "tts-rt-v2", "languages": [], "voices": [ { "id": "Bryce" } ] } ] }"""),
+                _ => throw new InvalidOperationException(request.RequestUri.ToString())
+            };
         });
         var host = new FeatureHost();
         host.Secrets["api-key"] = "key";
@@ -622,6 +628,7 @@ public sealed class SonioxFeatureTests
 
         // "Bryce" is not among the built-in voices, but the loaded list names him.
         await Assert.ThrowsAsync<ArgumentException>(() => sut.SpeakAsync(new TtsSpeakRequest("Hallo") { VoiceId = "Bryce" }, default));
+        releaseCatalog.SetResult();
         await sut.LastCleanupTask;
 
         Assert.Equal(["Bryce"], sut.AvailableVoices.Select(voice => voice.Id));
@@ -721,6 +728,12 @@ public sealed class SonioxFeatureTests
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
             Task.FromResult(respond(request));
+    }
+
+    private sealed class AsyncRoutingHandler(Func<HttpRequestMessage, Task<HttpResponseMessage>> respond) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            respond(request);
     }
 
     private sealed class FailingHandler : HttpMessageHandler
