@@ -86,6 +86,27 @@ public class GameIndicatorSignalsTests
     }
 
     [Fact]
+    public void Shown_FollowsWhetherTheLastChordReachedTheGame()
+    {
+        var results = new Queue<bool>([false, true]);
+        var signals = new GameIndicatorSignals(Chords, _ => results.Dequeue());
+
+        // Alt held for push-to-talk: the recording chord is not sent, so TypeWhisper keeps its own indicator.
+        signals.Observe(DictationPhase.Recording, recording: true);
+        Assert.False(signals.Shown);
+        // Released: the transcribing chord arrives, and the game shows the rest.
+        signals.Observe(DictationPhase.Processing, recording: false);
+        Assert.True(signals.Shown);
+
+        var lost = new GameIndicatorSignals(Chords, chord => chord == Chords.Recording);
+        lost.Observe(DictationPhase.Recording, recording: true);
+        Assert.True(lost.Shown);
+        // The game lost the foreground before transcribing: TypeWhisper's indicator takes over again.
+        lost.Observe(DictationPhase.Processing, recording: false);
+        Assert.False(lost.Shown);
+    }
+
+    [Fact]
     public void IndicatorFor_NeedsTheAddOnWithItsBarOn()
     {
         var on = new GamePreferences { WorldOfWarcraft = new() { Enabled = true } };
