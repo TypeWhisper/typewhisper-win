@@ -71,7 +71,7 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
     private bool _dictionaryModelEnabled;
     private IReadOnlyList<Reson8PatternSet> _patternSets = [];
     private Reson8DictionaryModelSync? _dictionarySync;
-    private IReson8CustomModelApi? _customModelApiOverride;
+    private readonly IReson8CustomModelApi? _customModelApiOverride;
     private int _disposed;
 
     /// <summary>
@@ -752,8 +752,8 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
 
     private void ForgetDictionaryModel()
     {
-        if (_dictionarySync?.State.ModelId is { } modelId)
-            TrackBackground(_dictionarySync.ForgetAsync(modelId, CancellationToken.None));
+        if (_dictionarySync is { } sync && sync.State.ModelId is { } modelId)
+            TrackBackground(sync.ForgetAsync(modelId, CancellationToken.None));
     }
 
     private void SaveDictionaryModelState(Reson8DictionaryModelState state)
