@@ -391,9 +391,10 @@ bar:SetScript("OnUpdate", function(self, elapsed)
         local value = 0.95 * (1 - math.exp(-age / 1.2))
         self:SetValue(value)
         self.Spark:SetPoint("CENTER", self, "LEFT", value * WIDTH, modern and 0 or 2)
-        -- TypeWhisper opens the chat, or pastes into the chat that was open: the cast is complete.
+        -- TypeWhisper opens the chat, or pastes into the chat that was open: the cast is complete. A chat closed with
+        -- Escape while TypeWhisper still works is not, since TypeWhisper opens it again for the text.
         local chat = FocusedChat()
-        if chat ~= chatAtStart or (chat ~= nil and chatTyped) then
+        if chat ~= nil and (chat ~= chatAtStart or chatTyped) then
             SetState("done")
         elseif age > TRANSCRIBING_TIMEOUT then
             FadeOut()
