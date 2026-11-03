@@ -8,6 +8,8 @@ internal sealed partial class LocalDictationSession
 {
     // Set when the current dictation's game add-on shows it in the game; cleared when the next capture starts.
     private GameIndicatorSignals? _gameIndicator;
+    // Fires when the game's bar times out during a long recording or transcription, so TypeWhisper's indicator returns.
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _gameIndicatorTimer;
     private bool _gameCaptured;
     private Workflow? _gameTranslationAtStart;
 
@@ -78,6 +80,23 @@ internal sealed partial class LocalDictationSession
             return NativeMethods.QueryFullProcessImageName(process, 0, buffer, ref size) ? new string(buffer, 0, (int)size) : null;
         }
         finally { NativeMethods.CloseHandle(process); }
+    }
+
+    private void ObserveGameIndicator()
+    {
+        if (_gameIndicator is not { } indicator) return;
+        indicator.Observe(OverlayState.Phase, _audio.IsRecording);
+        if (indicator.ExpiresAt is not { } expires || _gameIndicatorTimer is not { } timer) return;
+        timer.Stop();
+        timer.Interval = TimeSpan.FromMilliseconds(Math.Max(0, (expires - DateTimeOffset.UtcNow).TotalMilliseconds) + 250);
+        timer.Start();
+    }
+
+    private void CreateGameIndicatorTimer(Microsoft.UI.Dispatching.DispatcherQueue dispatcher)
+    {
+        _gameIndicatorTimer = dispatcher.CreateTimer();
+        _gameIndicatorTimer.IsRepeating = false;
+        _gameIndicatorTimer.Tick += (_, _) => { if (!_disposed) Changed?.Invoke(); };
     }
 
     private GameIndicatorSignals? CreateGameIndicator(GameIndicatorChords? chords)
