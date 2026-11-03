@@ -2,6 +2,8 @@
 
 Lets TypeWhisper dictation write into the World of Warcraft chat reliably and shows the dictation in the game.
 
+The add-on is developed in [TypeWhisper/typewhisper-wow](https://github.com/TypeWhisper/typewhisper-wow). This folder holds the copy that TypeWhisper for Windows ships and installs; update it from a release there, so its version matches.
+
 TypeWhisper cannot talk to the game directly. Add-ons have no network, file or clipboard access, so TypeWhisper only sends keys: it opens the chat, pastes the dictated text and presses Enter. Pressing Enter to open the chat fails when the chat is already open, because Enter then sends or closes it.
 
 ## Keys
