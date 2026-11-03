@@ -21,9 +21,16 @@ internal sealed class ForegroundWindowHistory : IDisposable
     private IntPtr _hook;
     private PasteTarget? _last;
 
+    /// <summary>Raised on the UI thread after another window came to the front.</summary>
+    internal event Action? Changed;
+
     internal ForegroundWindowHistory()
     {
-        _callback = (_, _, window, _, _, _, _) => _last = Eligible(window) ?? _last;
+        _callback = (_, _, window, _, _, _, _) =>
+        {
+            _last = Eligible(window) ?? _last;
+            Changed?.Invoke();
+        };
         // Out-of-context events are delivered on this (UI) thread through its message loop.
         _hook = SetWinEventHook(ForegroundEvent, ForegroundEvent, IntPtr.Zero, _callback, 0, 0, 0);
         _last = Eligible(NativeMethods.GetForegroundWindow());
