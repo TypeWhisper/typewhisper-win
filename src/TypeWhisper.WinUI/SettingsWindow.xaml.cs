@@ -96,7 +96,7 @@ public sealed partial class SettingsWindow : Window
             [(Loc.Mark("Home"), "home")],
             [(Loc.Mark("General"), "settings"), (Loc.Mark("Appearance"), "desktop"), (Loc.Mark("Dictation"), "microphone"), (Loc.Mark("Audio"), "speaker"), (Loc.Mark("Files & recovery"), "restore"),
              (Loc.Mark("Shortcuts"), "keyboard"), (Loc.Mark("File transcription"), "file"), (Loc.Mark("Recorder"), "recorder")],
-            [(Loc.Mark("Privacy"), "history"), (Loc.Mark("Statistics"), "stats"), (Loc.Mark("Dictionary"), "dictionary"), (Loc.Mark("Snippets"), "text"), (Loc.Mark("Workflows"), "workflow"), (Loc.Mark("Premium"), "lock")],
+            [(Loc.Mark("Privacy"), "history"), (Loc.Mark("Statistics"), "stats"), (Loc.Mark("Dictionary"), "dictionary"), (Loc.Mark("Snippets"), "text"), (Loc.Mark("Workflows"), "workflow"), (Loc.Mark("Games"), "gamepad"), (Loc.Mark("Premium"), "lock")],
             [],
             [(Loc.Mark("Sync & backup"), "devices"), (Loc.Mark("Advanced"), "settings"), (Loc.Mark("Account & about"), "info")]
         ];
@@ -661,6 +661,8 @@ public sealed partial class SettingsWindow : Window
         new("Account & about", AccountView.WhatsNewSettingKey, Loc.T("What's new in TypeWhisper"), Loc.T("Review the latest feature highlights."), "info", "news release features updates"),
         new("Home", "", Loc.T("Home"), Loc.T("Recent activity and transcriptions."), "home", "dashboard overview start"),
         new("Workflows", "", Loc.T("Workflows"), Loc.T("Create and edit workflows, triggers and their LLM."), "workflow", "prompt template automation selected text"),
+        new("Games", GamesSettingsPage.WowChatKey, Loc.T("Dictate into the World of Warcraft chat"), Loc.T("Dictation opens the game chat, inserts the text and sends it."), "gamepad", "game gaming wow warcraft classic forever chat"),
+        new("Games", GamesSettingsPage.WowAddOnKey, Loc.T("TypeWhisper add-on"), Loc.T("Install the World of Warcraft add-on that opens the chat reliably."), "gamepad", "game wow warcraft addon add-on install interface addons cast bar castbar translate whisper reply"),
         new("Dictionary", "", Loc.T("Dictionary"), Loc.T("Your words, corrections and term packs."), "dictionary", "vocabulary words corrections spelling"),
         new("Snippets", "", Loc.T("Snippets"), Loc.T("Reusable text with spoken triggers."), "text", "text expansion shortcut"),
         new("Recorder", "", Loc.T("Recorder"), Loc.T("Record microphone and system audio."), "recorder", "meeting session recordings"),
@@ -798,7 +800,8 @@ public sealed partial class SettingsWindow : Window
         ["LanguageHints"] = "Language",
         ["LockPasteToFocusedField"] = "AutoPaste",
         ["VocabularyBoostingEnabledPackIds"] = "VocabularyBoostingEnabled",
-        ["VocabularyBoostingSelectedIndustryPresetId"] = "VocabularyBoostingEnabled"
+        ["VocabularyBoostingSelectedIndustryPresetId"] = "VocabularyBoostingEnabled",
+        [GamesSettingsPage.WowAddOnKey] = GamesSettingsPage.WowChatKey
     };
 
     // False below a page host that is collapsed, true for the sidebar and the shown page.

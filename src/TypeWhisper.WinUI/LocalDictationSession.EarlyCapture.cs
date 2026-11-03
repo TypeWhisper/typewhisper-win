@@ -27,6 +27,8 @@ internal sealed partial class LocalDictationSession
         try
         {
             _earlyTarget = NativeMethods.GetForegroundWindow();
+            // The game indicator belongs to the dictation that chose it; this one decides again once it is adopted.
+            _gameIndicator = null;
             _earlyStopSamples = null;
             _earlyCancelled = false;
             _audio.WhisperModeEnabled = preferences.WhisperModeEnabled;
