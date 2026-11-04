@@ -153,7 +153,7 @@ public sealed class AssemblyAiStreamingTests
     {
         var socket = new Socket(); await using var session = new AssemblyAiStreamingSession(socket);
         var delivering = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var release = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
         var delivered = new List<string>();
         session.TranscriptReceived += e => { if (!e.IsFinal) return; delivering.TrySetResult(); release.Wait(TimeSpan.FromSeconds(5)); delivered.Add(e.Text); };
         await session.SendAudioAsync(Pcm(1.0, 8000), default);
