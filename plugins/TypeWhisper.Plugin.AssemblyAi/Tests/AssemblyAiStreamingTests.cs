@@ -107,6 +107,74 @@ public sealed class AssemblyAiStreamingTests
         Assert.Empty(socket.Audio);
     }
 
+    [Theory]
+    [InlineData(1000, true)] // the last word ends where the speech ends
+    [InlineData(500, false)] // speech after the last word may still be on its way
+    public async Task FinalTurnCoveringTheSentAudioFinishesBeforeTermination(int lastWordEndMs, bool early)
+    {
+        var socket = new Socket(); await using var session = new AssemblyAiStreamingSession(socket);
+        var events = new List<StreamingTranscriptEvent>(); session.TranscriptReceived += events.Add;
+        await session.SendAudioAsync(Pcm(1.0, 8000), default); // speech
+        await session.SendAudioAsync(Pcm(0.5, 0), default);    // silence before the stop
+        var finish = session.FinalizeAsync(default); await socket.Terminated.Reader.ReadAsync();
+        socket.Text(WordTurn(0, "Hallo Welt.", lastWordEndMs));
+        if (early) await finish.WaitAsync(TimeSpan.FromSeconds(2));
+        else
+        {
+            await Task.Delay(200); Assert.False(finish.IsCompleted);
+            socket.Text("{\"type\":\"Termination\"}"); await finish.WaitAsync(TimeSpan.FromSeconds(2));
+        }
+        Assert.Equal("Hallo Welt.", Assert.Single(events, e => e.IsFinal).Text);
+    }
+
+    [Fact]
+    public async Task OpenTurnAfterTerminateWaitsForTermination()
+    {
+        var socket = new Socket(); await using var session = new AssemblyAiStreamingSession(socket);
+        await session.SendAudioAsync(Pcm(1.0, 8000), default);
+        socket.Text(WordTurn(0, "Hallo.", 1000));
+        var finish = session.FinalizeAsync(default); await socket.Terminated.Reader.ReadAsync();
+        await finish.WaitAsync(TimeSpan.FromSeconds(2)); // already covered when Terminate went out
+
+        var second = new Socket(); await using var open = new AssemblyAiStreamingSession(second);
+        await open.SendAudioAsync(Pcm(1.0, 8000), default);
+        var partial = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        open.TranscriptReceived += e => { if (!e.IsFinal) partial.TrySetResult(); };
+        second.Text(WordTurn(0, "Hallo.", 1000)); second.Text(Turn(1, "und", false, false));
+        await partial.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        var waiting = open.FinalizeAsync(default); await second.Terminated.Reader.ReadAsync();
+        await Task.Delay(200); Assert.False(waiting.IsCompleted);
+        second.Text(Turn(1, "Und.", true, true)); second.Text("{\"type\":\"Termination\"}");
+        await waiting.WaitAsync(TimeSpan.FromSeconds(2));
+    }
+
+    [Fact]
+    public async Task CancelledSessionSendsTerminateToEndBilling()
+    {
+        var socket = new Socket(); var session = new AssemblyAiStreamingSession(socket);
+        await session.SendAudioAsync(Pcm(0.2, 8000), default);
+        await session.DisposeAsync();
+        Assert.Equal("Terminate", Assert.Single(socket.Control)); Assert.True(socket.Aborted);
+    }
+
+    private static byte[] Pcm(double seconds, short amplitude)
+    {
+        var samples = (int)(seconds * 16000);
+        var bytes = new byte[samples * 2];
+        for (var i = 0; i < samples; i++)
+        {
+            var value = (short)(i % 2 == 0 ? amplitude : -amplitude);
+            bytes[2 * i] = (byte)value; bytes[2 * i + 1] = (byte)(value >> 8);
+        }
+        return bytes;
+    }
+
+    private static string WordTurn(int order, string text, int lastWordEndMs) => JsonSerializer.Serialize(new
+    {
+        type = "Turn", turn_order = order, transcript = text, end_of_turn = true, turn_is_formatted = true,
+        words = new[] { new { text = "Hallo", start = 100, end = lastWordEndMs / 2 }, new { text = "Welt.", start = lastWordEndMs / 2, end = lastWordEndMs } }
+    });
+
     private static string Turn(int order, string text, bool end, bool formatted) => JsonSerializer.Serialize(new
     { type = "Turn", turn_order = order, transcript = text, end_of_turn = end, turn_is_formatted = formatted, language_code = "de" });
 

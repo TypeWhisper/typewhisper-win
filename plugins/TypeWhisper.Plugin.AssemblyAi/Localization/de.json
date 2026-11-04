@@ -2,10 +2,15 @@
   "Transcription model": "Transkriptionsmodell",
   "Universal-3.5 Pro supports 18 languages. Universal-2 offers wider recorded-audio language support.": "Universal-3.5 Pro unterstützt 18 Sprachen. Universal-2 bietet bei Aufnahmen eine größere Sprachauswahl.",
   "Speaker diarization": "Sprechertrennung",
-  "Label speakers and preserve utterance timestamps. Uses recorded-audio transcription instead of live text.": "Sprecher kennzeichnen und Zeitstempel der Äußerungen erhalten. Verwendet Transkription nach der Aufnahme statt Live-Text.",
   "Off": "Aus",
   "On": "An",
   "Check connection": "Verbindung prüfen",
   "Verify the entered key without uploading audio or saving changes.": "Den eingegebenen Key ohne Audio-Upload oder Speichern prüfen.",
-  "Connection verified. No changes saved.": "Verbindung geprüft. Keine Änderungen gespeichert."
+  "Connection verified. No changes saved.": "Verbindung geprüft. Keine Änderungen gespeichert.",
+  "Transcription": "Transkription",
+  "Live – $0.45/h": "Live – 0,45 $/h",
+  "Sync – $0.30/h": "Sync – 0,30 $/h",
+  "Async – $0.21/h": "Async – 0,21 $/h",
+  "Label speakers and preserve utterance timestamps. Uses the async API after the recording instead of live text.": "Sprecher kennzeichnen und Zeitstempel der Äußerungen erhalten. Verwendet die Async-API nach der Aufnahme statt Live-Text.",
+  "Live streams dictations with a live preview, and the text is ready right after you stop; billed while the connection is open. Recordings, files and dictations without a preview then use the Sync API. Sync uploads the recording when you stop and usually finishes in under half a second. Async costs the least but takes a few seconds. Only Live shows a live preview from AssemblyAI. Universal-2 has no Sync API, and speaker diarization always uses the async API. With more than 100 dictionary terms, Live also transcribes the recording, billed in addition. AssemblyAI list prices for Universal-3.5 Pro in November 2026; add-ons such as dictionary terms cost extra.": "Live streamt Diktate mit Live-Vorschau, und der Text steht direkt nach dem Stoppen bereit; abgerechnet wird, solange die Verbindung offen ist. Aufnahmen, Dateien und Diktate ohne Vorschau nutzen dann die Sync-API. Sync lädt die Aufnahme beim Stoppen hoch und ist meist in unter einer halben Sekunde fertig. Async kostet am wenigsten, braucht aber einige Sekunden. Nur Live zeigt eine Live-Vorschau von AssemblyAI. Universal-2 hat keine Sync-API, und die Sprechertrennung nutzt immer die Async-API. Mit mehr als 100 Wörterbuchbegriffen transkribiert Live zusätzlich die Aufnahme, was zusätzlich abgerechnet wird. Listenpreise von AssemblyAI für Universal-3.5 Pro im November 2026; Zusatzfunktionen wie Wörterbuchbegriffe kosten extra."
 }
