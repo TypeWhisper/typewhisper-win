@@ -602,6 +602,20 @@ public sealed partial class SettingsWindow : Window
         if (SetupHost.Child is null) OpenSearchResult(new(category, key, "", "", ""));
     }
 
+    // A page shown while the app started was rendered before startup registered shortcuts and loaded plugins and
+    // policy problems. Render it again, unless the user is working on it.
+    internal void RefreshAfterStartup()
+    {
+        if (SetupHost.Child is not null || _searchActive || _checkingNavigation || CatalogScroll.Visibility != Visibility.Visible
+            || ShortcutRecorder.AnyEditing || CatalogContent.XamlRoot is not { } root || VisualTreeHelper.GetOpenPopupsForXamlRoot(root).Count > 0) return;
+        for (var focused = FocusManager.GetFocusedElement(root) as DependencyObject; focused is not null; focused = VisualTreeHelper.GetParent(focused))
+            if (ReferenceEquals(focused, CatalogContent)) return;
+        var offset = CatalogScroll.VerticalOffset;
+        ShowCategoryCore(_currentCategory);
+        CatalogScroll.UpdateLayout();
+        CatalogScroll.ChangeView(null, offset, null, true);
+    }
+
 
     private void ClearSearch_Click(object sender, RoutedEventArgs e)
     {

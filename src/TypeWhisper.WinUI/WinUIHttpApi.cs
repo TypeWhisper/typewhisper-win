@@ -20,7 +20,7 @@ internal sealed partial class WinUIHttpApi(LocalDictationSession session, Dispat
     private LocalHttpApi? _host;
     private string? _token;
     private bool _closed;
-    private Preferences _preferences = new();
+    private Preferences _preferences = SavedPreferences();
     internal bool Enabled => _preferences.Enabled;
     internal int Port => _preferences.Port;
     internal bool RequireAuthentication => _preferences.RequireAuthentication;
@@ -47,6 +47,20 @@ internal sealed partial class WinUIHttpApi(LocalDictationSession session, Dispat
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         { RemoveDiscovery(); Status = Loc.T("HTTP API settings could not be loaded. The server is off."); Changed?.Invoke(); }
+    }
+
+    // Settings opened while the app starts shows and keeps the saved values. InitializeAsync reads the file again
+    // and reports a broken one.
+    private static Preferences SavedPreferences()
+    {
+        try
+        {
+            if (File.Exists(SettingsPath) && new FileInfo(SettingsPath).Length <= 4096
+                && JsonSerializer.Deserialize<Preferences>(File.ReadAllText(SettingsPath)) is { Port: >= 1024 and <= 65535 } saved)
+                return saved;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { /* InitializeAsync reports it. */ }
+        return new();
     }
 
     internal async Task ConfigureAsync(bool enabled, int port, bool requireAuthentication)

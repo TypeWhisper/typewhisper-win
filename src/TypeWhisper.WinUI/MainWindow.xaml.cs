@@ -100,6 +100,8 @@ public sealed partial class MainWindow : Window
             _ = ApplyStartupPolicyAsync();
             // A dictation can start while the model loads below, so Esc and Enter must already be handled then.
             InitializeEscapeCancel();
+            // Settings can open during startup; Sync & backup then waits with automatic sync for the access checks below.
+            WinUICloudSync.AwaitStartupChecks = true;
             await _dictation.InitializeAsync();
             // A dictation captured while the model loaded is waiting to be adopted; the remaining
             // startup steps yield in between so they do not freeze it or its overlay in one block.
@@ -131,7 +133,10 @@ public sealed partial class MainWindow : Window
             ShowNotice(new AppNotice(Loc.T("Dictation startup failed: {0}", ex.Message)));
             // Settings stay usable after a failed start, so the managed license key still has to be applied.
             _ = WinUILicensing.ValidateAsync();
+            WinUICloudSync.AwaitStartupChecks = false;
         }
+        // Settings can open while startup runs; its page shows what startup has registered and loaded since.
+        if (!_closing) _settingsWindow?.RefreshAfterStartup();
     }
 
     private async Task StartCloudSyncAfterAccessChecksAsync(Task accessChecks)
@@ -141,10 +146,10 @@ public sealed partial class MainWindow : Window
             await accessChecks;
             await YieldToQueuedWorkAsync();
             if (_closing) return;
-            WinUICloudSync.DataChanged += () => _lexicon?.RefreshApiData();
             WinUICloudSync.Initialize(DispatcherQueue);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { if (!_closing) ShowNotice(new AppNotice(Loc.T("Dictation startup failed: {0}", ex.Message))); }
+        finally { WinUICloudSync.AwaitStartupChecks = false; }
     }
 
     private Task YieldToQueuedWorkAsync()
@@ -364,6 +369,8 @@ public sealed partial class MainWindow : Window
             WorkflowsView.RefreshApiData();
             if (_workflowShortcuts?.Initialize() is { } error) ShowNotice(new AppNotice(error));
         };
+        // Also for a sync started from Sync & backup while the app starts.
+        WinUICloudSync.DataChanged += () => _lexicon?.RefreshApiData();
         _dictation.StopHistoryPlayback = () => { _historyWindow?.StopAudioPlayback(); RecorderView.StopAudioPlayback(); };
         RecorderView.CanPlayAudio = CanPlayHistoryAudio;
         RecorderView.PrepareAudioPlayback = async () =>

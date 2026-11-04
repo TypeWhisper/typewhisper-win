@@ -36,6 +36,14 @@ internal static class WinUIPremiumAccount
             return _client = new(Http, id, Save, saved);
         }
     }
+    // Reads the saved session without a request, so Settings opened before the startup refresh shows whether
+    // this device is signed in.
+    internal static void LoadSavedSession()
+    {
+        if (_client is not null || _closing) return;
+        try { _ = Client; }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { /* The startup refresh reports it. */ }
+    }
     private static void Save(string? value)
     {
         if (value is null) { File.Delete(SessionPath); return; }

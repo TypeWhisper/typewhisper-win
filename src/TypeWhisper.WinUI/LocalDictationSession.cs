@@ -89,7 +89,9 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             preferences = preferences.Validated();
             AtomicFileWriter.WriteAllText(AudioPreferencesPath, System.Text.Json.JsonSerializer.Serialize(preferences));
             AudioPreferences = preferences;
-            _audio.MicrophonePrerollEnabled = preferences.MicrophonePrerollEnabled;
+            // The setter waits for the capture lock, which the microphone warm-up holds while the app starts.
+            if (_audio.MicrophonePrerollEnabled != preferences.MicrophonePrerollEnabled)
+                _audio.MicrophonePrerollEnabled = preferences.MicrophonePrerollEnabled;
             AudioPreferencesError = null;
             return null;
         }
@@ -624,11 +626,13 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         // Retention loads the whole history; the model load need not wait for it.
         _ = ApplyHistoryRetentionAsync();
         _retentionTimer.Start();
+        // Before the first wait: a Recovery page opened meanwhile refreshes the list, which deletes by retention,
+        // so the store must not keep its default of 30 days until then.
+        var recoveryRetention = _recoveryAudio.SetRetentionAsync(RecoveryPreferences.Current.Enabled ? RecoveryPreferences.Current.RetentionDays : 0);
         await _gate.WaitAsync();
         try
         {
-            await _recoveryAudio.InitializeAsync();
-            await _recoveryAudio.SetRetentionAsync(RecoveryPreferences.Current.Enabled ? RecoveryPreferences.Current.RetentionDays : 0);
+            await Task.WhenAll(_recoveryAudio.InitializeAsync(), recoveryRetention);
             if (_disposed) return;
             ReportRecoveryStorageError();
             await Packages.InitializeAsync();
@@ -642,6 +646,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     ? System.Text.Json.JsonSerializer.Deserialize<List<MicrophonePriorityItem>>(json) ?? []
                     : System.Text.Json.JsonSerializer.Deserialize<MicrophonePriorityItem>(json) is { } previous ? [previous] : [];
                 _audio.SetMicrophonePriorityList(_microphones);
+                // Audio settings and setup can be open already; they show the saved order instead of an empty one.
+                MicrophonesChanged?.Invoke();
             }
             _providerId = StartupProviderId();
             // Prepare the device without starting capture, so key-down need not initialize it. It is opened

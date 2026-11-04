@@ -70,7 +70,7 @@ public sealed partial class PluginsView
             }
         }
         SettingsNavigationChanged?.Invoke();
-        if (_selectedSettingsPlugin is not null && !_plugins.Any(p => Path.GetFileName(p.Id) == _selectedSettingsPlugin))
+        if (_selectedSettingsPlugin is not null && _inventoryLoaded && !_plugins.Any(p => Path.GetFileName(p.Id) == _selectedSettingsPlugin))
         {
             CloseSettingsPage();
             PluginPageTitle.Text = Loc.T("Plugin unavailable");
