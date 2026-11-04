@@ -53,7 +53,8 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
         {
             var mode = recordingMode();
             var now = Environment.TickCount64;
-            _state.LostReleaseMilliseconds = HybridHotkeyState.LostReleaseAfter(KeyboardRepeatTiming.LongestGapMilliseconds);
+            // Two SystemParametersInfo calls; read only for an event that compares a gap, at most once per event.
+            _state.ReadLostReleaseFrom(LostReleaseFromRepeatTiming);
             Dispatch(_state.Key(key, down, now - InputEventTiming.Age(time, now), _bindings, isRecording(), mode, paused?.Invoke() == true,
                 Held, stale: InputEventTiming.IsStale(time, now)));
             LogDroppedKeys(_state.DroppedKeys, time);
@@ -103,6 +104,7 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
         _hook = NativeMethods.SetWindowsHookEx(NativeMethods.WH_KEYBOARD_LL, _callback, NativeMethods.GetModuleHandle(null), 0);
         if (_hook == IntPtr.Zero) { _regular.Dispose(); throw new Win32Exception(Marshal.GetLastWin32Error()); }
     }
+    private static readonly Func<long> LostReleaseFromRepeatTiming = () => HybridHotkeyState.LostReleaseAfter(KeyboardRepeatTiming.LongestGapMilliseconds);
     // Every shortcut hook sees the same event, so each lost key-up is logged once per event and key.
     // All hooks run on the UI thread.
     private static uint _droppedEvent;

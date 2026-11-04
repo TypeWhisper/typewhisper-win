@@ -27,8 +27,22 @@ internal sealed class HybridHotkeyState
     // long it was released and its key-up got lost, e.g. swallowed by another app's keyboard hook.
     // Windows can then still report it as down, which would block every shortcut until it is pressed again.
     internal const long DefaultLostReleaseMilliseconds = 1500;
+    private long _lostReleaseMilliseconds = DefaultLostReleaseMilliseconds;
+    private Func<long>? _lostReleaseSource;
+    private bool _lostReleaseRead;
     /// <summary>Set from the keyboard repeat timing, so slow accessibility repeats still count as held.</summary>
-    internal long LostReleaseMilliseconds { get; set; } = DefaultLostReleaseMilliseconds;
+    internal long LostReleaseMilliseconds
+    {
+        get
+        {
+            if (_lostReleaseSource is { } source && !_lostReleaseRead) { _lostReleaseMilliseconds = source(); _lostReleaseRead = true; }
+            return _lostReleaseMilliseconds;
+        }
+        set { _lostReleaseMilliseconds = value; _lostReleaseSource = null; }
+    }
+    /// <summary>Takes the threshold for the next key event from <paramref name="source"/>, read only if that event compares a
+    /// gap. Most key events do not (nothing else is held), so the system's repeat timing is not queried for them.</summary>
+    internal void ReadLostReleaseFrom(Func<long> source) { _lostReleaseSource = source; _lostReleaseRead = false; }
     // Without repeats a quiet key may still be held, so nothing counts as a lost release.
     internal static long LostReleaseAfter(long longestRepeatGapMilliseconds) => longestRepeatGapMilliseconds == long.MaxValue
         ? long.MaxValue : Math.Max(DefaultLostReleaseMilliseconds, longestRepeatGapMilliseconds + 500);
