@@ -8,6 +8,7 @@ public sealed partial class PortablePluginRuntimeRegistryTests : IDisposable
 {
     private const string Id = "test.typewhisper.runtime";
     private const string OtherId = "test.typewhisper.runtime-other";
+    private const string ThirdId = "test.typewhisper.runtime-third";
     private readonly string _root = Path.Combine(Path.GetTempPath(), "portable-runtime-" + Guid.NewGuid().ToString("N"));
     private readonly HttpClient _http = new();
     private readonly Dictionary<string, ProbeHost> _hosts = new();
@@ -18,11 +19,12 @@ public sealed partial class PortablePluginRuntimeRegistryTests : IDisposable
         if (!_hosts.TryGetValue(id, out var host)) _hosts.Add(id, host = new(Path.Combine(_root, "data", id)));
         return host;
     }
-    private async Task<PortablePluginStore> Store(bool second = false)
+    private async Task<PortablePluginStore> Store(bool second = false, bool third = false)
     {
         var bundles = Path.Combine(_root, "bundles");
         Package(bundles, Id, typeof(RuntimeProbePlugin));
         if (second) Package(bundles, OtherId, typeof(OtherRuntimeProbePlugin));
+        if (third) Package(bundles, ThirdId, typeof(ThirdRuntimeProbePlugin));
         var store = new PortablePluginStore(Path.Combine(_root, "store"), Version, _http);
         await store.InitializeAsync(bundles);
         return store;
@@ -78,6 +80,49 @@ public sealed partial class PortablePluginRuntimeRegistryTests : IDisposable
         Assert.False(Host(Id).GetSetting<bool>("Enabled"));
         Assert.Equal(1, Host(Id).GetSetting<int>("disposals"));
         Assert.False(registry.Snapshot().Single(state => state.PluginId == Id).Enabled);
+    }
+
+    [Fact]
+    public async Task StartupReadsEachPackageOnceAndAnnouncesThePassOnceWithoutRewritingEnablement()
+    {
+        var store = await Store(second: true, third: true);
+        string[] ids = [Id, OtherId, ThirdId];
+        var saved = new DateTime(2001, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        foreach (var id in ids)
+        {
+            Host(id).SetSetting("Enabled", true);
+            Host(id).SetSetting("QuietActivation", true);
+            File.SetLastWriteTimeUtc(Path.Combine(Host(id).PluginDataDirectory, "settings.json"), saved);
+        }
+        await using var registry = Registry(store);
+        var changes = 0;
+        registry.Changed += () => Interlocked.Increment(ref changes);
+        await registry.InitializeAsync();
+        Assert.Equal(ids.Order(), registry.TranscriptionProviders.Select(provider => provider.PluginId).Order());
+        Assert.Equal(1, changes);
+        // Enabled was already saved as true, so no settings file was written.
+        Assert.All(ids, id => Assert.Equal(saved, File.GetLastWriteTimeUtc(Path.Combine(Host(id).PluginDataDirectory, "settings.json"))));
+        // A refresh reads every package once. Startup read each package as often, not once per later package as well.
+        var startupReads = ids.Select(id => Host(id).Reads("SharedSelection")).ToArray();
+        await registry.RefreshCapabilitiesAsync();
+        Assert.All(startupReads, reads => Assert.True(reads > 0));
+        Assert.Equal(startupReads, ids.Select((id, index) => Host(id).Reads("SharedSelection") - startupReads[index]));
+    }
+
+    [Fact]
+    public async Task StartupCollisionKeepsTheEarlierOwnerAndReleasesTheLaterPackage()
+    {
+        var store = await Store(second: true);
+        foreach (var id in new[] { Id, OtherId }) { Host(id).SetSetting("Enabled", true); Host(id).SetSetting("SharedSelection", "shared"); }
+        await using var registry = Registry(store);
+        await registry.InitializeAsync();
+        Assert.Equal(Id, Assert.Single(registry.TranscriptionProviders).PluginId);
+        var other = registry.Snapshot().Single(state => state.PluginId == OtherId);
+        Assert.False(other.Enabled);
+        Assert.Contains("collision", other.Error);
+        Assert.True(Host(OtherId).GetSetting<bool>("Enabled"));
+        Assert.Equal(1, Host(OtherId).GetSetting<int>("disposals"));
+        Assert.Equal(Id, await registry.UseLlmAsync(Id, (plugin, ct) => plugin.ProcessAsync("", Id, "llm", ct)));
     }
 
     [Fact]
@@ -369,14 +414,20 @@ public sealed partial class PortablePluginRuntimeRegistryTests : IDisposable
     private sealed class ProbeHost(string directory) : IPluginHostServices
     {
         private readonly VocabularyHostServices _inner = new(directory);
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, int> _reads = new(StringComparer.Ordinal);
         internal bool FailEnabledWrites;
         internal Action? OnCapabilitiesChanged;
+        internal int Reads(string key) => _reads.GetValueOrDefault(key);
         internal TaskCompletionSource<bool> Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         internal TaskCompletionSource<string?> Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public Task StoreSecretAsync(string key, string value) => throw new NotSupportedException();
         public Task<string?> LoadSecretAsync(string key) => key == "hold" ? Release.Task : Task.FromResult<string?>(null);
         public Task DeleteSecretAsync(string key) => throw new NotSupportedException();
-        public T? GetSetting<T>(string key) => _inner.GetSetting<T>(key);
+        public T? GetSetting<T>(string key)
+        {
+            _reads.AddOrUpdate(key, 1, (_, count) => count + 1);
+            return _inner.GetSetting<T>(key);
+        }
         public void SetSetting<T>(string key, T value)
         {
             if (key == "Enabled" && FailEnabledWrites) throw new IOException("Fixture write failure.");

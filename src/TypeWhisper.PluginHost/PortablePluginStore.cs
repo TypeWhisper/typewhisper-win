@@ -166,10 +166,16 @@ public sealed class PortablePluginStore
         lock (_sync) return _installed.TryGetValue(id, out var receipt) ? PackagePath(receipt.Directory)
             : throw new InvalidOperationException("This plugin is not installed.");
     }
-    public IReadOnlyList<InstalledPluginPackage> Inventory()
+    public IReadOnlyList<InstalledPluginPackage> Inventory() => InspectInstalled().Select(item => item.Package).ToArray();
+
+    // Each inventory entry with the loadable directory it was read from, so the runtime need not inspect it again.
+    internal (InstalledPluginPackage Package, string Directory)[] InspectInstalled()
     {
-        lock (_sync) return _installed.Select(pair => PortablePluginInventory.Inspect(PackagePath(pair.Value.Directory), _host)
-            with { Directory = Path.Combine(InventoryRoot, pair.Key) }).ToArray();
+        lock (_sync) return _installed.Select(pair =>
+        {
+            var directory = PackagePath(pair.Value.Directory);
+            return (PortablePluginInventory.Inspect(directory, _host) with { Directory = Path.Combine(InventoryRoot, pair.Key) }, directory);
+        }).ToArray();
     }
 
     public async Task<bool> InstallAsync(PortableCatalogEntry entry, IProgress<PluginInstallationProgress>? progress = null, CancellationToken ct = default)
