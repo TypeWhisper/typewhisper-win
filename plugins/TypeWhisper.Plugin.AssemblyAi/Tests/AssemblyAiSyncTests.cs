@@ -40,24 +40,27 @@ public partial class AssemblyAiTests
             Assert.Equal("config", parts[1].Headers.ContentDisposition!.Name!.Trim('"'));
             Assert.Equal("application/json", parts[1].Headers.ContentType!.MediaType);
             var config = JsonSerializer.Deserialize<JsonElement>(await parts[1].ReadAsStringAsync(ct));
+            Assert.True(config.GetProperty("timestamps").GetBoolean());
             Assert.Equal(new[] { "Grüße", "TypeWhisper" }, config.GetProperty("keyterms_prompt").EnumerateArray().Select(e => e.GetString()));
             if (expectedLanguage is null) Assert.False(config.TryGetProperty("language_codes", out _));
             else Assert.Equal(expectedLanguage, Assert.Single(config.GetProperty("language_codes").EnumerateArray()).GetString());
-            return Json("""{"text":"Grüße TypeWhisper!","words":[{"text":"Grüße","confidence":0.9}],"audio_duration_ms":2500,"request_time_ms":240.5}""");
+            return Json("""{"text":"Grüße TypeWhisper!","words":[{"text":"Grüße","start":100,"end":600,"confidence":0.9},{"text":"TypeWhisper!","start":700,"end":1500}],"audio_duration_ms":2500,"request_time_ms":240.5}""");
         });
         await plugin.ActivateAsync(Host());
         var result = await plugin.TranscribeAsync(audio, language, false, "Grüße, TypeWhisper, grüße", default);
         Assert.Equal(1, calls); Assert.Equal("Grüße TypeWhisper!", result.Text);
-        Assert.Equal(expectedLanguage, result.DetectedLanguage); Assert.Equal(2.5, result.DurationSeconds); Assert.Empty(result.Segments);
+        Assert.Equal(expectedLanguage, result.DetectedLanguage); Assert.Equal(2.5, result.DurationSeconds);
+        Assert.Equal(new[] { ("Grüße", 0.1, 0.6), ("TypeWhisper!", 0.7, 1.5) }, result.Segments.Select(x => (x.Text, x.Start, x.End)));
     }
 
     [Fact]
-    public async Task SyncApiWithoutLanguageOrTermsSendsOnlyTheAudio()
+    public async Task SyncApiWithoutLanguageOrTermsAsksOnlyForTimestamps()
     {
-        using var plugin = Plugin((request, _) =>
+        using var plugin = Plugin(async (request, ct) =>
         {
-            Assert.Single(Assert.IsType<MultipartFormDataContent>(request.Content));
-            return Task.FromResult(Json("""{"text":null}"""));
+            var parts = Assert.IsType<MultipartFormDataContent>(request.Content).ToArray();
+            Assert.Equal("""{"timestamps":true}""", await parts[1].ReadAsStringAsync(ct));
+            return Json("""{"text":null}""");
         });
         await plugin.ActivateAsync(Host());
         var result = await plugin.TranscribeAsync(Wav(1), null, false, null, default);
@@ -156,6 +159,24 @@ public partial class AssemblyAiTests
         var request = AssemblyAiPlugin.SyncRequestFor(AssemblyAiModels.Require(model), mode, diarization, language, prompt, TimeSpan.FromSeconds(seconds));
         Assert.Equal(sync, request is not null);
         if (request is not null) Assert.Equal(terms, request.Keyterms.Count);
+    }
+
+    [Fact]
+    public void WordsWithoutTimesJoinANeighbourSoSubtitlesKeepAllText()
+    {
+        using var doc = JsonDocument.Parse("""{"words":[{"text":"npm"},{"text":"Führe","start":100,"end":400},{"text":"run"},{"text":"benchmark"},{"text":"aus.","start":900,"end":1200},{"text":" "},{"text":"zurück","start":800,"end":1300}]}""");
+        Assert.Equal(new[] { ("npm Führe run benchmark", 0.1, 0.4), ("aus. zurück", 0.9, 1.2) },
+            AssemblyAiPlugin.SyncSegments(doc.RootElement).Select(x => (x.Text, x.Start, x.End)));
+        using var untimed = JsonDocument.Parse("""{"words":[{"text":"Hallo"}]}""");
+        Assert.Empty(AssemblyAiPlugin.SyncSegments(untimed.RootElement));
+    }
+
+    [Fact]
+    public void SyncApiTakesAtMost256MegabytesOfAudio()
+    {
+        var model = AssemblyAiModels.All[0];
+        Assert.NotNull(AssemblyAiPlugin.SyncRequestFor(model, "live", false, null, null, TimeSpan.FromMinutes(10), 256L * 1024 * 1024));
+        Assert.Null(AssemblyAiPlugin.SyncRequestFor(model, "live", false, null, null, TimeSpan.FromMinutes(10), 256L * 1024 * 1024 + 1));
     }
 
     [Fact]

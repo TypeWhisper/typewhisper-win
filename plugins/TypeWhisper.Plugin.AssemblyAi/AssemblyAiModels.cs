@@ -16,9 +16,10 @@ internal sealed record AssemblyAiModel(string Id, string Name, IReadOnlyList<str
 /// </summary>
 /// <param name="Languages">Codes <c>language_codes</c> accepts; any other code is rejected with a 400.</param>
 /// <param name="MaxDuration">Longer audio is rejected with a 413.</param>
+/// <param name="MaxBytes">Larger files are rejected with a 413.</param>
 /// <param name="MaxTerms">At most this many <c>keyterms_prompt</c> entries.</param>
 /// <param name="MaxTermCharacters">At most this many characters across all entries.</param>
-internal sealed record AssemblyAiSyncLimits(IReadOnlyList<string> Languages, TimeSpan MaxDuration, int MaxTerms, int MaxTermCharacters);
+internal sealed record AssemblyAiSyncLimits(IReadOnlyList<string> Languages, TimeSpan MaxDuration, long MaxBytes, int MaxTerms, int MaxTermCharacters);
 
 /// <summary>How dictations stream and how recordings are transcribed, with AssemblyAI's list price for Universal-3.5 Pro.</summary>
 internal static class AssemblyAiModes
@@ -46,7 +47,7 @@ internal static class AssemblyAiModels
         {
             "en", "es", "de", "fr", "it", "pt", "tr", "nl", "sv", "no", "da", "fi", "hi", "vi", "ar", "he", "ja", "ur", "zh", "ko",
             "ca", "gl", "ru", "ro", "et", "fa", "yue", "af", "mr", "zu", "xh", "nn"
-        }), TimeSpan.FromMinutes(20), MaxTerms: 100, MaxTermCharacters: 8000)),
+        }), TimeSpan.FromMinutes(20), MaxBytes: 256L * 1024 * 1024, MaxTerms: 100, MaxTermCharacters: 8000)),
         new AssemblyAiModel("universal-2", "Universal-2", Array.AsReadOnly(new[]
         {
             "bg", "ca", "cs", "da", "de", "el", "en", "es", "et", "fi", "fr", "hi", "hr", "hu", "id", "it", "ja", "ko", "lt", "lv",

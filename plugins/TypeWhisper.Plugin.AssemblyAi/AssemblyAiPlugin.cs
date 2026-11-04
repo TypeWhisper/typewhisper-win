@@ -131,7 +131,7 @@ public sealed partial class AssemblyAiPlugin : ITranscriptionEnginePlugin, IApiK
             throw new NotSupportedException("The selected AssemblyAI model does not support this language.");
 
         var duration = WavDuration(wavAudio);
-        if (SyncRequestFor(model, Mode, diarization, normalizedLanguage, prompt, duration) is { } sync)
+        if (SyncRequestFor(model, Mode, diarization, normalizedLanguage, prompt, duration, wavAudio.Length) is { } sync)
         {
             var recording = Convert.ToHexString(SHA256.HashData(wavAudio));
             if (!SyncFailedBefore(recording))
@@ -203,11 +203,13 @@ public sealed partial class AssemblyAiPlugin : ITranscriptionEnginePlugin, IApiK
 
     /// <summary>
     /// Null when the recording needs the async API: the Async mode, a model without a Sync API, speaker labels,
-    /// a language or dictionary the Sync API would reject, or audio over its length limit.
+    /// a language or dictionary the Sync API would reject, or audio over its length or size limit.
     /// </summary>
-    internal static SyncRequest? SyncRequestFor(AssemblyAiModel model, string mode, bool diarization, string? language, string? prompt, TimeSpan? duration)
+    internal static SyncRequest? SyncRequestFor(AssemblyAiModel model, string mode, bool diarization, string? language, string? prompt,
+        TimeSpan? duration, long bytes = 0)
     {
-        if (mode == AssemblyAiModes.Async || diarization || model.Sync is not { } limits || duration > limits.MaxDuration) return null;
+        if (mode == AssemblyAiModes.Async || diarization || model.Sync is not { } limits || duration > limits.MaxDuration || bytes > limits.MaxBytes)
+            return null;
         var code = AssemblyAiModels.Language(language);
         if (code is not null && !limits.Languages.Contains(code)) return null;
         var terms = AssemblyAiModels.Terms(prompt, model);
@@ -229,10 +231,37 @@ public sealed partial class AssemblyAiPlugin : ITranscriptionEnginePlugin, IApiK
         var root = response.RootElement;
         if (!root.TryGetProperty("text", out var textField) || textField.ValueKind is not (JsonValueKind.String or JsonValueKind.Null))
             throw InvalidResponse();
+        var segments = SyncSegments(root);
         var seconds = Number(root, "audio_duration_ms") is { } ms ? ms / 1000 : duration?.TotalSeconds ?? 0;
+        if (segments.Count > 0) seconds = Math.Max(seconds, segments.Max(s => s.End));
         _host?.Log(PluginLogLevel.Info, $"AssemblyAI Sync API returned the transcript after {started.ElapsedMilliseconds} ms.");
         // The Sync API reports no detected language.
-        return new(textField.GetString() ?? "", sync.Language, seconds, NoSpeechProbability: null);
+        return new(textField.GetString() ?? "", sync.Language, seconds, NoSpeechProbability: null) { Segments = segments };
+    }
+
+    /// <summary>
+    /// One segment per word, as from the async API, so subtitles keep working. The Sync API leaves out the times of words
+    /// it cannot align; such a word joins the segment of the word before it (or after it, at the start), so no text is lost.
+    /// </summary>
+    internal static List<PluginTranscriptionSegment> SyncSegments(JsonElement root)
+    {
+        var segments = new List<PluginTranscriptionSegment>();
+        if (!root.TryGetProperty("words", out var words) || words.ValueKind != JsonValueKind.Array) return segments;
+        var leading = new List<string>();
+        foreach (var word in words.EnumerateArray())
+        {
+            var text = OptionalString(word, "text")?.Trim();
+            if (string.IsNullOrEmpty(text)) continue;
+            if (Number(word, "start") is { } start && Number(word, "end") is { } end && end >= start
+                && (segments.Count == 0 || start / 1000 >= segments[^1].Start))
+            {
+                if (leading.Count > 0) { text = string.Join(" ", leading) + " " + text; leading.Clear(); }
+                segments.Add(new(text, start / 1000, end / 1000));
+            }
+            else if (segments.Count == 0) leading.Add(text);
+            else segments[^1] = segments[^1] with { Text = segments[^1].Text + " " + text };
+        }
+        return segments;
     }
 
     internal static MultipartFormDataContent SyncContent(byte[] wavAudio, SyncRequest sync)
@@ -241,15 +270,13 @@ public sealed partial class AssemblyAiPlugin : ITranscriptionEnginePlugin, IApiK
         var audio = new ByteArrayContent(wavAudio);
         audio.Headers.ContentType = new MediaTypeHeaderValue("audio/wav");
         content.Add(audio, "audio", "audio.wav");
-        var config = new Dictionary<string, object>();
+        // Word timestamps cost 0 to 0.2 s and keep subtitles of files possible, as with the async API.
+        var config = new Dictionary<string, object> { ["timestamps"] = true };
         if (sync.Language is { } language) config["language_codes"] = new[] { language };
         if (sync.Keyterms.Count > 0) config["keyterms_prompt"] = sync.Keyterms;
-        if (config.Count > 0)
-        {
-            var json = new StringContent(JsonSerializer.Serialize(config), Encoding.UTF8);
-            json.Headers.ContentType = new MediaTypeHeaderValue("application/json");
-            content.Add(json, "config");
-        }
+        var json = new StringContent(JsonSerializer.Serialize(config), Encoding.UTF8);
+        json.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+        content.Add(json, "config");
         return content;
     }
 
