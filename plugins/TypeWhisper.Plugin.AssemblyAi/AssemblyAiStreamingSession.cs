@@ -226,7 +226,10 @@ internal sealed class AssemblyAiStreamingSession : IStreamingSession
             await _socket.SendAsync(TerminateMessage, WebSocketMessageType.Text, true, timeout.Token).ConfigureAwait(false);
             lock (_gate) _terminateSent = true;
         }
-        catch (Exception ex) when (ex is WebSocketException or OperationCanceledException or IOException or ObjectDisposedException or InvalidOperationException) { }
+        catch (Exception ex) when (ex is WebSocketException or OperationCanceledException or IOException or ObjectDisposedException or InvalidOperationException)
+        {
+            // Best effort: DisposeAsync aborts the socket next, and AssemblyAI then ends the session by itself.
+        }
         finally { _sendLock.Release(); }
     }
 
