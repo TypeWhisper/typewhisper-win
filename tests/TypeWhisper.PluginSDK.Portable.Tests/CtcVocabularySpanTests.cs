@@ -44,6 +44,21 @@ public sealed class CtcVocabularySpanTests
     }
 
     [Fact]
+    public void OnePreparedTranscriptServesEveryTermOfARescoring()
+    {
+        const string text = "Die Anwendung verbindet Postgres SQL mit einem Cluster in Kubanesis. Type Visper nutzt ein Modell von Openai auf GitHub Actions.";
+        var transcript = CtcVocabularySpans.Prepare(text);
+        foreach (var term in new[] { "PostgreSQL", "Kubernetes", "TypeWhisper", "OpenAI", "GitHub Actions", "Grafana", "Postgres SQL" })
+        {
+            var fresh = CtcVocabularySpans.Find(text, term, .52f, out var similarityRejected, out var spanRejected, out var best);
+            var reused = CtcVocabularySpans.Find(transcript, term, .52f, out var reusedSimilarityRejected, out var reusedSpanRejected, out var reusedBest);
+            Assert.Equal(fresh, reused);
+            Assert.Equal((similarityRejected, spanRejected, best), (reusedSimilarityRejected, reusedSpanRejected, reusedBest));
+        }
+        Assert.Equal(["Kubanesis"], CtcVocabularySpans.Find(transcript, "Kubernetes", .52f, out _, out _, out _).Select(s => text.Substring(s.Start, s.Length)));
+    }
+
+    [Fact]
     public void OverlappingProposalsKeepTheWindowClosestToTheTerm()
     {
         // "Visper" alone sounds like "TypeWhisper" too and scores higher, but replacing it would leave "Type TypeWhisper".
