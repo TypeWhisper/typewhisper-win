@@ -1,4 +1,7 @@
+using System.Buffers.Binary;
+using System.Diagnostics;
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using TypeWhisper.PluginSDK;
@@ -11,13 +14,22 @@ public sealed partial class AssemblyAiPlugin : ITranscriptionEnginePlugin, IApiK
     IPluginProfileSettings, IPluginSettingsActions, IPluginConnectionSettings
 {
     private const string BaseUrl = "https://api.assemblyai.com";
+    private const string SyncUrl = "https://sync.assemblyai.com/v1/transcribe";
     private readonly HttpClient _http;
     private readonly TimeSpan _pollInterval;
     private readonly TimeSpan _jobTimeout;
     private IPluginHostServices? _host;
+    // Requests whose Sync attempt failed. The host retries a transient failure of the async fallback with the same
+    // recording, which then goes to the async API at once instead of a second, possibly billed, Sync request. An entry
+    // covers the host's retries (two, at most 10 s apart, after async attempts of up to five minutes) and then expires,
+    // so a later transcription of the same audio tries the Sync API again.
+    private readonly Dictionary<string, DateTimeOffset> _failedSyncRequests = [];
+    private static readonly TimeSpan FailedSyncRetryWindow = TimeSpan.FromMinutes(15);
+    internal TimeProvider Clock { get; set; } = TimeProvider.System;
     private string? _apiKey;
     private Configuration _configuration = new(AssemblyAiModels.DefaultId, false, "api-key");
-    private sealed record Configuration(string Model, bool SpeakerDiarizationEnabled, string? SecretName);
+    // Profiles saved before 1.2.0 have no mode and get the Live default.
+    private sealed record Configuration(string Model, bool SpeakerDiarizationEnabled, string? SecretName, string? Mode = AssemblyAiModes.Live);
 
     /// <summary>Creates the provider with its own HTTP transport.</summary>
     public AssemblyAiPlugin() : this(new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(120) }) { }
@@ -33,7 +45,7 @@ public sealed partial class AssemblyAiPlugin : ITranscriptionEnginePlugin, IApiK
     /// <inheritdoc />
     public string PluginName => "AssemblyAI";
     /// <inheritdoc />
-    public string PluginVersion => "1.1.4";
+    public string PluginVersion => "1.2.0";
     /// <inheritdoc />
     public string ProviderId => "assemblyai";
     /// <inheritdoc />
@@ -48,7 +60,8 @@ public sealed partial class AssemblyAiPlugin : ITranscriptionEnginePlugin, IApiK
     /// <inheritdoc />
     public bool SupportsTranslation => false;
     /// <inheritdoc />
-    public bool SupportsStreaming => !_configuration.SpeakerDiarizationEnabled;
+    /// <remarks>Only the Live mode streams; Sync and Async show no live preview from AssemblyAI, so their price is what they cost.</remarks>
+    public bool SupportsStreaming => Mode == AssemblyAiModes.Live && !_configuration.SpeakerDiarizationEnabled;
     /// <inheritdoc />
     public bool SupportsStreamingCompletion => true;
     /// <inheritdoc />
@@ -60,6 +73,7 @@ public sealed partial class AssemblyAiPlugin : ITranscriptionEnginePlugin, IApiK
     /// <inheritdoc />
     public IReadOnlyList<string> SupportedLanguages => Model.Languages;
     private AssemblyAiModel Model => AssemblyAiModels.Resolve(_configuration.Model);
+    internal string Mode => AssemblyAiModes.Normalize(_configuration.Mode);
 
     /// <inheritdoc />
     public async Task ActivateAsync(IPluginHostServices host)
@@ -67,7 +81,7 @@ public sealed partial class AssemblyAiPlugin : ITranscriptionEnginePlugin, IApiK
         var saved = host.GetSetting<Configuration>("configuration")
             ?? new(host.GetSetting<string>("selectedModel") ?? AssemblyAiModels.DefaultId,
                 host.GetSetting<bool?>("speakerDiarizationEnabled") ?? false, "api-key");
-        var normalized = saved with { Model = AssemblyAiModels.Resolve(saved.Model).Id };
+        var normalized = saved with { Model = AssemblyAiModels.Resolve(saved.Model).Id, Mode = AssemblyAiModes.Normalize(saved.Mode) };
         var key = normalized.SecretName is null ? null : await host.LoadSecretAsync(normalized.SecretName);
         if (saved != normalized) host.SetSetting("configuration", normalized);
         _configuration = normalized;
@@ -119,6 +133,25 @@ public sealed partial class AssemblyAiPlugin : ITranscriptionEnginePlugin, IApiK
         if (normalizedLanguage is not null && !model.Languages.Contains(normalizedLanguage))
             throw new NotSupportedException("The selected AssemblyAI model does not support this language.");
 
+        var duration = WavDuration(wavAudio);
+        if (SyncRequestFor(model, Mode, diarization, normalizedLanguage, prompt, duration, wavAudio.Length) is { } sync)
+        {
+            var recording = SyncRequestIdentity(wavAudio, sync);
+            if (!SyncFailedBefore(recording))
+            {
+                try { return await TranscribeSyncAsync(wavAudio, sync, key, duration, ct); }
+                catch (Exception ex) when (!ct.IsCancellationRequested && ex is not OutOfMemoryException
+                    && ex is not PluginRequestException { FailureKind: PluginRequestFailureKind.Authentication })
+                {
+                    // A failed Sync request is not sent again: AssemblyAI may have received and billed it.
+                    RememberFailedSync(recording);
+                    var reason = ex is PluginRequestException request ? request.FailureKind.ToString() : "Timeout";
+                    _host?.Log(PluginLogLevel.Warning, $"AssemblyAI Sync API failed ({reason}); transcribing with the async API.");
+                }
+            }
+        }
+        var started = Stopwatch.StartNew();
+
         using var uploadRequest = Request(HttpMethod.Post, "/v2/upload", key);
         uploadRequest.Content = new ByteArrayContent(wavAudio);
         uploadRequest.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
@@ -141,7 +174,9 @@ public sealed partial class AssemblyAiPlugin : ITranscriptionEnginePlugin, IApiK
                 using var poll = await ReadAsync(pollRequest, deadline.Token);
                 switch (RequiredString(poll.RootElement, "status"))
                 {
-                    case "completed": return ParseCompleted(poll.RootElement, normalizedLanguage, diarization);
+                    case "completed":
+                        _host?.Log(PluginLogLevel.Info, $"AssemblyAI async API returned the transcript after {started.ElapsedMilliseconds} ms.");
+                        return ParseCompleted(poll.RootElement, normalizedLanguage, diarization);
                     case "queued": case "processing": continue;
                     case "error": throw new PluginRequestException("AssemblyAI could not transcribe the recording.", PluginRequestFailureKind.InvalidRequest);
                     default: throw InvalidResponse();
@@ -150,6 +185,132 @@ public sealed partial class AssemblyAiPlugin : ITranscriptionEnginePlugin, IApiK
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         { throw new PluginRequestException("AssemblyAI transcription timed out.", PluginRequestFailureKind.Timeout); }
+    }
+
+    /// <summary>The audio and the settings of a Sync request, so changed settings try the Sync API again.</summary>
+    private static string SyncRequestIdentity(byte[] wavAudio, SyncRequest sync)
+    {
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        hash.AppendData(wavAudio);
+        hash.AppendData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(sync)));
+        return Convert.ToHexString(hash.GetHashAndReset());
+    }
+
+    private bool SyncFailedBefore(string request)
+    {
+        lock (_failedSyncRequests)
+        {
+            var now = Clock.GetUtcNow();
+            foreach (var expired in _failedSyncRequests.Where(e => now - e.Value > FailedSyncRetryWindow).Select(e => e.Key).ToArray())
+                _failedSyncRequests.Remove(expired);
+            return _failedSyncRequests.ContainsKey(request);
+        }
+    }
+
+    private void RememberFailedSync(string request)
+    {
+        lock (_failedSyncRequests) _failedSyncRequests[request] = Clock.GetUtcNow();
+    }
+
+    /// <summary>The Sync API request for a recording.</summary>
+    internal sealed record SyncRequest(string? Language, IReadOnlyList<string> Keyterms);
+
+    /// <summary>
+    /// Null when the recording needs the async API: the Async mode, a model without a Sync API, speaker labels,
+    /// a language or dictionary the Sync API would reject, or audio over its length or size limit.
+    /// </summary>
+    internal static SyncRequest? SyncRequestFor(AssemblyAiModel model, string mode, bool diarization, string? language, string? prompt,
+        TimeSpan? duration, long bytes = 0)
+    {
+        if (mode == AssemblyAiModes.Async || diarization || model.Sync is not { } limits || duration > limits.MaxDuration || bytes > limits.MaxBytes)
+            return null;
+        var code = AssemblyAiModels.Language(language);
+        if (code is not null && !limits.Languages.Contains(code)) return null;
+        var terms = AssemblyAiModels.Terms(prompt, model);
+        if (terms.Count > limits.MaxTerms || terms.Sum(t => t.Length) > limits.MaxTermCharacters) return null;
+        return new(code, terms);
+    }
+
+    private async Task<PluginTranscriptionResult> TranscribeSyncAsync(byte[] wavAudio, SyncRequest sync, string key, TimeSpan? duration, CancellationToken ct)
+    {
+        var started = Stopwatch.StartNew();
+        using var request = new HttpRequestMessage(HttpMethod.Post, SyncUrl);
+        request.Headers.Add("Authorization", key);
+        request.Headers.Add("X-AAI-Model", AssemblyAiModels.DefaultId);
+        request.Content = SyncContent(wavAudio, sync);
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        // The server gives up after 30 s; the rest covers the upload.
+        deadline.CancelAfter(TimeSpan.FromSeconds(45) + TimeSpan.FromSeconds(wavAudio.Length / 1_000_000.0));
+        using var response = await ReadAsync(request, deadline.Token);
+        var root = response.RootElement;
+        if (!root.TryGetProperty("text", out var textField) || textField.ValueKind is not (JsonValueKind.String or JsonValueKind.Null))
+            throw InvalidResponse();
+        var segments = SyncSegments(root);
+        var seconds = Number(root, "audio_duration_ms") is { } ms ? ms / 1000 : duration?.TotalSeconds ?? 0;
+        if (segments.Count > 0) seconds = Math.Max(seconds, segments.Max(s => s.End));
+        _host?.Log(PluginLogLevel.Info, $"AssemblyAI Sync API returned the transcript after {started.ElapsedMilliseconds} ms.");
+        // The Sync API reports no detected language.
+        return new(textField.GetString() ?? "", sync.Language, seconds, NoSpeechProbability: null) { Segments = segments };
+    }
+
+    /// <summary>
+    /// One segment per word, as from the async API, so subtitles keep working. The Sync API leaves out the times of words
+    /// it cannot align; such a word joins the segment of the word before it (or after it, at the start), so no text is lost.
+    /// </summary>
+    internal static List<PluginTranscriptionSegment> SyncSegments(JsonElement root)
+    {
+        var segments = new List<PluginTranscriptionSegment>();
+        if (!root.TryGetProperty("words", out var words) || words.ValueKind != JsonValueKind.Array) return segments;
+        var leading = new List<string>();
+        foreach (var word in words.EnumerateArray())
+        {
+            var text = OptionalString(word, "text")?.Trim();
+            if (string.IsNullOrEmpty(text)) continue;
+            if (Number(word, "start") is { } start && Number(word, "end") is { } end && end >= start
+                && (segments.Count == 0 || start / 1000 >= segments[^1].Start))
+            {
+                if (leading.Count > 0) { text = string.Join(" ", leading) + " " + text; leading.Clear(); }
+                segments.Add(new(text, start / 1000, end / 1000));
+            }
+            else if (segments.Count == 0) leading.Add(text);
+            else segments[^1] = segments[^1] with { Text = segments[^1].Text + " " + text };
+        }
+        return segments;
+    }
+
+    internal static MultipartFormDataContent SyncContent(byte[] wavAudio, SyncRequest sync)
+    {
+        var content = new MultipartFormDataContent();
+        var audio = new ByteArrayContent(wavAudio);
+        audio.Headers.ContentType = new MediaTypeHeaderValue("audio/wav");
+        content.Add(audio, "audio", "audio.wav");
+        // Word timestamps cost 0 to 0.2 s and keep subtitles of files possible, as with the async API.
+        var config = new Dictionary<string, object> { ["timestamps"] = true };
+        if (sync.Language is { } language) config["language_codes"] = new[] { language };
+        if (sync.Keyterms.Count > 0) config["keyterms_prompt"] = sync.Keyterms;
+        var json = new StringContent(JsonSerializer.Serialize(config), Encoding.UTF8);
+        json.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+        content.Add(json, "config");
+        return content;
+    }
+
+    /// <summary>The length of a RIFF/WAVE recording, or null when the header cannot be read.</summary>
+    internal static TimeSpan? WavDuration(byte[] wav)
+    {
+        if (wav.Length < 12 || !wav.AsSpan(0, 4).SequenceEqual("RIFF"u8) || !wav.AsSpan(8, 4).SequenceEqual("WAVE"u8)) return null;
+        long byteRate = 0, offset = 12;
+        while (offset + 8 <= wav.Length)
+        {
+            var id = wav.AsSpan((int)offset, 4);
+            long size = BinaryPrimitives.ReadUInt32LittleEndian(wav.AsSpan((int)offset + 4, 4)), body = offset + 8;
+            if (id.SequenceEqual("fmt "u8) && size >= 16 && body + 16 <= wav.Length)
+                byteRate = BinaryPrimitives.ReadUInt32LittleEndian(wav.AsSpan((int)body + 8, 4));
+            else if (id.SequenceEqual("data"u8))
+                // A recorder that streams its WAV may leave the data size open; the bytes present count.
+                return byteRate > 0 ? TimeSpan.FromSeconds(Math.Min(size, wav.Length - body) / (double)byteRate) : null;
+            offset = body + size + (size & 1);
+        }
+        return null;
     }
 
     internal static Dictionary<string, object> SubmitBody(string url, AssemblyAiModel model, string? language, string? prompt, bool diarization)

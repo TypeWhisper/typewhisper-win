@@ -236,7 +236,7 @@ whatever endpoint the user enters.
 
 | Plugin | Hosts |
 | --- | --- |
-| AssemblyAI | `api.assemblyai.com`, `cdn.assemblyai.com` |
+| AssemblyAI | `api.assemblyai.com`, `sync.assemblyai.com`, `streaming.assemblyai.com`, `cdn.assemblyai.com` |
 | Cerebras | `api.cerebras.ai` |
 | Claude | `api.anthropic.com` |
 | Cloudflare ASR | `api.cloudflare.com` |

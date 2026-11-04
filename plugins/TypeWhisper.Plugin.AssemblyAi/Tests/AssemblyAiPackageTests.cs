@@ -22,7 +22,7 @@ public partial class AssemblyAiTests
             PortablePluginStore Store() => new(Path.Combine(root, "store"), new(1, 1, 5), http, _ => host);
             var entry = new PortableCatalogEntry
             {
-                Id = "com.typewhisper.assemblyai", Name = "AssemblyAI", Version = "1.1.4", MinHostVersion = "1.1.5",
+                Id = "com.typewhisper.assemblyai", Name = "AssemblyAI", Version = "1.2.0", MinHostVersion = "1.1.5",
                 DownloadUrl = "https://fixture.invalid/assemblyai.zip", Size = bytes.Length, Sha256 = Convert.ToHexString(SHA256.HashData(bytes)),
                 SupportedArchitectures = [PortablePluginCatalog.Architecture]
             };

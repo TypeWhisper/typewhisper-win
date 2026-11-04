@@ -14,6 +14,7 @@ public partial class AssemblyAiTests
         new(status) { Content = new StringContent(value, Encoding.UTF8, "application/json") };
     private static AssemblyAiPlugin Plugin(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> handler,
         TimeSpan? poll = null, TimeSpan? timeout = null) => new(new HttpClient(new Handler(handler)), poll ?? TimeSpan.Zero, timeout);
+    private static Task AsyncMode(AssemblyAiPlugin plugin) => plugin.SaveTextSettingAsync("transcriptionMode", "async", default);
     private static TestPluginHostServices Host()
     {
         var host = new TestPluginHostServices(); host.Secrets["api-key"] = "fixture-key"; return host;
@@ -31,7 +32,7 @@ public partial class AssemblyAiTests
         await plugin.ActivateAsync(host);
         Assert.Equal(expected, plugin.SelectedModelId); Assert.Equal(languages, plugin.SupportedLanguages.Count);
         Assert.True(plugin.IsConfigured); Assert.True(plugin.SupportsDictionaryTerms); Assert.True(plugin.SupportsStreamingCompletion);
-        Assert.False(plugin.SupportsTranslation); Assert.Equal(3, plugin.TextSettings.Count); Assert.Single(plugin.SettingsActions);
+        Assert.False(plugin.SupportsTranslation); Assert.Equal(4, plugin.TextSettings.Count); Assert.Single(plugin.SettingsActions);
         await plugin.DeactivateAsync(); Assert.False(plugin.IsConfigured);
     }
 
@@ -70,7 +71,7 @@ public partial class AssemblyAiTests
                 default: return Json("""{"status":"completed","text":"Grüße TypeWhisper!","language_code":"de","audio_duration":2.5,"words":[{"text":"Grüße","start":100,"end":600},{"text":"TypeWhisper!","start":700,"end":1500}]}""");
             }
         });
-        await plugin.ActivateAsync(Host()); plugin.SelectModel(model);
+        await plugin.ActivateAsync(Host()); plugin.SelectModel(model); await AsyncMode(plugin);
         var result = await plugin.TranscribeAsync(audio, language, false, "Grüße, TypeWhisper, grüße", default);
         Assert.Equal(4, calls); Assert.Equal("Grüße TypeWhisper!", result.Text); Assert.Equal("de", result.DetectedLanguage);
         Assert.Equal(2.5, result.DurationSeconds); Assert.Equal(0.1, result.Segments[0].Start); Assert.Equal(1.5, result.Segments[1].End);
@@ -99,7 +100,7 @@ public partial class AssemblyAiTests
     {
         var calls = 0;
         using var plugin = Plugin((_, _) => { calls++; return Task.FromResult(Json(payload)); });
-        await plugin.ActivateAsync(Host());
+        await plugin.ActivateAsync(Host()); await AsyncMode(plugin);
         var error = await Assert.ThrowsAsync<PluginRequestException>(() => plugin.TranscribeAsync([1, 2], null, false, null, default));
         Assert.Equal(PluginRequestFailureKind.OutputIncomplete, error.FailureKind); Assert.Equal(1, calls);
     }
@@ -112,7 +113,7 @@ public partial class AssemblyAiTests
     {
         var calls = 0;
         using var plugin = Plugin((_, _) => Task.FromResult(Json(++calls == 1 ? "{\"upload_url\":\"https://cdn.assemblyai.com/x\"}" : calls == 2 ? "{\"id\":\"x\"}" : final)));
-        await plugin.ActivateAsync(Host());
+        await plugin.ActivateAsync(Host()); await AsyncMode(plugin);
         var ex = await Assert.ThrowsAsync<PluginRequestException>(() => plugin.TranscribeAsync([1, 2], null, false, null, default));
         Assert.Equal(kind, ex.FailureKind); Assert.DoesNotContain("private", ex.Message);
     }
@@ -129,7 +130,7 @@ public partial class AssemblyAiTests
             if (++calls == 1) return Task.FromResult(Json("""{"upload_url":"https://cdn.assemblyai.com/x"}"""));
             submitted.TrySetResult(); return Task.FromResult(Json("""{"id":"x"}"""));
         }, TimeSpan.FromSeconds(30), TimeSpan.FromMilliseconds(50));
-        await plugin.ActivateAsync(Host());
+        await plugin.ActivateAsync(Host()); await AsyncMode(plugin);
         var request = plugin.TranscribeAsync([1, 2], null, false, null, cts.Token);
         await submitted.Task;
         if (cancel) { cts.Cancel(); await Assert.ThrowsAnyAsync<OperationCanceledException>(() => request); }

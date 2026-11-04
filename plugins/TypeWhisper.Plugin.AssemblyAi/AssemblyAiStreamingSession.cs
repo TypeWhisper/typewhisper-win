@@ -15,6 +15,12 @@ internal sealed class AssemblyAiStreamingSession : IStreamingSession
     private readonly TaskCompletionSource _begun = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly Task _receiver;
     private readonly TimeSpan _completionTimeout;
+    // Turn state, the sent audio and Terminate, shared by the receiver and FinalizeAsync.
+    private readonly object _gate = new();
+    private readonly AssemblyAiSentAudioLevels _sentLevels = new();
+    private readonly TaskCompletionSource _covered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private bool _terminateSent;
+    private double? _lastWordEnd;
     private bool _finishing;
     private int _disposed;
     private int _lastTurn = -1;
@@ -100,6 +106,7 @@ internal sealed class AssemblyAiStreamingSession : IStreamingSession
         _buffer.SetLength(0);
         if (padTail && audio.Length < MinBytes) Array.Resize(ref audio, MinBytes);
         await _socket.SendAsync(audio.AsMemory(), WebSocketMessageType.Binary, true, ct).ConfigureAwait(false);
+        lock (_gate) _sentLevels.Append(audio);
     }
 
     public async Task FinalizeAsync(CancellationToken ct)
@@ -111,11 +118,26 @@ internal sealed class AssemblyAiStreamingSession : IStreamingSession
             if (_finishing) throw new InvalidOperationException("Stream already finalized.");
             _finishing = true;
             await FlushAsync(true, ct).ConfigureAwait(false);
-            await _socket.SendAsync("{\"type\":\"Terminate\"}"u8.ToArray().AsMemory(), WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
-            // Termination is ordered after the final Turn; a closed socket is not success.
-            await _receiver.WaitAsync(_completionTimeout, ct).ConfigureAwait(false);
+            await _socket.SendAsync(TerminateMessage, WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
+            lock (_gate) { _terminateSent = true; SignalIfCovered(); }
+            // Termination is ordered after the final Turn; a closed socket is not success. It arrives about
+            // half a second after the last turn, so a transcript that already covers the audio finishes first.
+            var completed = await Task.WhenAny(_receiver, _covered.Task).WaitAsync(_completionTimeout, ct).ConfigureAwait(false);
+            await completed.ConfigureAwait(false);
         }
         finally { _sendLock.Release(); }
+    }
+
+    private static ReadOnlyMemory<byte> TerminateMessage => "{\"type\":\"Terminate\"}"u8.ToArray();
+
+    /// <summary>
+    /// After Terminate: no turn is open and the audio sent after the last confirmed word is quiet, so it holds no
+    /// word whose turn could still be on its way. Callers hold <see cref="_gate"/>.
+    /// </summary>
+    private void SignalIfCovered()
+    {
+        if (_terminateSent && _lastTurn >= 0 && _lastTurnFinal && _lastWordEnd is { } end && _sentLevels.IsQuietAfter(end))
+            _covered.TrySetResult();
     }
 
     private async Task EnsureOpenAsync()
@@ -164,17 +186,57 @@ internal sealed class AssemblyAiStreamingSession : IStreamingSession
             if (order < 0 || order < _lastTurn) throw new IOException("AssemblyAI returned out-of-order turns.");
             if (order > _lastTurn && !_lastTurnFinal) throw new IOException("AssemblyAI skipped an unconfirmed turn.");
             if (order == _lastTurn && _lastTurnFinal) continue; // Same turn re-delivered, not repeated speech.
-            _lastTurn = order;
             var text = root.GetProperty("transcript").GetString() ?? "";
             var final = root.GetProperty("end_of_turn").GetBoolean() && root.GetProperty("turn_is_formatted").GetBoolean();
-            _lastTurnFinal = final;
+            var wordEnd = final && !string.IsNullOrWhiteSpace(text) ? LastWordEnd(root) : null;
             TranscriptReceived?.Invoke(new(text, final) { DetectedLanguage = AssemblyAiPlugin.OptionalString(root, "language_code") });
+            // FinalizeAsync may only see the turn once the host has its text, or it could finish without it.
+            lock (_gate)
+            {
+                _lastTurn = order;
+                _lastTurnFinal = final;
+                // An empty final turn keeps the previous word end, as it adds no words.
+                if (final && !string.IsNullOrWhiteSpace(text)) _lastWordEnd = wordEnd;
+                if (final) SignalIfCovered();
+            }
         }
+    }
+
+    /// <summary>The end of a turn's last word in seconds, or null when the turn has no word timings.</summary>
+    private static double? LastWordEnd(JsonElement turn)
+    {
+        if (!turn.TryGetProperty("words", out var words) || words.ValueKind != JsonValueKind.Array) return null;
+        double? end = null;
+        foreach (var word in words.EnumerateArray())
+            end = word.ValueKind == JsonValueKind.Object && word.TryGetProperty("end", out var value)
+                && value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var ms) && double.IsFinite(ms) && ms >= 0 ? ms / 1000 : null;
+        return end;
+    }
+
+    /// <summary>AssemblyAI bills a session until it is terminated, so a cancelled one sends Terminate before closing.</summary>
+    private async Task TerminateCancelledSessionAsync()
+    {
+        lock (_gate) if (_terminateSent) return;
+        if (_socket.State != WebSocketState.Open || _receiver.IsCompleted) return;
+        // A send still in progress keeps the lock; the socket is then aborted without Terminate.
+        if (!await _sendLock.WaitAsync(TimeSpan.FromMilliseconds(500)).ConfigureAwait(false)) return;
+        try
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+            await _socket.SendAsync(TerminateMessage, WebSocketMessageType.Text, true, timeout.Token).ConfigureAwait(false);
+            lock (_gate) _terminateSent = true;
+        }
+        catch (Exception ex) when (ex is WebSocketException or OperationCanceledException or IOException or ObjectDisposedException or InvalidOperationException)
+        {
+            // Best effort: DisposeAsync aborts the socket next, and AssemblyAI then ends the session by itself.
+        }
+        finally { _sendLock.Release(); }
     }
 
     public async ValueTask DisposeAsync()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        await TerminateCancelledSessionAsync().ConfigureAwait(false);
         _lifetime.Cancel();
         _socket.Abort();
         try { await _receiver.ConfigureAwait(false); }
