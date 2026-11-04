@@ -63,6 +63,39 @@ public sealed class VocabularyIdleUnloadTests
     }
 
     [Fact]
+    public async Task EnablingWithoutLoadingStartsReleasedAndTheFirstRescoringWithTermsLoads()
+    {
+        await using var session = Create();
+        await session.SetEnabledAsync(true, load: false);
+        Assert.True(session.Enabled);
+        Assert.False(session.Loaded);
+        Assert.Equal(0, _loadsStarted);
+        Assert.Equal(0, _changes);
+        Assert.Equal("TypeWhisper", (await Run(session)).Text);
+        Assert.True(session.Loaded);
+        Assert.Equal(1, _loadsStarted);
+        Assert.Empty(_failures);
+    }
+
+    [Fact]
+    public async Task ARescoringWithoutTermsLeavesAReleasedModelUnloaded()
+    {
+        await using var session = Create();
+        await session.SetEnabledAsync(true, load: false);
+        var outcome = await session.RefineAsync(Guid.NewGuid(), "type whisper", new float[16000], 16000, [new("type whisper", 0, 1)], []);
+        Assert.Equal(new VocabularyOutcome("type whisper", false), outcome);
+        Assert.False(session.Loaded);
+        Assert.Equal(0, _loadsStarted);
+        // A loaded model is not kept alive by rescorings that have nothing to rescore.
+        Assert.Equal("TypeWhisper", (await Run(session)).Text);
+        _time.Advance(TimeSpan.FromSeconds(30));
+        await session.RefineAsync(Guid.NewGuid(), "type whisper", new float[16000], 16000, [new("type whisper", 0, 1)], []);
+        _time.Advance(TimeSpan.FromSeconds(30));
+        Assert.False(session.Loaded);
+        Assert.Equal(1, Assert.Single(_leases).DisposalCount);
+    }
+
+    [Fact]
     public async Task ARescoringAfterTheReleaseWaitsForTheLoadAndThenRuns()
     {
         await using var session = Create();

@@ -41,7 +41,13 @@ public sealed class VocabularyPluginSession : IAsyncDisposable
     /// <summary>Raised off the UI thread when a released model could not load again; that rescoring keeps the original text.</summary>
     public event Action<Exception>? LoadFailed;
 
-    public async Task SetEnabledAsync(bool enabled, CancellationToken cancellationToken = default)
+    public Task SetEnabledAsync(bool enabled, CancellationToken cancellationToken = default) => SetEnabledAsync(enabled, load: true, cancellationToken);
+
+    /// <summary>
+    /// Enables or disables rescoring. With <paramref name="load"/> false an enabled session starts released, as after an
+    /// idle release: <see cref="PrepareAsync"/> or the next rescoring with terms loads the model.
+    /// </summary>
+    public async Task SetEnabledAsync(bool enabled, bool load, CancellationToken cancellationToken = default)
     {
         long generation;
         lock (_sync)
@@ -60,7 +66,9 @@ public sealed class VocabularyPluginSession : IAsyncDisposable
             lock (_sync) { if (_disposed || generation != _generation) return; }
             _idle?.Cancel();
             if (await ReleaseLeaseUnsafeAsync()) RaiseChanged();
-            if (enabled) await LoadUnsafeAsync(generation, cancellationToken);
+            if (!enabled) return;
+            if (load) await LoadUnsafeAsync(generation, cancellationToken);
+            else lock (_sync) { if (!_disposed && generation == _generation) _enabled = true; }
         }
         finally { _gate.Release(); }
     }
@@ -104,6 +112,8 @@ public sealed class VocabularyPluginSession : IAsyncDisposable
             if (!_enabled) return new(text, false);
             generation = _generation;
         }
+        // The pipeline returns the text unchanged without terms, timings or audio; a released model is not loaded for that.
+        if (terms.Count == 0 || timings.Count == 0 || audio.Length == 0) return new(text, false);
         // A load that a recording started holds the gate: this waits for it rather than skipping the terms.
         await _gate.WaitAsync(cancellation);
         CancellationTokenSource? request = null;
