@@ -19,10 +19,13 @@ public sealed partial class AssemblyAiPlugin : ITranscriptionEnginePlugin, IApiK
     private readonly TimeSpan _pollInterval;
     private readonly TimeSpan _jobTimeout;
     private IPluginHostServices? _host;
-    // Recordings whose Sync request failed. The host retries a transient failure of the async fallback with the same
-    // recording, which then goes to the async API at once instead of a second, possibly billed, Sync request.
-    private readonly Queue<string> _failedSyncRecordings = new();
-    private const int FailedSyncRecordingLimit = 16;
+    // Requests whose Sync attempt failed. The host retries a transient failure of the async fallback with the same
+    // recording, which then goes to the async API at once instead of a second, possibly billed, Sync request. An entry
+    // covers the host's retries (two, at most 10 s apart, after async attempts of up to five minutes) and then expires,
+    // so a later transcription of the same audio tries the Sync API again.
+    private readonly Dictionary<string, DateTimeOffset> _failedSyncRequests = [];
+    private static readonly TimeSpan FailedSyncRetryWindow = TimeSpan.FromMinutes(15);
+    internal TimeProvider Clock { get; set; } = TimeProvider.System;
     private string? _apiKey;
     private Configuration _configuration = new(AssemblyAiModels.DefaultId, false, "api-key");
     // Profiles saved before 1.2.0 have no mode and get the Live default.
@@ -133,7 +136,7 @@ public sealed partial class AssemblyAiPlugin : ITranscriptionEnginePlugin, IApiK
         var duration = WavDuration(wavAudio);
         if (SyncRequestFor(model, Mode, diarization, normalizedLanguage, prompt, duration, wavAudio.Length) is { } sync)
         {
-            var recording = Convert.ToHexString(SHA256.HashData(wavAudio));
+            var recording = SyncRequestIdentity(wavAudio, sync);
             if (!SyncFailedBefore(recording))
             {
                 try { return await TranscribeSyncAsync(wavAudio, sync, key, duration, ct); }
@@ -184,18 +187,29 @@ public sealed partial class AssemblyAiPlugin : ITranscriptionEnginePlugin, IApiK
         { throw new PluginRequestException("AssemblyAI transcription timed out.", PluginRequestFailureKind.Timeout); }
     }
 
-    private bool SyncFailedBefore(string recording)
+    /// <summary>The audio and the settings of a Sync request, so changed settings try the Sync API again.</summary>
+    private static string SyncRequestIdentity(byte[] wavAudio, SyncRequest sync)
     {
-        lock (_failedSyncRecordings) return _failedSyncRecordings.Contains(recording);
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        hash.AppendData(wavAudio);
+        hash.AppendData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(sync)));
+        return Convert.ToHexString(hash.GetHashAndReset());
     }
 
-    private void RememberFailedSync(string recording)
+    private bool SyncFailedBefore(string request)
     {
-        lock (_failedSyncRecordings)
+        lock (_failedSyncRequests)
         {
-            _failedSyncRecordings.Enqueue(recording);
-            while (_failedSyncRecordings.Count > FailedSyncRecordingLimit) _failedSyncRecordings.Dequeue();
+            var now = Clock.GetUtcNow();
+            foreach (var expired in _failedSyncRequests.Where(e => now - e.Value > FailedSyncRetryWindow).Select(e => e.Key).ToArray())
+                _failedSyncRequests.Remove(expired);
+            return _failedSyncRequests.ContainsKey(request);
         }
+    }
+
+    private void RememberFailedSync(string request)
+    {
+        lock (_failedSyncRequests) _failedSyncRequests[request] = Clock.GetUtcNow();
     }
 
     /// <summary>The Sync API request for a recording.</summary>

@@ -124,14 +124,26 @@ public partial class AssemblyAiTests
             return Task.FromResult(request.RequestUri.Host.StartsWith("sync.", StringComparison.Ordinal)
                 ? Json("{}", HttpStatusCode.InternalServerError) : Json("{}", HttpStatusCode.ServiceUnavailable));
         });
+        var clock = new ManualClock(); plugin.Clock = clock;
         await plugin.ActivateAsync(Host());
         var audio = Wav(1);
         for (var attempt = 0; attempt < 3; attempt++)
             Assert.Equal(PluginRequestFailureKind.ServerError, (await Assert.ThrowsAsync<PluginRequestException>(() => plugin.TranscribeAsync(audio, null, false, null, default))).FailureKind);
         Assert.Equal(new[] { "sync.assemblyai.com/v1/transcribe", "api.assemblyai.com/v2/upload", "api.assemblyai.com/v2/upload", "api.assemblyai.com/v2/upload" }, paths);
-        // Another recording tries the Sync API again.
+        // Another recording, other settings or a later transcription of the same audio try the Sync API again.
         await Assert.ThrowsAsync<PluginRequestException>(() => plugin.TranscribeAsync(Wav(2), null, false, null, default));
         Assert.Equal("sync.assemblyai.com/v1/transcribe", paths[4]);
+        await Assert.ThrowsAsync<PluginRequestException>(() => plugin.TranscribeAsync(audio, "de", false, null, default));
+        Assert.Equal("sync.assemblyai.com/v1/transcribe", paths[6]);
+        clock.Now += TimeSpan.FromMinutes(16);
+        await Assert.ThrowsAsync<PluginRequestException>(() => plugin.TranscribeAsync(audio, null, false, null, default));
+        Assert.Equal("sync.assemblyai.com/v1/transcribe", paths[8]);
+    }
+
+    private sealed class ManualClock : TimeProvider
+    {
+        public DateTimeOffset Now = new(2026, 11, 4, 10, 0, 0, TimeSpan.Zero);
+        public override DateTimeOffset GetUtcNow() => Now;
     }
 
     [Fact]
