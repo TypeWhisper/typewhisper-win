@@ -155,6 +155,8 @@ public sealed partial class SettingsWindow : Window
                 NativeWindowAppearance.RemoveSystemBorder(this);
             else foreach (var recorder in Descendants(SettingsRoot).OfType<ShortcutRecorder>()) recorder.Cancel(false);
         };
+        // A refresh after startup that waited for the user runs once focus has moved off the page.
+        CatalogContent.LostFocus += (_, _) => { if (_startupRefreshPending) DispatcherQueue.TryEnqueue(TryRefreshAfterStartup); };
         AppWindow.Changed += (_, args) =>
         {
             if (_positioning || !args.DidPositionChange) return;
@@ -508,6 +510,8 @@ public sealed partial class SettingsWindow : Window
     private void ShowCategoryCore(string category)
     {
         if (category is not ("Appearance" or "Overlay editor")) PreviewDismissed?.Invoke();
+        // Rendering a page also covers a refresh after startup that was still waiting.
+        _startupRefreshPending = false;
         // TextChanged can arrive after the programmatic clear. It must not rebuild
         // this page again and remove the control focused by OpenSearchResult.
         _searchActive = false;
@@ -603,10 +607,19 @@ public sealed partial class SettingsWindow : Window
     }
 
     // A page shown while the app started was rendered before startup registered shortcuts and loaded plugins and
-    // policy problems. Render it again, unless the user is working on it.
+    // policy problems. Render it again, unless the user is working on it: then when focus leaves the page, or when
+    // the page is shown again anyway.
+    private bool _startupRefreshPending;
+
     internal void RefreshAfterStartup()
     {
-        if (SetupHost.Child is not null || _searchActive || _checkingNavigation || CatalogScroll.Visibility != Visibility.Visible
+        _startupRefreshPending = true;
+        TryRefreshAfterStartup();
+    }
+
+    private void TryRefreshAfterStartup()
+    {
+        if (!_startupRefreshPending || SetupHost.Child is not null || _searchActive || _checkingNavigation || CatalogScroll.Visibility != Visibility.Visible
             || ShortcutRecorder.AnyEditing || CatalogContent.XamlRoot is not { } root || VisualTreeHelper.GetOpenPopupsForXamlRoot(root).Count > 0) return;
         for (var focused = FocusManager.GetFocusedElement(root) as DependencyObject; focused is not null; focused = VisualTreeHelper.GetParent(focused))
             if (ReferenceEquals(focused, CatalogContent)) return;

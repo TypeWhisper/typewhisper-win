@@ -34,19 +34,24 @@ internal sealed partial class WinUIHttpApi(LocalDictationSession session, Dispat
     internal async Task InitializeAsync()
     {
         session.Changed += RefreshApiDictation;
+        // Settings can change the API while the app starts. Reading the saved values and applying them under the
+        // change lock keeps that change: it is either saved before the file is read here or applied after this.
+        await _changes.WaitAsync();
         try
         {
+            if (_closed) return;
             if (File.Exists(SettingsPath))
             {
                 if (new FileInfo(SettingsPath).Length > 4096) throw new IOException();
                 _preferences = JsonSerializer.Deserialize<Preferences>(File.ReadAllText(SettingsPath)) ?? new();
                 if (_preferences.Port is < 1024 or > 65535) throw new IOException();
             }
-            if (_preferences.Enabled) await ConfigureAsync(true, Port, RequireAuthentication);
+            if (_preferences.Enabled) await ApplyAsync(true, Port, RequireAuthentication);
             else RemoveDiscovery();
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { RemoveDiscovery(); Status = Loc.T("HTTP API settings could not be loaded. The server is off."); Changed?.Invoke(); }
+        { RemoveDiscovery(); Status = Loc.T("HTTP API settings could not be loaded. The server is off."); }
+        finally { _changes.Release(); Changed?.Invoke(); }
     }
 
     // Settings opened while the app starts shows and keeps the saved values. InitializeAsync reads the file again
@@ -68,6 +73,13 @@ internal sealed partial class WinUIHttpApi(LocalDictationSession session, Dispat
         if (_closed) return;
         if (port is < 1024 or > 65535) { Status = Loc.T("Choose a port from 1024 to 65535."); Changed?.Invoke(); return; }
         await _changes.WaitAsync();
+        try { await ApplyAsync(enabled, port, requireAuthentication); }
+        finally { _changes.Release(); Changed?.Invoke(); }
+    }
+
+    // Saves the values and restarts the server with them. The caller holds _changes.
+    private async Task ApplyAsync(bool enabled, int port, bool requireAuthentication)
+    {
         try
         {
             if (_closed) return;
@@ -111,7 +123,6 @@ internal sealed partial class WinUIHttpApi(LocalDictationSession session, Dispat
             Status = Loc.T("HTTP API could not start or save its settings. Check the port and profile access, then retry.");
             AppDiagnostics.Write("api.configure.failed", ex);
         }
-        finally { _changes.Release(); Changed?.Invoke(); }
     }
 
     // Audio may run 60 minutes and CPU models can be slower than real time, so the
