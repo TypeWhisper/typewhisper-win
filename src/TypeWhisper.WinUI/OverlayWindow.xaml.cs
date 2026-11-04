@@ -35,6 +35,23 @@ public sealed partial class OverlayWindow : Window
     private TranscriptPreviewWindow? _transcriptWindow;
     private long _lastCompositionTimestamp;
     private double _renderAccumulatorTicks;
+    // Drives the indicator at about 60 frames a second. CompositionTarget.Rendering fires at the refresh rate of the
+    // display, so on a 120 or 240 Hz display it woke the UI thread and rendered a XAML frame two or four times as often
+    // as the waveform is drawn (at most 60 times a second, see OnFrame). XAML now renders only frames that change.
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _frameTimer;
+
+    private void StartFrameLoop()
+    {
+        if (_frameTimer is null)
+        {
+            _frameTimer = DispatcherQueue.CreateTimer();
+            _frameTimer.Interval = TimeSpan.FromMilliseconds(15);
+            _frameTimer.IsRepeating = true;
+            _frameTimer.Tick += (_, _) => OnFrame();
+        }
+        if (!_frameTimer.IsRunning) _lastCompositionTimestamp = 0;
+        _frameTimer.Start();
+    }
     private double _phase;
     private bool _useMicrophone;
     private bool _isLoaded;
@@ -87,8 +104,7 @@ public sealed partial class OverlayWindow : Window
         ConfigureNativeWindow();
         AppWindow.Show(activateWindow: false);
         NativeWindowAppearance.RemoveOverlayFrame(this);
-        CompositionTarget.Rendering -= CompositionTarget_Rendering;
-        CompositionTarget.Rendering += CompositionTarget_Rendering;
+        StartFrameLoop();
         FadeIn();
     }
     internal bool IsPaused => _paused;
@@ -138,7 +154,7 @@ public sealed partial class OverlayWindow : Window
         {
             _closed = true;
             _iconRequest++;
-            Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= CompositionTarget_Rendering;
+            _frameTimer?.Stop();
             _audioLevelSource.Dispose();
             WaveformCanvas.RemoveFromVisualTree();
             _transcriptWindow?.Close();
@@ -169,8 +185,7 @@ public sealed partial class OverlayWindow : Window
         _useMicrophone = _externalLevel is null && _audioLevelSource.TryStart();
         _duration.Restart();
         Array.Clear(_levels);
-        Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= CompositionTarget_Rendering;
-        Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += CompositionTarget_Rendering;
+        StartFrameLoop();
         UpdateStateAppearance();
         FadeIn();
         SetTranscriptPreviewEnabled(_transcriptPreviewEnabled);
@@ -188,7 +203,7 @@ public sealed partial class OverlayWindow : Window
         _paused = false;
         _duration.Stop();
         _audioLevelSource.Dispose();
-        Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= CompositionTarget_Rendering;
+        _frameTimer?.Stop();
         _transcriptWindow?.HideImmediately();
         AppWindow.Hide();
     }
@@ -445,7 +460,7 @@ public sealed partial class OverlayWindow : Window
     internal Func<DisplayArea>? DisplayProvider { get; set; }
     private readonly Stopwatch _displayCheck = Stopwatch.StartNew();
 
-    private void CompositionTarget_Rendering(object? sender, object e)
+    private void OnFrame()
     {
         if (_previewVisible && !IsCorrectionFeedbackVisible && DisplayProvider is not null && _displayCheck.ElapsedMilliseconds >= 250)
         {
