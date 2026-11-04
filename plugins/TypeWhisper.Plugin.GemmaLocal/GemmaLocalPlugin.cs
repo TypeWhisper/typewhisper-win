@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
+using System.Text.Json;
 
 using LLama;
 using LLama.Common;
@@ -293,18 +294,64 @@ public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin, ILocalLlmMode
     private async Task VerifyCachedModelAsync(GemmaModelDefinition model, string path, CancellationToken ct)
     {
         _verifiedModels.TryRemove(model.Id, out _);
+        var checkedAt = DateTime.UtcNow;
         var before = new FileInfo(path);
         var stamp = (before.Length, before.LastWriteTimeUtc);
-        await VerifyModelFileAsync(path, model.SizeBytes, model.Sha256, ct);
-        var after = new FileInfo(path);
-        if ((after.Length, after.LastWriteTimeUtc) != stamp) throw new IOException("The model changed during verification. Retry the download.");
+        // A model unchanged since its pinned hash last matched is not read again.
+        if (!ReceiptMatches(model, path, stamp))
+        {
+            await VerifyModelFileAsync(path, model.SizeBytes, model.Sha256, ct);
+            var after = new FileInfo(path);
+            if ((after.Length, after.LastWriteTimeUtc) != stamp) throw new IOException("The model changed during verification. Retry the download.");
+            WriteReceipt(model, path, stamp, checkedAt);
+        }
         _verifiedModels[model.Id] = stamp;
     }
 
     private void RememberVerified(GemmaModelDefinition model, string path)
     {
+        var checkedAt = DateTime.UtcNow;
         var file = new FileInfo(path);
         _verifiedModels[model.Id] = (file.Length, file.LastWriteTimeUtc);
+        WriteReceipt(model, path, (file.Length, file.LastWriteTimeUtc), checkedAt);
+    }
+
+    // Beside the model: its size and last write time when the pinned hash last matched.
+    private sealed record VerifiedModelReceipt(string Sha256, long Size, long ModifiedTicks);
+    private static string GetReceiptPath(string modelPath) => modelPath + ".verified.json";
+
+    private static bool ReceiptMatches(GemmaModelDefinition model, string path, (long Length, DateTime Modified) stamp)
+    {
+        try
+        {
+            var receiptPath = GetReceiptPath(path);
+            if (new FileInfo(receiptPath) is not { Exists: true, Length: <= 4096 }) return false;
+            var receipt = JsonSerializer.Deserialize<VerifiedModelReceipt>(File.ReadAllText(receiptPath));
+            return receipt is not null && stamp.Length == model.SizeBytes && receipt.Size == stamp.Length
+                && receipt.ModifiedTicks == stamp.Modified.Ticks && string.Equals(receipt.Sha256, model.Sha256, StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException) { return false; }
+    }
+
+    // The model is verified either way; without a receipt it is only hashed again on the next check.
+    private static void WriteReceipt(GemmaModelDefinition model, string path, (long Length, DateTime Modified) stamp, DateTime checkedAt)
+    {
+        // A later rewrite is only certain to get a different last write time when the recorded one is older than the
+        // coarsest file-time resolution (2 s on FAT). A younger model is hashed again until it qualifies.
+        if (stamp.Modified >= checkedAt - TimeSpan.FromSeconds(2)) return;
+        var receiptPath = GetReceiptPath(path);
+        var temporary = receiptPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            File.WriteAllText(temporary, JsonSerializer.Serialize(new VerifiedModelReceipt(model.Sha256, stamp.Length, stamp.Modified.Ticks)));
+            File.Move(temporary, receiptPath, overwrite: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        finally
+        {
+            try { File.Delete(temporary); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        }
     }
 
     internal static int RequireOutputBudget(int requested, int promptTokens, int contextSize)
@@ -389,6 +436,7 @@ public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin, ILocalLlmMode
             ct.ThrowIfCancellationRequested();
             if (_loadedModelId == modelId) UnloadModel();
             File.Delete(path);
+            File.Delete(GetReceiptPath(path));
             _verifiedModels.TryRemove(modelId, out _);
             _host?.NotifyCapabilitiesChanged();
         }
