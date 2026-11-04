@@ -36,8 +36,9 @@ public sealed partial class MainWindow
         var id = 0x8200;
         foreach (var (key, mode) in new[] { (GlobalShortcuts.PushToTalk, RecordingMode.Hold), (GlobalShortcuts.ToggleOnly, RecordingMode.Toggle), (GlobalShortcuts.HoldOnly, RecordingMode.Hold) })
         {
+            // These shortcuts are unassigned by default; each hooks the keyboard only while it has a binding.
             var registration = new DictationHotkeyRegistration(this, DispatchRecordingShortcut,
-                () => _dictationInput?.IsRecordingOrStarting == true, () => mode, () => DictationHotkeysPaused, id);
+                () => _dictationInput?.IsRecordingOrStarting == true, () => mode, () => DictationHotkeysPaused, id, hookWithoutBinding: false);
             id += 0x200;
             var settings = new PersistedShortcut(WinUIProfile.DataPath(key + ".txt"),
                 registration, value => ValidateRecordingShortcut(key, value), Loc.T("Recording shortcuts"));
@@ -62,6 +63,8 @@ public sealed partial class MainWindow
         if (!_recordingShortcuts.TryGetValue(key, out var entry)) return Loc.T("Wait for shortcut initialization to finish.");
         var error = entry.Settings.Save(WorkflowShortcutCatalog.Canonical(value));
         _settingsValues[key] = entry.Settings.Value;
+        // A hook installed now would run before the Esc/Enter hook, so a held shortcut would see Enter first.
+        if (entry.Registration.HookInstalledByLastChange) MoveDictationKeyHookToFront();
         return error;
     }
 
