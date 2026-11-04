@@ -53,7 +53,8 @@ public sealed partial class MainWindow
             MarketplaceView.ResetNavigation();
         _integrationSearch.IsEnabled = _discoverSettings && !MarketplaceView.IsDetail;
         if (!_discoverSettings) _integrationSearch.Text = "";
-        if (_discoverSettings) MarketplaceView.Filter(_integrationSearch.Text);
+        // Both pages skip changes while hidden and catch up here.
+        if (_discoverSettings) MarketplaceView.Present(_integrationSearch.Text);
         else await PluginsView.OpenProviderSettingsAsync(pluginId!);
     }
 
