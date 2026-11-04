@@ -20,12 +20,15 @@ internal static class FrenchNumberWordParser
         ["cinquante"] = 50, ["soixante"] = 60
     };
 
-    public static NumberWordNormalizer.ParsedWords? Parse(IReadOnlyList<string> words)
+    public static NumberWordNormalizer.ParsedWords? Parse(IReadOnlyList<string> words) =>
+        words.Count == 0 ? null : ParseNormalized([.. words.Select(NumberWordNormalizer.NormalizeWord)]);
+
+    /// <summary>Parses words that already went through <see cref="NumberWordNormalizer.NormalizeWord"/>.</summary>
+    internal static NumberWordNormalizer.ParsedWords? ParseNormalized(string[] normalizedWords)
     {
-        if (words.Count == 0)
+        if (normalizedWords.Length == 0)
             return null;
 
-        var normalizedWords = words.Select(NumberWordNormalizer.NormalizeWord).ToArray();
         var index = 0;
         var isNegative = false;
 

@@ -27,11 +27,14 @@ public static class NumberWordNormalizer
         if (!tokens.Any(static token => token.IsWord))
             return text;
 
+        // Every word starts a parse attempt over all words up to the next punctuation mark. Normalizing them inside each
+        // attempt is quadratic in the length of an unpunctuated run, so each word is normalized once for this call.
+        var normalized = new string?[tokens.Count];
         var result = new StringBuilder();
         var index = 0;
         while (index < tokens.Count)
         {
-            if (tokens[index].IsWord && ParseNumber(index, tokens, languageCode) is { } parsed)
+            if (tokens[index].IsWord && ParseNumber(index, tokens, normalized, languageCode) is { } parsed)
             {
                 result.Append(parsed.Replacement);
                 index = parsed.EndIndex;
@@ -75,21 +78,20 @@ public static class NumberWordNormalizer
         return builder.ToString().Normalize(NormalizationForm.FormC).ToLowerInvariant();
     }
 
-    private static ParsedNumber? ParseNumber(int index, IReadOnlyList<Token> tokens, string languageCode)
+    private static ParsedNumber? ParseNumber(int index, IReadOnlyList<Token> tokens, string?[] normalized, string languageCode)
     {
         var words = WordCandidates(index, tokens);
         if (words.Count == 0)
             return null;
 
-        var wordTexts = words.Select(static word => word.Text).ToArray();
         var parsed = languageCode switch
         {
-            "en" => EnglishNumberWordParser.Parse(wordTexts),
-            "de" => GermanNumberWordParser.Parse(wordTexts),
-            "fr" => FrenchNumberWordParser.Parse(wordTexts),
-            "es" => SpanishNumberWordParser.Parse(wordTexts),
-            "zh" => ChineseNumberWordParser.Parse(wordTexts),
-            "ja" => JapaneseNumberWordParser.Parse(wordTexts),
+            "en" => EnglishNumberWordParser.ParseNormalized(NormalizedWords(words, normalized, NormalizeWord)),
+            "de" => GermanNumberWordParser.ParseNormalized(NormalizedWords(words, normalized, GermanNumberWordParser.NormalizeWord)),
+            "fr" => FrenchNumberWordParser.ParseNormalized(NormalizedWords(words, normalized, NormalizeWord)),
+            "es" => SpanishNumberWordParser.ParseNormalized(NormalizedWords(words, normalized, NormalizeWord)),
+            "zh" => ChineseNumberWordParser.Parse(words.Select(static word => word.Text).ToArray()),
+            "ja" => JapaneseNumberWordParser.Parse(words.Select(static word => word.Text).ToArray()),
             _ => null
         };
 
@@ -98,6 +100,15 @@ public static class NumberWordNormalizer
 
         var finalTokenIndex = words[parsed.ConsumedWords - 1].TokenIndex;
         return new ParsedNumber(parsed.Value, finalTokenIndex + 1);
+    }
+
+    // The candidates' normalized forms, each computed at most once per Normalize call (cached by token index).
+    private static string[] NormalizedWords(List<WordCandidate> words, string?[] normalized, Func<string, string> normalize)
+    {
+        var result = new string[words.Count];
+        for (var i = 0; i < words.Count; i++)
+            result[i] = normalized[words[i].TokenIndex] ??= normalize(words[i].Text);
+        return result;
     }
 
     private static List<WordCandidate> WordCandidates(int index, IReadOnlyList<Token> tokens)
