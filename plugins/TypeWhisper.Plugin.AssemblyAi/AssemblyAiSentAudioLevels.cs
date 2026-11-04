@@ -11,6 +11,9 @@ internal sealed class AssemblyAiSentAudioLevels
     // A window is quiet below this share of the loudest window, and always below the absolute level.
     private const float RelativeQuietLevel = 0.15f;
     private const float AbsoluteQuietLevel = 0.003f;
+    // ...but never above the recording's noise floor (its quietest tenth of windows) times this factor, so quieter
+    // speech after a loud sound does not pass for silence. Silence after the last word stays near the noise floor.
+    private const float NoiseFloorFactor = 4f;
     // Word end times can come a little early; the audio this soon after does not count.
     private const double WordEndTolerance = 0.1;
 
@@ -37,7 +40,10 @@ internal sealed class AssemblyAiSentAudioLevels
     {
         var windows = new List<float>(_levels);
         if (_partial.Count >= 2) windows.Add(Level(_partial, 0, _partial.Count));
-        var quiet = Math.Max(AbsoluteQuietLevel, (windows.Count == 0 ? 0 : windows.Max()) * RelativeQuietLevel);
+        if (windows.Count == 0) return true;
+        var sorted = windows.Order().ToArray();
+        var noiseFloor = sorted[sorted.Length / 10];
+        var quiet = Math.Max(AbsoluteQuietLevel, Math.Min(sorted[^1] * RelativeQuietLevel, noiseFloor * NoiseFloorFactor));
         var first = Math.Max(0, (int)Math.Floor((seconds + WordEndTolerance) / WindowSeconds));
         for (var i = first; i < windows.Count; i++)
             if (windows[i] >= quiet) return false;

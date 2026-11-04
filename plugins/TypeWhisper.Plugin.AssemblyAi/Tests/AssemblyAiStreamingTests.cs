@@ -128,6 +128,33 @@ public sealed class AssemblyAiStreamingTests
     }
 
     [Fact]
+    public async Task QuieterSpeechAfterALoudSoundIsNotSilence()
+    {
+        // Codex example: a peak of 8000 put the old threshold at 1200, so speech at 1000 passed for silence.
+        var socket = new Socket(); await using var session = new AssemblyAiStreamingSession(socket);
+        await session.SendAudioAsync(Pcm(0.5, 30), default);   // room noise
+        await session.SendAudioAsync(Pcm(0.5, 8000), default); // loud word
+        await session.SendAudioAsync(Pcm(0.5, 1000), default); // quieter speech, no turn yet
+        await session.SendAudioAsync(Pcm(0.3, 30), default);
+        var finish = session.FinalizeAsync(default); await socket.Terminated.Reader.ReadAsync();
+        socket.Text(WordTurn(0, "Hallo.", 1000));
+        await Task.Delay(200); Assert.False(finish.IsCompleted);
+        socket.Text("{\"type\":\"Termination\"}"); await finish.WaitAsync(TimeSpan.FromSeconds(2));
+    }
+
+    [Fact]
+    public async Task RoomNoiseAfterTheLastWordStillFinishesEarly()
+    {
+        var socket = new Socket(); await using var session = new AssemblyAiStreamingSession(socket);
+        await session.SendAudioAsync(Pcm(0.3, 60), default);
+        await session.SendAudioAsync(Pcm(0.7, 6000), default);
+        await session.SendAudioAsync(Pcm(0.5, 90), default); // noise, a little above the quietest tenth
+        var finish = session.FinalizeAsync(default); await socket.Terminated.Reader.ReadAsync();
+        socket.Text(WordTurn(0, "Hallo.", 1000));
+        await finish.WaitAsync(TimeSpan.FromSeconds(2));
+    }
+
+    [Fact]
     public async Task OpenTurnAfterTerminateWaitsForTermination()
     {
         var socket = new Socket(); await using var session = new AssemblyAiStreamingSession(socket);
