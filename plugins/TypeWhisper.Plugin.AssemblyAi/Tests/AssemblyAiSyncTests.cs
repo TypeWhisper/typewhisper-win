@@ -112,6 +112,26 @@ public partial class AssemblyAiTests
     }
 
     [Fact]
+    public async Task HostRetryOfTheAsyncFallbackDoesNotSendTheSyncRequestAgain()
+    {
+        var paths = new List<string>();
+        using var plugin = Plugin((request, _) =>
+        {
+            paths.Add(request.RequestUri!.Host + request.RequestUri.AbsolutePath);
+            return Task.FromResult(request.RequestUri.Host.StartsWith("sync.", StringComparison.Ordinal)
+                ? Json("{}", HttpStatusCode.InternalServerError) : Json("{}", HttpStatusCode.ServiceUnavailable));
+        });
+        await plugin.ActivateAsync(Host());
+        var audio = Wav(1);
+        for (var attempt = 0; attempt < 3; attempt++)
+            Assert.Equal(PluginRequestFailureKind.ServerError, (await Assert.ThrowsAsync<PluginRequestException>(() => plugin.TranscribeAsync(audio, null, false, null, default))).FailureKind);
+        Assert.Equal(new[] { "sync.assemblyai.com/v1/transcribe", "api.assemblyai.com/v2/upload", "api.assemblyai.com/v2/upload", "api.assemblyai.com/v2/upload" }, paths);
+        // Another recording tries the Sync API again.
+        await Assert.ThrowsAsync<PluginRequestException>(() => plugin.TranscribeAsync(Wav(2), null, false, null, default));
+        Assert.Equal("sync.assemblyai.com/v1/transcribe", paths[4]);
+    }
+
+    [Fact]
     public async Task InvalidKeyOnTheSyncApiIsNotRetriedWithTheAsyncApi()
     {
         var calls = 0;

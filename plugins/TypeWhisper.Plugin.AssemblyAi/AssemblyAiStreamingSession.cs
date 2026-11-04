@@ -188,16 +188,17 @@ internal sealed class AssemblyAiStreamingSession : IStreamingSession
             if (order == _lastTurn && _lastTurnFinal) continue; // Same turn re-delivered, not repeated speech.
             var text = root.GetProperty("transcript").GetString() ?? "";
             var final = root.GetProperty("end_of_turn").GetBoolean() && root.GetProperty("turn_is_formatted").GetBoolean();
+            var wordEnd = final && !string.IsNullOrWhiteSpace(text) ? LastWordEnd(root) : null;
+            TranscriptReceived?.Invoke(new(text, final) { DetectedLanguage = AssemblyAiPlugin.OptionalString(root, "language_code") });
+            // FinalizeAsync may only see the turn once the host has its text, or it could finish without it.
             lock (_gate)
             {
                 _lastTurn = order;
                 _lastTurnFinal = final;
                 // An empty final turn keeps the previous word end, as it adds no words.
-                if (final && !string.IsNullOrWhiteSpace(text)) _lastWordEnd = LastWordEnd(root);
+                if (final && !string.IsNullOrWhiteSpace(text)) _lastWordEnd = wordEnd;
+                if (final) SignalIfCovered();
             }
-            TranscriptReceived?.Invoke(new(text, final) { DetectedLanguage = AssemblyAiPlugin.OptionalString(root, "language_code") });
-            // Only after the host has the turn's text.
-            if (final) lock (_gate) SignalIfCovered();
         }
     }
 

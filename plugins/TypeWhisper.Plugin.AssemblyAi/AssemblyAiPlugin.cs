@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Diagnostics;
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using TypeWhisper.PluginSDK;
@@ -18,6 +19,10 @@ public sealed partial class AssemblyAiPlugin : ITranscriptionEnginePlugin, IApiK
     private readonly TimeSpan _pollInterval;
     private readonly TimeSpan _jobTimeout;
     private IPluginHostServices? _host;
+    // Recordings whose Sync request failed. The host retries a transient failure of the async fallback with the same
+    // recording, which then goes to the async API at once instead of a second, possibly billed, Sync request.
+    private readonly Queue<string> _failedSyncRecordings = new();
+    private const int FailedSyncRecordingLimit = 16;
     private string? _apiKey;
     private Configuration _configuration = new(AssemblyAiModels.DefaultId, false, "api-key");
     // Profiles saved before 1.2.0 have no mode and get the Live default.
@@ -128,13 +133,18 @@ public sealed partial class AssemblyAiPlugin : ITranscriptionEnginePlugin, IApiK
         var duration = WavDuration(wavAudio);
         if (SyncRequestFor(model, Mode, diarization, normalizedLanguage, prompt, duration) is { } sync)
         {
-            try { return await TranscribeSyncAsync(wavAudio, sync, key, duration, ct); }
-            catch (Exception ex) when (!ct.IsCancellationRequested && ex is not OutOfMemoryException
-                && ex is not PluginRequestException { FailureKind: PluginRequestFailureKind.Authentication })
+            var recording = Convert.ToHexString(SHA256.HashData(wavAudio));
+            if (!SyncFailedBefore(recording))
             {
-                // A failed Sync request is not sent again: AssemblyAI may have received and billed it.
-                var reason = ex is PluginRequestException request ? request.FailureKind.ToString() : "Timeout";
-                _host?.Log(PluginLogLevel.Warning, $"AssemblyAI Sync API failed ({reason}); transcribing with the async API.");
+                try { return await TranscribeSyncAsync(wavAudio, sync, key, duration, ct); }
+                catch (Exception ex) when (!ct.IsCancellationRequested && ex is not OutOfMemoryException
+                    && ex is not PluginRequestException { FailureKind: PluginRequestFailureKind.Authentication })
+                {
+                    // A failed Sync request is not sent again: AssemblyAI may have received and billed it.
+                    RememberFailedSync(recording);
+                    var reason = ex is PluginRequestException request ? request.FailureKind.ToString() : "Timeout";
+                    _host?.Log(PluginLogLevel.Warning, $"AssemblyAI Sync API failed ({reason}); transcribing with the async API.");
+                }
             }
         }
         var started = Stopwatch.StartNew();
@@ -172,6 +182,20 @@ public sealed partial class AssemblyAiPlugin : ITranscriptionEnginePlugin, IApiK
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         { throw new PluginRequestException("AssemblyAI transcription timed out.", PluginRequestFailureKind.Timeout); }
+    }
+
+    private bool SyncFailedBefore(string recording)
+    {
+        lock (_failedSyncRecordings) return _failedSyncRecordings.Contains(recording);
+    }
+
+    private void RememberFailedSync(string recording)
+    {
+        lock (_failedSyncRecordings)
+        {
+            _failedSyncRecordings.Enqueue(recording);
+            while (_failedSyncRecordings.Count > FailedSyncRecordingLimit) _failedSyncRecordings.Dequeue();
+        }
     }
 
     /// <summary>The Sync API request for a recording.</summary>

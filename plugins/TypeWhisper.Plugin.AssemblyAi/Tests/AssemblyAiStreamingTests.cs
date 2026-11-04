@@ -149,6 +149,23 @@ public sealed class AssemblyAiStreamingTests
     }
 
     [Fact]
+    public async Task FinalizeDoesNotFinishBeforeTheHostHasTheFinalTurn()
+    {
+        var socket = new Socket(); await using var session = new AssemblyAiStreamingSession(socket);
+        var delivering = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new ManualResetEventSlim();
+        var delivered = new List<string>();
+        session.TranscriptReceived += e => { if (!e.IsFinal) return; delivering.TrySetResult(); release.Wait(TimeSpan.FromSeconds(5)); delivered.Add(e.Text); };
+        await session.SendAudioAsync(Pcm(1.0, 8000), default);
+        var finish = session.FinalizeAsync(default); await socket.Terminated.Reader.ReadAsync();
+        socket.Text(WordTurn(0, "Hallo Welt.", 1000));
+        await delivering.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await Task.Delay(200); Assert.False(finish.IsCompleted);
+        release.Set(); await finish.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.Equal("Hallo Welt.", Assert.Single(delivered));
+    }
+
+    [Fact]
     public async Task CancelledSessionSendsTerminateToEndBilling()
     {
         var socket = new Socket(); var session = new AssemblyAiStreamingSession(socket);
