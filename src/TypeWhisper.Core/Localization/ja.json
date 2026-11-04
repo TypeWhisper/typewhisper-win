@@ -3275,5 +3275,6 @@
   "Installed for {0}. Settings: type /tw in the game.": "{0} にインストール済み。設定：ゲーム内で /tw と入力してください。",
   "Not installed yet. Found: {0}. Without it, TypeWhisper opens the chat with Enter, so start with the chat closed.": "まだインストールされていません。見つかったバージョン：{0}。アドオンがない場合、TypeWhisper は Enter でチャットを開くため、チャットを閉じた状態で始めてください。",
   "World of Warcraft translation": "World of Warcraft の翻訳",
-  "Translation is chosen in the game, but the default LLM is missing or unavailable, so messages go out untranslated. Open Default LLM in Workflows to choose one.": "ゲーム内で翻訳が選ばれていますが、デフォルトの LLM が見つからないか利用できないため、メッセージは翻訳されずに送信されます。ワークフローの「デフォルト LLM」を開いて選択してください。"
+  "Translation is chosen in the game, but the default LLM is missing or unavailable, so messages go out untranslated. Open Default LLM in Workflows to choose one.": "ゲーム内で翻訳が選ばれていますが、デフォルトの LLM が見つからないか利用できないため、メッセージは翻訳されずに送信されます。ワークフローの「デフォルト LLM」を開いて選択してください。",
+  "Could not install the keyboard hook for this shortcut (Windows error {0}). Restart TypeWhisper and try again.": "このショートカットのキーボードフックをインストールできませんでした（Windows エラー {0}）。TypeWhisper を再起動してもう一度お試しください。"
 }

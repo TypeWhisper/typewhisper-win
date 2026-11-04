@@ -3275,5 +3275,6 @@
   "Installed for {0}. Settings: type /tw in the game.": "已为 {0} 安装。设置：在游戏中输入 /tw。",
   "Not installed yet. Found: {0}. Without it, TypeWhisper opens the chat with Enter, so start with the chat closed.": "尚未安装。已找到：{0}。没有该插件时，TypeWhisper 会用 Enter 打开聊天框，因此请在聊天框关闭时开始。",
   "World of Warcraft translation": "World of Warcraft 翻译",
-  "Translation is chosen in the game, but the default LLM is missing or unavailable, so messages go out untranslated. Open Default LLM in Workflows to choose one.": "游戏中已选择翻译，但默认 LLM 缺失或不可用，因此消息将以原文发送。请在“工作流”中打开“默认 LLM”进行选择。"
+  "Translation is chosen in the game, but the default LLM is missing or unavailable, so messages go out untranslated. Open Default LLM in Workflows to choose one.": "游戏中已选择翻译，但默认 LLM 缺失或不可用，因此消息将以原文发送。请在“工作流”中打开“默认 LLM”进行选择。",
+  "Could not install the keyboard hook for this shortcut (Windows error {0}). Restart TypeWhisper and try again.": "无法为此快捷键安装键盘钩子（Windows 错误 {0}）。请重新启动 TypeWhisper 后重试。"
 }
