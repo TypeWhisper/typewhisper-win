@@ -113,6 +113,8 @@ public sealed class VocabularyPluginSession : IAsyncDisposable
             generation = _generation;
         }
         // The pipeline returns the text unchanged without terms, timings or audio; a released model is not loaded for that.
+        // A cancelled call still throws first, as the pipeline does.
+        cancellation.ThrowIfCancellationRequested();
         if (terms.Count == 0 || timings.Count == 0 || audio.Length == 0) return new(text, false);
         // A load that a recording started holds the gate: this waits for it rather than skipping the terms.
         await _gate.WaitAsync(cancellation);

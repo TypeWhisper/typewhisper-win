@@ -86,6 +86,9 @@ public sealed class VocabularyIdleUnloadTests
         Assert.Equal(new VocabularyOutcome("type whisper", false), outcome);
         Assert.False(session.Loaded);
         Assert.Equal(0, _loadsStarted);
+        // Cancellation is reported, not a completed refinement.
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => session.RefineAsync(Guid.NewGuid(), "type whisper",
+            new float[16000], 16000, [new("type whisper", 0, 1)], [], new CancellationToken(canceled: true)));
         // A loaded model is not kept alive by rescorings that have nothing to rescore.
         Assert.Equal("TypeWhisper", (await Run(session)).Text);
         _time.Advance(TimeSpan.FromSeconds(30));
