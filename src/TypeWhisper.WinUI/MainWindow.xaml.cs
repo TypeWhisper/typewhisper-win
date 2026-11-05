@@ -132,8 +132,7 @@ public sealed partial class MainWindow : Window
             if (_closing) return;
             ShowNotice(new AppNotice(Loc.T("Dictation startup failed: {0}", ex.Message)));
             // Settings stay usable after a failed start, so the managed license key still has to be applied.
-            _ = WinUILicensing.ValidateAsync();
-            WinUICloudSync.EndStartupWait();
+            _ = EndCloudSyncWaitAfterAsync(WinUILicensing.ValidateAsync());
         }
         // Settings can open while startup runs; its page shows what startup has registered and loaded since.
         if (!_closing) _settingsWindow?.RefreshAfterStartup();
@@ -155,6 +154,14 @@ public sealed partial class MainWindow : Window
             WinUICloudSync.EndStartupWait();
         }
         finally { WinUICloudSync.AwaitStartupChecks = false; }
+    }
+
+    // After a failed start only the license check runs. Sync waits for it, so it never runs on a saved license
+    // status that the check would have found expired.
+    private async Task EndCloudSyncWaitAfterAsync(Task licenseCheck)
+    {
+        await licenseCheck;
+        if (!_closing) WinUICloudSync.EndStartupWait();
     }
 
     private Task YieldToQueuedWorkAsync()

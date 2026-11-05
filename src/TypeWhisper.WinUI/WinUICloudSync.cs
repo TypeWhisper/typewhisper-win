@@ -28,7 +28,8 @@ internal static partial class WinUICloudSync
         else Initialize(dispatcher);
     }
 
-    // When startup fails before it starts sync, a page opened meanwhile starts it, as a page opened now would.
+    // When startup fails before it starts sync, a page opened meanwhile starts it once the license check has finished,
+    // as a page opened afterwards would.
     internal static void EndStartupWait()
     {
         AwaitStartupChecks = false;
