@@ -80,8 +80,8 @@ internal sealed class CustomGame(CustomGameSettings settings, Func<IReadOnlyList
                 "Das Programm des Spiels, wie es der Task-Manager zeigt, ohne .exe. Starte das Spiel zuerst, um es aus der Liste zu wählen. Mehrere Namen trennst du mit Kommas."),
             string.Join(", ", settings.ProcessNames), MaxProcessNames * (MaxProcessNameLength + 2)) with { Suggestions = (runningPrograms ?? RunningPrograms)() },
         Field("chatKey", text.L("Open the chat with", "Chat öffnen mit"),
-            text.L("The key the game opens its text chat with. With Nothing, open the chat yourself before you dictate.",
-                "Die Taste, mit der das Spiel seinen Text-Chat öffnet. Bei Nichts öffnest du den Chat selbst, bevor du diktierst."),
+            text.L("The key the game opens its text chat with. With Nothing, open the chat yourself before you dictate; text that needs more than one message then stays on the clipboard.",
+                "Die Taste, mit der das Spiel seinen Text-Chat öffnet. Bei Nichts öffnest du den Chat selbst, bevor du diktierst; Text, der mehr als eine Nachricht braucht, bleibt dann in der Zwischenablage."),
             settings.ChatKey) with
         {
             Choices = [new("enter", "Enter"), new("t", "T"), new("y", "Y"), new("u", "U"),

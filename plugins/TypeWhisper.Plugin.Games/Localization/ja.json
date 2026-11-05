@@ -9,7 +9,7 @@
   "Program name": "プログラム名",
   "The game's program as Task Manager shows it, without .exe. Start the game first to pick it from the list. Separate several names with commas.": "タスク マネージャーに表示されるゲームのプログラム名（.exe なし）。先にゲームを起動すると一覧から選べます。複数の名前はカンマで区切ります。",
   "Open the chat with": "チャットを開くキー",
-  "The key the game opens its text chat with. With Nothing, open the chat yourself before you dictate.": "ゲームがテキストチャットを開くキーです。「なし」の場合は、ディクテーションの前に自分でチャットを開いてください。",
+  "The key the game opens its text chat with. With Nothing, open the chat yourself before you dictate; text that needs more than one message then stays on the clipboard.": "ゲームがテキストチャットを開くキーです。「なし」の場合は、ディクテーションの前に自分でチャットを開いてください。1 つのメッセージに収まらないテキストはクリップボードに残ります。",
   "Nothing: I open the chat myself": "なし：自分でチャットを開く",
   "Send with Enter": "Enter で送信",
   "Off leaves the text in the chat so you can check it before you send it.": "オフにすると、テキストはチャットに残るので、送信前に確認できます。",

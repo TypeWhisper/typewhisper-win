@@ -57,10 +57,12 @@ internal static class ChatDeliveryOperation
         CancellationToken ct = default)
     {
         var parts = ChatMessageSplitter.Split(text, options.MaxMessageBytes);
-        // Without Enter every part would land in the same field, which keeps only one message. Inserting a longer text
-        // would cut it while reporting success, so it is not inserted; the caller keeps it on the clipboard and in review.
-        if (!options.Submit && parts.Count > 1) return new(0, parts.Count, ChatDeliveryStage.TooLong);
+        // Without Enter every part would land in the same field, which keeps only one message. Without a key that opens
+        // the chat, the Enter that sends the first part closes the chat, and the rest would go to the game itself.
+        // Inserting a longer text would lose part of it while reporting success, so it is not inserted; the caller
+        // keeps it on the clipboard and in review.
         var open = options.OpenKeys;
+        if (parts.Count > 1 && (!options.Submit || open.Count == 0)) return new(0, parts.Count, ChatDeliveryStage.TooLong);
         for (var i = 0; i < parts.Count; i++)
         {
             if (i > 0)

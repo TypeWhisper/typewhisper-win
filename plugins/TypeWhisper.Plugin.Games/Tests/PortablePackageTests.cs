@@ -10,7 +10,7 @@ public sealed class PortablePackageTests : IDisposable
 {
     // The plugin API version that brought dictation targets; 1.2.2 offers 1.1.6.
     private static readonly Version TargetHost = new(1, 1, 7);
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "portable-games-" + Guid.NewGuid().ToString("N"));
+    private readonly string _root = Path.Join(Path.GetTempPath(), "portable-games-" + Guid.NewGuid().ToString("N"));
 
     [Fact]
     public void Manifest_MatchesThePlugin_AndNeedsTheDictationTargetHost()
@@ -28,12 +28,12 @@ public sealed class PortablePackageTests : IDisposable
     [Fact]
     public void Localization_TranslatesEveryEnglishString()
     {
-        var directory = Path.Combine(ProjectDirectory, "Localization");
-        var english = Read(Path.Combine(directory, "en.json"));
+        var directory = Path.Join(ProjectDirectory, "Localization");
+        var english = Read(Path.Join(directory, "en.json"));
         Assert.All(english, pair => Assert.Equal(pair.Key, pair.Value));
         foreach (var language in new[] { "de", "ja", "zh-Hans" })
         {
-            var translated = Read(Path.Combine(directory, language + ".json"));
+            var translated = Read(Path.Join(directory, language + ".json"));
             Assert.Equal(english.Keys.Order(), translated.Keys.Order());
             Assert.All(translated, pair => Assert.Equal(pair.Key.Contains("{0}"), pair.Value.Contains("{0}")));
         }
@@ -42,7 +42,7 @@ public sealed class PortablePackageTests : IDisposable
     [Fact]
     public void Localization_CoversEveryStringThePluginShows()
     {
-        var english = Read(Path.Combine(ProjectDirectory, "Localization", "en.json"));
+        var english = Read(Path.Join(ProjectDirectory, "Localization", "en.json"));
         var shown = Directory.GetFiles(ProjectDirectory, "*.cs").SelectMany(file =>
             System.Text.RegularExpressions.Regex.Matches(File.ReadAllText(file), "\\bL\\(\"((?:[^\"\\\\]|\\\\.)*)\"").Select(match => match.Groups[1].Value))
             .Distinct().ToArray();
@@ -57,8 +57,8 @@ public sealed class PortablePackageTests : IDisposable
     public async Task Package_InstallsAsADictationTarget_OnlyOnAHostThatOffersIt()
     {
         var manifest = PortablePluginPackage.ReadManifest(ProjectDirectory);
-        var source = Path.Combine(ProjectDirectory, "bin", new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name, "portable-host", "Plugins", manifest.Id);
-        var archive = Path.Combine(_root, "package.zip");
+        var source = Path.Join(ProjectDirectory, "bin", new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name, "portable-host", "Plugins", manifest.Id);
+        var archive = Path.Join(_root, "package.zip");
         Directory.CreateDirectory(_root);
         ZipFile.CreateFromDirectory(source, archive, CompressionLevel.Fastest, false);
         var entry = new PortableCatalogEntry
@@ -68,13 +68,13 @@ public sealed class PortablePackageTests : IDisposable
             Sha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(archive))), SupportedArchitectures = [PortablePluginCatalog.Architecture]
         };
         using var http = new HttpClient(new ArchiveTransport(archive));
-        var host = new VocabularyHostServices(Path.Combine(_root, "data"));
+        var host = new VocabularyHostServices(Path.Join(_root, "data"));
 
-        var older = new PortablePluginStore(Path.Combine(_root, "older"), new(1, 1, 6), http, _ => host);
+        var older = new PortablePluginStore(Path.Join(_root, "older"), new(1, 1, 6), http, _ => host);
         await older.InitializeAsync();
         await Assert.ThrowsAsync<InvalidDataException>(() => older.InstallAsync(entry));
 
-        var store = new PortablePluginStore(Path.Combine(_root, "store"), TargetHost, http, _ => host);
+        var store = new PortablePluginStore(Path.Join(_root, "store"), TargetHost, http, _ => host);
         await store.InitializeAsync();
         await store.InstallAsync(entry);
         await using var runtime = new PortablePluginRuntimeRegistry(store, TargetHost, _ => host);
@@ -97,17 +97,16 @@ public sealed class PortablePackageTests : IDisposable
         Assert.Null(await runtime.SetEnabledAsync(entry.Id, false));
     }
 
-    private static string ProjectDirectory => Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+    private static string ProjectDirectory => Path.GetFullPath(Path.Join(AppContext.BaseDirectory, "..", "..", "..", ".."));
 
     private static Dictionary<string, string> Read(string path) =>
         System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(path))!;
 
+    // The package's assembly may still be loaded, so a folder that cannot be removed yet is left to the temp cleanup.
     public void Dispose()
     {
-        GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
         try { if (Directory.Exists(_root)) Directory.Delete(_root, true); }
-        catch (IOException) { }
-        catch (UnauthorizedAccessException) { }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Console.Error.WriteLine("Kept the test folder " + _root + ": " + ex.Message); }
     }
 
     private sealed class ArchiveTransport(string path) : HttpMessageHandler

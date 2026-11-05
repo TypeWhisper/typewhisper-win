@@ -115,7 +115,7 @@ public sealed class GamesPlugin : IDictationTargetPlugin, IPluginProfileSettings
         {
             null => null,
             ChatDeliveryStage.TooLong => "too-long",
-            var stage => stage.Value.ToString().ToLowerInvariant()
+            _ => result.FailedAt.Value.ToString().ToLowerInvariant()
         });
     }
 

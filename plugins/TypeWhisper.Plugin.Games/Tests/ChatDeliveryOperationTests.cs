@@ -92,6 +92,20 @@ public class ChatDeliveryOperationTests
     }
 
     [Fact]
+    public async Task WithoutOpenKey_TextLongerThanOneMessage_IsNotInserted()
+    {
+        // The Enter that sends the first part closes the chat, and nothing would open it for the rest.
+        var platform = new Fake();
+
+        var result = await ChatDeliveryOperation.RunAsync(platform, "First part. Second part.", new() { OpenKeys = [], MaxMessageBytes = 12 });
+
+        Assert.Equal(new ChatDeliveryResult(0, 2, ChatDeliveryStage.TooLong), result);
+        Assert.Empty(platform.Calls);
+        Assert.True((await ChatDeliveryOperation.RunAsync(platform, "Short.", new() { OpenKeys = [], MaxMessageBytes = 12 })).Completed);
+        Assert.Equal(["paste:Short.", "settle", "press:0D"], platform.Calls);
+    }
+
+    [Fact]
     public async Task LongText_IsSentAsSeveralMessagesWithAPause()
     {
         var platform = new Fake();

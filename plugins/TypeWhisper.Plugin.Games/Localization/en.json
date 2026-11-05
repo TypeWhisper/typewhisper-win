@@ -9,7 +9,7 @@
   "Program name": "Program name",
   "The game's program as Task Manager shows it, without .exe. Start the game first to pick it from the list. Separate several names with commas.": "The game's program as Task Manager shows it, without .exe. Start the game first to pick it from the list. Separate several names with commas.",
   "Open the chat with": "Open the chat with",
-  "The key the game opens its text chat with. With Nothing, open the chat yourself before you dictate.": "The key the game opens its text chat with. With Nothing, open the chat yourself before you dictate.",
+  "The key the game opens its text chat with. With Nothing, open the chat yourself before you dictate; text that needs more than one message then stays on the clipboard.": "The key the game opens its text chat with. With Nothing, open the chat yourself before you dictate; text that needs more than one message then stays on the clipboard.",
   "Nothing: I open the chat myself": "Nothing: I open the chat myself",
   "Send with Enter": "Send with Enter",
   "Off leaves the text in the chat so you can check it before you send it.": "Off leaves the text in the chat so you can check it before you send it.",

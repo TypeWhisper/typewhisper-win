@@ -9,7 +9,7 @@
   "Program name": "程序名称",
   "The game's program as Task Manager shows it, without .exe. Start the game first to pick it from the list. Separate several names with commas.": "任务管理器中显示的游戏程序名称，不含 .exe。先启动游戏即可从列表中选择。多个名称用逗号分隔。",
   "Open the chat with": "打开聊天的按键",
-  "The key the game opens its text chat with. With Nothing, open the chat yourself before you dictate.": "游戏打开文字聊天所用的按键。选择“无”时，请在听写前自行打开聊天框。",
+  "The key the game opens its text chat with. With Nothing, open the chat yourself before you dictate; text that needs more than one message then stays on the clipboard.": "游戏打开文字聊天所用的按键。选择“无”时，请在听写前自行打开聊天框；需要多条消息的文本将保留在剪贴板中。",
   "Nothing: I open the chat myself": "无：我自己打开聊天框",
   "Send with Enter": "按 Enter 发送",
   "Off leaves the text in the chat so you can check it before you send it.": "关闭后，文本会留在聊天框中，你可以在发送前检查。",
