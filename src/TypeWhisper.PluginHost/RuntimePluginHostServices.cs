@@ -23,4 +23,5 @@ internal sealed class RuntimePluginHostServices(IPluginHostServices inner, Actio
     public void NotifyCapabilitiesChanged() { try { inner.NotifyCapabilitiesChanged(); } finally { changed(); } }
     public IPluginLocalization Localization => localization ?? inner.Localization;
     public void SetStreamingDisplayActive(bool active) => inner.SetStreamingDisplayActive(active);
+    public PluginLlmStatus? DefaultLlm => inner.DefaultLlm;
 }

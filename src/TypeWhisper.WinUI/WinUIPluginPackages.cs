@@ -14,10 +14,12 @@ internal sealed class WinUIPluginPackages
     internal WinUIPluginPackages() => Updates = new(Store, Catalog, LocalCtcVocabulary.HostVersion, PortablePluginCatalog.Architecture);
     internal Task InitializeAsync() => Task.Run(() => Store.InitializeAsync());
     internal static VocabularyHostServices CreateServices(string id) => Services.GetOrAdd(id, BuildServices);
+    /// <summary>The shared workflow LLM plugins may read, set once the dictation session exists.</summary>
+    internal static Func<TypeWhisper.PluginSDK.Models.PluginLlmStatus?>? DefaultLlm { get; set; }
     private static VocabularyHostServices BuildServices(string id)
     {
         var data = WinUIProfile.DataPath("PluginData", id);
         return new(data, secrets: new WindowsPluginSecretStore(data), assetDirectory: id == LocalTranscriptionPlugin.PluginId
-            ? WinUIProfile.PluginAssetPath(id) : data);
+            ? WinUIProfile.PluginAssetPath(id) : data, defaultLlm: () => DefaultLlm?.Invoke());
     }
 }

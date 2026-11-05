@@ -10,8 +10,8 @@ public sealed partial class MainWindow
     {
         if (_closing || _profileRestoreClosing) return;
         _foregroundHistory = new();
-        // A game shows the dictation only while it is in front, so switching windows can hand the indicator back.
-        _foregroundHistory.Changed += () => { if (_dictation.ShowsGameIndicator != _gameIndicatorShown) UpdateLiveDictation(); };
+        // A plugin's app shows the dictation only while it is in front, so switching windows can hand the indicator back.
+        _foregroundHistory.Changed += () => { if (_dictation.ShowsTargetIndicator != _targetIndicatorShown) UpdateLiveDictation(); };
         // The shortcut pastes into the app window it was pressed in.
         _pasteLastShortcut = InitializeActionShortcut(GlobalShortcuts.PasteLastTranscription,
             () => _ = PasteLastTranscriptionAsync(ForegroundWindowHistory.CurrentTarget, activate: false), 0x8A00,

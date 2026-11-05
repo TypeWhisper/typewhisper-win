@@ -68,6 +68,12 @@ public interface IPluginHostServices
     /// When active, the host suppresses its own streaming text overlay.
     /// </summary>
     void SetStreamingDisplayActive(bool active) { }
+
+    /// <summary>
+    /// The LLM that workflows use when they choose none, and whether it can run now; null when none is chosen or the
+    /// host does not tell.
+    /// </summary>
+    PluginLlmStatus? DefaultLlm => null;
 }
 
 /// <summary>

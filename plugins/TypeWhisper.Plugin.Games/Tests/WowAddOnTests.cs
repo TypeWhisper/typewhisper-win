@@ -1,6 +1,5 @@
 using System.Text;
-using TypeWhisper.Presentation;
-using Xunit;
+using TypeWhisper.Plugin.Games;
 
 public sealed class WowAddOnTests : IDisposable
 {
@@ -20,8 +19,8 @@ public sealed class WowAddOnTests : IDisposable
         // The add-on binds the same chord TypeWhisper presses.
         Assert.Contains("\"CTRL-SHIFT-F11\"", files["TypeWhisper.lua"]);
         Assert.Contains("\"OPENCHAT\"", files["TypeWhisper.lua"]);
-        Assert.Equal("Ctrl+Shift+F11", TypeWhisper.Core.Models.GameCatalog.WorldOfWarcraft.AddOnChordName);
-        Assert.Equal("CTRL-SHIFT-F11", WowKeyName(TypeWhisper.Core.Models.GameCatalog.WorldOfWarcraft.AddOnChord));
+        Assert.Equal("Ctrl+Shift+F11", GameCatalog.WorldOfWarcraft.AddOnChordName);
+        Assert.Equal("CTRL-SHIFT-F11", WowKeyName(GameCatalog.WorldOfWarcraft.AddOnChord));
         // The cast bar keeps its position between sessions.
         Assert.Contains("## SavedVariables: TypeWhisperDB", files["TypeWhisper.toc"]);
     }
@@ -88,7 +87,7 @@ public sealed class WowAddOnTests : IDisposable
     public void BundledAddOn_BindsTheIndicatorChordsInOrder()
     {
         var lua = WowAddOn.BundledFiles().Single(file => file.Name == "TypeWhisper.lua").Text;
-        var indicator = TypeWhisper.Core.Models.GameCatalog.WorldOfWarcraft.Indicator!;
+        var indicator = GameCatalog.WorldOfWarcraft.Indicator!;
 
         var recording = lua.IndexOf($"key = \"{WowKeyName(indicator.Recording)}\", button = \"TypeWhisperRecordingButton\", signal = \"recording\"", StringComparison.Ordinal);
         var transcribing = lua.IndexOf($"key = \"{WowKeyName(indicator.Transcribing)}\", button = \"TypeWhisperTranscribingButton\", signal = \"transcribing\"", StringComparison.Ordinal);
@@ -96,8 +95,8 @@ public sealed class WowAddOnTests : IDisposable
 
         Assert.True(recording >= 0 && transcribing >= 0 && stopped >= 0, "Each chord TypeWhisper presses is bound to its signal.");
         // TypeWhisper brings its own indicator back when the add-on's bar times out, so both use the same limits.
-        Assert.Contains($"RECORDING_TIMEOUT, TRANSCRIBING_TIMEOUT = {TypeWhisper.WinUI.GameIndicatorSignals.RecordingLimit.TotalSeconds}, "
-            + $"{TypeWhisper.WinUI.GameIndicatorSignals.TranscribingLimit.TotalSeconds}", lua);
+        Assert.Contains($"RECORDING_TIMEOUT, TRANSCRIBING_TIMEOUT = {GameIndicatorSignals.RecordingLimit.TotalSeconds}, "
+            + $"{GameIndicatorSignals.TranscribingLimit.TotalSeconds}", lua);
     }
 
     // The game's name for a chord: modifiers as CTRL and SHIFT, then the function key.

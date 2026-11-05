@@ -6,8 +6,10 @@ namespace TypeWhisper.PluginHost;
 
 // Restricted host for the first local vocabulary capability. Unconnected SDK
 // services fail explicitly; this is not yet a general-purpose plugin host.
-public sealed class VocabularyHostServices(string dataDirectory, Action<string>? diagnosticSink = null, string? assetDirectory = null, IPluginSecretStore? secrets = null) : IPluginHostServices
+public sealed class VocabularyHostServices(string dataDirectory, Action<string>? diagnosticSink = null, string? assetDirectory = null, IPluginSecretStore? secrets = null,
+    Func<PluginLlmStatus?>? defaultLlm = null) : IPluginHostServices
 {
+    public PluginLlmStatus? DefaultLlm => defaultLlm?.Invoke();
     private readonly object _sync = new();
     private string SettingsPath => Path.Combine(PluginDataDirectory, "settings.json");
     public string PluginDataDirectory { get; } = Path.GetFullPath(dataDirectory);
