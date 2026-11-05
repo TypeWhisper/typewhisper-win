@@ -40,10 +40,14 @@ internal sealed class HttpApiSettingsView : UserControl
         var actions = new SettingsRow().Below(footer);
         body.Children.Add(actions);
         var updating = false;
+        // A port or token setting changed here waits for Apply. While a change runs, the API still reports the values
+        // from before it, so a page rebuilt meanwhile would show those.
+        UnappliedEdits.Track(this, () => updating
+            || (api.Enabled && (port.Value != api.Port || requireAuthentication.IsOn != api.RequireAuthentication)));
         void Refresh()
         {
-            // The switch already says that the API is off.
-            enable.Status = api.Enabled || (api.Status != "HTTP API is off." && api.Status != Loc.T("HTTP API is off.")) ? Loc.T(api.Status) : "";
+            // The switch already says whether the API is on; while the app starts, a saved server has not started yet.
+            enable.Status = api.Status != "HTTP API is off." && api.Status != Loc.T("HTTP API is off.") ? Loc.T(api.Status) : "";
             portRow.Visibility = authenticationRow.Visibility = actions.Visibility = api.Enabled ? Visibility.Visible : Visibility.Collapsed;
             copyAddress.IsEnabled = copyToken.IsEnabled = documentation.IsEnabled = api.Running;
             documentation.NavigateUri = api.Running ? new Uri($"http://127.0.0.1:{api.Port}/docs") : null;
@@ -61,6 +65,7 @@ internal sealed class HttpApiSettingsView : UserControl
                 apply.IsEnabled = enabled.IsEnabled = port.IsEnabled = requireAuthentication.IsEnabled = true;
                 updating = false;
                 Refresh();
+                UnappliedEdits.NotifySettled();
             }
         }
         enabled.Toggled += async (_, _) =>

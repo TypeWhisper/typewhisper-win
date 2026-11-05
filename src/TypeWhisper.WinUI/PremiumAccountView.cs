@@ -15,6 +15,7 @@ internal sealed class PremiumAccountView : UserControl
     private readonly TextBlock _status = new() { FontSize = 12, TextWrapping = TextWrapping.Wrap, Foreground = (Brush)Application.Current.Resources["MutedBrush"] };
     internal PremiumAccountView()
     {
+        WinUIPremiumAccount.LoadSavedSession();
         var body = new StackPanel { Spacing = 12 };
         body.Children.Add(SettingsHelp.Label(Loc.T("Premium account"), Loc.T("Sign in with your Apple Account in your browser. An activated commercial license is linked to your account after sign-in. Account access and iCloud Drive folder synchronization are separate; signing out keeps your local data and license."), 16));
         var actions = new StackPanel { Spacing = 8 };

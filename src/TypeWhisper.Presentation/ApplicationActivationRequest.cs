@@ -13,8 +13,10 @@ public sealed record ApplicationActivationRequest(string? Route, IReadOnlyList<s
     public string? SettingsRowKey { get; init; }
     /// <summary>The History entry to open, given as --history &lt;entry id&gt;.</summary>
     public string? HistoryRecordId { get; init; }
-    /// <summary>Only opens a window or a settings page: no files, account callback or error to handle.</summary>
-    public bool OnlyNavigates => ShowWindow && Files.Count == 0 && AccountCallback is null && Error is null;
+    /// <summary>Opened by Windows sharing; the shared files follow in their own request once startup has finished.</summary>
+    public bool AwaitsSharedFiles { get; init; }
+    /// <summary>Only opens a window or a settings page: no files, shared files, account callback or error to handle.</summary>
+    public bool OnlyNavigates => ShowWindow && Files.Count == 0 && !AwaitsSharedFiles && AccountCallback is null && Error is null;
     /// <summary>Redacts authorization callback data from diagnostic output.</summary>
     public override string ToString() => $"Activation: {Route ?? "default"}; account callback: {AccountCallback is not null}";
     /// <summary>Maximum files in one activation.</summary>
@@ -202,10 +204,22 @@ public sealed class ActivationInbox
         }
     }
     /// <summary>Consumes each pending request once; one handler failure cannot discard subsequent requests.</summary>
-    public void Dispatch(Action<ApplicationActivationRequest> handle, Action<Exception> reportError)
+    public void Dispatch(Action<ApplicationActivationRequest> handle, Action<Exception> reportError) => Run(Drain(), handle, reportError);
+    /// <summary>
+    /// For use before startup has finished: consumes the pending requests that only navigate, up to the first one that
+    /// needs the initialized session, so requests keep their order. Dispatch reports an overflow later.
+    /// </summary>
+    public void DispatchNavigation(Action<ApplicationActivationRequest> handle, Action<Exception> reportError)
+    {
+        var navigation = new List<ApplicationActivationRequest>();
+        lock (_requests)
+            while (_requests.TryPeek(out var request) && request.OnlyNavigates) navigation.Add(_requests.Dequeue());
+        Run(navigation, handle, reportError);
+    }
+    private static void Run(IReadOnlyList<ApplicationActivationRequest> requests, Action<ApplicationActivationRequest> handle, Action<Exception> reportError)
     {
         var errors = new List<Exception>();
-        foreach (var request in Drain())
+        foreach (var request in requests)
         {
             try { handle(request); }
             catch (Exception ex) when (ex is not OutOfMemoryException)

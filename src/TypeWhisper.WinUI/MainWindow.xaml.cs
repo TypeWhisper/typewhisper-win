@@ -48,6 +48,9 @@ public sealed partial class MainWindow : Window
     private async Task InitializeDictationCoreAsync()
     {
         if (_closing) return;
+        // Settings can open during startup; Sync & backup then waits with automatic sync for the access checks below.
+        // Set before anything that can fail, so a failed start also holds sync until its license check has finished.
+        WinUICloudSync.AwaitStartupChecks = true;
         try
         {
             _dictationInput = new(
@@ -130,8 +133,10 @@ public sealed partial class MainWindow : Window
             if (_closing) return;
             ShowNotice(new AppNotice(Loc.T("Dictation startup failed: {0}", ex.Message)));
             // Settings stay usable after a failed start, so the managed license key still has to be applied.
-            _ = WinUILicensing.ValidateAsync();
+            _ = EndCloudSyncWaitAfterAsync(WinUILicensing.ValidateAsync());
         }
+        // Settings can open while startup runs; its page shows what startup has registered and loaded since.
+        if (!_closing) _settingsWindow?.RefreshAfterStartup();
     }
 
     private async Task StartCloudSyncAfterAccessChecksAsync(Task accessChecks)
@@ -141,10 +146,23 @@ public sealed partial class MainWindow : Window
             await accessChecks;
             await YieldToQueuedWorkAsync();
             if (_closing) return;
-            WinUICloudSync.DataChanged += () => _lexicon?.RefreshApiData();
             WinUICloudSync.Initialize(DispatcherQueue);
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { if (!_closing) ShowNotice(new AppNotice(Loc.T("Dictation startup failed: {0}", ex.Message))); }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            if (_closing) return;
+            ShowNotice(new AppNotice(Loc.T("Dictation startup failed: {0}", ex.Message)));
+            WinUICloudSync.EndStartupWait();
+        }
+        finally { WinUICloudSync.AwaitStartupChecks = false; }
+    }
+
+    // After a failed start only the license check runs. Sync waits for it, so it never runs on a saved license
+    // status that the check would have found expired.
+    private async Task EndCloudSyncWaitAfterAsync(Task licenseCheck)
+    {
+        await licenseCheck;
+        if (!_closing) WinUICloudSync.EndStartupWait();
     }
 
     private Task YieldToQueuedWorkAsync()
@@ -365,6 +383,8 @@ public sealed partial class MainWindow : Window
             WorkflowsView.RefreshApiData();
             if (_workflowShortcuts?.Initialize() is { } error) ShowNotice(new AppNotice(error));
         };
+        // Also for a sync started from Sync & backup while the app starts.
+        WinUICloudSync.DataChanged += () => _lexicon?.RefreshApiData();
         _dictation.StopHistoryPlayback = () => { _historyWindow?.StopAudioPlayback(); RecorderView.StopAudioPlayback(); };
         RecorderView.CanPlayAudio = CanPlayHistoryAudio;
         RecorderView.PrepareAudioPlayback = async () =>

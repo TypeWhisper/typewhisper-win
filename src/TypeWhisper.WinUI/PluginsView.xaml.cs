@@ -9,6 +9,8 @@ public sealed partial class PluginsView : UserControl
     private LocalDictationSession? _runtime;
     private PluginManagementController? _management;
     private int _refreshGeneration;
+    // A scan before the package store has loaded lists nothing; a page requested meanwhile waits for the next scan.
+    private bool _inventoryLoaded;
     private bool _changingPlugin;
 
     internal void ConfigureRuntime(LocalDictationSession runtime)
@@ -32,8 +34,11 @@ public sealed partial class PluginsView : UserControl
         if (_runtime is null || _management is null) return;
         var generation = ++_refreshGeneration;
         var root = _runtime.Packages.Store.InventoryRoot;
+        // Read before scanning: a scan that started earlier can finish after the store has loaded. A failed load is final.
+        var inventoryLoaded = _runtime.Packages.Store.Initialized || _runtime.LocalPluginError is not null;
         await _management.RefreshAsync();
         if (generation != _refreshGeneration) return;
+        _inventoryLoaded = inventoryLoaded;
         _plugins.Clear();
         // The CTC package is an internal dependency of NVIDIA Parakeet.
         foreach (var state in _management.Snapshot().Where(state =>
