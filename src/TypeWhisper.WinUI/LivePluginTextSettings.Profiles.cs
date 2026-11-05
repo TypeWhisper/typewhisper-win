@@ -281,7 +281,7 @@ internal sealed partial class LivePluginTextSettings
             }
             else
             {
-                var text = new TextBox { Text = values[field.Id], MaxLength = Math.Clamp(field.MaxLength, 1, 32768),
+                var text = new TextBox { Text = values[field.Id], MaxLength = Math.Clamp(field.MaxLength, 1, 32768), PlaceholderText = field.Placeholder ?? "",
                     MinHeight = memoryEditor && field.IsMultiline ? 220 : 40, AcceptsReturn = field.IsMultiline,
                     Padding = field.IsMultiline ? new Thickness(10, 10, 4, 10) : new Thickness(10, 0, 4, 0),
                     TextWrapping = field.IsMultiline ? TextWrapping.Wrap : TextWrapping.NoWrap,
@@ -291,12 +291,15 @@ internal sealed partial class LivePluginTextSettings
             }
             AutomationProperties.SetName(input, Loc.T("{0} for “{1}”", field.Title, name));
             AutomationProperties.SetHelpText(input, field.Description);
-            var border = new Border { Child = input, CornerRadius = new(8), BorderThickness = new(1),
+            var border = new Border { Child = input is TextBox { AcceptsReturn: false } hinted && !string.IsNullOrEmpty(field.Placeholder)
+                    ? WithPlaceholder(hinted, field.Placeholder) : input, CornerRadius = new(8), BorderThickness = new(1),
                 Background = (Brush)Application.Current.Resources["SurfaceBrush"],
                 BorderBrush = (Brush)Application.Current.Resources["HairlineBrush"] };
             input.GotFocus += (_, _) => border.BorderBrush = (Brush)Application.Current.Resources["AccentBrush"];
             input.LostFocus += (_, _) => border.BorderBrush = (Brush)Application.Current.Resources["HairlineBrush"];
-            group.Children.Add(border);
+            if (field.Kind == PluginTextSettingKind.Folder && input is TextBox { AcceptsReturn: false } folder)
+                group.Children.Add(FolderRow(border, folder, field.Title));
+            else group.Children.Add(border);
             if (input is ScriptCodeEditor { Tag: TextBlock positionNote }) group.Children.Add(positionNote);
             panel.Children.Add(group);
         }
@@ -498,4 +501,55 @@ internal sealed partial class LivePluginTextSettings
         return button;
     }
 
+    // The app's text box template has no placeholder part, so the hint is drawn over the empty field, as the settings
+    // search does.
+    private static Grid WithPlaceholder(TextBox text, string placeholder)
+    {
+        var hint = new TextBlock
+        {
+            Text = placeholder, Margin = text.Padding, FontSize = text.FontSize, VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis, IsHitTestVisible = false,
+            Foreground = (Brush)Application.Current.Resources["MutedBrush"]
+        };
+        AutomationProperties.SetAccessibilityView(hint, Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
+        void Update() => hint.Visibility = text.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+        text.TextChanged += (_, _) => Update();
+        Update();
+        var grid = new Grid();
+        grid.Children.Add(text);
+        grid.Children.Add(hint);
+        return grid;
+    }
+
+    // A folder setting keeps its path editable and offers the system's folder picker beside it. A chosen folder fills
+    // the field like typing, so it is saved with the other edits.
+    private Grid FolderRow(Border field, TextBox text, string title)
+    {
+        var row = new Grid { ColumnSpacing = 8 };
+        row.ColumnDefinitions.Add(new() { Width = new GridLength(1, GridUnitType.Star) });
+        row.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+        row.Children.Add(field);
+        var picking = false;
+        var browse = ProfileButton(Loc.T("Browse…"), async () =>
+        {
+            if (picking || XamlRoot is null) return;
+            picking = true;
+            try
+            {
+                var picker = new Microsoft.Windows.Storage.Pickers.FolderPicker(XamlRoot.ContentIslandEnvironment.AppWindowId) { Title = title };
+                if (await picker.PickSingleFolderAsync() is { } folder) text.Text = folder.Path;
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                AppDiagnostics.WriteFailure(AppDiagnostics.PluginStage("plugin.settings.folder-picker-failed", _id), ex);
+                SetStatus(Loc.T("The folder picker could not be opened. You can enter the path directly."));
+            }
+            finally { picking = false; }
+        });
+        browse.VerticalAlignment = VerticalAlignment.Center;
+        AutomationProperties.SetName(browse, Loc.T("Browse {0}", title));
+        Grid.SetColumn(browse, 1);
+        row.Children.Add(browse);
+        return row;
+    }
 }

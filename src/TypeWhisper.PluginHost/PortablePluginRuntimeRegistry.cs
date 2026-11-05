@@ -91,6 +91,11 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
         // Worker adapters for this activation, keyed by the in-process engine they present. Locked for readers
         // outside the gate; only gate holders change it.
         internal readonly Dictionary<ITranscriptionEnginePlugin, IsolatedTranscriptionEngine> Isolated = new(ReferenceEqualityComparer.Instance);
+        // Dictation target calls run beside the gate. Their count keeps the package loaded until they return, and the
+        // lifetime cancels them when the package stops accepting. Guarded by _sync.
+        internal int TargetCalls;
+        internal TaskCompletionSource? TargetIdle;
+        internal CancellationTokenSource TargetLifetime = new();
     }
     private sealed record TranscriptionRole(Slot Owner, ITranscriptionEnginePlugin Engine);
     private sealed record LlmRole(Slot Owner, ILlmProviderPlugin Provider);
@@ -102,6 +107,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
         internal Dictionary<string, PostProcessorRole> PostProcessors { get; init; } = new(StringComparer.Ordinal);
         internal PortableTtsProvider[] TtsSnapshots { get; init; } = [];
         internal Dictionary<string, ActionRole> Actions { get; init; } = new(StringComparer.Ordinal);
+        internal Dictionary<string, DictationTargetRole> DictationTargets { get; init; } = new(StringComparer.Ordinal);
         // The activation each included package's entries were read from.
         internal Dictionary<Slot, PortablePluginPackage> Members { get; init; } = new();
     }
@@ -474,7 +480,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
         // Text reaches processors, actions, speech and memory sources: judged by the activated plugin, since a
         // manifest need not declare categories.
         foreach (var slot in _slots.Values)
-            if (slot.Package?.Plugin is IPostProcessorPlugin or IActionPlugin or ITtsProviderPlugin or IMemoryStoragePlugin
+            if (slot.Package?.Plugin is IPostProcessorPlugin or IActionPlugin or ITtsProviderPlugin or IMemoryStoragePlugin or IDictationTargetPlugin
                 && policy.TextTransferRefusal(slot.Id, slot.Locality) is not null)
                 CancelRequest(slot);
     }
@@ -810,6 +816,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
         var ttsSnapshots = new List<PortableTtsProvider>();
         var postProcessors = new Dictionary<string, PostProcessorRole>(StringComparer.Ordinal);
         var actions = new Dictionary<string, ActionRole>(StringComparer.Ordinal);
+        var dictationTargets = new Dictionary<string, DictationTargetRole>(StringComparer.Ordinal);
         var members = new Dictionary<Slot, PortablePluginPackage>();
         foreach (var slot in slots)
         {
@@ -826,6 +833,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
                 ttsSnapshots.AddRange(previous.TtsSnapshots.Where(item => item.PluginId == slot.Id));
                 if (previous.Actions.TryGetValue(slot.Id, out var reusedAction)) actions.Add(slot.Id, reusedAction);
                 if (previous.PostProcessors.TryGetValue(slot.Id, out var reusedProcessor)) postProcessors.Add(slot.Id, reusedProcessor);
+                if (previous.DictationTargets.TryGetValue(slot.Id, out var reusedTarget)) dictationTargets.Add(slot.Id, reusedTarget);
                 foreach (var reused in previous.TranscriptionSnapshots.Where(item => item.PluginId == slot.Id))
                 {
                     if (!transcription.TryAdd(reused.SelectionId, previous.Transcription[reused.SelectionId]))
@@ -856,6 +864,14 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
                 var snapshot = new PortablePostProcessor(slot.Id, processor.ProcessorName,
                     processor.PluginVersion, processor.Priority, slot.Generation);
                 postProcessors.Add(slot.Id, new(slot, processor, snapshot));
+            }
+            if (plugin is IDictationTargetPlugin target)
+            {
+                if (target.PluginId != slot.Id)
+                    throw new CapabilityCollisionException("Dictation target identity does not match its package.");
+                var processes = (target.TargetProcessNames ?? []).Where(name => !string.IsNullOrWhiteSpace(name)).Select(name => name.Trim())
+                    .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+                dictationTargets.Add(slot.Id, new(slot, target, new(slot.Id, target.PluginName, Array.AsReadOnly(processes), slot.Generation)));
             }
             slot.ApiKeyConfigured = plugin is IApiKeyPlugin { IsConfigured: true };
             var engines = (plugin is ITranscriptionEnginePlugin direct ? new[] { direct } : [])
@@ -888,7 +904,8 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
                     { IsLocal = slot.IsLocal, Locality = slot.Locality });
             }
         }
-        return new(transcription, llm, transcriptionSnapshots.ToArray(), llmSnapshots.ToArray()) { PostProcessors = postProcessors, Actions = actions, TtsSnapshots = ttsSnapshots.ToArray(), Members = members };
+        return new(transcription, llm, transcriptionSnapshots.ToArray(), llmSnapshots.ToArray())
+            { PostProcessors = postProcessors, Actions = actions, TtsSnapshots = ttsSnapshots.ToArray(), DictationTargets = dictationTargets, Members = members };
     }
 
     private void Publish(Index index) { lock (_sync) _index = index; }
@@ -903,9 +920,11 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
         return isolated;
     }
 
-    // Ends the package's workers before its in-process instances are deactivated.
-    private static async Task ReleasePackageAsync(Slot slot, PortablePluginPackage package)
+    // Ends the package's workers before its in-process instances are deactivated. Dictation target calls were
+    // cancelled when the package stopped accepting; their code returns before the package is released.
+    private async Task ReleasePackageAsync(Slot slot, PortablePluginPackage package)
     {
+        await DictationTargetCallsReturnedAsync(slot).ConfigureAwait(false);
         slot.LocalLlmIdle?.Dispose();
         slot.LocalLlmIdle = null;
         IsolatedTranscriptionEngine[] isolated;
@@ -941,6 +960,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
     {
         if (slot.Request is { IsCancellationRequested: false } request)
             slot.CancellationCallbacks = ObserveCancellationAsync(request.CancelAsync());
+        CancelDictationTargetCalls(slot);
     }
     private static async Task ObserveCancellationAsync(Task task)
     {

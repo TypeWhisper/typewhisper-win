@@ -23,7 +23,7 @@ internal static class AdvancedSettingsPage
         Section(content, Loc.T("Spoken feedback"), new SystemVoiceSettingsControl(session, pickers));
         Section(content, Loc.T("API server"), new HttpApiSettingsView(api));
         Section(content, Loc.T("Command line tool"), new CliSettingsView());
-        Section(content, Loc.T("Integrations"), new IntegrationsSettingsView(session.GamePreferences, session.GameTranslationLlm));
+        Section(content, Loc.T("Integrations"), new IntegrationsSettingsView());
         Section(content, Loc.T("Managed settings"), new ManagedPolicyView());
         Section(content, Loc.T("Support diagnostics"), new DiagnosticsSettingsView(session, api));
     }
