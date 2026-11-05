@@ -631,8 +631,8 @@ public sealed partial class SettingsWindow : Window
             || ShortcutRecorder.AnyEditing || CatalogContent.XamlRoot is not { } root
             // A tooltip is not the user's work; any other open popup is.
             || VisualTreeHelper.GetOpenPopupsForXamlRoot(root).Any(popup => popup.Child is not ToolTip)
-            // A change waiting for Apply (HTTP API port or token, history retention) would be lost with the page, and
-            // one still running would show the values from before it.
+            // A change waiting for Apply (HTTP API port or token, history retention, a license key before Activate)
+            // would be lost with the page, and one still running would show the values from before it.
             || UnappliedEdits.Any(Descendants(CatalogContent))) return;
         for (var focused = FocusManager.GetFocusedElement(root) as DependencyObject; focused is not null; focused = VisualTreeHelper.GetParent(focused))
             if (ReferenceEquals(focused, CatalogContent)) return;
