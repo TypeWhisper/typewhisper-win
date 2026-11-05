@@ -620,7 +620,11 @@ public sealed partial class SettingsWindow : Window
     private void TryRefreshAfterStartup()
     {
         if (!_startupRefreshPending || SetupHost.Child is not null || _searchActive || _checkingNavigation || CatalogScroll.Visibility != Visibility.Visible
-            || ShortcutRecorder.AnyEditing || CatalogContent.XamlRoot is not { } root || VisualTreeHelper.GetOpenPopupsForXamlRoot(root).Count > 0) return;
+            || ShortcutRecorder.AnyEditing || CatalogContent.XamlRoot is not { } root
+            // A tooltip is not the user's work; any other open popup is.
+            || VisualTreeHelper.GetOpenPopupsForXamlRoot(root).Any(popup => popup.Child is not ToolTip)
+            // An HTTP API port or token change waiting for Apply would be lost with the page.
+            || Descendants(CatalogContent).OfType<HttpApiSettingsView>().Any(view => view.HasUnappliedChanges)) return;
         for (var focused = FocusManager.GetFocusedElement(root) as DependencyObject; focused is not null; focused = VisualTreeHelper.GetParent(focused))
             if (ReferenceEquals(focused, CatalogContent)) return;
         var offset = CatalogScroll.VerticalOffset;

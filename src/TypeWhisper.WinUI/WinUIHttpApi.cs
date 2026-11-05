@@ -40,14 +40,16 @@ internal sealed partial class WinUIHttpApi(LocalDictationSession session, Dispat
         try
         {
             if (_closed) return;
+            // A server started from Settings while the app started already runs the values it saved.
+            var running = Running ? _preferences : null;
             if (File.Exists(SettingsPath))
             {
                 if (new FileInfo(SettingsPath).Length > 4096) throw new IOException();
                 _preferences = JsonSerializer.Deserialize<Preferences>(File.ReadAllText(SettingsPath)) ?? new();
                 if (_preferences.Port is < 1024 or > 65535) throw new IOException();
             }
-            if (_preferences.Enabled) await ApplyAsync(true, Port, RequireAuthentication);
-            else RemoveDiscovery();
+            if (!_preferences.Enabled) RemoveDiscovery();
+            else if (_preferences != running) await ApplyAsync(true, Port, RequireAuthentication);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         { RemoveDiscovery(); Status = Loc.T("HTTP API settings could not be loaded. The server is off."); }
