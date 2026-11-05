@@ -1,3 +1,5 @@
+using System.Text.Json;
+using TypeWhisper.Core.Models;
 using TypeWhisper.PluginHost;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
@@ -7,10 +9,17 @@ public sealed partial class PortablePluginRuntimeRegistryTests
 {
     private const string TargetId = "test.typewhisper.target";
 
-    private async Task<PortablePluginStore> TargetStore()
+    // With a locality, the manifest declares it and its categories, as a catalog package does.
+    private async Task<PortablePluginStore> TargetStore(string? locality = null, string[]? categories = null)
     {
         var bundles = Path.Join(_root, "bundles");
         Package(bundles, TargetId, typeof(DictationTargetProbePlugin));
+        if (locality is not null)
+            File.WriteAllText(Path.Join(bundles, TargetId, "manifest.json"), JsonSerializer.Serialize(new PluginManifest
+            {
+                Id = TargetId, Name = "Runtime fixture", Version = "1.0.0", Locality = locality, Categories = categories,
+                AssemblyName = "fixture.dll", PluginClass = typeof(DictationTargetProbePlugin).FullName!
+            }));
         var store = new PortablePluginStore(Path.Join(_root, "store"), Version, _http);
         await store.InitializeAsync(bundles);
         return store;
@@ -88,6 +97,27 @@ public sealed partial class PortablePluginRuntimeRegistryTests
         Assert.False(registry.TryUseDictationTarget(stale, plugin => plugin.PluginId, out _));
         Assert.True(registry.TryUseDictationTarget(Assert.Single(registry.DictationTargets), plugin => plugin.PluginId, out var current));
         Assert.Equal(TargetId, current);
+    }
+
+    [Fact]
+    public async Task APackageThePolicyRefuses_GetsNoDictation_BeforeThePolicyIsReapplied()
+    {
+        // A cloud package that declares only transcription: turning cloud transcription off refuses the whole package,
+        // while the text rule alone would still hand it the dictation's text.
+        var policy = Policy();
+        await using var registry = PolicyRegistry(await TargetStore("cloud", ["transcription"]), () => policy);
+        Assert.Null(await registry.SetEnabledAsync(TargetId, true));
+        var target = Assert.Single(registry.DictationTargets);
+
+        // No policy pass has unloaded the package yet, so every call judges the package itself.
+        policy = Policy(cloudTranscription: false);
+
+        Assert.Empty(registry.DictationTargets);
+        var denied = await Assert.ThrowsAsync<ManagedPolicyDeniedException>(() =>
+            registry.UseDictationTargetAsync(target, (plugin, ct) => plugin.PrepareDictationAsync(new(Guid.NewGuid(), "ProbeGame", null), ct)));
+        Assert.Equal("plugin", denied.PolicyKey);
+        Assert.Contains("cloud", denied.Message);
+        Assert.False(registry.TryUseDictationTarget(target, plugin => plugin.PluginId, out _));
     }
 
     private sealed class RecordingInput : IDictationTargetInput

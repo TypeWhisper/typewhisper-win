@@ -1,3 +1,4 @@
+using TypeWhisper.Core.Models;
 using TypeWhisper.PluginSDK;
 
 namespace TypeWhisper.PluginHost;
@@ -20,14 +21,15 @@ public sealed partial class PortablePluginRuntimeRegistry
 
     /// <summary>
     /// Enabled packages that take over dictation into the apps they list, in identifier order. A package the policy
-    /// does not allow text is left out, so a dictation into its apps stays with the host.
+    /// refuses or does not allow text is left out, so a dictation into its apps stays with the host.
     /// </summary>
     public IReadOnlyList<PortableDictationTarget> DictationTargets
     {
         get
         {
             lock (_sync) return _index.DictationTargets.Values
-                .Where(role => role.Owner.Accepting && !role.Owner.Stopping && Policy.TextTransferRefusal(role.Owner.Id, role.Owner.Locality) is null)
+                .Where(role => role.Owner.Accepting && !role.Owner.Stopping && SlotRefusal(role.Owner) is null
+                    && Policy.TextTransferRefusal(role.Owner.Id, role.Owner.Locality) is null)
                 .Select(role => role.Snapshot with { Generation = role.Owner.Generation })
                 .OrderBy(item => item.PluginId, StringComparer.Ordinal).ToArray();
         }
@@ -37,7 +39,7 @@ public sealed partial class PortablePluginRuntimeRegistry
     /// Calls a dictation target beside the queue that serializes other plugin calls: live transcription holds that
     /// queue while the user speaks, and the target must hear about the dictation then. Disabling or unloading the
     /// package cancels running calls, and its release waits until they returned. Throws
-    /// <see cref="InvalidOperationException"/> when the activation is gone or the policy refuses it text.
+    /// <see cref="InvalidOperationException"/> when the activation is gone or the policy refuses the package or its text.
     /// </summary>
     public async Task<T> UseDictationTargetAsync<T>(PortableDictationTarget expected,
         Func<IDictationTargetPlugin, CancellationToken, Task<T>> use, CancellationToken cancellationToken = default)
@@ -53,7 +55,8 @@ public sealed partial class PortablePluginRuntimeRegistry
 
     /// <summary>
     /// Calls a dictation target synchronously, for calls that must return at once, such as a step reported on the UI
-    /// thread. Returns false without calling the plugin when its activation is gone or the policy refuses it text.
+    /// thread. Returns false without calling the plugin when its activation is gone or the policy refuses the package or
+    /// its text.
     /// </summary>
     public bool TryUseDictationTarget<T>(PortableDictationTarget expected, Func<IDictationTargetPlugin, T> use, out T? result)
     {
@@ -78,6 +81,9 @@ public sealed partial class PortablePluginRuntimeRegistry
             if (_disposed || !_index.DictationTargets.TryGetValue(expected.PluginId, out var role) || !role.Owner.Accepting
                 || role.Owner.Stopping || role.Owner.Generation != expected.Generation)
                 throw new InvalidOperationException("The dictation target is no longer available.");
+            // Target calls take no lease, so the package is judged here as a lease judges it: a refusal applies at once,
+            // before the policy pass unloads the package.
+            if (SlotRefusal(role.Owner) is { } refusedPackage) throw new ManagedPolicyDeniedException("plugin", refusedPackage);
             // The plugin receives the dictation's text, so the text rule decides as it does for processors and actions.
             DenyTextTransferIfRefused(role.Owner, "dictation-target");
             role.Owner.TargetCalls++;

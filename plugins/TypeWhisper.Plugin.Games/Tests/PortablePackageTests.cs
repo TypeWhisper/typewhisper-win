@@ -31,9 +31,8 @@ public sealed class PortablePackageTests : IDisposable
         var directory = Path.Join(ProjectDirectory, "Localization");
         var english = Read(Path.Join(directory, "en.json"));
         Assert.All(english, pair => Assert.Equal(pair.Key, pair.Value));
-        foreach (var language in new[] { "de", "ja", "zh-Hans" })
+        foreach (var translated in new[] { "de", "ja", "zh-Hans" }.Select(language => Read(Path.Join(directory, language + ".json"))))
         {
-            var translated = Read(Path.Join(directory, language + ".json"));
             Assert.Equal(english.Keys.Order(), translated.Keys.Order());
             Assert.All(translated, pair => Assert.Equal(pair.Key.Contains("{0}"), pair.Value.Contains("{0}")));
         }

@@ -10,6 +10,8 @@ namespace TypeWhisper.PluginSDK;
 /// <remarks>
 /// The host calls these members outside the queue that serializes other plugin calls, because live transcription
 /// holds that queue while the user speaks. They can overlap each other and settings calls, so keep them thread-safe.
+/// When the plugin is turned off or unloaded, the host cancels running calls and releases the plugin only after they
+/// returned, so pass the cancellation token on to every wait.
 /// </remarks>
 public interface IDictationTargetPlugin : ITypeWhisperPlugin
 {

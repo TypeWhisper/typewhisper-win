@@ -197,7 +197,7 @@ internal static partial class WowAddOn
     public static string StatusContent(string? translationLlm, bool translationReady)
     {
         var text = new StringBuilder()
-            .Append("-- Written by TypeWhisper when you dictate into the game or open the Games plugin's settings. The game reads it on /reload.\n")
+            .Append("-- Written by TypeWhisper when you dictate into the game or install the add-on. The game reads it on /reload.\n")
             .Append("-- TypeWhisper replaces this file, so changes here do not last.\n")
             .Append("TypeWhisperStatus = {\n");
         if (!string.IsNullOrWhiteSpace(translationLlm)) text.Append("\tllm = \"").Append(LuaString(translationLlm)).Append("\",\n");
