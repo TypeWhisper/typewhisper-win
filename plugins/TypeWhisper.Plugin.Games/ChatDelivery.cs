@@ -1,12 +1,9 @@
-using System.Text.Json.Serialization;
-
-namespace TypeWhisper.Core.Models;
+namespace TypeWhisper.Plugin.Games;
 
 /// <summary>
-/// Lists the ways TypeWhisper can open a game's text chat before it inserts dictated text.
+/// Lists the ways the plugin can open a game's text chat before it inserts dictated text.
 /// </summary>
-[JsonConverter(typeof(JsonStringEnumConverter<ChatOpenKey>))]
-public enum ChatOpenKey
+internal enum ChatOpenKey
 {
     /// <summary>
     /// Presses nothing; the player opens the chat before dictating.
@@ -25,7 +22,7 @@ public enum ChatOpenKey
 /// <summary>
 /// Describes how dictated text is delivered into a game chat.
 /// </summary>
-public sealed record ChatDeliveryOptions
+internal sealed record ChatDeliveryOptions
 {
     /// <summary>
     /// Gets how the chat is opened.
@@ -53,4 +50,21 @@ public sealed record ChatDeliveryOptions
     /// Gets the pause between two messages of one dictation, in milliseconds, so the game's chat throttle keeps them.
     /// </summary>
     public int MessageIntervalMilliseconds { get; init; }
+}
+
+/// <summary>How a dictation into a game's chat runs, from the game and its add-on's settings.</summary>
+internal static class GameChat
+{
+    /// <summary>Returns the chat delivery for the game. Only the add-on opens a chat that is already open without
+    /// closing it; without it, Enter opens the chat.</summary>
+    public static ChatDeliveryOptions ChatFor(GameDefinition game, WowAddOnSettings addOn, bool addOnInstalled) => new()
+    {
+        OpenKey = addOnInstalled ? ChatOpenKey.AddOn : ChatOpenKey.Enter, AddOnChord = game.AddOnChord, Submit = addOn.Send,
+        MaxMessageBytes = game.MaxMessageBytes, MessageIntervalMilliseconds = game.MessageIntervalMilliseconds
+    };
+
+    /// <summary>Returns the chords for the add-on's cast bar, or null when TypeWhisper's own indicator shows the
+    /// dictation. Only an installed add-on with its bar turned on draws one.</summary>
+    public static GameIndicatorChords? IndicatorFor(GameDefinition game, WowAddOnSettings addOn, bool addOnInstalled) =>
+        addOnInstalled && addOn.ShowBar ? game.Indicator : null;
 }

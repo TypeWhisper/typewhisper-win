@@ -1,6 +1,4 @@
-using TypeWhisper.Core.Models;
-using TypeWhisper.WinUI;
-using Xunit;
+using TypeWhisper.Plugin.Games;
 
 public class ChatDeliveryOperationTests
 {
@@ -23,29 +21,27 @@ public class ChatDeliveryOperationTests
     [Fact]
     public void ChatFor_WorldOfWarcraft_UsesTheAddOnChordAndByteLimit()
     {
-        var preferences = new TypeWhisper.Presentation.GamePreferences { WorldOfWarcraft = new() { Enabled = true } };
-        var addOn = TypeWhisper.Presentation.WowAddOnSettings.Default;
+        var game = GameCatalog.FindByProcess("WowClassic");
 
-        var chat = preferences.ChatFor("WowClassic", addOn, addOnInstalled: true);
+        var chat = GameChat.ChatFor(game!, WowAddOnSettings.Default, addOnInstalled: true);
 
-        Assert.NotNull(chat);
+        Assert.Equal(GameCatalog.WorldOfWarcraft, game);
         Assert.Equal(ChatOpenKey.AddOn, chat.OpenKey);
         Assert.Equal([0x11, 0x10, 0x7A], chat.AddOnChord);
         Assert.Equal(255, chat.MaxMessageBytes);
         Assert.Equal(1000, chat.MessageIntervalMilliseconds);
         Assert.True(chat.Submit);
-        Assert.Null(preferences.ChatFor("notepad", addOn, true));
-        Assert.Null(new TypeWhisper.Presentation.GamePreferences().ChatFor("Wow", addOn, true));
+        Assert.Null(GameCatalog.FindByProcess("notepad"));
     }
 
     [Fact]
     public void ChatFor_FollowsTheAddOn()
     {
-        var preferences = new TypeWhisper.Presentation.GamePreferences { WorldOfWarcraft = new() { Enabled = true } };
+        var game = GameCatalog.WorldOfWarcraft;
 
         // Without the add-on only Enter opens the chat; sending is the add-on's setting.
-        Assert.Equal(ChatOpenKey.Enter, preferences.ChatFor("Wow", TypeWhisper.Presentation.WowAddOnSettings.Default, addOnInstalled: false)!.OpenKey);
-        Assert.False(preferences.ChatFor("Wow", new TypeWhisper.Presentation.WowAddOnSettings(Send: false), true)!.Submit);
+        Assert.Equal(ChatOpenKey.Enter, GameChat.ChatFor(game, WowAddOnSettings.Default, addOnInstalled: false).OpenKey);
+        Assert.False(GameChat.ChatFor(game, new WowAddOnSettings(Send: false), true).Submit);
     }
 
     [Fact]

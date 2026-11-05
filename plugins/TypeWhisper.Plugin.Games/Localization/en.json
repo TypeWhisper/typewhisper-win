@@ -1,0 +1,14 @@
+{
+  "World of Warcraft folder": "World of Warcraft folder",
+  "Leave empty to find World of Warcraft through Battle.net and its default folders. If it is installed elsewhere, enter the folder that holds _retail_, _classic_ or _forever_.": "Leave empty to find World of Warcraft through Battle.net and its default folders. If it is installed elsewhere, enter the folder that holds _retail_, _classic_ or _forever_.",
+  "Enter the full path of the World of Warcraft folder.": "Enter the full path of the World of Warcraft folder.",
+  "Install add-on": "Install add-on",
+  "Update add-on": "Update add-on",
+  "Reinstall add-on": "Reinstall add-on",
+  "Copies the TypeWhisper add-on into every World of Warcraft version found. It opens the chat without closing an open one and shows your dictation as a cast bar. Type /tw in the game for its settings.": "Copies the TypeWhisper add-on into every World of Warcraft version found. It opens the chat without closing an open one and shows your dictation as a cast bar. Type /tw in the game for its settings.",
+  "World of Warcraft was not found. Enter its folder under World of Warcraft folder and save.": "World of Warcraft was not found. Enter its folder under World of Warcraft folder and save.",
+  "This folder contains no World of Warcraft version. Enter the folder that holds _retail_, _classic_ or _forever_.": "This folder contains no World of Warcraft version. Enter the folder that holds _retail_, _classic_ or _forever_.",
+  "Installed for {0}. If the game is running, type /reload in the chat. Settings: type /tw in the game.": "Installed for {0}. If the game is running, type /reload in the chat. Settings: type /tw in the game.",
+  "The add-on could not be installed for {0}. Close the game and try again.": "The add-on could not be installed for {0}. Close the game and try again.",
+  "Translation is chosen in the game, but the default LLM is missing or unavailable, so messages go out untranslated. Open Default LLM in Workflows to choose one.": "Translation is chosen in the game, but the default LLM is missing or unavailable, so messages go out untranslated. Open Default LLM in Workflows to choose one."
+}

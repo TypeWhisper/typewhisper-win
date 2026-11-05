@@ -10,8 +10,4 @@
   <ItemGroup>
     <Using Include="TypeWhisper.Core" />
   </ItemGroup>
-  <ItemGroup>
-    <!-- The World of Warcraft add-on that Settings › Games installs into the game. -->
-    <EmbeddedResource Include="../../addons/wow/TypeWhisper/*" LogicalName="WowAddOn/%(Filename)%(Extension)" WithCulture="false" />
-  </ItemGroup>
 </Project>

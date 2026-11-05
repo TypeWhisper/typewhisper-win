@@ -661,8 +661,6 @@ public sealed partial class SettingsWindow : Window
         new("Account & about", AccountView.WhatsNewSettingKey, Loc.T("What's new in TypeWhisper"), Loc.T("Review the latest feature highlights."), "info", "news release features updates"),
         new("Home", "", Loc.T("Home"), Loc.T("Recent activity and transcriptions."), "home", "dashboard overview start"),
         new("Workflows", "", Loc.T("Workflows"), Loc.T("Create and edit workflows, triggers and their LLM."), "workflow", "prompt template automation selected text"),
-        new("Advanced", WowIntegrationSettings.WowChatKey, Loc.T("Dictate into the World of Warcraft chat"), Loc.T("Dictation opens the game chat, inserts the text and sends it."), "gamepad", "game gaming games wow warcraft classic forever chat integration"),
-        new("Advanced", WowIntegrationSettings.WowAddOnKey, Loc.T("TypeWhisper add-on"), Loc.T("Install the World of Warcraft add-on that opens the chat reliably."), "gamepad", "game wow warcraft addon add-on install interface addons cast bar castbar translate whisper reply"),
         new("Dictionary", "", Loc.T("Dictionary"), Loc.T("Your words, corrections and term packs."), "dictionary", "vocabulary words corrections spelling"),
         new("Snippets", "", Loc.T("Snippets"), Loc.T("Reusable text with spoken triggers."), "text", "text expansion shortcut"),
         new("Recorder", "", Loc.T("Recorder"), Loc.T("Record microphone and system audio."), "recorder", "meeting session recordings"),
@@ -800,8 +798,7 @@ public sealed partial class SettingsWindow : Window
         ["LanguageHints"] = "Language",
         ["LockPasteToFocusedField"] = "AutoPaste",
         ["VocabularyBoostingEnabledPackIds"] = "VocabularyBoostingEnabled",
-        ["VocabularyBoostingSelectedIndustryPresetId"] = "VocabularyBoostingEnabled",
-        [WowIntegrationSettings.WowAddOnKey] = WowIntegrationSettings.WowChatKey
+        ["VocabularyBoostingSelectedIndustryPresetId"] = "VocabularyBoostingEnabled"
     };
 
     // False below a page host that is collapsed, true for the sidebar and the shown page.

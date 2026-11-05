@@ -1,0 +1,14 @@
+{
+  "World of Warcraft folder": "World of Warcraft のフォルダ",
+  "Leave empty to find World of Warcraft through Battle.net and its default folders. If it is installed elsewhere, enter the folder that holds _retail_, _classic_ or _forever_.": "空欄のままにすると、Battle.net と既定のフォルダから World of Warcraft を探します。別の場所にインストールしている場合は、_retail_、_classic_、_forever_ を含むフォルダを入力してください。",
+  "Enter the full path of the World of Warcraft folder.": "World of Warcraft のフォルダのフルパスを入力してください。",
+  "Install add-on": "アドオンをインストール",
+  "Update add-on": "アドオンを更新",
+  "Reinstall add-on": "アドオンを再インストール",
+  "Copies the TypeWhisper add-on into every World of Warcraft version found. It opens the chat without closing an open one and shows your dictation as a cast bar. Type /tw in the game for its settings.": "見つかったすべての World of Warcraft のバージョンに TypeWhisper アドオンをコピーします。このアドオンは、開いているチャットを閉じずにチャットを開き、ディクテーションを詠唱バーとして表示します。設定するには、ゲーム内で /tw と入力してください。",
+  "World of Warcraft was not found. Enter its folder under World of Warcraft folder and save.": "World of Warcraft が見つかりませんでした。「World of Warcraft のフォルダ」にフォルダを入力して保存してください。",
+  "This folder contains no World of Warcraft version. Enter the folder that holds _retail_, _classic_ or _forever_.": "このフォルダには World of Warcraft のバージョンがありません。_retail_、_classic_、_forever_ を含むフォルダを入力してください。",
+  "Installed for {0}. If the game is running, type /reload in the chat. Settings: type /tw in the game.": "{0} にインストールしました。ゲームの実行中は、チャットに /reload と入力してください。設定：ゲーム内で /tw と入力してください。",
+  "The add-on could not be installed for {0}. Close the game and try again.": "{0} にアドオンをインストールできませんでした。ゲームを終了してもう一度お試しください。",
+  "Translation is chosen in the game, but the default LLM is missing or unavailable, so messages go out untranslated. Open Default LLM in Workflows to choose one.": "ゲーム内で翻訳が選ばれていますが、デフォルトの LLM が見つからないか利用できないため、メッセージは翻訳されずに送信されます。ワークフローの「デフォルト LLM」を開いて選択してください。"
+}

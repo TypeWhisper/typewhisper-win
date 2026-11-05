@@ -2,7 +2,7 @@
 
 Lets TypeWhisper dictation write into the World of Warcraft chat reliably and shows the dictation in the game.
 
-The add-on is developed in [TypeWhisper/typewhisper-wow](https://github.com/TypeWhisper/typewhisper-wow). This folder holds the copy that TypeWhisper for Windows ships and installs; update it from a release there, so its version matches.
+The add-on is developed in [TypeWhisper/typewhisper-wow](https://github.com/TypeWhisper/typewhisper-wow). This folder holds the copy that the **Games** plugin ([`plugins/TypeWhisper.Plugin.Games`](../../plugins/TypeWhisper.Plugin.Games)) ships and installs; update it from a release there, so its version matches.
 
 TypeWhisper cannot talk to the game directly. Add-ons have no network, file or clipboard access, so TypeWhisper only sends keys: it opens the chat, pastes the dictated text and presses Enter. Pressing Enter to open the chat fails when the chat is already open, because Enter then sends or closes it.
 
@@ -32,7 +32,7 @@ Sending stays with Blizzard's own code, so it also works during encounters. The 
 
 ## Install
 
-In TypeWhisper, open **Settings › Advanced › Integrations**, turn on **World of Warcraft** and click **Install add-on**. TypeWhisper finds World of Warcraft through Battle.net and copies the add-on into every installed version (Retail, Classic, Forever). If the game is running, type `/reload`.
+In TypeWhisper, open **Settings › Plugins**, install the **Games** plugin and turn it on. On its page, click **Install add-on**. The plugin finds World of Warcraft through Battle.net and copies the add-on into every installed version (Retail, Classic, Forever). If the game is installed elsewhere, enter its folder first. If the game is running, type `/reload`.
 
 For a manual install, copy the `TypeWhisper` folder into `World of Warcraft\<version>\Interface\AddOns\`.
 
@@ -46,7 +46,7 @@ Everything about dictating in the game is set on the add-on's page in **Options 
 
 The add-on cannot reach TypeWhisper, so TypeWhisper reads these settings from the file the game saves them in. The game writes it when you type `/reload` or log out. After a change, the page offers a **Reload now** button.
 
-The other way round, TypeWhisper writes `Status.lua` into the add-on folder when you dictate into the game or open **Settings › Advanced**. It names the translating LLM. The game loads it on the next `/reload`.
+The other way round, the Games plugin writes `Status.lua` into the add-on folder when you dictate into the game or install the add-on. It names the translating LLM. The game loads it on the next `/reload`.
 
 To answer a whisper, press the game's Reply key (R by default), then dictate. The page names your Reply key.
 
@@ -67,4 +67,4 @@ The add-on keeps the last 40 signals of a session in its saved variables for tro
 - `TypeWhisper.lua`: the bindings, the cast bar and the settings page
 - `Icon.tga`: the TypeWhisper logo for the add-on list, 64×64 pixels. The game loads TGA or BLP, not PNG; it is made from `assets/icon.png`.
 
-Bump `## Version` in the TOC when the add-on changes. TypeWhisper compares this version to offer an update.
+Bump `## Version` in the TOC when the add-on changes. The Games plugin compares this version to offer an update, so a new add-on version also needs a new plugin release.
