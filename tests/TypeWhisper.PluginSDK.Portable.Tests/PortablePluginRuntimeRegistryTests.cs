@@ -110,6 +110,28 @@ public sealed partial class PortablePluginRuntimeRegistryTests : IDisposable
     }
 
     [Fact]
+    public async Task ActivationNotificationsDuringStartupAreAnsweredByOneRefreshAfterThePass()
+    {
+        var store = await Store(second: true, third: true);
+        string[] ids = [Id, OtherId, ThirdId];
+        // Without QuietActivation each probe reports a capability change while it activates.
+        foreach (var id in ids) Host(id).SetSetting("Enabled", true);
+        await using var registry = Registry(store);
+        var changes = 0;
+        registry.Changed += () => Interlocked.Increment(ref changes);
+        await registry.InitializeAsync();
+        await Task.Delay(200);
+        Assert.Equal(1, changes);
+        Assert.Equal(ids.Order(), registry.TranscriptionProviders.Select(provider => provider.PluginId).Order());
+        // Each package was read for its activation and once more after the pass, never between activations.
+        var afterStartup = ids.Select(id => Host(id).Reads("SharedSelection")).ToArray();
+        await registry.RefreshCapabilitiesAsync();
+        var perRefresh = ids.Select((id, index) => Host(id).Reads("SharedSelection") - afterStartup[index]).ToArray();
+        Assert.All(perRefresh, reads => Assert.True(reads > 0));
+        Assert.Equal(perRefresh.Select(reads => 2 * reads), afterStartup);
+    }
+
+    [Fact]
     public async Task StartupCollisionKeepsTheEarlierOwnerAndReleasesTheLaterPackage()
     {
         var store = await Store(second: true);

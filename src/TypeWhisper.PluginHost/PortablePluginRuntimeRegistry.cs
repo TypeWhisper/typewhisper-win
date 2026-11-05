@@ -117,6 +117,10 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
     private bool _disposed;
     private int _refreshRequested;
     private int _refreshRunning;
+    // While InitializeAsync activates the saved packages, a capability notification only marks a refresh for after
+    // the pass, so it neither rebuilds the index between activations nor announces a change of its own.
+    private bool _startupPass;
+    private bool _refreshAfterStartup;
 
     /// <summary>Raised after state changes; UI subscribers must dispatch to their UI thread.</summary>
     public event Action? Changed;
@@ -225,6 +229,18 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
     public async Task InitializeAsync()
     {
         if (!store.Initialized) throw new InvalidOperationException("Initialize plugin storage before the runtime.");
+        var refresh = false;
+        lock (_sync) _startupPass = true;
+        try { await ActivateSavedPackagesAsync(); }
+        finally { lock (_sync) { _startupPass = false; refresh = _refreshAfterStartup; _refreshAfterStartup = false; } }
+        // A package that reported a change while it activated is read again, once for the whole pass; that refresh
+        // announces the pass.
+        if (refresh) await RefreshCapabilitiesAsync();
+        else NotifyChanged();
+    }
+
+    private async Task ActivateSavedPackagesAsync()
+    {
         foreach (var (package, directory) in store.InspectInstalled())
         {
             if (package.Manifest is not { } manifest) continue;
@@ -251,7 +267,6 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             catch (Exception ex) when (ex is not OutOfMemoryException)
             { lock (_sync) slot.Error = "Plugin enablement could not be loaded: " + ex.GetType().Name; }
         }
-        NotifyChanged();
     }
 
     /// <summary>
@@ -781,7 +796,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
 
     // Reads the capabilities of every included package. With a package given, as in the startup pass, only that one
     // is read: a package the published index read for the same activation keeps its entries from there. A change
-    // since that read has queued a refresh, which reads every package again.
+    // since that read asks for a refresh, which reads every package again once the startup pass has ended.
     private Index BuildIndex(Slot? only = null)
     {
         Slot[] slots;
@@ -905,7 +920,11 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
     private sealed class CapabilityCollisionException(string message) : Exception(message);
     private void QueueRefresh()
     {
-        lock (_sync) if (_disposed) return;
+        lock (_sync)
+        {
+            if (_disposed) return;
+            if (_startupPass) { _refreshAfterStartup = true; return; }
+        }
         Interlocked.Exchange(ref _refreshRequested, 1);
         if (Interlocked.CompareExchange(ref _refreshRunning, 1, 0) != 0) return;
         _ = Task.Run(async () =>
