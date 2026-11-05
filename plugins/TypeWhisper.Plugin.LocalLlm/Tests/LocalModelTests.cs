@@ -121,6 +121,74 @@ public sealed class LocalModelTests
     }
 
     [Fact]
+    public async Task VerifiedModelIsTrustedAfterRestartUntilItsStampChanges()
+    {
+        using var fixture = new PortableFixture();
+        byte[] expected = [1, 2, 3, 4];
+        var model = new LocalLlmModelDefinition("fixture", "Fixture", "4 bytes", 0, false,
+            "https://fixture.invalid/model", "model.gguf", 4, Convert.ToHexString(SHA256.HashData(expected)));
+        var directory = Path.Combine(fixture.Host.PluginAssetDirectory, "Models", model.Id);
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, model.FileName);
+        await File.WriteAllBytesAsync(path, expected);
+        var written = DateTime.UtcNow.AddMinutes(-10);
+        File.SetLastWriteTimeUtc(path, written);
+        using (var first = new LocalLlmPlugin([model]))
+        {
+            await first.ActivateAsync(fixture.Host);
+            await first.CacheVerification;
+            Assert.True(first.LocalModels[0].Downloaded);
+            await first.DeactivateAsync();
+        }
+        Assert.True(File.Exists(path + ".verified.json"));
+        // Different bytes behind the recorded size and last write time: a matching receipt means the model is not read again.
+        await File.WriteAllBytesAsync(path, [4, 3, 2, 1]);
+        File.SetLastWriteTimeUtc(path, written);
+        using var restarted = new LocalLlmPlugin([model]);
+        await restarted.ActivateAsync(fixture.Host);
+        await restarted.CacheVerification;
+        Assert.True(restarted.LocalModels[0].Downloaded);
+        // A changed stamp is verified by hashing again, also before native loading.
+        File.SetLastWriteTimeUtc(path, written.AddSeconds(2));
+        Assert.False(restarted.LocalModels[0].Downloaded);
+        var error = await Assert.ThrowsAsync<IOException>(() => restarted.LoadModelAsync(model.Id, default));
+        Assert.Contains("integrity check", error.Message);
+        await restarted.CacheVerification;
+        Assert.False(restarted.LocalModels[0].Downloaded);
+    }
+
+    [Fact]
+    public async Task FreshlyWrittenModelGetsAReceiptOnlyOnceSettled_AndRemovalDeletesIt()
+    {
+        using var fixture = new PortableFixture();
+        byte[] expected = [1, 2, 3, 4];
+        var model = new LocalLlmModelDefinition("fixture", "Fixture", "4 bytes", 0, false,
+            "https://fixture.invalid/model", "model.gguf", 4, Convert.ToHexString(SHA256.HashData(expected)));
+        var directory = Path.Combine(fixture.Host.PluginAssetDirectory, "Models", model.Id);
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, model.FileName);
+        await File.WriteAllBytesAsync(path, expected);
+        // A stamp ahead of the clock stays within the file-time resolution however late the scan below starts.
+        File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddMinutes(1));
+        using var plugin = new LocalLlmPlugin([model]);
+        await plugin.ActivateAsync(fixture.Host);
+        await plugin.CacheVerification;
+        Assert.True(plugin.LocalModels[0].Downloaded);
+        // A rewrite within the file-time resolution could keep this stamp, so it is not recorded yet.
+        Assert.False(File.Exists(path + ".verified.json"));
+        File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddMinutes(-10));
+        await plugin.DeactivateAsync();
+        await plugin.ActivateAsync(fixture.Host);
+        await plugin.CacheVerification;
+        Assert.True(plugin.LocalModels[0].Downloaded);
+        Assert.True(File.Exists(path + ".verified.json"));
+        Assert.Empty(Directory.GetFiles(directory, "*.tmp"));
+        await plugin.RemoveModelAsync(model.Id, default);
+        Assert.False(File.Exists(path));
+        Assert.False(File.Exists(path + ".verified.json"));
+    }
+
+    [Fact]
     public async Task InterruptedScanResumesAfterFailedLoadOrCancelledOperation()
     {
         using var fixture = new PortableFixture();
