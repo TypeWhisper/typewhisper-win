@@ -40,6 +40,17 @@ public sealed class PortablePackageTests : IDisposable
     }
 
     [Fact]
+    public void Localization_CoversEveryStringThePluginShows()
+    {
+        var english = Read(Path.Combine(ProjectDirectory, "Localization", "en.json"));
+        var source = File.ReadAllText(Path.Combine(ProjectDirectory, "GamesPlugin.cs"));
+        var shown = System.Text.RegularExpressions.Regex.Matches(source, "\\bL\\(\"((?:[^\"\\\\]|\\\\.)*)\"").Select(match => match.Groups[1].Value).ToArray();
+
+        Assert.NotEmpty(shown);
+        Assert.All(shown, text => Assert.True(english.ContainsKey(text), "Missing from Localization/en.json: " + text));
+    }
+
+    [Fact]
     public async Task Package_InstallsAsADictationTarget_OnlyOnAHostThatOffersIt()
     {
         var manifest = PortablePluginPackage.ReadManifest(ProjectDirectory);

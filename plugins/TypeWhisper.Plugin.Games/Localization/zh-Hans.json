@@ -1,13 +1,15 @@
 {
   "World of Warcraft folder": "World of Warcraft 文件夹",
-  "Leave empty to find World of Warcraft through Battle.net and its default folders. If it is installed elsewhere, enter the folder that holds _retail_, _classic_ or _forever_.": "留空即可通过 Battle.net 和默认文件夹查找 World of Warcraft。如果安装在其他位置，请输入包含 _retail_、_classic_ 或 _forever_ 的文件夹。",
+  "Leave empty to find World of Warcraft through Battle.net and its default folders. If it is installed elsewhere, choose the folder that holds _retail_, _classic_ or _forever_.": "留空即可通过 Battle.net 和默认文件夹查找 World of Warcraft。如果安装在其他位置，请选择包含 _retail_、_classic_ 或 _forever_ 的文件夹。",
+  "{0} (found automatically)": "{0}（已自动找到）",
+  "Not found automatically. Choose the World of Warcraft folder.": "未能自动找到。请选择 World of Warcraft 文件夹。",
   "Enter the full path of the World of Warcraft folder.": "请输入 World of Warcraft 文件夹的完整路径。",
   "Install add-on": "安装游戏插件",
   "Update add-on": "更新游戏插件",
   "Reinstall add-on": "重新安装游戏插件",
   "Copies the TypeWhisper add-on into every World of Warcraft version found. It opens the chat without closing an open one and shows your dictation as a cast bar. Type /tw in the game for its settings.": "将 TypeWhisper 游戏插件复制到找到的每个 World of Warcraft 版本中。它会打开聊天框而不关闭已打开的聊天框，并以施法条显示你的听写。在游戏中输入 /tw 进行设置。",
-  "World of Warcraft was not found. Enter its folder under World of Warcraft folder and save.": "未找到 World of Warcraft。请在“World of Warcraft 文件夹”中输入其文件夹并保存。",
-  "This folder contains no World of Warcraft version. Enter the folder that holds _retail_, _classic_ or _forever_.": "此文件夹中没有 World of Warcraft 版本。请输入包含 _retail_、_classic_ 或 _forever_ 的文件夹。",
+  "World of Warcraft was not found. Choose its folder under World of Warcraft folder and save.": "未找到 World of Warcraft。请在“World of Warcraft 文件夹”中选择其文件夹并保存。",
+  "This folder contains no World of Warcraft version. Choose the folder that holds _retail_, _classic_ or _forever_.": "此文件夹中没有 World of Warcraft 版本。请选择包含 _retail_、_classic_ 或 _forever_ 的文件夹。",
   "Installed for {0}. If the game is running, type /reload in the chat. Settings: type /tw in the game.": "已为 {0} 安装。如果游戏正在运行，请在聊天中输入 /reload。设置：在游戏中输入 /tw。",
   "The add-on could not be installed for {0}. Close the game and try again.": "无法为 {0} 安装游戏插件。请关闭游戏后重试。",
   "Translation is chosen in the game, but the default LLM is missing or unavailable, so messages go out untranslated. Open Default LLM in Workflows to choose one.": "游戏中已选择翻译，但默认 LLM 缺失或不可用，因此消息将以原文发送。请在“工作流”中打开“默认 LLM”进行选择。"

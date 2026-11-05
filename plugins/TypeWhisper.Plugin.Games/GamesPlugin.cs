@@ -103,9 +103,16 @@ public sealed class GamesPlugin : IDictationTargetPlugin, IPluginTextSettings, I
     public IReadOnlyList<PluginTextSetting> TextSettings =>
     [
         new(FolderSettingId, L("World of Warcraft folder", "World-of-Warcraft-Ordner"),
-            L("Leave empty to find World of Warcraft through Battle.net and its default folders. If it is installed elsewhere, enter the folder that holds _retail_, _classic_ or _forever_.",
-                "Leer lassen, um World of Warcraft über Battle.net und die Standardordner zu finden. Ist es woanders installiert, gib den Ordner ein, der _retail_, _classic_ oder _forever_ enthält."),
+            L("Leave empty to find World of Warcraft through Battle.net and its default folders. If it is installed elsewhere, choose the folder that holds _retail_, _classic_ or _forever_.",
+                "Leer lassen, um World of Warcraft über Battle.net und die Standardordner zu finden. Ist es woanders installiert, wähle den Ordner, der _retail_, _classic_ oder _forever_ enthält."),
             ChosenFolder ?? "", MaxFolderLength)
+        {
+            Kind = PluginTextSettingKind.Folder,
+            // An empty field finds the game by itself; the hint says where, or that it found nothing.
+            Placeholder = DetectedFolder() is { } detected
+                ? L("{0} (found automatically)", "{0} (automatisch gefunden)", detected)
+                : L("Not found automatically. Choose the World of Warcraft folder.", "Nicht automatisch gefunden. Wähle den World-of-Warcraft-Ordner.")
+        }
     ];
 
     /// <inheritdoc />
@@ -144,10 +151,10 @@ public sealed class GamesPlugin : IDictationTargetPlugin, IPluginTextSettings, I
         var versions = FindVersions();
         if (versions.Count == 0)
             return Task.FromResult<string?>(ChosenFolder is null
-                ? L("World of Warcraft was not found. Enter its folder under World of Warcraft folder and save.",
-                    "World of Warcraft wurde nicht gefunden. Gib seinen Ordner unter World-of-Warcraft-Ordner ein und speichere.")
-                : L("This folder contains no World of Warcraft version. Enter the folder that holds _retail_, _classic_ or _forever_.",
-                    "Dieser Ordner enthält keine World-of-Warcraft-Version. Gib den Ordner ein, der _retail_, _classic_ oder _forever_ enthält."));
+                ? L("World of Warcraft was not found. Choose its folder under World of Warcraft folder and save.",
+                    "World of Warcraft wurde nicht gefunden. Wähle seinen Ordner unter World-of-Warcraft-Ordner und speichere.")
+                : L("This folder contains no World of Warcraft version. Choose the folder that holds _retail_, _classic_ or _forever_.",
+                    "Dieser Ordner enthält keine World-of-Warcraft-Version. Wähle den Ordner, der _retail_, _classic_ oder _forever_ enthält."));
         var failures = WowAddOn.Install(versions);
         foreach (var version in versions) WriteStatus(version.Path);
         var installed = versions.Where(version => failures.All(failure => failure.Folder != version)).ToArray();
@@ -169,6 +176,10 @@ public sealed class GamesPlugin : IDictationTargetPlugin, IPluginTextSettings, I
 
     private IReadOnlyList<WowVersionFolder> FindVersions() => _findVersions?.Invoke()
         ?? WowAddOn.FindInstallRoots(ChosenFolder).SelectMany(WowAddOn.VersionFolders).ToArray();
+
+    // The installation found without a chosen folder, through Battle.net and the default folders.
+    private string? DetectedFolder() => (_findVersions?.Invoke() ?? WowAddOn.FindInstallRoots().SelectMany(WowAddOn.VersionFolders).ToArray())
+        .Select(version => Path.GetDirectoryName(version.Path)).FirstOrDefault(folder => !string.IsNullOrEmpty(folder));
 
     // Tells the add-on which LLM translates its messages; it shows the name on its page after the next /reload.
     private void WriteStatus(string? versionFolder)

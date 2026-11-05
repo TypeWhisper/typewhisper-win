@@ -145,6 +145,19 @@ public sealed class GamesPluginTests : IDisposable
     }
 
     [Fact]
+    public async Task FolderSetting_OffersThePicker_AndSaysWhereTheGameWasFound()
+    {
+        Version("_retail_", addOn: false);
+        var found = Assert.Single((await ActiveAsync(() => WowAddOn.VersionFolders(_root))).TextSettings);
+        var missing = Assert.Single((await ActiveAsync(() => [])).TextSettings);
+
+        Assert.Equal(PluginTextSettingKind.Folder, found.Kind);
+        Assert.Equal("", found.Value);
+        Assert.Equal(_root + " (found automatically)", found.Placeholder);
+        Assert.Equal("Not found automatically. Choose the World of Warcraft folder.", missing.Placeholder);
+    }
+
+    [Fact]
     public async Task FolderSetting_TakesAFullPathOrNothing()
     {
         var plugin = await ActiveAsync();

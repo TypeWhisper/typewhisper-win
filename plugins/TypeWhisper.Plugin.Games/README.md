@@ -20,7 +20,7 @@ Sending, the cast bar and a translation language are set on the add-on's page in
 
 ## Setup
 
-Install and turn on the plugin under **Settings › Plugins**, then click **Install add-on** on its page. The plugin finds World of Warcraft through Battle.net's product database and the default folders. If the game is installed elsewhere, enter its folder (the one that holds `_retail_`, `_classic_` or `_forever_`) under **World of Warcraft folder** and save. The button reads **Update add-on** when a version has an older add-on and **Reinstall add-on** when every version is current.
+Install and turn on the plugin under **Settings › Plugins**, then click **Install add-on** on its page. The plugin finds World of Warcraft through Battle.net's product database and the default folders; the empty **World of Warcraft folder** field shows where it found the game. If the game is installed elsewhere, choose its folder (the one that holds `_retail_`, `_classic_` or `_forever_`) with **Browse…** or type it, then save. The button reads **Update add-on** when a version has an older add-on and **Reinstall add-on** when every version is current.
 
 ## Build and verification
 

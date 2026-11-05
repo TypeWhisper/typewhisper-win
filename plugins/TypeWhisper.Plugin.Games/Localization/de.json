@@ -1,13 +1,15 @@
 {
   "World of Warcraft folder": "World-of-Warcraft-Ordner",
-  "Leave empty to find World of Warcraft through Battle.net and its default folders. If it is installed elsewhere, enter the folder that holds _retail_, _classic_ or _forever_.": "Leer lassen, um World of Warcraft über Battle.net und die Standardordner zu finden. Ist es woanders installiert, gib den Ordner ein, der _retail_, _classic_ oder _forever_ enthält.",
+  "Leave empty to find World of Warcraft through Battle.net and its default folders. If it is installed elsewhere, choose the folder that holds _retail_, _classic_ or _forever_.": "Leer lassen, um World of Warcraft über Battle.net und die Standardordner zu finden. Ist es woanders installiert, wähle den Ordner, der _retail_, _classic_ oder _forever_ enthält.",
+  "{0} (found automatically)": "{0} (automatisch gefunden)",
+  "Not found automatically. Choose the World of Warcraft folder.": "Nicht automatisch gefunden. Wähle den World-of-Warcraft-Ordner.",
   "Enter the full path of the World of Warcraft folder.": "Gib den vollständigen Pfad des World-of-Warcraft-Ordners ein.",
   "Install add-on": "Add-on installieren",
   "Update add-on": "Add-on aktualisieren",
   "Reinstall add-on": "Add-on neu installieren",
   "Copies the TypeWhisper add-on into every World of Warcraft version found. It opens the chat without closing an open one and shows your dictation as a cast bar. Type /tw in the game for its settings.": "Kopiert das TypeWhisper-Add-on in jede gefundene World-of-Warcraft-Version. Es öffnet den Chat, ohne einen offenen zu schließen, und zeigt dein Diktat als Zauberbalken. Gib /tw im Spiel ein, um es einzustellen.",
-  "World of Warcraft was not found. Enter its folder under World of Warcraft folder and save.": "World of Warcraft wurde nicht gefunden. Gib seinen Ordner unter World-of-Warcraft-Ordner ein und speichere.",
-  "This folder contains no World of Warcraft version. Enter the folder that holds _retail_, _classic_ or _forever_.": "Dieser Ordner enthält keine World-of-Warcraft-Version. Gib den Ordner ein, der _retail_, _classic_ oder _forever_ enthält.",
+  "World of Warcraft was not found. Choose its folder under World of Warcraft folder and save.": "World of Warcraft wurde nicht gefunden. Wähle seinen Ordner unter World-of-Warcraft-Ordner und speichere.",
+  "This folder contains no World of Warcraft version. Choose the folder that holds _retail_, _classic_ or _forever_.": "Dieser Ordner enthält keine World-of-Warcraft-Version. Wähle den Ordner, der _retail_, _classic_ oder _forever_ enthält.",
   "Installed for {0}. If the game is running, type /reload in the chat. Settings: type /tw in the game.": "Installiert für {0}. Läuft das Spiel, gib /reload im Chat ein. Einstellungen: Gib /tw im Spiel ein.",
   "The add-on could not be installed for {0}. Close the game and try again.": "Das Add-on konnte für {0} nicht installiert werden. Schließe das Spiel und versuche es erneut.",
   "Translation is chosen in the game, but the default LLM is missing or unavailable, so messages go out untranslated. Open Default LLM in Workflows to choose one.": "Im Spiel ist eine Übersetzung gewählt, aber das Standard-LLM fehlt oder ist nicht verfügbar, deshalb gehen Nachrichten unübersetzt raus. Öffne „Standard-LLM“ unter Workflows, um eines zu wählen."
