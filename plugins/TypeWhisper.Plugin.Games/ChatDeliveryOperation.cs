@@ -1,7 +1,6 @@
-using TypeWhisper.Core.Models;
-using TypeWhisper.Core.Services;
+using TypeWhisper.PluginSDK;
 
-namespace TypeWhisper.WinUI;
+namespace TypeWhisper.Plugin.Games;
 
 internal interface IChatDeliveryPlatform
 {
@@ -15,6 +14,25 @@ internal interface IChatDeliveryPlatform
     Task SettleAsync();
     /// <summary>Waits between two messages.</summary>
     Task PauseAsync(int milliseconds);
+}
+
+/// <summary>Delivers into the game through the input TypeWhisper provides for the dictation's window.</summary>
+internal sealed class TargetInputPlatform(IDictationTargetInput input, int settleMilliseconds, CancellationToken ct) : IChatDeliveryPlatform
+{
+    private readonly int _settle = Math.Clamp(settleMilliseconds, 0, 1000);
+
+    public bool TargetIsReady => input.IsReady;
+    public bool Press(IReadOnlyList<ushort> chord) => input.PressKeys(chord);
+    public Task<bool> InsertAsync(string text) => input.PasteAsync(text, ct);
+
+    // A hung or loading game would drop the next key; wait until its window answers, then give it a few frames.
+    public async Task SettleAsync()
+    {
+        await input.WaitUntilResponsiveAsync(ct);
+        if (_settle > 0) await Task.Delay(_settle, ct);
+    }
+
+    public Task PauseAsync(int milliseconds) => Task.Delay(Math.Clamp(milliseconds, 0, 5000), ct);
 }
 
 // TooLong: without Enter the text needs more than the one message the chat field holds, so nothing was inserted.
@@ -39,15 +57,12 @@ internal static class ChatDeliveryOperation
         CancellationToken ct = default)
     {
         var parts = ChatMessageSplitter.Split(text, options.MaxMessageBytes);
-        // Without Enter every part would land in the same field, which keeps only one message. Inserting a longer text
-        // would cut it while reporting success, so it is not inserted; the caller keeps it on the clipboard and in review.
-        if (!options.Submit && parts.Count > 1) return new(0, parts.Count, ChatDeliveryStage.TooLong);
-        IReadOnlyList<ushort> open = options.OpenKey switch
-        {
-            ChatOpenKey.Enter => Enter,
-            ChatOpenKey.AddOn => options.AddOnChord,
-            _ => []
-        };
+        // Without Enter every part would land in the same field, which keeps only one message. Without a key that opens
+        // the chat, the Enter that sends the first part closes the chat, and the rest would go to the game itself.
+        // Inserting a longer text would lose part of it while reporting success, so it is not inserted; the caller
+        // keeps it on the clipboard and in review.
+        var open = options.OpenKeys;
+        if (parts.Count > 1 && (!options.Submit || open.Count == 0)) return new(0, parts.Count, ChatDeliveryStage.TooLong);
         for (var i = 0; i < parts.Count; i++)
         {
             if (i > 0)

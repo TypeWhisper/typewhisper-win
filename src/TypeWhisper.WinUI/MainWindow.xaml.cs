@@ -251,11 +251,12 @@ public sealed partial class MainWindow : Window
         var revision = ++_overlayRevision;
         _settingsWindow?.SetLiveTranscriptionAvailability(_dictation.SupportsLiveTranscription);
         DictationChanged?.Invoke(_dictation.Status, _dictation.IsRecording);
-        // The game add-on shows recording and transcribing in the game. Errors, copies (also a chosen copy instead of
-        // pasting) and the Escape warning still show here, since the game's bar cannot say what happened to the text.
-        _gameIndicatorShown = _dictation.ShowsGameIndicator;
-        if (_gameIndicatorShown && _dictation.OverlayState is { ShowsCancelWarning: false, ShowsCancelled: false, CopyChosen: false } gameState
-            && gameState.Phase is DictationPhase.Recording or DictationPhase.Processing or DictationPhase.LoadingModel or DictationPhase.Completed)
+        // A plugin that took the dictation over, such as a game's add-on, can show recording and transcribing in its
+        // app. Errors, copies (also a chosen copy instead of pasting) and the Escape warning still show here, since the
+        // app's own display cannot say what happened to the text.
+        _targetIndicatorShown = _dictation.ShowsTargetIndicator;
+        if (_targetIndicatorShown && _dictation.OverlayState is { ShowsCancelWarning: false, ShowsCancelled: false, CopyChosen: false } targetState
+            && targetState.Phase is DictationPhase.Recording or DictationPhase.Processing or DictationPhase.LoadingModel or DictationPhase.Completed)
         {
             _liveOverlay?.HidePreview();
             return;
@@ -292,8 +293,8 @@ public sealed partial class MainWindow : Window
         }
     }
     private int _overlayRevision;
-    // What the last overlay update saw, so a window switch updates the overlay only when the game's bar comes or goes.
-    private bool _gameIndicatorShown;
+    // What the last overlay update saw, so a window switch updates the overlay only when the app's display comes or goes.
+    private bool _targetIndicatorShown;
     private Guid _completedRecordingId;
     private bool _completedPreviewExpired;
     private async Task HideCompletedOverlayAsync(Guid recordingId)

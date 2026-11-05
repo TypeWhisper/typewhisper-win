@@ -1,7 +1,7 @@
-namespace TypeWhisper.Core.Models;
+namespace TypeWhisper.Plugin.Games;
 
 /// <summary>
-/// A game whose text chat TypeWhisper can write into.
+/// A game whose text chat the plugin can write into.
 /// </summary>
 /// <param name="Id">Stable id used in settings.</param>
 /// <param name="Name">Display name; a product name that is not translated.</param>
@@ -11,7 +11,7 @@ namespace TypeWhisper.Core.Models;
 /// <param name="AddOnChordName">The add-on chord as shown to the player.</param>
 /// <param name="MessageIntervalMilliseconds">Pause between the messages of one long dictation.</param>
 /// <param name="Indicator">Chords that tell the add-on what a dictation is doing, or null without an in-game indicator.</param>
-public sealed record GameDefinition(string Id, string Name, IReadOnlyList<string> ProcessNames, int? MaxMessageBytes,
+internal sealed record GameDefinition(string Id, string Name, IReadOnlyList<string> ProcessNames, int? MaxMessageBytes,
     IReadOnlyList<ushort> AddOnChord, string AddOnChordName, int MessageIntervalMilliseconds, GameIndicatorChords? Indicator = null);
 
 /// <summary>
@@ -21,12 +21,12 @@ public sealed record GameDefinition(string Id, string Name, IReadOnlyList<string
 /// <param name="Recording">Recording started.</param>
 /// <param name="Transcribing">Recording ended and the speech is being transcribed.</param>
 /// <param name="Stopped">The dictation was canceled or failed. A finished dictation needs no chord: the add-on sees the chat open.</param>
-public sealed record GameIndicatorChords(IReadOnlyList<ushort> Recording, IReadOnlyList<ushort> Transcribing, IReadOnlyList<ushort> Stopped);
+internal sealed record GameIndicatorChords(IReadOnlyList<ushort> Recording, IReadOnlyList<ushort> Transcribing, IReadOnlyList<ushort> Stopped);
 
 /// <summary>
 /// Lists the games with chat support.
 /// </summary>
-public static class GameCatalog
+internal static class GameCatalog
 {
     /// <summary>
     /// World of Warcraft in all versions (Retail, Classic, Forever, test realms). Chat messages hold 255 UTF-8 bytes,

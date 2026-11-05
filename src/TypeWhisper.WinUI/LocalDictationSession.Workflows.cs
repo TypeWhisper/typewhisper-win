@@ -30,15 +30,17 @@ internal sealed partial class LocalDictationSession
                 _targetHostAtStart = await BrowserContext.CaptureHostAsync((int)_targetProcessId, _targetApp,
                     () => WindowsBrowserTargetReader.CaptureAsync(_target, (int)_targetProcessId, _targetApp, _operationCancellation.Token));
             _operationCancellation.Token.ThrowIfCancellationRequested();
-            // A language chosen in the game's add-on joins as the lowest-ranked App rule for the game.
-            CaptureGameAtStart();
+            // A translation the plugin that took the dictation over asks for joins as the lowest-ranked App rule.
+            BeginDictationTarget();
             var candidates = workflows.AsEnumerable();
-            if (_gameTranslationAtStart is { } translation)
+            if (await DictationTargetPlanAsync() is { } plan && TargetTranslationWorkflow(plan) is { } translation)
             {
+                // Without a ready LLM the message goes out as dictated: a failed translation would open review over the app.
                 var ready = TranslationLlmReady(translation);
-                AppDiagnostics.Write($"game.translation ready={ready}");
+                AppDiagnostics.Write($"dictation.target.translation ready={ready}");
                 if (ready) candidates = workflows.Append(translation);
             }
+            _operationCancellation.Token.ThrowIfCancellationRequested();
             _workflowAtStart = AutomaticWorkflowSnapshot.Select(candidates, _targetApp, _targetHostAtStart, WorkflowDefaults.Resolve);
         }
         catch (OperationCanceledException) when (_operationCancellation.Token.IsCancellationRequested) { throw; }
