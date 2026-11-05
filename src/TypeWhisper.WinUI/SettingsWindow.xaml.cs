@@ -610,8 +610,8 @@ public sealed partial class SettingsWindow : Window
     }
 
     // A page shown while the app started was rendered before startup registered shortcuts and loaded plugins and
-    // policy problems. Render it again, unless the user is working on it: then when focus leaves the page or a change
-    // on it was applied, or when the page is shown again anyway.
+    // policy problems. Render it again, unless the user is working on it: then when focus leaves the page, a change on
+    // it was applied or a menu or other popup closed, or when the page is shown again anyway.
     private bool _startupRefreshPending;
 
     internal void RefreshAfterStartup()
@@ -625,15 +625,28 @@ public sealed partial class SettingsWindow : Window
         if (_startupRefreshPending) DispatcherQueue.TryEnqueue(TryRefreshAfterStartup);
     }
 
+    private void RetryRefreshAfterPopup(object? sender, object e)
+    {
+        if (sender is Microsoft.UI.Xaml.Controls.Primitives.Popup popup) popup.Closed -= RetryRefreshAfterPopup;
+        RetryRefreshAfterStartup();
+    }
+
     private void TryRefreshAfterStartup()
     {
         if (!_startupRefreshPending || SetupHost.Child is not null || _searchActive || _checkingNavigation || CatalogScroll.Visibility != Visibility.Visible
             || ShortcutRecorder.AnyEditing || CatalogContent.XamlRoot is not { } root
-            // A tooltip is not the user's work; any other open popup is.
-            || VisualTreeHelper.GetOpenPopupsForXamlRoot(root).Any(popup => popup.Child is not ToolTip)
             // A change waiting for Apply (HTTP API port or token, history retention, a license key before Activate)
             // would be lost with the page, and one still running would show the values from before it.
             || UnappliedEdits.Any(Descendants(CatalogContent))) return;
+        // A tooltip is not the user's work; any other open popup is. Closing it can leave focus outside the page, as the
+        // search box's menu does, so the refresh is tried again then.
+        var popups = VisualTreeHelper.GetOpenPopupsForXamlRoot(root).Where(popup => popup.Child is not ToolTip).ToList();
+        foreach (var popup in popups)
+        {
+            popup.Closed -= RetryRefreshAfterPopup;
+            popup.Closed += RetryRefreshAfterPopup;
+        }
+        if (popups.Count > 0) return;
         for (var focused = FocusManager.GetFocusedElement(root) as DependencyObject; focused is not null; focused = VisualTreeHelper.GetParent(focused))
             if (ReferenceEquals(focused, CatalogContent)) return;
         var offset = CatalogScroll.VerticalOffset;
