@@ -70,7 +70,8 @@ internal sealed class LocalCtcVocabulary : IAsyncDisposable
 
     internal Task<string?> SetEnabledAsync(bool enabled) => SetEnabledAsync(enabled, CancellationToken.None);
 
-    internal async Task<string?> SetEnabledAsync(bool enabled, CancellationToken ct)
+    // load: false enables the add-on with its model released, as after an idle release; it loads when terms need it.
+    internal async Task<string?> SetEnabledAsync(bool enabled, CancellationToken ct, bool load = true)
     {
         if (!enabled) RequestCancelActivation();
         if (enabled && !await _settingsGate.WaitAsync(0, ct)) return Loc.T("A plugin operation is already in progress.");
@@ -81,7 +82,7 @@ internal sealed class LocalCtcVocabulary : IAsyncDisposable
         try
         {
             // Enablement is owned by the parent transcription plugin, never a separate preference.
-            await Task.Run(() => _session.SetEnabledAsync(enabled, activation.Token));
+            await Task.Run(() => _session.SetEnabledAsync(enabled, load, activation.Token));
             activation.Token.ThrowIfCancellationRequested();
             return Error = null;
         }

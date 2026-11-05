@@ -654,7 +654,9 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             catch (Exception ex) when (ex is not OutOfMemoryException) { LocalPluginError = ex.Message; }
             if (_disposed) return;
             var prepared = await warmUp;
-            await CtcVocabulary.SetEnabledAsync(Models.Enabled && CtcAllowed);
+            // Without dictionary terms nothing is rescored, so the model stays released until terms exist; the next
+            // dictation with terms loads it while the user speaks (PrepareTranscriptionModel), as after an idle release.
+            await CtcVocabulary.SetEnabledAsync(Models.Enabled && CtcAllowed, CancellationToken.None, load: await HasCtcTermsAsync());
             if (_disposed) return;
             // An enforced pair for a registry provider selects its model here; the local engine applied its own above.
             await ApplySelectionPolicyCoreAsync();

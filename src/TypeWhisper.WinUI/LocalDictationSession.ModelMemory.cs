@@ -30,7 +30,21 @@ internal sealed partial class LocalDictationSession
     {
         if (UsesRegistryProvider) _ = PrepareRegistryTranscriptionAsync(RegistrySelectionId(_providerId));
         else Models.PrepareForDictation();
-        if (RescoresWithCtc) CtcVocabulary.PrepareForDictation();
+        if (RescoresWithCtc) _ = PrepareCtcForTermsAsync();
+    }
+
+    // Only dictionary terms are rescored, so a dictionary without them never needs the rescoring model.
+    private async Task PrepareCtcForTermsAsync()
+    {
+        if (await HasCtcTermsAsync()) CtcVocabulary.PrepareForDictation();
+    }
+
+    // The snapshot is cached until dictionary.json changes, so this reads the file only after an edit.
+    // When it cannot be read, the model is treated as needed, as before.
+    private static async Task<bool> HasCtcTermsAsync()
+    {
+        try { return await Task.Run(() => DictationDictionarySnapshot.Load(DictationDictionarySnapshot.StoragePath).EnabledCtcEntries.Count > 0); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return true; }
     }
 
     // Failures surface on the transcription itself.
