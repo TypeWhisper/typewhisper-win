@@ -155,8 +155,10 @@ public sealed partial class SettingsWindow : Window
                 NativeWindowAppearance.RemoveSystemBorder(this);
             else foreach (var recorder in Descendants(SettingsRoot).OfType<ShortcutRecorder>()) recorder.Cancel(false);
         };
-        // A refresh after startup that waited for the user runs once focus has moved off the page.
-        CatalogContent.LostFocus += (_, _) => { if (_startupRefreshPending) DispatcherQueue.TryEnqueue(TryRefreshAfterStartup); };
+        // A refresh after startup that waited for the user runs once focus has moved off the page or a change that
+        // held it back was applied.
+        CatalogContent.LostFocus += (_, _) => RetryRefreshAfterStartup();
+        UnappliedEdits.Settled += RetryRefreshAfterStartup;
         AppWindow.Changed += (_, args) =>
         {
             if (_positioning || !args.DidPositionChange) return;
@@ -166,6 +168,7 @@ public sealed partial class SettingsWindow : Window
         SetPreferences(preferences);
         Closed += (_, _) =>
         {
+            UnappliedEdits.Settled -= RetryRefreshAfterStartup;
             _ = ShutdownSetupImportAsync();
             // Release the hosted view so the next settings window can show it.
             WorkspaceHost.Child = null;
@@ -607,8 +610,8 @@ public sealed partial class SettingsWindow : Window
     }
 
     // A page shown while the app started was rendered before startup registered shortcuts and loaded plugins and
-    // policy problems. Render it again, unless the user is working on it: then when focus leaves the page, or when
-    // the page is shown again anyway.
+    // policy problems. Render it again, unless the user is working on it: then when focus leaves the page or a change
+    // on it was applied, or when the page is shown again anyway.
     private bool _startupRefreshPending;
 
     internal void RefreshAfterStartup()
@@ -617,13 +620,19 @@ public sealed partial class SettingsWindow : Window
         TryRefreshAfterStartup();
     }
 
+    private void RetryRefreshAfterStartup()
+    {
+        if (_startupRefreshPending) DispatcherQueue.TryEnqueue(TryRefreshAfterStartup);
+    }
+
     private void TryRefreshAfterStartup()
     {
         if (!_startupRefreshPending || SetupHost.Child is not null || _searchActive || _checkingNavigation || CatalogScroll.Visibility != Visibility.Visible
             || ShortcutRecorder.AnyEditing || CatalogContent.XamlRoot is not { } root
             // A tooltip is not the user's work; any other open popup is.
             || VisualTreeHelper.GetOpenPopupsForXamlRoot(root).Any(popup => popup.Child is not ToolTip)
-            // A change waiting for Apply (HTTP API port or token, history retention) would be lost with the page.
+            // A change waiting for Apply (HTTP API port or token, history retention) would be lost with the page, and
+            // one still running would show the values from before it.
             || UnappliedEdits.Any(Descendants(CatalogContent))) return;
         for (var focused = FocusManager.GetFocusedElement(root) as DependencyObject; focused is not null; focused = VisualTreeHelper.GetParent(focused))
             if (ReferenceEquals(focused, CatalogContent)) return;
