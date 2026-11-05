@@ -132,6 +132,24 @@ public sealed partial class PortablePluginRuntimeRegistryTests : IDisposable
     }
 
     [Fact]
+    public async Task StartupKeepsTheDictationTargetOfAPackageActivatedEarlierInThePass()
+    {
+        var bundles = Path.Join(_root, "bundles");
+        Package(bundles, TargetId, typeof(DictationTargetProbePlugin));
+        Package(bundles, Id, typeof(RuntimeProbePlugin));
+        var store = new PortablePluginStore(Path.Join(_root, "store"), Version, _http);
+        // The target activates first, so the later activation keeps the target's entries from the published index.
+        await store.InitializeAsync(bundles, bootstrapPluginIds: [TargetId, Id]);
+        Host(TargetId).SetSetting("Enabled", true);
+        Host(Id).SetSetting("Enabled", true);
+        Host(Id).SetSetting("QuietActivation", true);
+        await using var registry = Registry(store);
+        await registry.InitializeAsync();
+        Assert.Equal(TargetId, Assert.Single(registry.DictationTargets).PluginId);
+        Assert.Equal(Id, Assert.Single(registry.TranscriptionProviders).PluginId);
+    }
+
+    [Fact]
     public async Task StartupCollisionKeepsTheEarlierOwnerAndReleasesTheLaterPackage()
     {
         var store = await Store(second: true);
