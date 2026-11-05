@@ -43,7 +43,7 @@
   "Remove game…": "ゲームを削除…",
   "New game {0}": "新しいゲーム {0}",
   "Game added. Enter its program name and the key its chat opens with, then save.": "ゲームを追加しました。プログラム名とチャットを開くキーを入力して保存してください。",
-  "{0} removed.": "{0} を削除しました。",
+  "Removed.": "削除しました。",
   "On": "オン",
   "While World of Warcraft is in front, dictation opens the chat, inserts the text and sends it, in messages of up to 255 bytes. The TypeWhisper add-on opens the chat without closing an open one and shows a cast bar in the game. Type /tw in the game to set sending, the bar and a translation.": "World of Warcraft が前面にあるとき、ディクテーションはチャットを開き、テキストを挿入して、最大 255 バイトのメッセージとして送信します。TypeWhisper アドオンは、開いているチャットを閉じずにチャットを開き、ゲーム内に詠唱バーを表示します。送信、バー、翻訳はゲーム内で /tw と入力して設定します。",
   "Turned off: TypeWhisper pastes into World of Warcraft as into any other app.": "オフになっています。TypeWhisper は World of Warcraft にも他のアプリと同じように貼り付けます。",

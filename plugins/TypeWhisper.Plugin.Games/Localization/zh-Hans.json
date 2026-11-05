@@ -43,7 +43,7 @@
   "Remove game…": "移除游戏…",
   "New game {0}": "新游戏 {0}",
   "Game added. Enter its program name and the key its chat opens with, then save.": "已添加游戏。请输入其程序名称和打开聊天的按键，然后保存。",
-  "{0} removed.": "已移除 {0}。",
+  "Removed.": "已移除。",
   "On": "开",
   "While World of Warcraft is in front, dictation opens the chat, inserts the text and sends it, in messages of up to 255 bytes. The TypeWhisper add-on opens the chat without closing an open one and shows a cast bar in the game. Type /tw in the game to set sending, the bar and a translation.": "当 World of Warcraft 位于前台时，听写会打开聊天框，插入文本并以每条最多 255 字节的消息发送。TypeWhisper 游戏插件会打开聊天框而不关闭已打开的聊天框，并在游戏中显示施法条。在游戏中输入 /tw 可设置发送、施法条和翻译。",
   "Turned off: TypeWhisper pastes into World of Warcraft as into any other app.": "已关闭：TypeWhisper 会像在其他应用中一样粘贴到 World of Warcraft 中。",

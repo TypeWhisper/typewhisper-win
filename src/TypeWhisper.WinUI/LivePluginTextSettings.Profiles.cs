@@ -291,7 +291,8 @@ internal sealed partial class LivePluginTextSettings
             }
             AutomationProperties.SetName(input, Loc.T("{0} for “{1}”", field.Title, name));
             AutomationProperties.SetHelpText(input, field.Description);
-            var border = new Border { Child = input, CornerRadius = new(8), BorderThickness = new(1),
+            var border = new Border { Child = input is TextBox { AcceptsReturn: false } hinted && !string.IsNullOrEmpty(field.Placeholder)
+                    ? WithPlaceholder(hinted, field.Placeholder) : input, CornerRadius = new(8), BorderThickness = new(1),
                 Background = (Brush)Application.Current.Resources["SurfaceBrush"],
                 BorderBrush = (Brush)Application.Current.Resources["HairlineBrush"] };
             input.GotFocus += (_, _) => border.BorderBrush = (Brush)Application.Current.Resources["AccentBrush"];
@@ -498,6 +499,26 @@ internal sealed partial class LivePluginTextSettings
             Style = (Style)Application.Current.Resources["SecondaryButtonStyle"] };
         button.Click += async (_, _) => await action();
         return button;
+    }
+
+    // The app's text box template has no placeholder part, so the hint is drawn over the empty field, as the settings
+    // search does.
+    private static Grid WithPlaceholder(TextBox text, string placeholder)
+    {
+        var hint = new TextBlock
+        {
+            Text = placeholder, Margin = text.Padding, FontSize = text.FontSize, VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis, IsHitTestVisible = false,
+            Foreground = (Brush)Application.Current.Resources["MutedBrush"]
+        };
+        AutomationProperties.SetAccessibilityView(hint, Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
+        void Update() => hint.Visibility = text.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+        text.TextChanged += (_, _) => Update();
+        Update();
+        var grid = new Grid();
+        grid.Children.Add(text);
+        grid.Children.Add(hint);
+        return grid;
     }
 
     // A folder setting keeps its path editable and offers the system's folder picker beside it. A chosen folder fills

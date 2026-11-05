@@ -189,7 +189,7 @@ public sealed class GamesPluginTests : IDisposable
         await plugin.SaveProfileSettingsAsync(game, new Dictionary<string, string> { [game + ":process"] = "Wardogs" }, null, default);
         Assert.Equal("remove:" + game, plugin.RemoveProfileActionId);
 
-        Assert.Equal("New game 1 removed.", await plugin.ExecuteSettingsActionAsync("remove:" + game, default));
+        Assert.Equal("Removed.", await plugin.ExecuteSettingsActionAsync("remove:" + game, default));
 
         Assert.Equal("wow", plugin.TextSettings[0].Value);
         Assert.Single(plugin.TextSettings[0].Choices);

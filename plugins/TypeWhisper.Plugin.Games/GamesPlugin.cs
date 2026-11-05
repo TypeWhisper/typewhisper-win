@@ -215,7 +215,8 @@ public sealed class GamesPlugin : IDictationTargetPlugin, IPluginProfileSettings
         {
             Save(settings with { CustomGames = settings.CustomGames.Where(game => game.Id != selected.Id).ToArray() });
             _selected = WorldOfWarcraftGame.GameId;
-            return _text.L("{0} removed.", "{0} entfernt.", selected.Name);
+            // The page puts the game's name before the message.
+            return _text.L("Removed.", "Entfernt.");
         }
         // A host that shows the page without the list runs the chosen game's buttons with its saved values.
         if (Selected.Actions(_text).Any(action => action.Id == id))

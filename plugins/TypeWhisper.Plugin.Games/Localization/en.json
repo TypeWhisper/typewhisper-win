@@ -43,7 +43,7 @@
   "Remove game…": "Remove game…",
   "New game {0}": "New game {0}",
   "Game added. Enter its program name and the key its chat opens with, then save.": "Game added. Enter its program name and the key its chat opens with, then save.",
-  "{0} removed.": "{0} removed.",
+  "Removed.": "Removed.",
   "On": "On",
   "While World of Warcraft is in front, dictation opens the chat, inserts the text and sends it, in messages of up to 255 bytes. The TypeWhisper add-on opens the chat without closing an open one and shows a cast bar in the game. Type /tw in the game to set sending, the bar and a translation.": "While World of Warcraft is in front, dictation opens the chat, inserts the text and sends it, in messages of up to 255 bytes. The TypeWhisper add-on opens the chat without closing an open one and shows a cast bar in the game. Type /tw in the game to set sending, the bar and a translation.",
   "Turned off: TypeWhisper pastes into World of Warcraft as into any other app.": "Turned off: TypeWhisper pastes into World of Warcraft as into any other app.",
