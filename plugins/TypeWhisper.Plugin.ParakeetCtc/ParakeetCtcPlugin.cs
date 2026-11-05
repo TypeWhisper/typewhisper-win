@@ -88,13 +88,15 @@ public sealed class ParakeetCtcPlugin : IVocabularyRescorerPlugin
         }
         var candidates = new List<(int Start, int Length, string Term, string Original, double Similarity, double From, double To)>();
         var similarityRejected = 0; var spanRejected = 0; var timingRejected = 0; double bestSimilarity = 0;
+        // The transcript's words and windows are the same for every term.
+        var transcript = CtcVocabularySpans.Prepare(request.Text);
         foreach (var term in request.Terms.Take(256).DistinctBy(t => t.Text, StringComparer.Ordinal))
         {
             cancellation.ThrowIfCancellationRequested();
             if (string.IsNullOrWhiteSpace(term.Text) || term.Text.Length > 160) continue;
             var threshold = term.MinimumSimilarity ?? CtcBiasPolicy.MinimumSimilarity(Math.Min(request.Terms.Count, 256));
             if (!float.IsFinite(threshold) || threshold is < 0 or > 1) continue;
-            var spans = CtcVocabularySpans.Find(request.Text, term.Text, threshold, out var termSimilarityRejected, out var termSpanRejected, out var termBest);
+            var spans = CtcVocabularySpans.Find(transcript, term.Text, threshold, out var termSimilarityRejected, out var termSpanRejected, out var termBest);
             similarityRejected += termSimilarityRejected; spanRejected += termSpanRejected; bestSimilarity = Math.Max(bestSimilarity, termBest);
             foreach (var span in spans)
             {
