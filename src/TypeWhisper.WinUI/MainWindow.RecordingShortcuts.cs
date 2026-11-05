@@ -64,7 +64,8 @@ public sealed partial class MainWindow
         var error = entry.Settings.Save(WorkflowShortcutCatalog.Canonical(value));
         _settingsValues[key] = entry.Settings.Value;
         // A hook installed now would run before the Esc/Enter hook, so a held shortcut would see Enter first.
-        if (entry.Registration.HookInstalledByLastChange) MoveDictationKeyHookToFront();
+        // If moving that hook fails, the shortcut still applies, and Settings shows why Esc or Enter may not work.
+        if (entry.Registration.HookInstalledByLastChange && MoveDictationKeyHookToFront() is { } reorderError) error ??= reorderError;
         return error;
     }
 
