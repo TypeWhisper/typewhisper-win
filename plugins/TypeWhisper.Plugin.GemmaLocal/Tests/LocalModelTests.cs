@@ -142,6 +142,8 @@ public sealed class LocalModelTests
         Directory.CreateDirectory(directory);
         var path = Path.Combine(directory, model.FileName);
         await File.WriteAllBytesAsync(path, expected);
+        // A stamp ahead of the clock stays within the file-time resolution however late the scan below starts.
+        File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddMinutes(1));
         using var plugin = new GemmaLocalPlugin([model]);
         await plugin.ActivateAsync(fixture.Host);
         await plugin.CacheVerification;

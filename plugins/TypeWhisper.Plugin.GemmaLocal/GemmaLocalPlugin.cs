@@ -435,8 +435,9 @@ public sealed partial class GemmaLocalPlugin : ILlmProviderPlugin, ILocalLlmMode
             var path = GetModelFilePath(modelId, model.FileName);
             ct.ThrowIfCancellationRequested();
             if (_loadedModelId == modelId) UnloadModel();
-            File.Delete(path);
+            // The receipt goes first, so a receipt that cannot be deleted leaves the model in place for a retry.
             File.Delete(GetReceiptPath(path));
+            File.Delete(path);
             _verifiedModels.TryRemove(modelId, out _);
             _host?.NotifyCapabilitiesChanged();
         }
