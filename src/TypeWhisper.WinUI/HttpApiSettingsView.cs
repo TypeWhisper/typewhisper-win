@@ -9,10 +9,6 @@ namespace TypeWhisper.WinUI;
 
 internal sealed class HttpApiSettingsView : UserControl
 {
-    private readonly Func<bool> _unapplied;
-    // A port or token setting changed here waits for Apply; Settings does not rebuild the page over it.
-    internal bool HasUnappliedChanges => _unapplied();
-
     internal HttpApiSettingsView(WinUIHttpApi api)
     {
         var body = new SettingsRows();
@@ -44,7 +40,8 @@ internal sealed class HttpApiSettingsView : UserControl
         var actions = new SettingsRow().Below(footer);
         body.Children.Add(actions);
         var updating = false;
-        _unapplied = () => api.Enabled && (port.Value != api.Port || requireAuthentication.IsOn != api.RequireAuthentication);
+        // A port or token setting changed here waits for Apply.
+        UnappliedEdits.Track(this, () => api.Enabled && (port.Value != api.Port || requireAuthentication.IsOn != api.RequireAuthentication));
         void Refresh()
         {
             // The switch already says whether the API is on; while the app starts, a saved server has not started yet.
