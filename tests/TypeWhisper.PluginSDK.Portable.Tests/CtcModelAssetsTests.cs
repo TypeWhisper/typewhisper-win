@@ -2,6 +2,7 @@ using System.Formats.Tar;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json.Nodes;
 using SharpCompress.Compressors;
 using SharpCompress.Compressors.BZip2;
 using TypeWhisper.Plugin.ParakeetCtc;
@@ -136,6 +137,78 @@ public sealed class CtcModelAssetsTests : IDisposable
         Assert.Equal(4, requests);
         Assert.Equal(new byte[] { 1, 2, 3 }, File.ReadAllBytes(Path.Combine(Model, "model.int8.onnx")));
     }
+
+    [Fact]
+    public async Task UnchangedVerifiedAssetsAreNotHashedAgainUntilTheirStampChanges()
+    {
+        var archive = ValidArchive();
+        var requests = 0;
+        using var client = new HttpClient(new Handler((request, _) =>
+        {
+            requests++;
+            return Task.FromResult(Response(request.RequestUri!.AbsolutePath == "/model" ? archive : Tokenizer));
+        }));
+        await Create(client, archive).EnsureAsync(Model, CancellationToken.None);
+        // Files written moments ago get no stamp: a rewrite within the file-time resolution could keep it.
+        Assert.Empty(Stamps());
+        AgeInstalledFiles();
+        await Create(client, archive).EnsureAsync(Model, CancellationToken.None);
+        Assert.Equal(["model.int8.onnx", "tokenizer.json", "tokens.txt"], Stamps().Keys.Order(StringComparer.Ordinal));
+        var receipt = Path.Combine(Model, "verified-assets.json");
+        var receiptWritten = DateTime.UtcNow.AddMinutes(-5);
+        File.SetLastWriteTimeUtc(receipt, receiptWritten);
+        var model = Path.Combine(Model, "model.int8.onnx");
+        var modelWritten = File.GetLastWriteTimeUtc(model);
+        // Different bytes behind the recorded size and last write time: a matching stamp means the file is not read again.
+        File.WriteAllBytes(model, [3, 2, 1]);
+        File.SetLastWriteTimeUtc(model, modelWritten);
+        await Create(client, archive).EnsureAsync(Model, CancellationToken.None);
+        Assert.Equal(2, requests);
+        Assert.Equal(new byte[] { 3, 2, 1 }, File.ReadAllBytes(model));
+        Assert.Equal(receiptWritten, File.GetLastWriteTimeUtc(receipt)); // An unchanged receipt is not rewritten.
+        // A changed stamp is verified by hashing again, and the mismatch is repaired.
+        File.SetLastWriteTimeUtc(model, modelWritten.AddSeconds(2));
+        await Create(client, archive).EnsureAsync(Model, CancellationToken.None);
+        Assert.Equal(4, requests);
+        Assert.Equal(new byte[] { 1, 2, 3 }, File.ReadAllBytes(model));
+    }
+
+    [Fact]
+    public async Task ReceiptWithoutStampsIsVerifiedOnceAndUpgraded()
+    {
+        var archive = ValidArchive();
+        var requests = 0;
+        using var client = new HttpClient(new Handler((request, _) =>
+        {
+            requests++;
+            return Task.FromResult(Response(request.RequestUri!.AbsolutePath == "/model" ? archive : Tokenizer));
+        }));
+        await Create(client, archive).EnsureAsync(Model, CancellationToken.None);
+        var receipt = Path.Combine(Model, "verified-assets.json");
+        // The receipt format before stamps existed: the pinned source hashes and one hash per file.
+        var legacy = JsonNode.Parse(File.ReadAllText(receipt))!.AsObject();
+        legacy.Remove("Stamps");
+        File.WriteAllText(receipt, legacy.ToJsonString());
+        AgeInstalledFiles();
+        await Create(client, archive).EnsureAsync(Model, CancellationToken.None);
+        Assert.Equal(2, requests);
+        Assert.Equal(3, Stamps().Count);
+        var upgraded = JsonNode.Parse(File.ReadAllText(receipt))!;
+        foreach (var field in new[] { "ArchiveHash", "TokenizerHash", "Files" })
+            Assert.Equal(legacy[field]!.ToJsonString(), upgraded[field]!.ToJsonString());
+        Assert.Empty(Directory.GetFiles(_root, ".ctc-receipt-*"));
+    }
+
+    // Moves the installed files' last write times back, as they are on every launch after the one that installed them.
+    private void AgeInstalledFiles()
+    {
+        foreach (var path in Directory.GetFiles(Model))
+            File.SetLastWriteTimeUtc(path, File.GetLastWriteTimeUtc(path).AddMinutes(-10));
+    }
+
+    private Dictionary<string, JsonNode?> Stamps() =>
+        JsonNode.Parse(File.ReadAllText(Path.Combine(Model, "verified-assets.json")))!["Stamps"]?.AsObject()
+            .ToDictionary(entry => entry.Key, entry => entry.Value) ?? [];
 
     private static HttpResponseMessage Response(byte[] bytes) => new(HttpStatusCode.OK) { Content = new ByteArrayContent(bytes) };
     private sealed class Handler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> handler) : HttpMessageHandler
