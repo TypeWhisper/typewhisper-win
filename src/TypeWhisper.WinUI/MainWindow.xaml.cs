@@ -48,6 +48,9 @@ public sealed partial class MainWindow : Window
     private async Task InitializeDictationCoreAsync()
     {
         if (_closing) return;
+        // Settings can open during startup; Sync & backup then waits with automatic sync for the access checks below.
+        // Set before anything that can fail, so a failed start also holds sync until its license check has finished.
+        WinUICloudSync.AwaitStartupChecks = true;
         try
         {
             _dictationInput = new(
@@ -100,8 +103,6 @@ public sealed partial class MainWindow : Window
             _ = ApplyStartupPolicyAsync();
             // A dictation can start while the model loads below, so Esc and Enter must already be handled then.
             InitializeEscapeCancel();
-            // Settings can open during startup; Sync & backup then waits with automatic sync for the access checks below.
-            WinUICloudSync.AwaitStartupChecks = true;
             await _dictation.InitializeAsync();
             // A dictation captured while the model loaded is waiting to be adopted; the remaining
             // startup steps yield in between so they do not freeze it or its overlay in one block.
