@@ -32,7 +32,7 @@ Sending stays with Blizzard's own code, so it also works during encounters. The 
 
 ## Install
 
-In TypeWhisper, open **Settings › Plugins**, install the **Games** plugin and turn it on. On its page, click **Install add-on**. The plugin finds World of Warcraft through Battle.net and copies the add-on into every installed version (Retail, Classic, Forever). If the game is installed elsewhere, choose its folder there first. If the game is running, type `/reload`.
+In TypeWhisper, open **Settings › Discover plugins** and install the **Games** plugin. On its page, **Games** in the settings sidebar, choose World of Warcraft and click **Install add-on**. The plugin finds World of Warcraft through Battle.net and copies the add-on into every installed version (Retail, Classic, Forever). If the game is installed elsewhere, choose its folder there first. If the game is running, type `/reload`.
 
 For a manual install, copy the `TypeWhisper` folder into `World of Warcraft\<version>\Interface\AddOns\`.
 

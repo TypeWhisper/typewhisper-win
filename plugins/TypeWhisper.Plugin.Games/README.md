@@ -26,7 +26,7 @@ An added game has a name, its program names as Task Manager shows them, the key 
 
 ## Setup
 
-Install and turn on the plugin under **Settings › Plugins**. Its page lists the games on the left; the right side shows the chosen game's state and settings.
+Install the plugin under **Settings › Discover plugins**; it then appears as **Games** in the settings sidebar. Its page lists the games on the left; the right side shows the chosen game's state and settings.
 
 - **World of Warcraft:** click **Install add-on**. The plugin finds the game through Battle.net's product database and the default folders; the empty **World of Warcraft folder** field shows where. If the game is installed elsewhere, choose its folder (the one that holds `_retail_`, `_classic_` or `_forever_`) with **Browse…** and save. The button reads **Update add-on** when a version has an older add-on and **Reinstall add-on** when every version is current.
 - **Another game:** click **+**, start the game, pick its program from the list, choose the key that opens its chat and save. **Remove game…** takes it off the list.
