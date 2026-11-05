@@ -1,33 +1,42 @@
-using System.Globalization;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.Plugin.Games;
 
 /// <summary>
-/// Dictation into game chats, starting with World of Warcraft. While the game is in front, a dictation opens the chat,
-/// inserts the text and sends it, split into messages the game accepts. The TypeWhisper add-on opens the chat without
-/// closing an open one and shows the dictation as a cast bar; its page in the game sets sending, the bar and a
-/// translation language.
+/// Dictation into game chats. The plugin's page lists the games: World of Warcraft, whose TypeWhisper add-on opens the
+/// chat and shows a cast bar, and any game the user adds with the key its chat opens with. While a listed game is in
+/// front, a dictation opens its chat, inserts the text and sends it, split into messages the game accepts.
 /// </summary>
-public sealed class GamesPlugin : IDictationTargetPlugin, IPluginTextSettings, IPluginSettingsActions
+public sealed class GamesPlugin : IDictationTargetPlugin, IPluginProfileSettings, IPluginSettingsActions
 {
-    internal const string FolderSettingId = "wowFolder";
-    internal const string InstallActionId = "install-wow-addon";
-    private const int MaxFolderLength = 1024;
+    internal const string SettingsKey = "games.v1";
+    internal const string SelectorId = "game";
+    internal const string AddGameActionId = "add-game";
+    internal const int MaxCustomGames = 30;
     private readonly object _sync = new();
-    private readonly Func<IReadOnlyList<WowVersionFolder>>? _findVersions;
+    private readonly Func<string?, IReadOnlyList<WowVersionFolder>>? _findVersions;
+    private readonly Func<IReadOnlyList<string>>? _runningPrograms;
+    private readonly GameText _text;
     private IPluginHostServices? _host;
+    // Replaced as a whole on every change, so dictation calls beside the settings page always read one consistent state.
+    private GamesSettings _settings = new();
+    // The game whose settings the page shows; not saved, so the page opens on World of Warcraft.
+    private string _selected = WorldOfWarcraftGame.GameId;
     // Only one dictation runs at a time; a new one replaces the state of the last.
     private GameDictation? _dictation;
 
     private sealed record GameDictation(Guid Id, ChatDeliveryOptions Chat, GameIndicatorSignals? Indicator);
 
     /// <summary>Creates the plugin the host loads.</summary>
-    public GamesPlugin() { }
+    public GamesPlugin() => _text = new(() => _host);
 
-    // Tests pass the game versions instead of searching the machine.
-    internal GamesPlugin(Func<IReadOnlyList<WowVersionFolder>> findVersions) => _findVersions = findVersions;
+    // Tests pass the World of Warcraft versions and running programs instead of looking at the machine.
+    internal GamesPlugin(Func<string?, IReadOnlyList<WowVersionFolder>>? findVersions, Func<IReadOnlyList<string>>? runningPrograms = null) : this()
+    {
+        _findVersions = findVersions;
+        _runningPrograms = runningPrograms;
+    }
 
     /// <inheritdoc />
     public string PluginId => "com.typewhisper.games";
@@ -39,6 +48,11 @@ public sealed class GamesPlugin : IDictationTargetPlugin, IPluginTextSettings, I
     /// <inheritdoc />
     public Task ActivateAsync(IPluginHostServices host)
     {
+        var saved = host.GetSetting<GamesSettings>(SettingsKey) ?? new GamesSettings();
+        // Entries that cannot have come from this plugin are left out instead of failing the whole list.
+        var games = (saved.CustomGames ?? []).Where(game => game is { Name: { Length: > 0 }, Id: { Length: 33 } } && game.Id[0] == 'c'
+            && game.Id.Skip(1).All(char.IsAsciiHexDigitLower) && game.ProcessNames is not null).DistinctBy(game => game.Id).Take(MaxCustomGames).ToArray();
+        Volatile.Write(ref _settings, saved with { CustomGames = games });
         _host = host;
         return Task.CompletedTask;
     }
@@ -54,23 +68,29 @@ public sealed class GamesPlugin : IDictationTargetPlugin, IPluginTextSettings, I
     /// <inheritdoc />
     public void Dispose() { }
 
+    private IReadOnlyList<Game> Games
+    {
+        get
+        {
+            var settings = Volatile.Read(ref _settings);
+            return [new WorldOfWarcraftGame(settings, _findVersions), .. settings.CustomGames.Select(game => new CustomGame(game, _runningPrograms))];
+        }
+    }
+
+    private Game Selected => Games.FirstOrDefault(game => game.Id == _selected) ?? Games[0];
+
     /// <inheritdoc />
-    public IReadOnlyList<string> TargetProcessNames => GameCatalog.All.SelectMany(game => game.ProcessNames).ToArray();
+    public IReadOnlyList<string> TargetProcessNames =>
+        Games.Where(game => game.Enabled).SelectMany(game => game.ProcessNames).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
 
     /// <inheritdoc />
     public Task<DictationTargetPlan?> PrepareDictationAsync(DictationTargetInfo target, CancellationToken cancellationToken)
     {
-        if (GameCatalog.FindByProcess(target.ProcessName) is not { } game) return Task.FromResult<DictationTargetPlan?>(null);
-        // The add-on's page in the game decides sending, the cast bar and translation. The game saves it on /reload or
-        // logout, and the plugin reads it from the version folder the game runs from.
-        var versionFolder = Path.GetDirectoryName(target.ExecutablePath);
-        var addOn = WowAddOnSettings.Read(versionFolder);
-        var installed = WowAddOn.IsInstalledIn(versionFolder);
-        var chords = GameChat.IndicatorFor(game, addOn, installed);
-        lock (_sync) _dictation = new(target.DictationId, GameChat.ChatFor(game, addOn, installed), chords is null ? null : new GameIndicatorSignals(chords));
-        // The add-on page names the translating LLM after the next /reload.
-        WriteStatus(versionFolder);
-        return Task.FromResult<DictationTargetPlan?>(new DictationTargetPlan { AppName = game.Name, TranslateTo = addOn.TranslateTo });
+        if (Games.FirstOrDefault(game => game.Enabled && game.ProcessNames.Contains(target.ProcessName, StringComparer.OrdinalIgnoreCase)) is not { } game)
+            return Task.FromResult<DictationTargetPlan?>(null);
+        var plan = game.Prepare(target, _host?.DefaultLlm);
+        lock (_sync) _dictation = new(target.DictationId, plan.Chat, plan.Indicator is null ? null : new GameIndicatorSignals(plan.Indicator));
+        return Task.FromResult<DictationTargetPlan?>(new DictationTargetPlan { AppName = game.Name, TranslateTo = plan.TranslateTo });
     }
 
     /// <inheritdoc />
@@ -100,30 +120,63 @@ public sealed class GamesPlugin : IDictationTargetPlugin, IPluginTextSettings, I
     }
 
     /// <inheritdoc />
-    public IReadOnlyList<PluginTextSetting> TextSettings =>
-    [
-        new(FolderSettingId, L("World of Warcraft folder", "World-of-Warcraft-Ordner"),
-            L("Leave empty to find World of Warcraft through Battle.net and its default folders. If it is installed elsewhere, choose the folder that holds _retail_, _classic_ or _forever_.",
-                "Leer lassen, um World of Warcraft über Battle.net und die Standardordner zu finden. Ist es woanders installiert, wähle den Ordner, der _retail_, _classic_ oder _forever_ enthält."),
-            ChosenFolder ?? "", MaxFolderLength)
+    public string ProfileSelectorId => SelectorId;
+    /// <inheritdoc />
+    public string? AddProfileActionId => Volatile.Read(ref _settings).CustomGames.Count < MaxCustomGames ? AddGameActionId : null;
+    /// <inheritdoc />
+    public string? RemoveProfileActionId => Selected is CustomGame game ? RemoveActionId(game.Id) : null;
+
+    /// <inheritdoc />
+    public IReadOnlyList<PluginTextSetting> TextSettings
+    {
+        get
         {
-            Kind = PluginTextSettingKind.Folder,
-            // An empty field finds the game by itself; the hint says where, or that it found nothing.
-            Placeholder = DetectedFolder() is { } detected
-                ? L("{0} (found automatically)", "{0} (automatisch gefunden)", detected)
-                : L("Not found automatically. Choose the World of Warcraft folder.", "Nicht automatisch gefunden. Wähle den World-of-Warcraft-Ordner.")
+            var games = Games;
+            var selected = games.FirstOrDefault(game => game.Id == _selected) ?? games[0];
+            // The list's description shows above the chosen game's settings, so it says what dictation does there.
+            return
+            [
+                new(SelectorId, _text.L("Games", "Spiele"), selected.Describe(_text, _host?.DefaultLlm), selected.Id)
+                {
+                    Choices = games.Select(game => new PluginSettingChoice(game.Id, game.Enabled ? game.Name : _text.L("{0} (off)", "{0} (aus)", game.Name))).ToArray()
+                },
+                .. selected.Fields(_text)
+            ];
         }
-    ];
+    }
 
     /// <inheritdoc />
     public Task SaveTextSettingAsync(string id, string value, CancellationToken cancellationToken)
     {
-        if (id != FolderSettingId) throw new ArgumentException("Unknown setting.", nameof(id));
-        var folder = value.Trim();
-        if (folder.Length > 0 && (folder.Length > MaxFolderLength || folder.IndexOfAny(Path.GetInvalidPathChars()) >= 0 || !Path.IsPathFullyQualified(folder)))
-            throw new ArgumentException(L("Enter the full path of the World of Warcraft folder.", "Gib den vollständigen Pfad des World-of-Warcraft-Ordners ein."), nameof(value));
-        Host.SetSetting<string?>(FolderSettingId, folder.Length == 0 ? null : folder);
+        if (id != SelectorId) return SaveProfileSettingsAsync(Selected.Id, new Dictionary<string, string> { [id] = value }, null, cancellationToken);
+        if (Games.All(game => game.Id != value)) throw new ArgumentException("Unknown game.", nameof(value));
+        _selected = value;
         return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public Task SaveProfileSettingsAsync(string profileId, IReadOnlyDictionary<string, string> values, string? apiKey, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var game = Games.FirstOrDefault(candidate => candidate.Id == profileId)
+            ?? throw new ArgumentException(_text.L("This game is no longer in the list. Reopen the plugin's settings.", "Dieses Spiel ist nicht mehr in der Liste. Öffne die Einstellungen des Plugins erneut."));
+        var next = game.Save(Volatile.Read(ref _settings), values, _text);
+        // Two games cannot share a program: a dictation into it would not know which chat it belongs to.
+        var all = new[] { new WorldOfWarcraftGame(next, _findVersions) }.Concat<Game>(next.CustomGames.Select(custom => new CustomGame(custom, _runningPrograms))).ToArray();
+        foreach (var other in all.Where(candidate => candidate.Id != profileId))
+            if (all.Single(candidate => candidate.Id == profileId).ProcessNames.FirstOrDefault(name => other.ProcessNames.Contains(name, StringComparer.OrdinalIgnoreCase)) is { } shared)
+                throw new ArgumentException(_text.L("{0} already belongs to {1}.", "{0} gehört schon zu {1}.", shared, other.Name));
+        Save(next);
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public async Task<PluginProfileActionResult> ExecuteProfileActionAsync(string profileId, string actionId, IReadOnlyDictionary<string, string> values,
+        string? apiKey, CancellationToken cancellationToken)
+    {
+        var game = Games.FirstOrDefault(candidate => candidate.Id == profileId)
+            ?? throw new ArgumentException(_text.L("This game is no longer in the list. Reopen the plugin's settings.", "Dieses Spiel ist nicht mehr in der Liste. Öffne die Einstellungen des Plugins erneut."));
+        return new(await game.RunAsync(actionId, values, _text, _host?.DefaultLlm, cancellationToken) ?? "");
     }
 
     /// <inheritdoc />
@@ -131,66 +184,54 @@ public sealed class GamesPlugin : IDictationTargetPlugin, IPluginTextSettings, I
     {
         get
         {
-            var versions = FindVersions();
-            var title = versions.Count == 0 || versions.All(version => version.InstalledVersion is null) ? L("Install add-on", "Add-on installieren")
-                : versions.Any(version => version.InstalledVersion != WowAddOn.BundledVersion) ? L("Update add-on", "Add-on aktualisieren")
-                : L("Reinstall add-on", "Add-on neu installieren");
-            return
-            [
-                new(InstallActionId, title,
-                    L("Copies the TypeWhisper add-on into every World of Warcraft version found. It opens the chat without closing an open one and shows your dictation as a cast bar. Type /tw in the game for its settings.",
-                        "Kopiert das TypeWhisper-Add-on in jede gefundene World-of-Warcraft-Version. Es öffnet den Chat, ohne einen offenen zu schließen, und zeigt dein Diktat als Zauberbalken. Gib /tw im Spiel ein, um es einzustellen."))
-            ];
+            var selected = Selected;
+            var actions = new List<PluginSettingsAction>();
+            if (AddProfileActionId is { } add)
+                actions.Add(new(add, _text.L("Add game", "Spiel hinzufügen"), "") { Section = PluginSettingsSection.Connection });
+            actions.AddRange(selected.Actions(_text));
+            if (selected is CustomGame custom)
+                actions.Add(new(RemoveActionId(custom.Id), _text.L("Remove game…", "Spiel entfernen …"), "") { Section = PluginSettingsSection.Connection });
+            return actions;
         }
     }
 
     /// <inheritdoc />
-    public Task<string?> ExecuteSettingsActionAsync(string id, CancellationToken cancellationToken)
+    public async Task<string?> ExecuteSettingsActionAsync(string id, CancellationToken cancellationToken)
     {
-        if (id != InstallActionId) throw new ArgumentException("Unknown action.", nameof(id));
-        var versions = FindVersions();
-        if (versions.Count == 0)
-            return Task.FromResult<string?>(ChosenFolder is null
-                ? L("World of Warcraft was not found. Choose its folder under World of Warcraft folder and save.",
-                    "World of Warcraft wurde nicht gefunden. Wähle seinen Ordner unter World-of-Warcraft-Ordner und speichere.")
-                : L("This folder contains no World of Warcraft version. Choose the folder that holds _retail_, _classic_ or _forever_.",
-                    "Dieser Ordner enthält keine World-of-Warcraft-Version. Wähle den Ordner, der _retail_, _classic_ oder _forever_ enthält."));
-        var failures = WowAddOn.Install(versions);
-        foreach (var version in versions) WriteStatus(version.Path);
-        var installed = versions.Where(version => failures.All(failure => failure.Folder != version)).ToArray();
-        var message = failures.Count == 0
-            ? L("Installed for {0}. If the game is running, type /reload in the chat. Settings: type /tw in the game.",
-                "Installiert für {0}. Läuft das Spiel, gib /reload im Chat ein. Einstellungen: Gib /tw im Spiel ein.", Names(installed))
-            : L("The add-on could not be installed for {0}. Close the game and try again.",
-                "Das Add-on konnte für {0} nicht installiert werden. Schließe das Spiel und versuche es erneut.", Names(failures.Select(failure => failure.Folder)));
-        // A translation that cannot run is explained here too, without waiting for a /reload in the game.
-        if (Host.DefaultLlm is not { Ready: true } && versions.Any(version => WowAddOnSettings.Read(version.Path).TranslateTo is not null))
-            message += " " + L("Translation is chosen in the game, but the default LLM is missing or unavailable, so messages go out untranslated. Open Default LLM in Workflows to choose one.",
-                "Im Spiel ist eine Übersetzung gewählt, aber das Standard-LLM fehlt oder ist nicht verfügbar, deshalb gehen Nachrichten unübersetzt raus. Öffne „Standard-LLM“ unter Workflows, um eines zu wählen.");
-        return Task.FromResult<string?>(message);
+        var settings = Volatile.Read(ref _settings);
+        if (id == AddGameActionId && settings.CustomGames.Count < MaxCustomGames)
+        {
+            var game = new CustomGameSettings
+            {
+                Id = "c" + Guid.NewGuid().ToString("N"),
+                Name = _text.L("New game {0}", "Neues Spiel {0}", settings.CustomGames.Count + 1)
+            };
+            Save(settings with { CustomGames = [.. settings.CustomGames, game] });
+            _selected = game.Id;
+            return _text.L("Game added. Enter its program name and the key its chat opens with, then save.",
+                "Spiel hinzugefügt. Gib seinen Programmnamen und die Taste zum Öffnen des Chats ein und speichere.");
+        }
+        if (Selected is CustomGame selected && id == RemoveActionId(selected.Id))
+        {
+            Save(settings with { CustomGames = settings.CustomGames.Where(game => game.Id != selected.Id).ToArray() });
+            _selected = WorldOfWarcraftGame.GameId;
+            return _text.L("{0} removed.", "{0} entfernt.", selected.Name);
+        }
+        // A host that shows the page without the list runs the chosen game's buttons with its saved values.
+        if (Selected.Actions(_text).Any(action => action.Id == id))
+            return await Selected.RunAsync(id, new Dictionary<string, string>(), _text, _host?.DefaultLlm, cancellationToken);
+        throw new ArgumentException("Unknown or stale action.", nameof(id));
     }
 
-    private IPluginHostServices Host => _host ?? throw new InvalidOperationException("The plugin is not active.");
+    private static string RemoveActionId(string gameId) => "remove:" + gameId;
 
-    private string? ChosenFolder => _host?.GetSetting<string?>(FolderSettingId) is { Length: > 0 } folder ? folder : null;
-
-    private IReadOnlyList<WowVersionFolder> FindVersions() => _findVersions?.Invoke()
-        ?? WowAddOn.FindInstallRoots(ChosenFolder).SelectMany(WowAddOn.VersionFolders).ToArray();
-
-    // The installation found without a chosen folder, through Battle.net and the default folders.
-    private string? DetectedFolder() => (_findVersions?.Invoke() ?? WowAddOn.FindInstallRoots().SelectMany(WowAddOn.VersionFolders).ToArray())
-        .Select(version => Path.GetDirectoryName(version.Path)).FirstOrDefault(folder => !string.IsNullOrEmpty(folder));
-
-    // Tells the add-on which LLM translates its messages; it shows the name on its page after the next /reload.
-    private void WriteStatus(string? versionFolder)
+    // Saved first, then published: a failed write keeps the previous settings. The host reads the games' programs
+    // again, so a dictation into a new or changed game reaches the plugin.
+    private void Save(GamesSettings next)
     {
-        var llm = _host?.DefaultLlm;
-        WowAddOn.WriteStatus(versionFolder, llm?.Name, llm?.Ready == true);
+        var host = _host ?? throw new InvalidOperationException("The plugin is not active.");
+        host.SetSetting(SettingsKey, next);
+        Volatile.Write(ref _settings, next);
+        host.NotifyCapabilitiesChanged();
     }
-
-    private static string Names(IEnumerable<WowVersionFolder> versions) => string.Join(", ", versions.Select(version => version.Name).Distinct());
-
-    private string L(string english, string german) => PluginLocalization.Get(_host, english, german);
-
-    private string L(string english, string german, params object[] args) => string.Format(CultureInfo.CurrentCulture, L(english, german), args);
 }

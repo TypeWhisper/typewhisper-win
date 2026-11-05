@@ -60,12 +60,7 @@ internal static class ChatDeliveryOperation
         // Without Enter every part would land in the same field, which keeps only one message. Inserting a longer text
         // would cut it while reporting success, so it is not inserted; the caller keeps it on the clipboard and in review.
         if (!options.Submit && parts.Count > 1) return new(0, parts.Count, ChatDeliveryStage.TooLong);
-        IReadOnlyList<ushort> open = options.OpenKey switch
-        {
-            ChatOpenKey.Enter => Enter,
-            ChatOpenKey.AddOn => options.AddOnChord,
-            _ => []
-        };
+        var open = options.OpenKeys;
         for (var i = 0; i < parts.Count; i++)
         {
             if (i > 0)

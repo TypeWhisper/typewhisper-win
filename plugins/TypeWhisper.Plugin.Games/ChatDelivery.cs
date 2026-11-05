@@ -1,38 +1,17 @@
 namespace TypeWhisper.Plugin.Games;
 
 /// <summary>
-/// Lists the ways the plugin can open a game's text chat before it inserts dictated text.
-/// </summary>
-internal enum ChatOpenKey
-{
-    /// <summary>
-    /// Presses nothing; the player opens the chat before dictating.
-    /// </summary>
-    None,
-    /// <summary>
-    /// Presses Enter. An open chat closes again, so dictation must start with the chat closed.
-    /// </summary>
-    Enter,
-    /// <summary>
-    /// Presses the key of the TypeWhisper game add-on, which opens a closed chat and leaves an open one as it is.
-    /// </summary>
-    AddOn
-}
-
-/// <summary>
 /// Describes how dictated text is delivered into a game chat.
 /// </summary>
 internal sealed record ChatDeliveryOptions
 {
     /// <summary>
-    /// Gets how the chat is opened.
+    /// Gets the virtual keys that open the chat, modifiers first: Enter, a game's chat key, or the chord of the
+    /// TypeWhisper add-on, which opens a closed chat and leaves an open one as it is. Empty when the player opens the
+    /// chat before dictating. Enter or a chat key closes a chat that is already open, so dictation must start with
+    /// the chat closed.
     /// </summary>
-    public ChatOpenKey OpenKey { get; init; } = ChatOpenKey.Enter;
-    /// <summary>
-    /// Gets the virtual keys of the chord the game add-on listens for, modifiers first; used when <see cref="OpenKey"/>
-    /// is <see cref="ChatOpenKey.AddOn"/>.
-    /// </summary>
-    public IReadOnlyList<ushort> AddOnChord { get; init; } = [];
+    public IReadOnlyList<ushort> OpenKeys { get; init; } = [ChatDeliveryOperation.EnterKey];
     /// <summary>
     /// Gets whether Enter sends each message.
     /// </summary>
@@ -52,14 +31,14 @@ internal sealed record ChatDeliveryOptions
     public int MessageIntervalMilliseconds { get; init; }
 }
 
-/// <summary>How a dictation into a game's chat runs, from the game and its add-on's settings.</summary>
+/// <summary>How a dictation into the World of Warcraft chat runs, from its add-on's settings.</summary>
 internal static class GameChat
 {
     /// <summary>Returns the chat delivery for the game. Only the add-on opens a chat that is already open without
     /// closing it; without it, Enter opens the chat.</summary>
     public static ChatDeliveryOptions ChatFor(GameDefinition game, WowAddOnSettings addOn, bool addOnInstalled) => new()
     {
-        OpenKey = addOnInstalled ? ChatOpenKey.AddOn : ChatOpenKey.Enter, AddOnChord = game.AddOnChord, Submit = addOn.Send,
+        OpenKeys = addOnInstalled ? game.AddOnChord : [ChatDeliveryOperation.EnterKey], Submit = addOn.Send,
         MaxMessageBytes = game.MaxMessageBytes, MessageIntervalMilliseconds = game.MessageIntervalMilliseconds
     };
 

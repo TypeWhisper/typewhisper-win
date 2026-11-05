@@ -2,7 +2,7 @@ using TypeWhisper.Plugin.Games;
 
 public class ChatDeliveryOperationTests
 {
-    private static readonly ChatDeliveryOptions AddOn = new() { OpenKey = ChatOpenKey.AddOn, AddOnChord = [0x11, 0x10, 0x7A] };
+    private static readonly ChatDeliveryOptions AddOn = new() { OpenKeys = [0x11, 0x10, 0x7A] };
 
     private sealed class Fake : IChatDeliveryPlatform
     {
@@ -26,8 +26,7 @@ public class ChatDeliveryOperationTests
         var chat = GameChat.ChatFor(game!, WowAddOnSettings.Default, addOnInstalled: true);
 
         Assert.Equal(GameCatalog.WorldOfWarcraft, game);
-        Assert.Equal(ChatOpenKey.AddOn, chat.OpenKey);
-        Assert.Equal([0x11, 0x10, 0x7A], chat.AddOnChord);
+        Assert.Equal([0x11, 0x10, 0x7A], chat.OpenKeys);
         Assert.Equal(255, chat.MaxMessageBytes);
         Assert.Equal(1000, chat.MessageIntervalMilliseconds);
         Assert.True(chat.Submit);
@@ -40,7 +39,7 @@ public class ChatDeliveryOperationTests
         var game = GameCatalog.WorldOfWarcraft;
 
         // Without the add-on only Enter opens the chat; sending is the add-on's setting.
-        Assert.Equal(ChatOpenKey.Enter, GameChat.ChatFor(game, WowAddOnSettings.Default, addOnInstalled: false).OpenKey);
+        Assert.Equal([0x0D], GameChat.ChatFor(game, WowAddOnSettings.Default, addOnInstalled: false).OpenKeys);
         Assert.False(GameChat.ChatFor(game, new WowAddOnSettings(Send: false), true).Submit);
     }
 
@@ -60,7 +59,7 @@ public class ChatDeliveryOperationTests
     {
         var platform = new Fake();
 
-        var result = await ChatDeliveryOperation.RunAsync(platform, "gg wp", new() { OpenKey = ChatOpenKey.Enter });
+        var result = await ChatDeliveryOperation.RunAsync(platform, "gg wp", new() { OpenKeys = [0x0D] });
 
         Assert.True(result.Completed);
         Assert.Equal(["press:0D", "settle", "paste:gg wp", "settle", "press:0D"], platform.Calls);
@@ -73,7 +72,7 @@ public class ChatDeliveryOperationTests
         var text = new string('a', 20) + " " + new string('b', 20);
 
         var result = await ChatDeliveryOperation.RunAsync(platform, text,
-            new() { OpenKey = ChatOpenKey.None, Submit = false, MaxMessageBytes = 50 });
+            new() { OpenKeys = [], Submit = false, MaxMessageBytes = 50 });
 
         Assert.True(result.Completed);
         Assert.Equal(["paste:" + text], platform.Calls);

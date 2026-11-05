@@ -43,11 +43,14 @@ public sealed class PortablePackageTests : IDisposable
     public void Localization_CoversEveryStringThePluginShows()
     {
         var english = Read(Path.Combine(ProjectDirectory, "Localization", "en.json"));
-        var source = File.ReadAllText(Path.Combine(ProjectDirectory, "GamesPlugin.cs"));
-        var shown = System.Text.RegularExpressions.Regex.Matches(source, "\\bL\\(\"((?:[^\"\\\\]|\\\\.)*)\"").Select(match => match.Groups[1].Value).ToArray();
+        var shown = Directory.GetFiles(ProjectDirectory, "*.cs").SelectMany(file =>
+            System.Text.RegularExpressions.Regex.Matches(File.ReadAllText(file), "\\bL\\(\"((?:[^\"\\\\]|\\\\.)*)\"").Select(match => match.Groups[1].Value))
+            .Distinct().ToArray();
 
         Assert.NotEmpty(shown);
         Assert.All(shown, text => Assert.True(english.ContainsKey(text), "Missing from Localization/en.json: " + text));
+        // Every translation is still shown somewhere, so the files carry no leftovers.
+        Assert.All(english.Keys, key => Assert.Contains(key, shown));
     }
 
     [Fact]

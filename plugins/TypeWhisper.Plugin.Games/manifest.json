@@ -4,7 +4,7 @@
   "name": "Games",
   "version": "1.0.0",
   "author": "TypeWhisper",
-  "description": "Dictate into game chats. World of Warcraft: the chat opens, your text goes in and is sent, with a cast bar in the game while you speak.",
+  "description": "Dictate into game chats: the chat opens, your text goes in and is sent. World of Warcraft with a cast bar in the game, and any game you add with its chat key.",
   "assemblyName": "TypeWhisper.Plugin.Games.dll",
   "pluginClass": "TypeWhisper.Plugin.Games.GamesPlugin",
   "minHostVersion": "1.1.7",
