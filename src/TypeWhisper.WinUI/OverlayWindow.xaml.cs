@@ -45,7 +45,9 @@ public sealed partial class OverlayWindow : Window
         if (_frameTimer is null)
         {
             _frameTimer = DispatcherQueue.CreateTimer();
-            _frameTimer.Interval = TimeSpan.FromMilliseconds(15);
+            // The timer ticks on Windows' 15.6 ms timer periods. An interval well below one period gives a tick in each
+            // of them, 64 a second. At 15 ms about every fifth tick slipped to the next period, and at 16.7 ms every one.
+            _frameTimer.Interval = TimeSpan.FromMilliseconds(10);
             _frameTimer.IsRepeating = true;
             _frameTimer.Tick += (_, _) => OnFrame();
         }
