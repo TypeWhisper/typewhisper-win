@@ -244,7 +244,9 @@ internal static class MistralCatalog
     {
         var ids = models.Select(id).ToHashSet(StringComparer.Ordinal);
         string Canonical(string value) => aliases.GetValueOrDefault(value, value);
-        bool Replaced(string modelId) => Replacements.Any(pair => Canonical(pair.Key) == modelId
+        // A "-latest" key may already point at a newer model than its successor; the dated keys identify the old ones.
+        bool Replaced(string modelId) => Replacements.Any(pair => !pair.Key.EndsWith("-latest", StringComparison.Ordinal)
+            && Canonical(pair.Key) == modelId
             && Canonical(pair.Value) is var successor && successor != modelId && ids.Contains(successor));
         return models.Where(m => !Replaced(id(m)));
     }

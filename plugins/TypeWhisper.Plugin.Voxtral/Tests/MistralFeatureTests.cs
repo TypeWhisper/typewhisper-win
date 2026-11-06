@@ -92,6 +92,24 @@ public sealed partial class ProviderTests
         Assert.Empty(plugin.SupportedLanguages);
     }
 
+    [Fact]
+    public async Task MovedLatestAliasDoesNotHideTheModelItNowNames()
+    {
+        using var plugin = await RefreshedPlugin(new Host(), catalog: """
+            {"data":[
+              {"id":"voxtral-mini-2602","capabilities":{"audio_transcription":true}},
+              {"id":"voxtral-mini-transcribe-3-0","capabilities":{"audio_transcription":true}},
+              {"id":"voxtral-mini-transcribe-4-0","aliases":["voxtral-mini-latest"],"capabilities":{"audio_transcription":true}},
+              {"id":"mistral-large-4","capabilities":{"completion_chat":true}},
+              {"id":"mistral-large-5","aliases":["mistral-large-latest"],"capabilities":{"completion_chat":true}}
+            ]}
+            """);
+        Assert.Equal(new[] { MiniTranscribe, "voxtral-mini-transcribe-4-0" }, plugin.TranscriptionModels.Select(m => m.Id));
+        Assert.Equal(new[] { "mistral-large-4", "mistral-large-5" }, plugin.SupportedModels.Select(m => m.Id));
+        await plugin.SelectModelAsync("voxtral-mini-latest", default);
+        Assert.Equal("voxtral-mini-transcribe-4-0", plugin.SelectedModelId);
+    }
+
     [Theory]
     [InlineData("voxtral-mini-latest", "mistral-large-latest", MiniTranscribe, "mistral-large-4")]
     [InlineData("voxtral-mini-realtime-latest", "mistral-vibe-cli-fast", "voxtral-mini-transcribe-realtime-3-0", "mistral-small-2603")]

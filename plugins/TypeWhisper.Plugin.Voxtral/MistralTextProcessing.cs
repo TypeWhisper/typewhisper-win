@@ -17,10 +17,12 @@ public sealed partial class VoxtralPlugin
             TranscriptionModels.Select(m => new PluginSettingChoice(m.Id, m.DisplayName)).ToArray()) with
             {
                 Value = SelectedModelId ?? "",
-                Description = IsRealtime
-                    ? Connection.L("Shows live text while you speak. The final text and files come from Voxtral Mini Transcribe 3.",
-                        "Zeigt Live-Text beim Sprechen. Den fertigen Text und Dateien liefert Voxtral Mini Transcribe 3.")
-                    : Connection.L("Transcribes after recording stops.", "Transkribiert nach dem Ende der Aufnahme.")
+                Description = !IsRealtime ? Connection.L("Transcribes after recording stops.", "Transkribiert nach dem Ende der Aufnahme.")
+                    : BatchModel is { } batch
+                        ? Connection.L($"Shows live text while you speak. The final text and files come from {MistralCatalog.DisplayName(batch.Id, batch.Name)}.",
+                            $"Zeigt Live-Text beim Sprechen. Den fertigen Text und Dateien liefert {MistralCatalog.DisplayName(batch.Id, batch.Name)}.")
+                        : Connection.L("Shows live text while you speak and keeps it as the final text.",
+                            "Zeigt Live-Text beim Sprechen und übernimmt ihn als fertigen Text.")
             },
         Field("llmModel", "Text model", "Textmodell", SelectedTextModel, PluginSettingsSection.TextProcessing,
             SupportedModels.Select(m => new PluginSettingChoice(m.Id, m.DisplayName)).ToArray()) with { Value = SelectedTextModel },

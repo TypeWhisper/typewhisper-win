@@ -220,6 +220,7 @@ public sealed partial class ProviderTests
         using var plugin = new VoxtralPlugin(http); await plugin.ActivateAsync(new Host()); await Configure(plugin);
         await plugin.ExecuteSettingsActionAsync("refreshModels", default);
         Assert.True(plugin.SupportsStreamingForPrompt("Saoirse Ronan")); Assert.False(plugin.SupportsStreamingPreviewForPrompt("Saoirse Ronan"));
+        Assert.Equal("Zeigt Live-Text beim Sprechen und übernimmt ihn als fertigen Text.", plugin.TextSettings.Single(s => s.Id == "model").Description);
         var socket = new MistralSocket { CompleteAutomatically = true };
         MistralSessionOptions? opened = null;
         plugin.ConnectStreaming = (_, options, _, ct) => { opened = options; return ReadySessionAsInterface(socket, ct); };
