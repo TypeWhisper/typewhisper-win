@@ -154,6 +154,25 @@ public sealed class PortablePluginStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task RevisionChangesWithTheInstallationIndexOnly()
+    {
+        var store = Store();
+        var empty = store.Revision;
+        await store.InitializeAsync();
+        var initialized = store.Revision;
+        Assert.NotEqual(empty, initialized);
+        await store.InstallAsync(Entry());
+        var installed = store.Revision;
+        Assert.NotEqual(initialized, installed);
+        // Reading the inventory or a refused installation leaves the index as it is.
+        Assert.Single(store.Inventory());
+        await Assert.ThrowsAsync<InvalidOperationException>(() => store.InstallAsync(Entry()));
+        Assert.Equal(installed, store.Revision);
+        await store.UninstallAsync(Id);
+        Assert.NotEqual(installed, store.Revision);
+    }
+
+    [Fact]
     public async Task BootstrapRunsOnceAndDoesNotResurrectRemovedPlugins()
     {
         var bundled = Path.Combine(_root, "bundled"); Directory.CreateDirectory(bundled);

@@ -19,6 +19,7 @@ public sealed class PortablePluginStore
     private readonly SemaphoreSlim _operation = new(1, 1);
     private readonly object _sync = new();
     private Dictionary<string, Receipt> _installed = new(StringComparer.Ordinal);
+    private long _revision;
     private bool _initialized;
     private sealed record Receipt(string Directory, string Version, string? PendingDirectory = null, string? PendingVersion = null, string? UpdateWarning = null);
     // The lifecycle operation in progress and why the policy would refuse it, so a policy pass can cancel it;
@@ -27,6 +28,9 @@ public sealed class PortablePluginStore
     private Func<string?>? _activeRefusal;
     public string Root { get; }
     public string InventoryRoot => Path.Combine(Root, "installed");
+    /// <summary>Changes whenever the installation index changes. Reading it touches no file, so a view can tell
+    /// whether the <see cref="Inventory"/> it read last is still current.</summary>
+    public long Revision => Interlocked.Read(ref _revision);
     public bool Initialized => _initialized;
     public PortablePluginStore(string root, Version host, HttpClient http, Func<string, IPluginHostServices>? services = null,
         Func<TypeWhisper.Core.Models.ManagedProviderPolicy>? policy = null)
@@ -356,7 +360,7 @@ public sealed class PortablePluginStore
         var path = Path.Combine(Root, "installed.json");
         File.WriteAllText(path + ".tmp", JsonSerializer.Serialize(next, PortablePluginCatalog.Json));
         File.Move(path + ".tmp", path, true);
-        lock (_sync) _installed = next;
+        lock (_sync) { _installed = next; Interlocked.Increment(ref _revision); }
     }
     private static void CopyTree(string source, string target)
     {
