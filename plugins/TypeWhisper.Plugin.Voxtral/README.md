@@ -1,16 +1,41 @@
 # Mistral for the portable host
 
-Portable .NET 10 package `com.typewhisper.voxtral`, version `1.3.3`, requiring host `1.1.2`. The visible provider is **Mistral**. Its existing package and provider IDs remain unchanged so encrypted credentials, enabled state and dictation selections survive the rename.
+Portable .NET 10 package `com.typewhisper.voxtral`, version `1.4.0`, requiring host `1.1.2`. The visible provider is **Mistral**. Its existing package and provider IDs remain unchanged so encrypted credentials, enabled state and dictation selections survive the rename.
 
-## Behavior
+## Models
 
-The plugin uses one Mistral API key for Voxtral audio transcription and Mistral chat completions. **Refresh models** reads `/v1/models`, classifies models by their advertised capabilities and persists the account catalog. Batch transcription models and text completion models have separate selectors. Archived models, embeddings, OCR and speech generation are not offered for these endpoints. Realtime audio models use the WebSocket transport instead of the file endpoint. Model listing is not a guarantee of quota or inference permission for every model.
+The plugin uses one Mistral API key for Voxtral transcription and Mistral chat completions. Until the user presses **Refresh models**, it offers the current lineup: Voxtral Mini Transcribe 3 (default), Voxtral Small Transcribe 3 and Voxtral Mini Transcribe Realtime 3 for transcription; Mistral Large 4, Medium 3.5, Small 4 (default) and Ministral 3 14B, 8B and 3B for text.
 
-Text processing supports the selected default or an explicit workflow model, provider-default or custom temperature, complete-response validation, and reasoning responses containing text chunks. Thinking chunks are excluded from the returned text. Batch Voxtral supports automatic language detection and explicit hints for the 13 documented languages. Voxtral Realtime detects language automatically; the provider does not expose a language-hint parameter for live sessions.
+**Refresh models** reads `/v1/models` and keeps a cleaned account catalog:
 
-Settings use the host's single **Save settings** button. The key stays in encrypted host storage. Opening settings performs no network request. A failed model fetch or settings write retains the previous catalog. Changing accounts resets the old catalog, and a concurrent refresh cannot publish models fetched using a replaced key. Redirects are disabled; HTTP status, retry information and cancellation remain typed.
+- Mistral lists every alias as its own model. Aliases of one model become one entry; known models get their product name and a fixed order. Unknown models keep their catalog name and a dated ID rather than a moving `-latest` alias.
+- Voxtral Transcribe 2 and Realtime 2 are hidden while their version 3 successors are listed. Code completion, Labs, audio-understanding chat and speech models are not offered for text processing. Archived models are skipped.
+- Saved selections that name an alias, a Voxtral 2 model or a retired chat model (the list matches the macOS plugin) resolve to the listed model. Catalogs saved by earlier versions fall back to the current lineup until the next refresh.
+- Model listing is not a guarantee of quota or inference permission; a workspace can set a model's limit to zero requests.
 
-Mac `VoxtralPlugin` is a local MLX engine; `MistralAIPlugin` is the comparable cloud provider. This package is cloud-based, without local downloads, translation or dictionary biasing. Voxtral Realtime sends PCM16 mono 16 kHz audio through the documented WebSocket protocol. It accumulates text deltas for live previews, then waits for the authoritative `transcription.done` result after flushing and ending audio. Interruptions, malformed responses and missing completion fail rather than returning partial text. Realtime models also accept completed host WAV recordings through the same socket, including when live preview is disabled. Live finalization keeps the host's 15-second tail deadline and full-recording fallback. Completed WAV requests allow the audio duration plus 15 seconds for finalization, since their audio is submitted faster than realtime.
+## Transcription
+
+Languages and dictionary support come from each model's `audio_transcription_capabilities`. Transcribe 3 and Realtime 3 accept 58 languages. A language outside the selected model's list is dropped instead of being sent, because Mistral rejects it.
+
+- **File transcription** posts to `/v1/audio/transcriptions`. Without a pinned language the request sets `return_language=true`, since Transcribe 3 otherwise returns no language; with a pinned language it omits the flag, which Mistral would reject with HTTP 422.
+- **Dictionary terms** are sent as repeated `context_bias` fields (up to 200 terms, 8,000 characters), so names such as "Saoirse Ronan" keep their spaces. The plugin accepts the host's structured dictionary prompt.
+- **Voxtral Realtime 3** streams PCM16 mono 16 kHz audio through the documented WebSocket protocol and shows its text deltas as live preview. The final text comes from uploading the complete recording to Voxtral Mini Transcribe 3 (`SupportsStreamingPreviewForPrompt`): on the same German dictations, Realtime 3 misheard more words ("Wir öffnen" for "Bitte öffne", "3.399" for "1.399") and needed 0.85–1.7 seconds after stopping, the upload 0.55–0.7 seconds. This bills both services. Hosts without preview-only streaming transcribe after recording stops.
+- **Accounts without a file model** keep the live session as the source of the final text. The language and dictionary then go into the single `session.update`, because Mistral locks session settings when audio starts, and the plugin waits for the authoritative `transcription.done` result after flushing and ending audio. Interruptions, malformed responses and missing completion fail rather than returning partial text.
+- **Complete recordings with a realtime model selected** (live text off, file transcription, final text after a preview) upload to Voxtral Mini Transcribe 3 instead of streaming through the socket: a 63-second recording took 1 second instead of 40. Only an account without a file model streams the recording, with the audio duration plus 15 seconds to finish.
+
+Speaker labels (`diarize`) and turn detection are not used: the Windows SDK has no speaker segments, and a plugin cannot end a dictation.
+
+## Text processing
+
+Text processing supports the selected default or an explicit workflow model, provider-default or custom temperature, complete-response validation, and reasoning responses containing text chunks. Thinking chunks are excluded from the returned text.
+
+Models with documented reasoning levels get a **Reasoning effort** setting, shown while that model is selected and also used when a workflow names the model. The default is the fastest level: `low` for Large 4 (it rejects `none`), `none` for Small 4 and Medium 3.5. Ministral rejects the parameter, so it is never sent there.
+
+## Settings and errors
+
+Settings use the host's single **Save settings** button. The key stays in encrypted host storage. Opening settings performs no network request. A failed model fetch or settings write retains the previous catalog. Changing accounts resets the old catalog, and a concurrent refresh cannot publish models fetched using a replaced key. Redirects are disabled; HTTP status, retry information and cancellation remain typed. Mistral error bodies are reduced to their message, without the request fields that validation errors echo.
+
+Mac `VoxtralPlugin` is a local MLX engine; `MistralAIPlugin` is the comparable cloud provider.
 
 ## Verification
 
@@ -18,10 +43,6 @@ Mac `VoxtralPlugin` is a local MLX engine; `MistralAIPlugin` is the comparable c
 dotnet test plugins/TypeWhisper.Plugin.Voxtral/Tests/TypeWhisper.Plugin.Voxtral.Portable.Tests.csproj -c Release
 ```
 
-Tests cover capability discovery, filtering/deduplication, restart persistence, failed writes, account changes during refresh, empty account catalogs, shared-key chat requests, optional temperature, reasoning chunks, incomplete replies, independent ZIP lifecycle tests, WebSocket handshake, ordered PCM chunks, fragmented Unicode, complete finalization, typed failures, bounded messages, cancellation, the real host transcript collector, duration-aware completed-WAV finalization, and concurrent key/model writes without UI-context capture.
+Tests cover catalog grouping and naming, hidden predecessors, saved-ID resolution and old catalogs, language pinning and `return_language`, dictionary terms in uploads and live sessions, complete recordings with realtime models, per-model reasoning levels, readable error messages, restart persistence, failed writes, account changes during refresh, WebSocket handshake, ordered PCM chunks, fragmented Unicode, complete finalization, typed failures, bounded messages, cancellation, the real host transcript collector, and concurrent key/model writes without UI-context capture.
 
-Validate text workflows and ARM64 execution separately. Account model discovery does not establish successful inference for every listed model. See [settings screenshots](../../docs/screenshots/mistral/).
-
-References: [models](https://docs.mistral.ai/api/endpoint/models), [chat](https://docs.mistral.ai/api/endpoint/chat), [transcription](https://docs.mistral.ai/studio/audio/speech_to_text).
-
-Realtime protocol reference: [official Mistral Python SDK](https://github.com/mistralai/client-python/tree/main/src/mistralai/extra/realtime).
+References: [models](https://docs.mistral.ai/api/endpoint/models), [chat](https://docs.mistral.ai/api/endpoint/chat), [file transcription](https://docs.mistral.ai/studio/audio/speech-to-text/transcribe-files), [realtime transcription](https://docs.mistral.ai/studio/audio/speech-to-text/transcribe-in-realtime), [migrating from Voxtral 2](https://docs.mistral.ai/studio/audio/migrate-from-voxtral-2), [reasoning](https://docs.mistral.ai/inference/conversations/reasoning).

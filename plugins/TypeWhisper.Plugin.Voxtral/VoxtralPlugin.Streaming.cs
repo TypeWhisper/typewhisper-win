@@ -10,35 +10,52 @@ public sealed partial class VoxtralPlugin
     public bool SupportsStreaming => IsRealtime;
     /// <inheritdoc />
     public bool SupportsStreamingCompletion => IsRealtime;
-    internal Func<string, string, TimeSpan, CancellationToken, Task<IStreamingSession>> ConnectStreaming { get; set; } = MistralStreamingSession.ConnectAsync;
+    // On the same dictations, Realtime 3 misheard more words and finished about 0.6 s later than an upload to Mini
+    // Transcribe 3 (tested 2026-11-06). With a file model available, the live session therefore only shows preview text
+    // and the host takes the final text from the complete recording, which TranscribeAsync uploads to that model.
+    /// <inheritdoc />
+    public bool SupportsStreamingForPrompt(string? prompt) =>
+        SupportsStreaming && BatchModel is null
+        && (SelectedTranscription?.ContextBias == true || PluginDictionaryTerms.ParsePrompt(prompt).Count == 0);
+    /// <inheritdoc />
+    public bool SupportsStreamingPreviewForPrompt(string? prompt) => SupportsStreaming && !SupportsStreamingForPrompt(prompt);
+    internal Func<string, MistralSessionOptions, TimeSpan, CancellationToken, Task<IStreamingSession>> ConnectStreaming { get; set; } = MistralStreamingSession.ConnectAsync;
 
     /// <inheritdoc />
     public Task<IStreamingSession> StartStreamingAsync(string? language, CancellationToken ct) =>
-        StartStreamingCoreAsync(TimeSpan.FromSeconds(15), ct);
+        StartStreamingCoreAsync(language, null, TimeSpan.FromSeconds(15), ct);
 
-    private async Task<IStreamingSession> StartStreamingCoreAsync(TimeSpan completionTimeout, CancellationToken ct)
+    // Implemented implicitly: an explicit interface implementation would reference a member older SDKs lack and fail to load there.
+    /// <inheritdoc />
+    public Task<IStreamingSession> StartStreamingWithLanguageHintsAndPromptAsync(IReadOnlyList<string> languageHints, string? prompt, CancellationToken ct) =>
+        StartStreamingCoreAsync(languageHints.FirstOrDefault(h => !string.IsNullOrWhiteSpace(h)), prompt, TimeSpan.FromSeconds(15), ct);
+
+    private async Task<IStreamingSession> StartStreamingCoreAsync(string? language, string? prompt, TimeSpan completionTimeout, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
-        if (!IsRealtime) throw new NotSupportedException("Select a Voxtral Realtime model for live transcription.");
+        if (SelectedTranscription is not { Realtime: true } model) throw new NotSupportedException("Select a Voxtral Realtime model for live transcription.");
+        // Realtime 3 takes the language and dictionary in session.update; Realtime 2 rejects both, so they are only sent when supported.
+        var options = new MistralSessionOptions(model.Id, LanguageFor(model, language), ContextBias(model, prompt));
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(TimeSpan.FromSeconds(15));
-        try { return await ConnectStreaming(Connection.RequireKey(), SelectedModelId!, completionTimeout, timeout.Token).ConfigureAwait(false); }
+        try { return await ConnectStreaming(Connection.RequireKey(), options, completionTimeout, timeout.Token).ConfigureAwait(false); }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         { throw new PluginRequestException("Mistral live connection timed out.", PluginRequestFailureKind.Timeout); }
     }
 
-    private async Task<PluginTranscriptionResult> TranscribeRealtimeAsync(byte[] wavAudio, CancellationToken ct)
+    // Used only when the catalog offers no file transcription model for complete recordings.
+    private async Task<PluginTranscriptionResult> TranscribeRealtimeAsync(byte[] wavAudio, string? language, string? prompt, CancellationToken ct)
     {
         var pcm = ExtractPcm(wavAudio);
         // A complete recording is uploaded faster than realtime. Allow its duration plus
         // the usual live tail budget; the host's live deadline does not wrap this fallback.
         var duration = pcm.Length / 32000d;
-        await using var session = await StartStreamingCoreAsync(TimeSpan.FromSeconds(duration + 15), ct).ConfigureAwait(false);
-        string? text = null, language = null;
-        session.TranscriptReceived += update => { if (update.IsFinal) { text = update.Text; language = update.DetectedLanguage; } };
+        await using var session = await StartStreamingCoreAsync(language, prompt, TimeSpan.FromSeconds(duration + 15), ct).ConfigureAwait(false);
+        string? text = null, detected = null;
+        session.TranscriptReceived += update => { if (update.IsFinal) { text = update.Text; detected = update.DetectedLanguage; } };
         await session.SendAudioAsync(pcm, ct).ConfigureAwait(false);
         await session.FinalizeAsync(ct).ConfigureAwait(false);
-        return new(text ?? throw ProviderConnection.InvalidResponse(), language, duration, null);
+        return new(text ?? throw ProviderConnection.InvalidResponse(), detected, duration, null);
     }
 
     internal static ReadOnlyMemory<byte> ExtractPcm(byte[] wav)
