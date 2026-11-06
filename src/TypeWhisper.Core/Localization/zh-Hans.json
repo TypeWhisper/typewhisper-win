@@ -3252,5 +3252,6 @@
   "LLM Time": "LLM 用时",
   "{0:0.0} s": "{0:0.0} 秒",
   "{0} min {1} s": "{0} 分钟 {1} 秒",
-  "Translation for {0}": "{0} 的翻译"
+  "Translation for {0}": "{0} 的翻译",
+  "Could not install the keyboard hook for this shortcut (Windows error {0}). Restart TypeWhisper and try again.": "无法为此快捷键安装键盘钩子（Windows 错误 {0}）。请重新启动 TypeWhisper 后重试。"
 }

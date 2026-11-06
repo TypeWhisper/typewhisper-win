@@ -3252,5 +3252,6 @@
   "LLM Time": "LLM処理時間",
   "{0:0.0} s": "{0:0.0}秒",
   "{0} min {1} s": "{0}分{1}秒",
-  "Translation for {0}": "{0} の翻訳"
+  "Translation for {0}": "{0} の翻訳",
+  "Could not install the keyboard hook for this shortcut (Windows error {0}). Restart TypeWhisper and try again.": "このショートカットのキーボードフックをインストールできませんでした（Windows エラー {0}）。TypeWhisper を再起動してもう一度お試しください。"
 }

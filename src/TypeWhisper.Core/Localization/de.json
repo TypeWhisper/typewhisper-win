@@ -3252,5 +3252,6 @@
   "LLM Time": "LLM-Dauer",
   "{0:0.0} s": "{0:0.0} s",
   "{0} min {1} s": "{0} Min. {1} s",
-  "Translation for {0}": "Übersetzung für {0}"
+  "Translation for {0}": "Übersetzung für {0}",
+  "Could not install the keyboard hook for this shortcut (Windows error {0}). Restart TypeWhisper and try again.": "Der Tastatur-Hook für dieses Tastenkürzel konnte nicht installiert werden (Windows-Fehler {0}). Starte TypeWhisper neu und versuche es erneut."
 }
