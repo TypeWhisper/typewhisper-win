@@ -1,9 +1,5 @@
-using System.Globalization;
-using System.Net.Http.Headers;
-using System.Text;
 using System.Text.Json;
 using TypeWhisper.PluginSDK;
-using TypeWhisper.PluginSDK.Helpers;
 using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.Plugin.Shared;
@@ -12,8 +8,7 @@ namespace TypeWhisper.Plugin.Shared;
 internal sealed partial class ProviderConnection
 {
     private static partial string NormalizeLanguage(string language) => language;
-    private static partial IEnumerable<string> ParseTerms(string? prompt) =>
-        prompt?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) ?? [];
+    private static partial IEnumerable<string> ParseTerms(string? prompt) => PluginDictionaryTerms.ParsePrompt(prompt);
     // The model catalog was fetched with the previous key; a new key may see a different set of models.
     partial void OnKeyReplacing(ref Configuration next, string? key)
     {
@@ -22,16 +17,22 @@ internal sealed partial class ProviderConnection
         values.Remove("modelCatalog");
         next = next with { Values = values };
     }
-    internal async Task<PluginTranscriptionResult> MultipartAsync(string url, string model, byte[] audio, string? language,
-        string? prompt, CancellationToken ct, string? key = null, string fileField = "file", string? responseFormat = null)
+
+    /// <summary>
+    /// Uploads a recording to <c>/v1/audio/transcriptions</c>. Without a pinned language the request asks for the detected
+    /// one: Transcribe 3 leaves <c>language</c> empty otherwise, and rejects <c>return_language</c> next to a pinned language.
+    /// </summary>
+    internal async Task<PluginTranscriptionResult> MistralTranscriptionAsync(string model, byte[] audio, string? language,
+        IReadOnlyList<string> contextBias, CancellationToken ct)
     {
-        using var request = Request(HttpMethod.Post, url, key);
+        using var request = Request(HttpMethod.Post, "https://api.mistral.ai/v1/audio/transcriptions");
         using var form = new MultipartFormDataContent();
-        var file = new ByteArrayContent(audio); file.Headers.ContentType = new("audio/wav"); form.Add(file, fileField, "audio.wav");
+        var file = new ByteArrayContent(audio); file.Headers.ContentType = new("audio/wav"); form.Add(file, "file", "audio.wav");
         form.Add(new StringContent(model), "model");
-        if (responseFormat is not null) form.Add(new StringContent(responseFormat), "response_format");
-        if (Language(language) is { } lang) form.Add(new StringContent(lang), "language");
-        if (!string.IsNullOrWhiteSpace(prompt)) form.Add(new StringContent(prompt), "prompt");
+        if (language is not null) form.Add(new StringContent(language), "language");
+        else form.Add(new StringContent("true"), "return_language");
+        // Repeated fields keep multi-word names and phrases intact.
+        foreach (var term in contextBias) form.Add(new StringContent(term), "context_bias");
         request.Content = form;
         using var document = await ReadAsync(request, ct).ConfigureAwait(false); var root = document.RootElement;
         var text = Text(root, "text") ?? throw InvalidResponse();
@@ -46,6 +47,7 @@ internal sealed partial class ProviderConnection
                 if (probability is >= 0 and <= 1) noSpeech = noSpeech is null ? (float)probability : Math.Min(noSpeech.Value, (float)probability);
             }
         }
-        return new(text.Trim(), Text(root, "language") ?? Language(language), Number(root, "duration"), noSpeech) { Segments = segments };
+        var detected = Text(root, "language") is { Length: > 0 } reported ? reported : language;
+        return new(text.Trim(), detected, Number(root, "duration"), noSpeech) { Segments = segments };
     }
 }
