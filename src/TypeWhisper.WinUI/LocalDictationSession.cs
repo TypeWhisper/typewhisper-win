@@ -648,7 +648,9 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             // beside the model load, so a dictation started meanwhile does not wait for the device either.
             var warmUp = Task.Run(_audio.WarmUp);
             SetStatus(Loc.T("Loading model…"), DictationPhase.LoadingModel);
-            await PluginRuntime.InitializeAsync();
+            // Activation loads every enabled package and runs its code. On the thread pool it no longer holds up this
+            // thread, which also serves the keyboard hooks; the steps below still follow it here, in order.
+            await Task.Run(PluginRuntime.InitializeAsync);
             if (_disposed) return;
             try { if (Packages.Store.IsInstalled(LocalTranscriptionPlugin.PluginId)) await _transcriptionPlugin.InitializeAsync(); }
             catch (Exception ex) when (ex is not OutOfMemoryException) { LocalPluginError = ex.Message; }
