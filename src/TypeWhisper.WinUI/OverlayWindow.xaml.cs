@@ -62,8 +62,11 @@ public sealed partial class OverlayWindow : Window
                 _frameTimer.IsRepeating = true;
                 _frameTimer.Tick += (_, _) => OnFrame();
             }
-            if (!_frameTimer.IsRunning) _lastCompositionTimestamp = 0;
-            _frameTimer.Start();
+            if (!_frameTimer.IsRunning)
+            {
+                _lastCompositionTimestamp = 0;
+                _frameTimer.Start();
+            }
         }
         else
         {
@@ -365,6 +368,8 @@ public sealed partial class OverlayWindow : Window
         }
         UpdateStateAppearance();
         WaveformCanvas.Invalidate();
+        // The indicator can be on another display now, so a running loop picks its source again.
+        if (_renderingAttached || _frameTimer?.IsRunning == true) StartFrameLoop();
     }
 
     internal void SetTranscriptPreviewEnabled(bool enabled)
@@ -505,8 +510,6 @@ public sealed partial class OverlayWindow : Window
             {
                 SetMode(_mode, area);
                 AnchorTranscript();
-                // The new display can have another refresh rate.
-                StartFrameLoop();
             }
         }
         if (IsCorrectionFeedbackVisible)
@@ -523,8 +526,12 @@ public sealed partial class OverlayWindow : Window
             _lastCompositionTimestamp = timestamp - (long)targetTicks;
 
         var elapsedTicks = Math.Min(timestamp - _lastCompositionTimestamp, targetTicks * 4);
+        // On the timer every tick is a step (see StartFrameLoop), unless it comes less than 12 ms after the last one: if
+        // something in this process asks Windows for a finer timer resolution, the 10 ms interval really ticks every
+        // 10 ms (96 times a second in a probe). Every second tick then waits, so the waveform keeps a steady pace.
+        if (_stepPerTick && elapsedTicks < Stopwatch.Frequency * 12 / 1000d) return;
         _lastCompositionTimestamp = timestamp;
-        // Display frames are limited to 60 steps a second; on the timer every tick is a step (see StartFrameLoop).
+        // Display frames are limited to 60 steps a second.
         if (!_stepPerTick)
         {
             _renderAccumulatorTicks += elapsedTicks;
