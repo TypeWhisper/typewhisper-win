@@ -35,25 +35,57 @@ public sealed partial class OverlayWindow : Window
     private TranscriptPreviewWindow? _transcriptWindow;
     private long _lastCompositionTimestamp;
     private double _renderAccumulatorTicks;
-    // Drives the indicator at about 60 frames a second. CompositionTarget.Rendering fires at the refresh rate of the
-    // display, so on a 120 or 240 Hz display it woke the UI thread and rendered a XAML frame two or four times as often
-    // as the waveform is drawn (at most 60 times a second, see OnFrame). XAML now renders only frames that change.
+    // CompositionTarget.Rendering runs once per display frame, and while it is attached XAML renders every frame, on a
+    // 240 Hz display four for each step of the waveform (at most 60 a second, see OnFrame). Up to this rate the indicator
+    // keeps it: each step lands on a display frame, evenly spaced on 60 and 120 Hz. Faster displays use a timer instead,
+    // with one step per tick. It ticks once per Windows timer period of 15.6 ms, 64 times a second, so the waveform
+    // scrolls about 7 % faster there. Limiting the ticks to 60 steps a second left every 16th tick without a step, which
+    // showed as stutter.
+    private const int FrameTimerAboveHz = 125;
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _frameTimer;
+    private bool _renderingAttached;
+    private bool _stepPerTick;
 
+    // Picks the frame source for the display the indicator is on; called again when it moves to another display.
     private void StartFrameLoop()
     {
-        if (_frameTimer is null)
+        _stepPerTick = NativeMethods.RefreshRateOf(WinRT.Interop.WindowNative.GetWindowHandle(this)) > FrameTimerAboveHz;
+        if (_stepPerTick)
         {
-            _frameTimer = DispatcherQueue.CreateTimer();
-            // The timer ticks on Windows' 15.6 ms timer periods. An interval well below one period gives a tick in each
-            // of them, 64 a second. At 15 ms about every fifth tick slipped to the next period, and at 16.7 ms every one.
-            _frameTimer.Interval = TimeSpan.FromMilliseconds(10);
-            _frameTimer.IsRepeating = true;
-            _frameTimer.Tick += (_, _) => OnFrame();
+            DetachRendering();
+            if (_frameTimer is null)
+            {
+                _frameTimer = DispatcherQueue.CreateTimer();
+                // An interval well below one timer period gives a tick in each of them. At 15 ms about every fifth tick
+                // slipped to the next period, and at 16.7 ms every one.
+                _frameTimer.Interval = TimeSpan.FromMilliseconds(10);
+                _frameTimer.IsRepeating = true;
+                _frameTimer.Tick += (_, _) => OnFrame();
+            }
+            if (!_frameTimer.IsRunning) _lastCompositionTimestamp = 0;
+            _frameTimer.Start();
         }
-        if (!_frameTimer.IsRunning) _lastCompositionTimestamp = 0;
-        _frameTimer.Start();
+        else
+        {
+            _frameTimer?.Stop();
+            if (!_renderingAttached) CompositionTarget.Rendering += CompositionTarget_Rendering;
+            _renderingAttached = true;
+        }
     }
+
+    private void StopFrameLoop()
+    {
+        _frameTimer?.Stop();
+        DetachRendering();
+    }
+
+    private void DetachRendering()
+    {
+        if (_renderingAttached) CompositionTarget.Rendering -= CompositionTarget_Rendering;
+        _renderingAttached = false;
+    }
+
+    private void CompositionTarget_Rendering(object? sender, object e) => OnFrame();
     private double _phase;
     private bool _useMicrophone;
     private bool _isLoaded;
@@ -156,7 +188,7 @@ public sealed partial class OverlayWindow : Window
         {
             _closed = true;
             _iconRequest++;
-            _frameTimer?.Stop();
+            StopFrameLoop();
             _audioLevelSource.Dispose();
             WaveformCanvas.RemoveFromVisualTree();
             _transcriptWindow?.Close();
@@ -205,7 +237,7 @@ public sealed partial class OverlayWindow : Window
         _paused = false;
         _duration.Stop();
         _audioLevelSource.Dispose();
-        _frameTimer?.Stop();
+        StopFrameLoop();
         _transcriptWindow?.HideImmediately();
         AppWindow.Hide();
     }
@@ -473,6 +505,8 @@ public sealed partial class OverlayWindow : Window
             {
                 SetMode(_mode, area);
                 AnchorTranscript();
+                // The new display can have another refresh rate.
+                StartFrameLoop();
             }
         }
         if (IsCorrectionFeedbackVisible)
@@ -490,10 +524,14 @@ public sealed partial class OverlayWindow : Window
 
         var elapsedTicks = Math.Min(timestamp - _lastCompositionTimestamp, targetTicks * 4);
         _lastCompositionTimestamp = timestamp;
-        _renderAccumulatorTicks += elapsedTicks;
-        if (_renderAccumulatorTicks < targetTicks)
-            return;
-        _renderAccumulatorTicks %= targetTicks;
+        // Display frames are limited to 60 steps a second; on the timer every tick is a step (see StartFrameLoop).
+        if (!_stepPerTick)
+        {
+            _renderAccumulatorTicks += elapsedTicks;
+            if (_renderAccumulatorTicks < targetTicks)
+                return;
+            _renderAccumulatorTicks %= targetTicks;
+        }
 
         _phase += 0.19;
         var carrier = (Math.Sin(_phase) + 1) * 0.5;
