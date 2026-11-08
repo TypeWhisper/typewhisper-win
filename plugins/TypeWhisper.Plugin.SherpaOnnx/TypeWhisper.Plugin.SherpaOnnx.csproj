@@ -179,10 +179,28 @@ foreach (var item in SherpaNativeLibraries)
            Text="Missing required sherpa-onnx runtime file: %(_RequiredRuntimeFiles.Identity)" />
   </Target>
   <Target Name="BundleDictionaryBoosting" AfterTargets="CopyToAppPlugins">
-    <ItemGroup><CtcFiles Include="../TypeWhisper.Plugin.ParakeetCtc/bin/$(Configuration)/net10.0/**/*" /></ItemGroup>
-    <Copy SourceFiles="@(CtcFiles)" DestinationFiles="@(CtcFiles->'$(PluginOutputDir)Dependencies/com.typewhisper.parakeet-ctc/%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="../TypeWhisper.Plugin.ParakeetCtc/manifest.json" DestinationFiles="$(PluginOutputDir)Dependencies/com.typewhisper.parakeet-ctc/manifest.json" />
-    <Copy SourceFiles="../TypeWhisper.Plugin.ParakeetCtc/THIRD-PARTY-NOTICES.md" DestinationFiles="$(PluginOutputDir)Dependencies/com.typewhisper.parakeet-ctc/THIRD-PARTY-NOTICES.md" />
+    <PropertyGroup>
+      <_CtcBuildDir>../TypeWhisper.Plugin.ParakeetCtc/bin/$(Configuration)/net10.0/</_CtcBuildDir>
+      <_CtcPackageDir>$(PluginOutputDir)Dependencies/com.typewhisper.parakeet-ctc/</_CtcPackageDir>
+    </PropertyGroup>
+    <!-- The package only runs on Windows. Built without a runtime identifier, the ONNX Runtime package also brings its
+         Android, iOS, Linux and macOS binaries, which were 140 MB of the 193 MB Parakeet 1.3.3 download. Builds on other
+         systems serve headless tests and keep everything. -->
+    <ItemGroup Condition="'$(OS)' == 'Windows_NT'">
+      <CtcFiles Include="$(_CtcBuildDir)**/*"
+                Exclude="$(_CtcBuildDir)runtimes/android/**;$(_CtcBuildDir)runtimes/ios/**;$(_CtcBuildDir)runtimes/linux-*/**;$(_CtcBuildDir)runtimes/osx-*/**" />
+    </ItemGroup>
+    <ItemGroup Condition="'$(OS)' != 'Windows_NT'">
+      <CtcFiles Include="$(_CtcBuildDir)**/*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(CtcFiles)" DestinationFiles="@(CtcFiles->'$(_CtcPackageDir)%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="../TypeWhisper.Plugin.ParakeetCtc/manifest.json" DestinationFiles="$(_CtcPackageDir)manifest.json" />
+    <Copy SourceFiles="../TypeWhisper.Plugin.ParakeetCtc/THIRD-PARTY-NOTICES.md" DestinationFiles="$(_CtcPackageDir)THIRD-PARTY-NOTICES.md" />
+    <!-- Removes what earlier builds copied, and any runtime the list above does not know yet: only win-* ships. -->
+    <ItemGroup Condition="'$(OS)' == 'Windows_NT' and Exists('$(_CtcPackageDir)runtimes')">
+      <_CtcPackagedRuntime Include="$([System.IO.Directory]::GetDirectories('$(_CtcPackageDir)runtimes'))" />
+    </ItemGroup>
+    <RemoveDir Directories="@(_CtcPackagedRuntime)" Condition="'@(_CtcPackagedRuntime)' != '' and !$([System.String]::Copy('%(Filename)%(Extension)').StartsWith('win-'))" />
     <PropertyGroup>
       <_CtcNativeDir>$(PluginOutputDir)Dependencies/com.typewhisper.parakeet-ctc/runtimes/win-x64/native/</_CtcNativeDir>
     </PropertyGroup>
