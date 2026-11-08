@@ -27,13 +27,9 @@ public sealed partial class MarketplaceView : UserControl
     private CancellationTokenSource? _installation;
     internal bool IsDetail { get; private set; }
     internal bool IsInstalling => _installation is not null;
-    private bool IsPageVisible()
-    {
-        if (!IsLoaded) return false;
-        for (DependencyObject? element = this; element is not null; element = VisualTreeHelper.GetParent(element))
-            if (element is UIElement { Visibility: Visibility.Collapsed }) return false;
-        return true;
-    }
+    private bool IsPageVisible() => ViewSubscriptions.IsShown(this);
+    // The view lives as long as the app and hears every change, also while Settings is closed or shows another page.
+    private readonly TypeWhisper.Presentation.DeferredPageRefresh _pageRefresh = new();
     internal ObservableCollection<MarketplaceItem> FilteredItems { get; } = [];
     internal event EventHandler? ClearSearchRequested;
     internal event Action<bool>? DetailModeChanged;
@@ -65,13 +61,28 @@ public sealed partial class MarketplaceView : UserControl
     internal void ConfigureRuntime(LocalDictationSession runtime)
     {
         _runtime = runtime;
-        runtime.Packages.Updates.Changed += () => DispatcherQueue.TryEnqueue(() => { UpdateAllAction(); if (!IsDetail) Filter(_query); else UpdateDetail(); });
+        runtime.Packages.Updates.Changed += () => DispatcherQueue.TryEnqueue(RefreshWhenShown);
         _isInstalled = runtime.Packages.Store.IsInstalled;
 
         ResetFiltersButton.Content = Loc.T("Retry");
         Loaded += async (_, _) => await RefreshCatalogAsync();
-        runtime.Changed += () => DispatcherQueue.TryEnqueue(() => { if (IsDetail) UpdateDetail(); else Filter(_query); });
-        WinUIManagedPolicy.Changed += _ => DispatcherQueue.TryEnqueue(() => { if (IsDetail) UpdateDetail(); else Filter(_query); });
+        runtime.Changed += () => DispatcherQueue.TryEnqueue(RefreshWhenShown);
+        WinUIManagedPolicy.Changed += _ => DispatcherQueue.TryEnqueue(RefreshWhenShown);
+    }
+
+    // A change refreshes the page while it is shown; a hidden page catches up when Present shows it again.
+    private void RefreshWhenShown()
+    {
+        if (!_pageRefresh.OnChange(IsPageVisible())) return;
+        if (IsDetail) UpdateDetail();
+        else Filter(_query);
+    }
+
+    /// <summary>Shows the list for the search text, or brings an open detail page up to date after it was hidden.</summary>
+    internal void Present(string query)
+    {
+        if (!IsDetail) Filter(query);
+        else if (_pageRefresh.OnShown()) UpdateDetail();
     }
 
     // Policy judges a catalog entry by its ID, locality and categories; an installed package is judged on its own page.
@@ -110,16 +121,22 @@ public sealed partial class MarketplaceView : UserControl
     internal void Filter(string query)
     {
         if (IsDetail) return;
+        _pageRefresh.OnRefreshed();
         UpdateAllAction();
         _query = query;
         var selectedId = (MarketList.SelectedItem as MarketplaceItem)?.Plugin.Id ?? _opened?.Plugin.Id;
-        FilteredItems.Clear();
         var available = _catalog.Where(item => !_isInstalled(item.Plugin.Id)).ToArray();
-        foreach (var item in available.Where(item => (_categoriesFilter.Length == 0 || item.CategoriesIds.Contains(_categoriesFilter, StringComparer.OrdinalIgnoreCase))
+        var items = available.Where(item => (_categoriesFilter.Length == 0 || item.CategoriesIds.Contains(_categoriesFilter, StringComparer.OrdinalIgnoreCase))
             && (item.Title.Contains(query, StringComparison.OrdinalIgnoreCase) || item.Description.Contains(query, StringComparison.OrdinalIgnoreCase)
-                || item.Categories.Contains(query, StringComparison.OrdinalIgnoreCase))))
-            FilteredItems.Add(item with { Installed = _isInstalled(item.Plugin.Id), Refusal = Refusal(item),
-                UpdateAvailable = HasUpdate(item), PendingRestart = _runtime?.Packages.Store.PendingRestart(item.Plugin.Id) == true });
+                || item.Categories.Contains(query, StringComparison.OrdinalIgnoreCase)))
+            .Select(item => item with { Installed = _isInstalled(item.Plugin.Id), Refusal = Refusal(item),
+                UpdateAvailable = HasUpdate(item), PendingRestart = _runtime?.Packages.Store.PendingRestart(item.Plugin.Id) == true }).ToArray();
+        // An unchanged list keeps its rows; rebuilding it would create every row and decode its logo again.
+        if (!items.SequenceEqual(FilteredItems))
+        {
+            FilteredItems.Clear();
+            foreach (var item in items) FilteredItems.Add(item);
+        }
         MarketList.SelectedItem = FilteredItems.FirstOrDefault(item => item.Plugin.Id == selectedId) ?? FilteredItems.FirstOrDefault();
         MarketSummary.Text = FilteredItems.Count == 1 ? Loc.T("1 plugin") : Loc.T("{0} plugins", FilteredItems.Count);
         MarketEmptyState.Visibility = FilteredItems.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
