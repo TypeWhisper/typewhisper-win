@@ -86,7 +86,7 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.1.1";
+    public string PluginVersion => "1.2.0";
 
     /// <inheritdoc />
     public Task OnInstallAsync(PluginInstallationContext context, CancellationToken cancellationToken)
