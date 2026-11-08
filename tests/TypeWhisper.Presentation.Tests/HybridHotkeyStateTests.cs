@@ -504,6 +504,42 @@ public class HybridHotkeyStateTests
         Assert.Equal(HybridHotkeyAction.Stop, state.Key(0x7C, false, 5000, bindings, true, RecordingMode.Hold, held: Held));
     }
 
+    [Fact]
+    public void TypingWithoutAHeldKeyNeverReadsTheRepeatTiming()
+    {
+        // Letters, a modifier and a capital letter: no event compares the gap of another held key.
+        var reads = 0;
+        var state = new HybridHotkeyState();
+        var bindings = new HashSet<string> { ShortcutRules.Normalize("CTRL+SHIFT") };
+        static bool Held(int key) => true;
+        long Source() { reads++; return HybridHotkeyState.DefaultLostReleaseMilliseconds; }
+        foreach (var (key, down, time) in new[] { (0x41, true, 0L), (0x41, false, 60L), (0x42, true, 120L), (0x42, false, 180L),
+            (0xA0, true, 240L), (0x43, true, 300L), (0x43, false, 360L), (0xA0, false, 420L) })
+        {
+            state.ReadLostReleaseFrom(Source);
+            state.Key(key, down, time, bindings, held: Held);
+        }
+        Assert.Equal(0, reads);
+    }
+
+    [Fact]
+    public void AnAutoRepeatReadsTheRepeatTimingOnce()
+    {
+        var reads = 0;
+        var state = new HybridHotkeyState();
+        var bindings = new HashSet<string> { "F13" };
+        static bool Held(int key) => true;
+        long Source() { reads++; return HybridHotkeyState.LostReleaseAfter(2000); }
+        state.ReadLostReleaseFrom(Source);
+        Assert.Equal(HybridHotkeyAction.Start, state.Key(0x7C, true, 0, bindings, mode: RecordingMode.Hold, held: Held));
+        Assert.Equal(0, reads);
+        // A slow accessibility repeat of the held key compares its gap with the threshold read for this event.
+        state.ReadLostReleaseFrom(Source);
+        Assert.Null(state.Key(0x7C, true, 2000, bindings, true, RecordingMode.Hold, held: Held));
+        Assert.Equal(1, reads);
+        Assert.Empty(state.DroppedKeys);
+    }
+
     [Theory]
     [InlineData(false, 0u, 0u, 0u, 250L)]
     [InlineData(false, 0u, 0u, 3u, 1000L)]
