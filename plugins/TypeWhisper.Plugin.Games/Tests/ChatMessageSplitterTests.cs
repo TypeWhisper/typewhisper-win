@@ -1,7 +1,7 @@
 using System.Text;
-using TypeWhisper.Core.Services;
+using TypeWhisper.Plugin.Games;
 
-namespace TypeWhisper.Core.Tests.Services;
+namespace TypeWhisper.Plugin.Games.Tests;
 
 public class ChatMessageSplitterTests
 {

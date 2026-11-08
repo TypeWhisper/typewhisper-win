@@ -1,14 +1,13 @@
 using System.Text;
 using System.Text.RegularExpressions;
-using TypeWhisper.Core.Services;
 
-namespace TypeWhisper.Presentation;
+namespace TypeWhisper.Plugin.Games;
 
 /// <summary>One installed World of Warcraft version, such as _retail_ or _forever_.</summary>
 /// <param name="Folder">The version folder name, such as "_forever_".</param>
 /// <param name="Path">Full path of the version folder.</param>
 /// <param name="InstalledVersion">Version of the TypeWhisper add-on found there, or null when it is missing.</param>
-public sealed record WowVersionFolder(string Folder, string Path, string? InstalledVersion)
+internal sealed record WowVersionFolder(string Folder, string Path, string? InstalledVersion)
 {
     /// <summary>A short display name; product names stay untranslated.</summary>
     public string Name => Folder switch
@@ -34,14 +33,14 @@ public sealed record WowVersionFolder(string Folder, string Path, string? Instal
 /// <summary>One file of the bundled add-on, copied byte for byte.</summary>
 /// <param name="Name">File name inside the add-on folder.</param>
 /// <param name="Data">File contents.</param>
-public sealed record WowAddOnFile(string Name, byte[] Data)
+internal sealed record WowAddOnFile(string Name, byte[] Data)
 {
     /// <summary>The contents of a text file (TOC or Lua).</summary>
     public string Text => Encoding.UTF8.GetString(Data);
 }
 
 /// <summary>Finds World of Warcraft installations and installs the TypeWhisper add-on into them.</summary>
-public static partial class WowAddOn
+internal static partial class WowAddOn
 {
     /// <summary>The add-on folder and TOC name.</summary>
     public const string FolderName = "TypeWhisper";
@@ -50,7 +49,7 @@ public static partial class WowAddOn
     /// <summary>The bundled add-on version from its TOC file.</summary>
     public static string BundledVersion { get; } = ReadVersion(BundledFiles().First(file => file.Name == FolderName + ".toc").Text) ?? "0";
 
-    /// <summary>The add-on files shipped with TypeWhisper.</summary>
+    /// <summary>The add-on files shipped with the plugin.</summary>
     public static IReadOnlyList<WowAddOnFile> BundledFiles()
     {
         var assembly = typeof(WowAddOn).Assembly;
@@ -165,7 +164,7 @@ public static partial class WowAddOn
             {
                 Directory.CreateDirectory(folder.AddOnPath);
                 foreach (var file in files)
-                    AtomicFileWriter.WriteAllBytes(System.IO.Path.Join(folder.AddOnPath, file.Name), file.Data);
+                    AtomicFile.WriteAllBytes(System.IO.Path.Join(folder.AddOnPath, file.Name), file.Data);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { failures.Add((folder, ex.Message)); }
         }
@@ -188,7 +187,7 @@ public static partial class WowAddOn
         try
         {
             if (File.Exists(path) && File.ReadAllText(path) == content) return false;
-            AtomicFileWriter.WriteAllText(path, content);
+            AtomicFile.WriteAllText(path, content);
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
@@ -198,7 +197,7 @@ public static partial class WowAddOn
     public static string StatusContent(string? translationLlm, bool translationReady)
     {
         var text = new StringBuilder()
-            .Append("-- Written by TypeWhisper when you dictate into the game or open its Advanced settings. The game reads it on /reload.\n")
+            .Append("-- Written by TypeWhisper when you dictate into the game or install the add-on. The game reads it on /reload.\n")
             .Append("-- TypeWhisper replaces this file, so changes here do not last.\n")
             .Append("TypeWhisperStatus = {\n");
         if (!string.IsNullOrWhiteSpace(translationLlm)) text.Append("\tllm = \"").Append(LuaString(translationLlm)).Append("\",\n");

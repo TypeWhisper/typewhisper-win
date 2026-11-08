@@ -13,14 +13,14 @@ public sealed partial class VoxtralPlugin : ITranscriptionEnginePlugin, IApiKeyP
 {
     private readonly ProviderConnection Connection;
     /// <summary>Creates a provider with isolated HTTP transport.</summary>
-    public VoxtralPlugin() : this(new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromMinutes(5) }) { }
+    public VoxtralPlugin() : this(new HttpClient(new MistralErrorHandler(new HttpClientHandler { AllowAutoRedirect = false })) { Timeout = TimeSpan.FromMinutes(5) }) { }
     internal VoxtralPlugin(HttpClient http) => Connection = new(http);
     /// <inheritdoc />
     public string PluginId => "com.typewhisper.voxtral";
     /// <inheritdoc />
     public string PluginName => "Mistral";
     /// <inheritdoc />
-    public string PluginVersion => "1.3.3";
+    public string PluginVersion => "1.4.0";
     /// <inheritdoc />
     public Task ActivateAsync(IPluginHostServices host) => Connection.ActivateAsync(host);
     /// <inheritdoc />
@@ -41,9 +41,12 @@ public sealed partial class VoxtralPlugin : ITranscriptionEnginePlugin, IApiKeyP
         cancellationToken.ThrowIfCancellationRequested();
         var field = TextSettings.FirstOrDefault(f => f.Id == id) ?? throw new ArgumentException("Unknown setting.");
         value = value.Trim();
-        if (id == "model" && !TranscriptionModels.Any(m => m.Id == value)
-            || id == "llmModel" && !SupportedModels.Any(m => m.Id == value))
-            throw new ArgumentException("Unknown model. Refresh models and select an available model.");
+        if (id is "model" or "llmModel")
+        {
+            // Aliases and retired IDs, e.g. from API clients or older settings, are saved as the listed model.
+            value = (id == "model" ? ResolveTranscriptionModel(value) : ResolveTextModel(value))
+                ?? throw new ArgumentException("Unknown model. Refresh models and select an available model.");
+        }
         if (value.Length > 2048 || value.Any(char.IsControl) || (field.Choices.Count > 0 && !field.Choices.Any(c => c.Value == value)))
             throw new ArgumentException("Invalid setting value.");
         ValidateValue(id, value);
@@ -72,22 +75,20 @@ public sealed partial class VoxtralPlugin : ITranscriptionEnginePlugin, IApiKeyP
     /// <inheritdoc />
     public string ProviderDisplayName => PluginName;
     /// <inheritdoc />
-    public IReadOnlyList<PluginModelInfo> TranscriptionModels => Catalog.Transcription;
-    /// <inheritdoc />
-    public string? SelectedModelId => TranscriptionModels.Any(m => m.Id == Connection.Get("model")) ? Connection.Get("model")
-        : TranscriptionModels.FirstOrDefault(m => m.Id == "voxtral-mini-latest")?.Id ?? TranscriptionModels.FirstOrDefault()?.Id;
+    public string? SelectedModelId => ResolveTranscriptionModel(Connection.Get("model"))
+        ?? ResolveTranscriptionModel(MistralCatalog.MiniTranscribe) ?? Catalog.Transcription.FirstOrDefault()?.Id;
     /// <inheritdoc />
     public void SelectModel(string modelId)
     {
         // Hosts that predate SelectModelAsync call this member and still block on the save.
-        if (!TranscriptionModels.Any(m => m.Id == modelId)) throw new ArgumentException("Unknown transcription model.");
-        Connection.SaveAsync("model", modelId, default).GetAwaiter().GetResult();
+        var id = ResolveTranscriptionModel(modelId) ?? throw new ArgumentException("Unknown transcription model.");
+        Connection.SaveAsync("model", id, default).GetAwaiter().GetResult();
     }
     // Implemented implicitly: an explicit interface implementation would reference a member older SDKs lack and fail to load there.
     /// <inheritdoc />
     public Task SelectModelAsync(string modelId, CancellationToken ct)
     {
-        if (!TranscriptionModels.Any(m => m.Id == modelId)) throw new ArgumentException("Unknown transcription model.");
-        return Connection.SaveAsync("model", modelId, ct);
+        var id = ResolveTranscriptionModel(modelId) ?? throw new ArgumentException("Unknown transcription model.");
+        return Connection.SaveAsync("model", id, ct);
     }
 }

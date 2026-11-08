@@ -5,6 +5,9 @@ using TypeWhisper.PluginSDK;
 
 namespace TypeWhisper.Plugin.Voxtral;
 
+/// <summary>Settings sent once in <c>session.update</c>; Mistral locks them when the first audio arrives.</summary>
+internal sealed record MistralSessionOptions(string Model, string? Language = null, IReadOnlyList<string>? ContextBias = null);
+
 /// <summary>Voxtral Realtime transport: PCM16 input, accumulated previews, one authoritative final transcript.</summary>
 internal sealed class MistralStreamingSession : IStreamingSession
 {
@@ -16,6 +19,7 @@ internal sealed class MistralStreamingSession : IStreamingSession
     private readonly TaskCompletionSource _updated = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly Task _receiver;
     private readonly TimeSpan _completionTimeout;
+    private readonly MistralSessionOptions? _options;
     private readonly StringBuilder _preview = new();
     private string? _language;
     private volatile bool _finishing;
@@ -24,14 +28,15 @@ internal sealed class MistralStreamingSession : IStreamingSession
 
     public event Action<StreamingTranscriptEvent>? TranscriptReceived;
 
-    internal MistralStreamingSession(WebSocket socket, TimeSpan? completionTimeout = null)
+    internal MistralStreamingSession(WebSocket socket, TimeSpan? completionTimeout = null, MistralSessionOptions? options = null)
     {
         _socket = socket;
+        _options = options;
         _completionTimeout = completionTimeout ?? TimeSpan.FromSeconds(15);
         _receiver = ReceiveAsync(_lifetime.Token);
     }
 
-    internal static async Task<IStreamingSession> ConnectAsync(string key, string model, TimeSpan completionTimeout, CancellationToken ct)
+    internal static async Task<IStreamingSession> ConnectAsync(string key, MistralSessionOptions options, TimeSpan completionTimeout, CancellationToken ct)
     {
         var socket = new ClientWebSocket();
         socket.Options.SetRequestHeader("Authorization", "Bearer " + key);
@@ -40,8 +45,8 @@ internal sealed class MistralStreamingSession : IStreamingSession
         MistralStreamingSession? session = null;
         try
         {
-            await socket.ConnectAsync(new Uri("wss://api.mistral.ai/v1/audio/transcriptions/realtime?model=" + Uri.EscapeDataString(model)), http, ct).ConfigureAwait(false);
-            session = new(socket, completionTimeout);
+            await socket.ConnectAsync(new Uri("wss://api.mistral.ai/v1/audio/transcriptions/realtime?model=" + Uri.EscapeDataString(options.Model)), http, ct).ConfigureAwait(false);
+            session = new(socket, completionTimeout, options);
             await session.InitializeAsync(ct).ConfigureAwait(false);
             return session;
         }
@@ -65,11 +70,14 @@ internal sealed class MistralStreamingSession : IStreamingSession
     internal async Task InitializeAsync(CancellationToken ct)
     {
         await WaitForEventAsync(_created.Task, ct).ConfigureAwait(false);
-        await SendJsonAsync(new
+        var session = new Dictionary<string, object>
         {
-            type = "session.update",
-            session = new { audio_format = new { encoding = "pcm_s16le", sample_rate = 16000 }, target_streaming_delay_ms = 480 }
-        }, ct).ConfigureAwait(false);
+            ["audio_format"] = new { encoding = "pcm_s16le", sample_rate = 16000 },
+            ["target_streaming_delay_ms"] = 480
+        };
+        if (_options?.Language is { } language) session["language"] = language;
+        if (_options?.ContextBias is { Count: > 0 } terms) session["context_bias"] = terms;
+        await SendJsonAsync(new { type = "session.update", session }, ct).ConfigureAwait(false);
         await WaitForEventAsync(_updated.Task, ct).ConfigureAwait(false);
         _ready = true;
     }
@@ -173,7 +181,7 @@ internal sealed class MistralStreamingSession : IStreamingSession
                     if (!_finishing) throw Incomplete();
                     var final = ProviderConnection.Text(root, "text") ?? throw Incomplete();
                     if (string.IsNullOrWhiteSpace(final) && !string.IsNullOrWhiteSpace(_preview.ToString())) throw Incomplete();
-                    TranscriptReceived?.Invoke(new(final, true) { DetectedLanguage = ProviderConnection.Text(root, "language") ?? _language });
+                    TranscriptReceived?.Invoke(new(final, true) { DetectedLanguage = ProviderConnection.Text(root, "language") ?? _language ?? _options?.Language });
                     return;
             }
         }

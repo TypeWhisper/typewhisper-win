@@ -11,12 +11,11 @@ internal sealed class IntegrationsSettingsView : UserControl
     private static readonly Uri RaycastStore = new("https://www.raycast.com/SeoFood/typewhisper");
     private static readonly Uri BrowserExtension = new("https://www.typewhisper.com/extensions#browser");
 
-    internal IntegrationsSettingsView(TypeWhisper.Presentation.GamePreferencesStore games, Func<(string? Name, bool Ready)> translationLlm)
+    internal IntegrationsSettingsView()
     {
         var rows = new SettingsRows();
         rows.Children.Add(RaycastRow());
         rows.Children.Add(BrowserRow());
-        WowIntegrationSettings.AddTo(rows, games, translationLlm);
         Content = rows;
     }
 

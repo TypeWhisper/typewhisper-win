@@ -5,6 +5,7 @@ using System.Threading.Channels;
 using TypeWhisper.Plugin.Voxtral;
 using TypeWhisper.PluginHost;
 using TypeWhisper.PluginSDK;
+using TypeWhisper.PluginSDK.Models;
 
 public sealed partial class ProviderTests
 {
@@ -20,30 +21,49 @@ public sealed partial class ProviderTests
     }
 
     [Fact]
-    public async Task StreamingCapabilityFollowsSelectedModelAndLanguageIsAutomatic()
+    public async Task StreamingCapabilityFollowsSelectedModelAndSessionCarriesLanguageAndDictionary()
     {
         using var plugin = new VoxtralPlugin(); await plugin.ActivateAsync(new Host()); await Configure(plugin);
         Assert.False(plugin.SupportsStreaming); Assert.Contains("de", plugin.SupportedLanguages);
         await Assert.ThrowsAsync<NotSupportedException>(() => plugin.StartStreamingAsync("de", default));
         plugin.SelectModel(VoxtralPlugin.RealtimeModel);
         Assert.True(plugin.SupportsStreaming); Assert.True(plugin.SupportsStreamingCompletion);
-        Assert.Empty(plugin.SupportedLanguages);
-        Assert.Contains("automatisch", plugin.TextSettings.Single(s => s.Id == "model").Description);
+        Assert.Contains("de", plugin.SupportedLanguages); Assert.True(plugin.SupportsDictionaryTerms);
+        // With Mini Transcribe 3 listed, the live session only previews; the final text comes from the upload.
+        Assert.False(plugin.SupportsStreamingForPrompt(null)); Assert.False(plugin.SupportsStreamingForPrompt("TypeWhisper, Saoirse Ronan"));
+        Assert.True(plugin.SupportsStreamingPreviewForPrompt(null)); Assert.True(plugin.SupportsStreamingPreviewForPrompt("TypeWhisper, Saoirse Ronan"));
+        Assert.Contains("Voxtral Mini Transcribe 3", plugin.TextSettings.Single(s => s.Id == "model").Description);
         var socket = new MistralSocket();
-        plugin.ConnectStreaming = async (key, model, budget, ct) =>
+        plugin.ConnectStreaming = async (key, options, budget, ct) =>
         {
-            Assert.Equal("fixture-key", key); Assert.Equal(VoxtralPlugin.RealtimeModel, model);
+            Assert.Equal("fixture-key", key); Assert.Equal(VoxtralPlugin.RealtimeModel, options.Model);
             Assert.Equal(TimeSpan.FromSeconds(15), budget);
-            return await ReadySession(socket, ct: ct);
+            return await ReadySession(socket, options: options, ct: ct);
         };
-        await using var session = await plugin.StartStreamingAsync("de", default);
+        var prompt = PluginDictionaryTerms.CreateStructuredPrompt(["TypeWhisper", "Saoirse Ronan"]);
+        await using var session = await plugin.StartStreamingWithLanguageHintsAndPromptAsync(["de-DE", "en"], prompt, default);
         using var payload = JsonDocument.Parse(socket.Sent[0]);
         var config = payload.RootElement.GetProperty("session");
         Assert.Equal(16000, config.GetProperty("audio_format").GetProperty("sample_rate").GetInt32());
         Assert.Equal("pcm_s16le", config.GetProperty("audio_format").GetProperty("encoding").GetString());
-        Assert.False(config.TryGetProperty("language", out _));
+        Assert.Equal("de", config.GetProperty("language").GetString());
+        Assert.Equal(new[] { "TypeWhisper", "Saoirse Ronan" }, config.GetProperty("context_bias").EnumerateArray().Select(t => t.GetString()));
         Assert.InRange(config.GetProperty("target_streaming_delay_ms").GetInt32(), 240, 2400);
         plugin.SelectModel("voxtral-mini-latest"); Assert.False(plugin.SupportsStreaming);
+        Assert.Equal(MiniTranscribe, plugin.SelectedModelId);
+    }
+
+    [Fact]
+    public async Task AutomaticLanguageAndEmptyDictionaryStayOutOfSessionUpdate()
+    {
+        using var plugin = new VoxtralPlugin(); await plugin.ActivateAsync(new Host()); await Configure(plugin);
+        plugin.SelectModel(VoxtralPlugin.RealtimeModel);
+        var socket = new MistralSocket();
+        plugin.ConnectStreaming = async (_, options, _, ct) => await ReadySession(socket, options: options, ct: ct);
+        await using var session = await plugin.StartStreamingAsync(null, default);
+        using var payload = JsonDocument.Parse(socket.Sent[0]);
+        var config = payload.RootElement.GetProperty("session");
+        Assert.False(config.TryGetProperty("language", out _)); Assert.False(config.TryGetProperty("context_bias", out _));
     }
 
     [Fact]
@@ -172,31 +192,83 @@ public sealed partial class ProviderTests
     }
 
     [Fact]
-    public async Task ActualHostCollectsCompleteResultWithoutDuplicatingPreviews()
+    public async Task ActualHostShowsPreviewAndLeavesTheFinalTextToTheUpload()
     {
         using var plugin = new VoxtralPlugin(); await plugin.ActivateAsync(new Host()); await Configure(plugin);
         plugin.SelectModel(VoxtralPlugin.RealtimeModel);
         var socket = new MistralSocket { CompleteAutomatically = true };
-        plugin.ConnectStreaming = (_, _, _, ct) => ReadySessionAsInterface(socket, ct);
+        MistralSessionOptions? opened = null;
+        plugin.ConnectStreaming = (_, options, _, ct) => { opened = options; return ReadySessionAsInterface(socket, ct); };
         var failed = false;
-        await using var stream = new StreamingDictation((run, ct) => run(plugin, ct), [], _ => { }, () => failed = true, default);
+        var previews = Channel.CreateUnbounded<string>();
+        await using var stream = new StreamingDictation((run, ct) => run(plugin, ct), ["de"], text => previews.Writer.TryWrite(text),
+            () => failed = true, default, ["Saoirse Ronan"]);
         stream.Append(new float[4000]);
-        Assert.Equal("Hello, world!", await stream.FinishAsync(4000)); Assert.False(failed);
+        Assert.Equal("Hello world", await previews.Reader.ReadAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.True(stream.IsPreviewOnly);
+        Assert.Null(await stream.FinishAsync(4000)); Assert.False(failed);
+        Assert.Equal("de", opened!.Language); Assert.Empty(opened.ContextBias!);
     }
 
     [Fact]
-    public async Task RealtimeWavPathUsesSameSocketModelAndCompleteResult()
+    public async Task ActualHostCollectsCompleteResultWhenNoFileModelIsListed()
     {
-        using var plugin = new VoxtralPlugin(); await plugin.ActivateAsync(new Host()); await Configure(plugin);
-        plugin.SelectModel(VoxtralPlugin.RealtimeModel);
+        using var http = new HttpClient(new Handler((_, _) => Json("""
+            {"data":[{"id":"voxtral-mini-transcribe-realtime-3-0","capabilities":{"audio_transcription_realtime":true},
+              "audio_transcription_capabilities":{"context_bias":true,"languages":["de"]}}]}
+            """)));
+        using var plugin = new VoxtralPlugin(http); await plugin.ActivateAsync(new Host()); await Configure(plugin);
+        await plugin.ExecuteSettingsActionAsync("refreshModels", default);
+        Assert.True(plugin.SupportsStreamingForPrompt("Saoirse Ronan")); Assert.False(plugin.SupportsStreamingPreviewForPrompt("Saoirse Ronan"));
+        Assert.Equal("Zeigt Live-Text beim Sprechen und übernimmt ihn als fertigen Text.", plugin.TextSettings.Single(s => s.Id == "model").Description);
         var socket = new MistralSocket { CompleteAutomatically = true };
-        plugin.ConnectStreaming = (_, model, budget, ct) =>
+        MistralSessionOptions? opened = null;
+        plugin.ConnectStreaming = (_, options, _, ct) => { opened = options; return ReadySessionAsInterface(socket, ct); };
+        var failed = false;
+        await using var stream = new StreamingDictation((run, ct) => run(plugin, ct), [], _ => { }, () => failed = true, default, ["Saoirse Ronan"]);
+        stream.Append(new float[4000]);
+        Assert.Equal("Hello, world!", await stream.FinishAsync(4000)); Assert.False(failed);
+        Assert.Equal(new[] { "Saoirse Ronan" }, opened!.ContextBias);
+    }
+
+    [Fact]
+    public async Task RealtimeSelectionUploadsCompleteRecordingsToTranscribe3()
+    {
+        var fields = new List<(string Name, string Value)>();
+        using var http = new HttpClient(new Handler((request, _) =>
         {
-            Assert.Equal(VoxtralPlugin.RealtimeModel, model);
+            Assert.Equal("/v1/audio/transcriptions", request.RequestUri!.AbsolutePath);
+            fields.AddRange(FormFields(request));
+            return Json("""{"text":"Hallo Welt","language":null}""");
+        }));
+        using var plugin = new VoxtralPlugin(http); await plugin.ActivateAsync(new Host()); await Configure(plugin);
+        plugin.SelectModel(VoxtralPlugin.RealtimeModel);
+        plugin.ConnectStreaming = (_, _, _, _) => throw new InvalidOperationException("Complete recordings must not use the live socket.");
+        var result = await plugin.TranscribeAsync(Audio(), "de", false, "TypeWhisper, Saoirse Ronan", default);
+        Assert.Equal("Hallo Welt", result.Text); Assert.Equal("de", result.DetectedLanguage); Assert.Equal(4 / 32000d, result.DurationSeconds);
+        Assert.Contains(("model", MiniTranscribe), fields); Assert.Contains(("language", "de"), fields);
+        Assert.Equal(new[] { "TypeWhisper", "Saoirse Ronan" }, fields.Where(f => f.Name == "context_bias").Select(f => f.Value));
+    }
+
+    [Fact]
+    public async Task RealtimeOnlyCatalogStreamsCompleteRecordingsThroughTheSocket()
+    {
+        using var http = new HttpClient(new Handler((_, _) => Json("""
+            {"data":[{"id":"voxtral-mini-transcribe-realtime-3-0","capabilities":{"audio_transcription_realtime":true},
+              "audio_transcription_capabilities":{"context_bias":true,"languages":["de","en"]}}]}
+            """)));
+        using var plugin = new VoxtralPlugin(http); await plugin.ActivateAsync(new Host()); await Configure(plugin);
+        await plugin.ExecuteSettingsActionAsync("refreshModels", default);
+        Assert.Equal(VoxtralPlugin.RealtimeModel, plugin.SelectedModelId);
+        var socket = new MistralSocket { CompleteAutomatically = true };
+        plugin.ConnectStreaming = (_, options, budget, ct) =>
+        {
+            Assert.Equal(VoxtralPlugin.RealtimeModel, options.Model); Assert.Equal("de", options.Language);
+            Assert.Equal(new[] { "TypeWhisper" }, options.ContextBias);
             Assert.Equal(TimeSpan.FromSeconds(15 + 4 / 32000d), budget);
             return ReadySessionAsInterface(socket, ct);
         };
-        var result = await plugin.TranscribeAsync(Audio(), "de", false, null, default);
+        var result = await plugin.TranscribeAsync(Audio(), "de", false, "TypeWhisper", default);
         Assert.Equal("Hello, world!", result.Text); Assert.Equal("en", result.DetectedLanguage);
         Assert.Equal(4 / 32000d, result.DurationSeconds); Assert.Equal(4, Assert.Single(socket.Audio).Length);
     }
@@ -204,8 +276,11 @@ public sealed partial class ProviderTests
     [Fact]
     public async Task CompletedRecordingReceivesDurationAwareFinalizationBudget()
     {
-        using var plugin = new VoxtralPlugin(); await plugin.ActivateAsync(new Host()); await Configure(plugin);
-        plugin.SelectModel(VoxtralPlugin.RealtimeModel);
+        using var http = new HttpClient(new Handler((_, _) => Json("""
+            {"data":[{"id":"voxtral-mini-transcribe-realtime-3-0","capabilities":{"audio_transcription_realtime":true}}]}
+            """)));
+        using var plugin = new VoxtralPlugin(http); await plugin.ActivateAsync(new Host()); await Configure(plugin);
+        await plugin.ExecuteSettingsActionAsync("refreshModels", default);
         var wav = new byte[44 + 32000 * 60]; Audio().AsSpan(0, 44).CopyTo(wav);
         System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(wav.AsSpan(4), wav.Length - 8);
         System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(wav.AsSpan(40), wav.Length - 44);
@@ -213,10 +288,23 @@ public sealed partial class ProviderTests
         plugin.ConnectStreaming = async (_, _, budget, ct) =>
         {
             Assert.Equal(TimeSpan.FromSeconds(75), budget);
-            return await ReadySession(socket, budget, ct);
+            return await ReadySession(socket, budget, ct: ct);
         };
         var result = await plugin.TranscribeAsync(wav, null, false, null, default);
         Assert.Equal(60, result.DurationSeconds); Assert.Equal("Hello, world!", result.Text);
+    }
+
+    [Fact]
+    public async Task ForcedLanguageIsReportedWhenTheLiveResultHasNone()
+    {
+        var socket = new MistralSocket();
+        await using var session = await ReadySession(socket, options: new(VoxtralPlugin.RealtimeModel, "de"));
+        var final = new TaskCompletionSource<StreamingTranscriptEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
+        session.TranscriptReceived += update => { if (update.IsFinal) final.TrySetResult(update); };
+        var finish = session.FinalizeAsync(default); await socket.Ended.Reader.ReadAsync();
+        socket.Text("""{"type":"transcription.done","text":"Hallo","language":null}""");
+        await finish;
+        Assert.Equal("de", (await final.Task).DetectedLanguage);
     }
 
     [Theory]
@@ -228,9 +316,10 @@ public sealed partial class ProviderTests
     }
 
     private static async Task<IStreamingSession> ReadySessionAsInterface(MistralSocket socket, CancellationToken ct) => await ReadySession(socket, ct: ct);
-    private static async Task<MistralStreamingSession> ReadySession(MistralSocket socket, TimeSpan? timeout = null, CancellationToken ct = default)
+    private static async Task<MistralStreamingSession> ReadySession(MistralSocket socket, TimeSpan? timeout = null,
+        MistralSessionOptions? options = null, CancellationToken ct = default)
     {
-        var session = new MistralStreamingSession(socket, timeout);
+        var session = new MistralStreamingSession(socket, timeout, options);
         socket.Text("""{"type":"session.created"}""");
         await session.InitializeAsync(ct); return session;
     }

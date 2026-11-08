@@ -20,6 +20,10 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
     private readonly MouseShortcutPresses _mousePresses = new();
     private readonly Func<bool>? _paused;
     private readonly Microsoft.UI.Dispatching.DispatcherQueue _queue;
+    // Windows calls every low-level keyboard hook once per key event on the UI thread. A registration without a binding
+    // has nothing to detect, so it is hooked only while it has one, unless it must always be (the main dictation shortcut
+    // also keeps AltGrControlDown current for the shortcut recorder).
+    private readonly bool _hookWithoutBinding;
     // Owned clicks in input order. Windows passes input to the hooks one event at a time, so every click queued here
     // happened before the keyboard event the UI thread is about to handle. The keyboard hook handles them first,
     // and the gesture always sees the order Windows saw.
@@ -33,10 +37,11 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
     // Lets the shortcut recorder tell AltGr from a real Ctrl, which XAML key events cannot.
     internal static bool AltGrControlDown { get; private set; }
     internal DictationHotkeyRegistration(Microsoft.UI.Xaml.Window window, Action<HybridHotkeyAction> invoke, Func<bool> isRecording,
-        Func<RecordingMode>? recordingMode = null, Func<bool>? paused = null, int idBase = 0x6500)
+        Func<RecordingMode>? recordingMode = null, Func<bool>? paused = null, int idBase = 0x6500, bool hookWithoutBinding = true)
     {
         recordingMode ??= () => RecordingMode.Hybrid;
         _paused = paused;
+        _hookWithoutBinding = hookWithoutBinding;
         _queue = window.DispatcherQueue;
         // Reserve ordinary chords, but use the hook for both press and release.
         _regular = new(window, () => { }, idBase);
@@ -101,9 +106,14 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
             }
             return NativeMethods.CallNextHookEx(IntPtr.Zero, code, message, data);
         };
+        if (!hookWithoutBinding) return;
         _hook = NativeMethods.SetWindowsHookEx(NativeMethods.WH_KEYBOARD_LL, _callback, NativeMethods.GetModuleHandle(null), 0);
         if (_hook == IntPtr.Zero) { _regular.Dispose(); throw new Win32Exception(Marshal.GetLastWin32Error()); }
     }
+
+    // Whether the last TryChange installed the keyboard hook, so the owner can restore the hook order.
+    internal bool HookInstalledByLastChange { get; private set; }
+    private bool NeedsHook(int bindings) => _hookWithoutBinding || bindings > 0;
     private static readonly Func<long> LostReleaseFromRepeatTiming = () => HybridHotkeyState.LostReleaseAfter(KeyboardRepeatTiming.LongestGapMilliseconds);
     // Every shortcut hook sees the same event, so each lost key-up is logged once per event and key.
     // All hooks run on the UI thread.
@@ -154,12 +164,15 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
     internal string? Recover()
     {
         if (_disposed) return null;
-        var replacement = NativeMethods.SetWindowsHookEx(NativeMethods.WH_KEYBOARD_LL, _callback, NativeMethods.GetModuleHandle(null), 0);
-        if (replacement == IntPtr.Zero)
-            return Loc.T("Could not restore dictation keyboard hook (Windows error {0}). Retry after unlocking, or restart TypeWhisper.", Marshal.GetLastWin32Error());
-        var previous = _hook;
-        _hook = replacement;
-        if (previous != IntPtr.Zero) NativeMethods.UnhookWindowsHookEx(previous);
+        if (NeedsHook(_bindings.Count))
+        {
+            var replacement = NativeMethods.SetWindowsHookEx(NativeMethods.WH_KEYBOARD_LL, _callback, NativeMethods.GetModuleHandle(null), 0);
+            if (replacement == IntPtr.Zero)
+                return Loc.T("Could not restore dictation keyboard hook (Windows error {0}). Retry after unlocking, or restart TypeWhisper.", Marshal.GetLastWin32Error());
+            var previous = _hook;
+            _hook = replacement;
+            if (previous != IntPtr.Zero) NativeMethods.UnhookWindowsHookEx(previous);
+        }
         // Generic modifier VKs alias the physical left/right keys. Seeding both
         // would leave a phantom generic key down after the physical key-up.
         _state.ResetAfterInterruption(Enumerable.Range(8, 247)
@@ -177,20 +190,32 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
         static bool ModifierOnly(string chord) => chord.Split('+').All(p => p is "CTRL" or "ALT" or "SHIFT" or "WIN");
         var mouseButtons = chords.Where(ShortcutKeys.IsMouseChord)
             .Select(chord => ShortcutKeys.TryParse(chord.Split('+')[^1], out var button) ? button : 0).ToHashSet();
-        // Install the mouse hook first, so a failure leaves the previous shortcuts untouched.
+        HookInstalledByLastChange = false;
+        // Install the keyboard and mouse hooks first, so a failure leaves the previous shortcuts untouched.
+        var keyboardHookAdded = false;
+        if (NeedsHook(chords.Length) && _hook == IntPtr.Zero)
+        {
+            _hook = NativeMethods.SetWindowsHookEx(NativeMethods.WH_KEYBOARD_LL, _callback, NativeMethods.GetModuleHandle(null), 0);
+            if (_hook == IntPtr.Zero)
+                return Loc.T("Could not install the keyboard hook for this shortcut (Windows error {0}). Restart TypeWhisper and try again.", Marshal.GetLastWin32Error());
+            keyboardHookAdded = true;
+        }
         var hookAdded = false;
         if (mouseButtons.Count > 0 && !_mouseHooked)
         {
-            if (MouseShortcutHook.Add(this) is { } hookError) return hookError;
+            if (MouseShortcutHook.Add(this) is { } hookError) { if (keyboardHookAdded) StopKeyboard(); return hookError; }
             _mouseHooked = hookAdded = true;
         }
         var registrationError = _regular.TryChange(string.Join(",", chords.Where(c => !ModifierOnly(c) && !ShortcutKeys.IsMouseChord(c))));
         if (registrationError is not null)
         {
             if (hookAdded) StopMouse();
+            if (keyboardHookAdded) StopKeyboard();
             return registrationError;
         }
         if (mouseButtons.Count == 0) StopMouse();
+        if (!NeedsHook(chords.Length)) StopKeyboard();
+        HookInstalledByLastChange = keyboardHookAdded;
         _bindings = chords.ToHashSet();
         _mouseButtons = mouseButtons;
         _state = new();
@@ -204,11 +229,17 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
         MouseShortcutHook.Remove(this);
         _mouseHooked = false;
     }
+    private void StopKeyboard()
+    {
+        if (_hook == IntPtr.Zero) return;
+        NativeMethods.UnhookWindowsHookEx(_hook);
+        _hook = IntPtr.Zero;
+    }
     public void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
-        NativeMethods.UnhookWindowsHookEx(_hook); _hook = IntPtr.Zero;
+        StopKeyboard();
         StopMouse();
         _regular.Dispose();
     }

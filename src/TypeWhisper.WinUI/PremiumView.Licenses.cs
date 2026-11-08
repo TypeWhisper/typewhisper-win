@@ -33,7 +33,13 @@ internal sealed partial class PremiumView
         panel.Children.Add(_licenseStatuses);
         _licenseInput.ColumnDefinitions.Add(new()); _licenseInput.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
         AutomationProperties.SetName(_licenseKey, Loc.T("License key"));
-        _licenseKey.PasswordChanged += (_, _) => UpdateLicenseInput();
+        // A key typed here waits for Activate; Settings does not rebuild the page over it.
+        UnappliedEdits.Track(this, () => _licenseKey.Password.Length > 0);
+        _licenseKey.PasswordChanged += (_, _) =>
+        {
+            UpdateLicenseInput();
+            if (_licenseKey.Password.Length == 0) UnappliedEdits.NotifySettled();
+        };
         _licenseKey.KeyDown += async (_, e) =>
         {
             if (e.Key != global::Windows.System.VirtualKey.Enter || !_activateLicense.IsEnabled) return;

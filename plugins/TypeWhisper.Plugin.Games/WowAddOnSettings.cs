@@ -1,35 +1,23 @@
 using System.Text.RegularExpressions;
-using TypeWhisper.Core.Models;
 
-namespace TypeWhisper.Presentation;
+namespace TypeWhisper.Plugin.Games;
 
 /// <summary>
 /// The settings the player chose on the add-on's page in World of Warcraft. Add-ons cannot reach TypeWhisper, so
-/// TypeWhisper reads the file the game saves them in. The game writes it when the player types /reload or logs out,
+/// the plugin reads the file the game saves them in. The game writes it when the player types /reload or logs out,
 /// so a change reaches TypeWhisper only then.
 /// </summary>
 /// <param name="Send">Whether Enter sends each message.</param>
 /// <param name="ShowBar">Whether the add-on's cast bar shows the dictation, in place of TypeWhisper's indicator.</param>
-/// <param name="TranslateTo">The language messages are translated into, in English, or null to keep the dictated language.</param>
-public sealed partial record WowAddOnSettings(bool Send = true, bool ShowBar = true, string? TranslateTo = null)
+/// <param name="TranslateTo">The language messages are translated into, in English, or null to keep the dictated
+/// language. TypeWhisper translates with the default LLM of its workflows.</param>
+internal sealed partial record WowAddOnSettings(bool Send = true, bool ShowBar = true, string? TranslateTo = null)
 {
     private const string FileName = WowAddOn.FolderName + ".lua";
     private const int MaxTranslationTarget = 64;
 
     /// <summary>The add-on's defaults, used before the game first saves them.</summary>
     public static WowAddOnSettings Default { get; } = new();
-
-    /// <summary>
-    /// The chosen translation as an App workflow for the game, or null without one. It ranks last among the game's App
-    /// rules, so a workflow of the player's own for the game still wins, while it beats a Global fallback. The shared
-    /// workflow LLM translates.
-    /// </summary>
-    public Workflow? TranslationWorkflow() => TranslateTo is null ? null : new Workflow
-    {
-        Id = "wow-addon-translation", Name = Loc.T("World of Warcraft translation"), Template = WorkflowTemplate.Translation,
-        SortOrder = int.MaxValue, Trigger = WorkflowTrigger.App([.. GameCatalog.WorldOfWarcraft.ProcessNames]),
-        Behavior = new() { TranslationTarget = TranslateTo, ProviderOverride = WorkflowLlmDefaults.Inherit }
-    };
 
     /// <summary>
     /// Reads the newest saved settings of the game version in <paramref name="versionFolder"/>, such as "_retail_".

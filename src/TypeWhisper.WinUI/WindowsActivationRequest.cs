@@ -12,7 +12,7 @@ internal static class WindowsActivationRequest
         var startup = activation.Kind == ExtendedActivationKind.StartupTask;
         return activation.Data switch
         {
-            ShareTargetActivatedEventArgs => ApplicationActivationRequest.Parse(["--files"]),
+            ShareTargetActivatedEventArgs => ApplicationActivationRequest.Parse(["--files"]) with { AwaitsSharedFiles = true },
             IFileActivatedEventArgs files => ApplicationActivationRequest.Parse(
                 new[] { "--transcribe-file" }.Concat(files.Files.Select(item => item is StorageFile file ? file.Path : string.Empty))),
             IProtocolActivatedEventArgs protocol => ApplicationActivationRequest.Parse([protocol.Uri.AbsoluteUri]),

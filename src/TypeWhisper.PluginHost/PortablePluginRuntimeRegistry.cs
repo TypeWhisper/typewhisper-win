@@ -91,6 +91,11 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
         // Worker adapters for this activation, keyed by the in-process engine they present. Locked for readers
         // outside the gate; only gate holders change it.
         internal readonly Dictionary<ITranscriptionEnginePlugin, IsolatedTranscriptionEngine> Isolated = new(ReferenceEqualityComparer.Instance);
+        // Dictation target calls run beside the gate. Their count keeps the package loaded until they return, and the
+        // lifetime cancels them when the package stops accepting. Guarded by _sync.
+        internal int TargetCalls;
+        internal TaskCompletionSource? TargetIdle;
+        internal CancellationTokenSource TargetLifetime = new();
     }
     private sealed record TranscriptionRole(Slot Owner, ITranscriptionEnginePlugin Engine);
     private sealed record LlmRole(Slot Owner, ILlmProviderPlugin Provider);
@@ -102,7 +107,12 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
         internal Dictionary<string, PostProcessorRole> PostProcessors { get; init; } = new(StringComparer.Ordinal);
         internal PortableTtsProvider[] TtsSnapshots { get; init; } = [];
         internal Dictionary<string, ActionRole> Actions { get; init; } = new(StringComparer.Ordinal);
+        internal Dictionary<string, DictationTargetRole> DictationTargets { get; init; } = new(StringComparer.Ordinal);
+        // The activation each included package's entries were read from.
+        internal Dictionary<Slot, PortablePluginPackage> Members { get; init; } = new();
     }
+    // The inventory's inspection of a package directory, handed to that package's activation in the startup pass.
+    private sealed record StartupPackage(string Directory, InstalledPluginPackage Inspection);
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly object _sync = new();
     private readonly Dictionary<string, Slot> _slots = new(StringComparer.Ordinal);
@@ -113,6 +123,10 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
     private bool _disposed;
     private int _refreshRequested;
     private int _refreshRunning;
+    // While InitializeAsync activates the saved packages, a capability notification only marks a refresh for after
+    // the pass, so it neither rebuilds the index between activations nor announces a change of its own.
+    private bool _startupPass;
+    private bool _refreshAfterStartup;
 
     /// <summary>Raised after state changes; UI subscribers must dispatch to their UI thread.</summary>
     public event Action? Changed;
@@ -221,7 +235,19 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
     public async Task InitializeAsync()
     {
         if (!store.Initialized) throw new InvalidOperationException("Initialize plugin storage before the runtime.");
-        foreach (var package in store.Inventory())
+        var refresh = false;
+        lock (_sync) _startupPass = true;
+        try { await ActivateSavedPackagesAsync(); }
+        finally { lock (_sync) { _startupPass = false; refresh = _refreshAfterStartup; _refreshAfterStartup = false; } }
+        // A package that reported a change while it activated is read again, once for the whole pass; that refresh
+        // announces the pass.
+        if (refresh) await RefreshCapabilitiesAsync();
+        else NotifyChanged();
+    }
+
+    private async Task ActivateSavedPackagesAsync()
+    {
+        foreach (var (package, directory) in store.InspectInstalled())
         {
             if (package.Manifest is not { } manifest) continue;
             if (ownsPlugin?.Invoke(manifest.Id) == false) continue;
@@ -241,19 +267,23 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             if (package.Error is not null || refused is not null) continue;
             try
             {
-                if (slot.Services.GetSetting<bool?>("Enabled") == true) await SetEnabledAsync(slot.Id, true);
+                // Each activation reads only its own package's capabilities; subscribers hear of the whole pass once below.
+                if (slot.Services.GetSetting<bool?>("Enabled") == true) await SetEnabledAsync(slot.Id, true, new(directory, package));
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             { lock (_sync) slot.Error = "Plugin enablement could not be loaded: " + ex.GetType().Name; }
         }
-        NotifyChanged();
     }
 
     /// <summary>
     /// Enables a verified installed package, or cancels and drains it before disabling.
     /// Returns a visible error; failed persistence does not report a changed preference.
     /// </summary>
-    public async Task<string?> SetEnabledAsync(string pluginId, bool enabled)
+    public Task<string?> SetEnabledAsync(string pluginId, bool enabled) => SetEnabledAsync(pluginId, enabled, null);
+
+    // A startup activation reuses the inventory's inspection of the same directory, reads only its own package's
+    // capabilities into the index and leaves the change notification to the end of the startup pass.
+    private async Task<string?> SetEnabledAsync(string pluginId, bool enabled, StartupPackage? startup)
     {
         if (ownsPlugin?.Invoke(pluginId) == false) return "This package is managed by its existing runtime owner.";
         Slot slot;
@@ -293,7 +323,8 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
                 return null;
             }
             var directory = store.Resolve(pluginId); // Inventory paths are display identities, not loadable directories.
-            var inspection = PortablePluginInventory.Inspect(directory, hostVersion);
+            // Installed package directories never change, so the startup pass's inspection of the same one still holds.
+            var inspection = startup?.Directory == directory ? startup.Inspection : PortablePluginInventory.Inspect(directory, hostVersion);
             if (inspection.Error is { } invalid) throw new InvalidDataException(invalid);
             if (inspection.Manifest?.Id != pluginId) throw new InvalidDataException("Installed package identity does not match its registration.");
             // Judged again with the manifest on disk and the policy of this moment, before any package code loads:
@@ -310,7 +341,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
                 return refusedPackage;
             }
             var loadedHere = slot.Package is null;
-            var package = slot.Package ?? await PortablePluginPackage.LoadAsync(directory, slot.Services, hostVersion);
+            var package = slot.Package ?? await PortablePluginPackage.LoadAsync(directory, inspection.Manifest, slot.Services, hostVersion);
             // Judged once more after activation: a policy that changed during the await releases the package
             // instead of publishing it.
             if (Policy.PackageRefusal(pluginId, locality, categories) is { } refusedAfterLoad)
@@ -328,7 +359,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             lock (_sync) slot.Stopping = false;
             try
             {
-                var next = BuildIndex();
+                var next = BuildIndex(startup is null ? null : slot);
                 lock (_sync)
                 {
                     if (_disposed || slot.Generation != generation) throw new OperationCanceledException("Plugin activation was superseded.");
@@ -358,7 +389,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             lock (_sync) { slot.Error = message; slot.PolicyRefused = ex is ManagedPolicyDeniedException; }
             return message;
         }
-        finally { _gate.Release(); NotifyChanged(); }
+        finally { _gate.Release(); if (startup is null) NotifyChanged(); }
     }
 
     private string? SlotRefusal(Slot slot) => slot.Categories is null
@@ -449,7 +480,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
         // Text reaches processors, actions, speech and memory sources: judged by the activated plugin, since a
         // manifest need not declare categories.
         foreach (var slot in _slots.Values)
-            if (slot.Package?.Plugin is IPostProcessorPlugin or IActionPlugin or ITtsProviderPlugin or IMemoryStoragePlugin
+            if (slot.Package?.Plugin is IPostProcessorPlugin or IActionPlugin or ITtsProviderPlugin or IMemoryStoragePlugin or IDictationTargetPlugin
                 && policy.TextTransferRefusal(slot.Id, slot.Locality) is not null)
                 CancelRequest(slot);
     }
@@ -769,11 +800,15 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
         finally { _gate.Release(); NotifyChanged(); }
     }
 
-    private Index BuildIndex()
+    // Reads the capabilities of every included package. With a package given, as in the startup pass, only that one
+    // is read: a package the published index read for the same activation keeps its entries from there. A change
+    // since that read asks for a refresh, which reads every package again once the startup pass has ended.
+    private Index BuildIndex(Slot? only = null)
     {
         Slot[] slots;
+        Index previous;
         // A package marked for a policy unload is left out: reading its capabilities would run its code.
-        lock (_sync) slots = _slots.Values.Where(slot => slot.Package is not null && !slot.Stopping).ToArray();
+        lock (_sync) { slots = _slots.Values.Where(slot => slot.Package is not null && !slot.Stopping).ToArray(); previous = _index; }
         var transcription = new Dictionary<string, TranscriptionRole>(StringComparer.OrdinalIgnoreCase);
         var llm = new Dictionary<string, LlmRole>(StringComparer.OrdinalIgnoreCase);
         var transcriptionSnapshots = new List<PortableTranscriptionProvider>();
@@ -781,6 +816,8 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
         var ttsSnapshots = new List<PortableTtsProvider>();
         var postProcessors = new Dictionary<string, PostProcessorRole>(StringComparer.Ordinal);
         var actions = new Dictionary<string, ActionRole>(StringComparer.Ordinal);
+        var dictationTargets = new Dictionary<string, DictationTargetRole>(StringComparer.Ordinal);
+        var members = new Dictionary<Slot, PortablePluginPackage>();
         foreach (var slot in slots)
         {
             // Judged once more right before its capabilities are read: a package marked or refused since the slots
@@ -788,7 +825,30 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             bool skip;
             lock (_sync) skip = slot.Package is null || slot.Stopping || SlotRefusal(slot) is not null;
             if (skip) continue;
-            var plugin = slot.Package!.Plugin;
+            var package = slot.Package!;
+            members.Add(slot, package);
+            if (only is not null && slot != only && previous.Members.GetValueOrDefault(slot) == package)
+            {
+                // Added through the same checks as a fresh read, so a collision with the package read now is still found.
+                ttsSnapshots.AddRange(previous.TtsSnapshots.Where(item => item.PluginId == slot.Id));
+                if (previous.Actions.TryGetValue(slot.Id, out var reusedAction)) actions.Add(slot.Id, reusedAction);
+                if (previous.PostProcessors.TryGetValue(slot.Id, out var reusedProcessor)) postProcessors.Add(slot.Id, reusedProcessor);
+                if (previous.DictationTargets.TryGetValue(slot.Id, out var reusedTarget)) dictationTargets.Add(slot.Id, reusedTarget);
+                foreach (var reused in previous.TranscriptionSnapshots.Where(item => item.PluginId == slot.Id))
+                {
+                    if (!transcription.TryAdd(reused.SelectionId, previous.Transcription[reused.SelectionId]))
+                        throw new CapabilityCollisionException("Transcription capability identity collision or invalid owner: " + reused.SelectionId);
+                    transcriptionSnapshots.Add(reused);
+                }
+                foreach (var reused in previous.LlmSnapshots.Where(item => item.PluginId == slot.Id))
+                {
+                    if (!llm.TryAdd(reused.SelectionId, previous.Llm[reused.SelectionId]))
+                        throw new CapabilityCollisionException("LLM capability identity collision or invalid owner: " + reused.SelectionId);
+                    llmSnapshots.Add(reused);
+                }
+                continue;
+            }
+            var plugin = package.Plugin;
             if (plugin is ITtsProviderPlugin tts && tts.SupportsPlaybackSelection)
                 ttsSnapshots.Add(new(slot.Id, tts.ProviderDisplayName, tts.IsConfigured, Array.AsReadOnly(tts.AvailableVoices.ToArray())) { IsLocal = slot.IsLocal });
             if (plugin is IActionPlugin action)
@@ -804,6 +864,14 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
                 var snapshot = new PortablePostProcessor(slot.Id, processor.ProcessorName,
                     processor.PluginVersion, processor.Priority, slot.Generation);
                 postProcessors.Add(slot.Id, new(slot, processor, snapshot));
+            }
+            if (plugin is IDictationTargetPlugin target)
+            {
+                if (target.PluginId != slot.Id)
+                    throw new CapabilityCollisionException("Dictation target identity does not match its package.");
+                var processes = (target.TargetProcessNames ?? []).Where(name => !string.IsNullOrWhiteSpace(name)).Select(name => name.Trim())
+                    .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+                dictationTargets.Add(slot.Id, new(slot, target, new(slot.Id, target.PluginName, Array.AsReadOnly(processes), slot.Generation)));
             }
             slot.ApiKeyConfigured = plugin is IApiKeyPlugin { IsConfigured: true };
             var engines = (plugin is ITranscriptionEnginePlugin direct ? new[] { direct } : [])
@@ -836,7 +904,8 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
                     { IsLocal = slot.IsLocal, Locality = slot.Locality });
             }
         }
-        return new(transcription, llm, transcriptionSnapshots.ToArray(), llmSnapshots.ToArray()) { PostProcessors = postProcessors, Actions = actions, TtsSnapshots = ttsSnapshots.ToArray() };
+        return new(transcription, llm, transcriptionSnapshots.ToArray(), llmSnapshots.ToArray())
+            { PostProcessors = postProcessors, Actions = actions, TtsSnapshots = ttsSnapshots.ToArray(), DictationTargets = dictationTargets, Members = members };
     }
 
     private void Publish(Index index) { lock (_sync) _index = index; }
@@ -851,9 +920,11 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
         return isolated;
     }
 
-    // Ends the package's workers before its in-process instances are deactivated.
-    private static async Task ReleasePackageAsync(Slot slot, PortablePluginPackage package)
+    // Ends the package's workers before its in-process instances are deactivated. Dictation target calls were
+    // cancelled when the package stopped accepting; their code returns before the package is released.
+    private async Task ReleasePackageAsync(Slot slot, PortablePluginPackage package)
     {
+        await DictationTargetCallsReturnedAsync(slot).ConfigureAwait(false);
         slot.LocalLlmIdle?.Dispose();
         slot.LocalLlmIdle = null;
         IsolatedTranscriptionEngine[] isolated;
@@ -868,7 +939,11 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
     private sealed class CapabilityCollisionException(string message) : Exception(message);
     private void QueueRefresh()
     {
-        lock (_sync) if (_disposed) return;
+        lock (_sync)
+        {
+            if (_disposed) return;
+            if (_startupPass) { _refreshAfterStartup = true; return; }
+        }
         Interlocked.Exchange(ref _refreshRequested, 1);
         if (Interlocked.CompareExchange(ref _refreshRunning, 1, 0) != 0) return;
         _ = Task.Run(async () =>
@@ -885,6 +960,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
     {
         if (slot.Request is { IsCancellationRequested: false } request)
             slot.CancellationCallbacks = ObserveCancellationAsync(request.CancelAsync());
+        CancelDictationTargetCalls(slot);
     }
     private static async Task ObserveCancellationAsync(Task task)
     {

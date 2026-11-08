@@ -15,6 +15,22 @@ public sealed record PluginTextSetting(string Id, string Title, string Descripti
     public IReadOnlyList<string> Suggestions { get; init; } = [];
     /// <summary>Optional display condition evaluated against current editor values, including unsaved edits.</summary>
     public PluginSettingCondition? VisibleWhen { get; init; }
+    /// <summary>
+    /// What the setting holds, so the host can offer a matching picker beside a single-line field; the value stays
+    /// editable text. Fields with choices or suggestions ignore it. Plugin API 1.1.7.
+    /// </summary>
+    public PluginTextSettingKind Kind { get; init; }
+    /// <summary>Optional hint shown while the field is empty, for example what an empty value means. Plugin API 1.1.7.</summary>
+    public string? Placeholder { get; init; }
+}
+
+/// <summary>What a text setting holds.</summary>
+public enum PluginTextSettingKind
+{
+    /// <summary>Plain text.</summary>
+    Text,
+    /// <summary>The full path of a folder. The host offers its folder picker beside the field.</summary>
+    Folder
 }
 
 /// <summary>A setting is shown when another setting has one of the given values.</summary>

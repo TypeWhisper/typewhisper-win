@@ -121,7 +121,8 @@ internal sealed class LivePortablePluginSettings : UserControl
         {
             if (_textSettings.Content is LivePluginTextSettings old) old.DetachHostControls();
             var fallback = new StackPanel { Spacing = 14 };
-            fallback.Children.Add(_credentials); fallback.Children.Add(_models);
+            // The models section is hidden until the plugin runs; loaded here, it would read the models and keep the error.
+            fallback.Children.Add(_credentials);
             _textSettings.Content = fallback;
             ProfileLayoutChanged?.Invoke(false);
         }

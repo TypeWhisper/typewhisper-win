@@ -63,6 +63,8 @@ public sealed class HomeView : UserControl
         if (_reader is null) return;
         if (_loading) { _refreshAgain = true; return; }
         _loading = true;
+        // While the app starts, the read waits for history retention; show loading instead of the first-run card.
+        if (_records.Count == 0) Render();
         try
         {
             do

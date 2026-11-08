@@ -21,7 +21,14 @@ public sealed class CtcModelAssets(HttpClient http, CtcAssetSource? archive = nu
     private readonly CtcAssetSource _archive = archive ?? Archive;
     private readonly CtcAssetSource _tokenizer = tokenizer ?? Tokenizer;
     private static readonly string[] Required = ["model.int8.onnx", "tokens.txt", "tokenizer.json"];
-    private sealed record Receipt(string ArchiveHash, string TokenizerHash, Dictionary<string, string> Files);
+    // A later rewrite is only certain to get a different last write time when the recorded one is older than the coarsest
+    // file-time resolution (2 s on FAT). Younger files keep being hashed until they qualify for a stamp.
+    private static readonly TimeSpan StampSettleTime = TimeSpan.FromSeconds(2);
+    // Stamps hold each file's size and last write time from the last check whose hash matched Files. Receipts written
+    // before stamps existed have none: those files are hashed once, then the receipt is upgraded.
+    private sealed record Receipt(string ArchiveHash, string TokenizerHash, Dictionary<string, string> Files,
+        Dictionary<string, FileStamp>? Stamps = null);
+    private sealed record FileStamp(long Size, long ModifiedTicks);
 
     public async Task EnsureAsync(string directory, CancellationToken cancellationToken, Action<string>? report = null)
     {
@@ -70,12 +77,49 @@ public sealed class CtcModelAssets(HttpClient http, CtcAssetSource? archive = nu
         {
             var receipt = JsonSerializer.Deserialize<Receipt>(await File.ReadAllTextAsync(receiptPath, ct).ConfigureAwait(false));
             if (receipt is null || receipt.ArchiveHash != _archive.Sha256 || receipt.TokenizerHash != _tokenizer.Sha256 || receipt.Files is null) return false;
+            var stamps = new Dictionary<string, FileStamp>(StringComparer.Ordinal);
             foreach (var name in Required)
-                if (!File.Exists(Path.Combine(directory, name)) || !receipt.Files.TryGetValue(name, out var hash)
-                    || !string.Equals(hash, await HashAsync(Path.Combine(directory, name), ct).ConfigureAwait(false), StringComparison.OrdinalIgnoreCase)) return false;
+            {
+                var path = Path.Combine(directory, name);
+                if (!File.Exists(path) || !receipt.Files.TryGetValue(name, out var hash)) return false;
+                var checkedAt = DateTime.UtcNow;
+                var stamp = Stamp(path);
+                // A file unchanged since its hash last matched is not read again.
+                if (receipt.Stamps?.GetValueOrDefault(name) == stamp) { stamps[name] = stamp; continue; }
+                if (!string.Equals(hash, await HashAsync(path, ct).ConfigureAwait(false), StringComparison.OrdinalIgnoreCase)) return false;
+                if (stamp.ModifiedTicks < (checkedAt - StampSettleTime).Ticks && Stamp(path) == stamp) stamps[name] = stamp;
+            }
+            var known = receipt.Stamps ?? [];
+            if (stamps.Count != known.Count || stamps.Any(entry => known.GetValueOrDefault(entry.Key) != entry.Value))
+                await TryUpgradeReceiptAsync(receiptPath, receipt with { Stamps = stamps }, ct).ConfigureAwait(false);
             return true;
         }
         catch (JsonException) { return false; }
+    }
+
+    private static FileStamp Stamp(string path)
+    {
+        var file = new FileInfo(path);
+        return new(file.Length, file.LastWriteTimeUtc.Ticks);
+    }
+
+    // The files are verified either way; a receipt that cannot be rewritten only means they are hashed again next time.
+    private static async Task TryUpgradeReceiptAsync(string receiptPath, Receipt receipt, CancellationToken ct)
+    {
+        // Staged beside the model directory, so an interrupted write never leaves a foreign file inside it.
+        var temporary = Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(receiptPath))!,
+            ".ctc-receipt-" + Guid.NewGuid().ToString("N") + ".tmp");
+        try
+        {
+            await File.WriteAllTextAsync(temporary, JsonSerializer.Serialize(receipt), ct).ConfigureAwait(false);
+            File.Move(temporary, receiptPath, overwrite: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        finally
+        {
+            try { File.Delete(temporary); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        }
     }
 
     private async Task DownloadAsync(CtcAssetSource source, string destination, CancellationToken ct)

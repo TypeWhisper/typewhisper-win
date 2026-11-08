@@ -54,7 +54,13 @@ public sealed partial class WorkflowsView : UserControl
     private HandCursorButton DeleteWorkflowButton = null!;
 
     private ManualWorkflowStore? _store;
-    internal WorkflowShortcutCatalog? Shortcuts { get; set; }
+    // Startup sets this; a workflow opened meanwhile drops its "wait for workflow shortcuts" message.
+    internal WorkflowShortcutCatalog? Shortcuts
+    {
+        get => _shortcuts;
+        set { _shortcuts = value; if (!_loadingConfiguration && _page == Page.Configuration) UpdateConfigurationState(); }
+    }
+    private WorkflowShortcutCatalog? _shortcuts;
     private readonly Dictionary<string, string> _shortcutDraft = [];
     private string DraftHotkeys => _shortcutDraft.GetValueOrDefault("WorkflowSelectedTextHotkeys", "");
     private string? ShortcutDraftError => Shortcuts is null ? Loc.T("Wait for workflow shortcuts to initialize.")

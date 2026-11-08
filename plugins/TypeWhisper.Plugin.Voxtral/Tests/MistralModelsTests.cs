@@ -116,12 +116,12 @@ public sealed partial class ProviderTests
         await plugin.ActivateAsync(host); await Configure(plugin);
         host.FailSetting = true;
         await Assert.ThrowsAsync<IOException>(() => plugin.ExecuteSettingsActionAsync("refreshModels", default));
-        Assert.Single(plugin.SupportedModels);
+        Assert.Equal(DefaultTextModels, plugin.SupportedModels.Select(m => m.Id));
         await plugin.ExecuteSettingsActionAsync("refreshModels", default);
         await plugin.SetApiKeyAsync("fixture-key");
         Assert.Equal(2, plugin.SupportedModels.Count);
         await plugin.SetApiKeyAsync("new-key");
-        Assert.Single(plugin.SupportedModels);
+        Assert.Equal(DefaultTextModels, plugin.SupportedModels.Select(m => m.Id));
         Assert.Equal("Mistral", plugin.PluginName);
         Assert.Equal("com.typewhisper.voxtral", plugin.PluginId);
     }
@@ -155,7 +155,7 @@ public sealed partial class ProviderTests
         {
             await plugin.ActivateAsync(new Host()); await Configure(plugin);
             await Assert.ThrowsAsync<InvalidOperationException>(() => plugin.ExecuteSettingsActionAsync("refreshModels", default));
-            Assert.Single(plugin.SupportedModels);
+            Assert.Equal(DefaultTextModels, plugin.SupportedModels.Select(m => m.Id));
         }
     }
 
@@ -182,6 +182,7 @@ public sealed partial class ProviderTests
             Assert.Equal("codestral-latest", json.RootElement.GetProperty("model").GetString());
             Assert.Equal("Grüße", json.RootElement.GetProperty("messages")[1].GetProperty("content").GetString());
             Assert.Equal(custom, json.RootElement.TryGetProperty("temperature", out var temperature));
+            Assert.False(json.RootElement.TryGetProperty("reasoning_effort", out _));
             if (custom) Assert.Equal(0.2, temperature.GetDouble());
             return Json("""{"choices":[{"finish_reason":"stop","message":{"content":"Grüße!"}}]}""");
         }));
