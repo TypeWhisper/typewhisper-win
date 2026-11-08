@@ -92,7 +92,7 @@ public class GroqPluginTests
         Assert.Equal(
             ["allam-2-7b", "openai/gpt-oss-120b"],
             sut.SupportedModels.Select(m => m.Id).ToArray());
-        Assert.Equal("openai/gpt-oss-120b", host.GetSetting<string>("selectedLlmModel"));
+        Assert.Equal("whisper-large-v3", host.GetSetting<string>("selectedLlmModel"));
     }
 
     [Fact]
@@ -113,7 +113,8 @@ public class GroqPluginTests
         Assert.Empty(sut.FetchedLlmModels);
         Assert.Empty(host.GetSetting<List<FetchedLlmModel>>("fetchedLlmModels")!);
         Assert.Equal(GroqPlugin.DefaultLlmModelId, sut.SelectedLlmModelId);
-        Assert.Equal(GroqPlugin.DefaultLlmModelId, host.GetSetting<string>("selectedLlmModel"));
+        // The saved value stays and applies again if Groq lists the model again.
+        Assert.Equal("llama-3.3-70b-versatile", host.GetSetting<string>("selectedLlmModel"));
     }
 
     [Fact]
@@ -228,6 +229,32 @@ public class GroqPluginTests
     }
 
     [Fact]
+    public async Task SetApiKeyAsync_KeepsSavedModelUntilTheNewListOffersIt()
+    {
+        var handler = new CapturingHandler((request, _) =>
+        {
+            Assert.Equal("Bearer second-key", request.Headers.Authorization?.ToString());
+            return JsonResponse("""{ "data": [ { "id": "allam-2-7b" }, { "id": "openai/gpt-oss-120b" } ] }""");
+        });
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "first-key";
+        host.SetSetting("fetchedLlmModels", new List<FetchedLlmModel> { new("allam-2-7b", "SDAIA") });
+        host.SetSetting<DateTimeOffset?>("fetchedLlmModelsAtUtc", DateTimeOffset.UtcNow);
+        host.SetSetting("selectedLlmModel", "allam-2-7b");
+
+        using var httpClient = new HttpClient(handler);
+        var sut = new GroqPlugin(httpClient, httpClient, refreshLlmModelsAutomatically: true);
+        await sut.ActivateAsync(host);
+        Assert.Equal("allam-2-7b", sut.SelectedLlmModelId);
+
+        await sut.SetApiKeyAsync("second-key");
+        await sut.LlmModelRefreshTask;
+
+        Assert.Equal("allam-2-7b", sut.SelectedLlmModelId);
+        Assert.Equal("allam-2-7b", host.GetSetting<string>("selectedLlmModel"));
+    }
+
+    [Fact]
     public async Task RefreshModelsAction_LoadsAccountModelsIntoTheConnectionSection()
     {
         var handler = new CapturingHandler((_, _) => JsonResponse("""
@@ -291,8 +318,8 @@ public class GroqPluginTests
         var sut = CreateOfflinePlugin();
         await sut.ActivateAsync(host);
 
-        Assert.Equal(sut.SupportedModels.First().Id, sut.SelectedLlmModelId);
-        Assert.Equal(sut.SupportedModels.First().Id, host.GetSetting<string>("selectedLlmModel"));
+        Assert.Equal(GroqPlugin.DefaultLlmModelId, sut.SelectedLlmModelId);
+        Assert.Null(host.GetSetting<string>("selectedLlmModel"));
     }
 
     [Fact]
@@ -324,7 +351,7 @@ public class GroqPluginTests
         await sut.ActivateAsync(host);
 
         Assert.Equal("openai/gpt-oss-120b", sut.SelectedLlmModelId);
-        Assert.Equal("openai/gpt-oss-120b", host.GetSetting<string>("selectedLlmModel"));
+        Assert.Equal(retiredModelId, host.GetSetting<string>("selectedLlmModel"));
     }
 
     [Fact]
