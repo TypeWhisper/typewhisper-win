@@ -56,10 +56,16 @@ public class GroqPluginTests
     [InlineData("orpheus-tts-1", false)]
     [InlineData("llama-guard-prompt-guard", false)]
     [InlineData("openai/gpt-oss-safeguard-20b", false)]
+    [InlineData("canopylabs/orpheus-v1-english", false)]
+    [InlineData("canopylabs/orpheus-arabic-saudi", false)]
+    [InlineData("llama-3.3-70b-versatile", true)]
     [InlineData("llama-3.1-8b-instant", true)]
     [InlineData("openai/gpt-oss-120b", true)]
+    [InlineData("openai/gpt-oss-20b", true)]
     [InlineData("qwen/qwen3.8-27b", true)]
     [InlineData("allam-2-7b", true)]
+    [InlineData("minimaxai/minimax-m2.7", true)]
+    [InlineData("meta-models/muse-spark-open", true)]
     public void IsLlmModel_FiltersGroqModelIds(string modelId, bool expected)
     {
         Assert.Equal(expected, GroqPlugin.IsLlmModel(modelId));
