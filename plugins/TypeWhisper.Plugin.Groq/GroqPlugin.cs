@@ -40,11 +40,10 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
 
     private static readonly IReadOnlyList<PluginModelInfo> FallbackLlmModels =
     [
-        new("llama-3.3-70b-versatile", "Llama 3.3 70B"),
-        new("llama-3.1-8b-instant", "Llama 3.1 8B"),
+        new("qwen/qwen3.8-27b", "Qwen 3.8 27B"),
         new("openai/gpt-oss-120b", "GPT-OSS 120B"),
         new("openai/gpt-oss-20b", "GPT-OSS 20B"),
-        new("moonshotai/kimi-k2-instruct-0905", "Kimi K2"),
+        new("allam-2-7b", "ALLaM 2 7B"),
     ];
 
     /// <summary>
