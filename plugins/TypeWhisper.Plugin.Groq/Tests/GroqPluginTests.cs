@@ -58,6 +58,8 @@ public class GroqPluginTests
     [InlineData("openai/gpt-oss-safeguard-20b", false)]
     [InlineData("llama-3.1-8b-instant", true)]
     [InlineData("openai/gpt-oss-120b", true)]
+    [InlineData("qwen/qwen3.8-27b", true)]
+    [InlineData("allam-2-7b", true)]
     public void IsLlmModel_FiltersGroqModelIds(string modelId, bool expected)
     {
         Assert.Equal(expected, GroqPlugin.IsLlmModel(modelId));
@@ -470,7 +472,7 @@ public class GroqPluginTests
         var handler = new CapturingHandler((_, body) =>
         {
             using var doc = JsonDocument.Parse(body ?? throw new InvalidOperationException("Missing request body."));
-            Assert.Equal("llama-3.3-70b-versatile", doc.RootElement.GetProperty("model").GetString());
+            Assert.Equal("qwen/qwen3.8-27b", doc.RootElement.GetProperty("model").GetString());
 
             return JsonResponse("""
                 {
