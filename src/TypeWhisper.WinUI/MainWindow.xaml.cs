@@ -48,6 +48,9 @@ public sealed partial class MainWindow : Window
     private async Task InitializeDictationCoreAsync()
     {
         if (_closing) return;
+        // Settings can open during startup; Sync & backup then waits with automatic sync for the access checks below.
+        // Set before anything that can fail, so a failed start also holds sync until its license check has finished.
+        WinUICloudSync.AwaitStartupChecks = true;
         try
         {
             _dictationInput = new(
@@ -130,8 +133,10 @@ public sealed partial class MainWindow : Window
             if (_closing) return;
             ShowNotice(new AppNotice(Loc.T("Dictation startup failed: {0}", ex.Message)));
             // Settings stay usable after a failed start, so the managed license key still has to be applied.
-            _ = WinUILicensing.ValidateAsync();
+            _ = EndCloudSyncWaitAfterAsync(WinUILicensing.ValidateAsync());
         }
+        // Settings can open while startup runs; its page shows what startup has registered and loaded since.
+        if (!_closing) _settingsWindow?.RefreshAfterStartup();
     }
 
     private async Task StartCloudSyncAfterAccessChecksAsync(Task accessChecks)
@@ -141,10 +146,23 @@ public sealed partial class MainWindow : Window
             await accessChecks;
             await YieldToQueuedWorkAsync();
             if (_closing) return;
-            WinUICloudSync.DataChanged += () => _lexicon?.RefreshApiData();
             WinUICloudSync.Initialize(DispatcherQueue);
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { if (!_closing) ShowNotice(new AppNotice(Loc.T("Dictation startup failed: {0}", ex.Message))); }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            if (_closing) return;
+            ShowNotice(new AppNotice(Loc.T("Dictation startup failed: {0}", ex.Message)));
+            WinUICloudSync.EndStartupWait();
+        }
+        finally { WinUICloudSync.AwaitStartupChecks = false; }
+    }
+
+    // After a failed start only the license check runs. Sync waits for it, so it never runs on a saved license
+    // status that the check would have found expired.
+    private async Task EndCloudSyncWaitAfterAsync(Task licenseCheck)
+    {
+        await licenseCheck;
+        if (!_closing) WinUICloudSync.EndStartupWait();
     }
 
     private Task YieldToQueuedWorkAsync()
@@ -251,11 +269,12 @@ public sealed partial class MainWindow : Window
         var revision = ++_overlayRevision;
         _settingsWindow?.SetLiveTranscriptionAvailability(_dictation.SupportsLiveTranscription);
         DictationChanged?.Invoke(_dictation.Status, _dictation.IsRecording);
-        // The game add-on shows recording and transcribing in the game. Errors, copies (also a chosen copy instead of
-        // pasting) and the Escape warning still show here, since the game's bar cannot say what happened to the text.
-        _gameIndicatorShown = _dictation.ShowsGameIndicator;
-        if (_gameIndicatorShown && _dictation.OverlayState is { ShowsCancelWarning: false, ShowsCancelled: false, CopyChosen: false } gameState
-            && gameState.Phase is DictationPhase.Recording or DictationPhase.Processing or DictationPhase.LoadingModel or DictationPhase.Completed)
+        // A plugin that took the dictation over, such as a game's add-on, can show recording and transcribing in its
+        // app. Errors, copies (also a chosen copy instead of pasting) and the Escape warning still show here, since the
+        // app's own display cannot say what happened to the text.
+        _targetIndicatorShown = _dictation.ShowsTargetIndicator;
+        if (_targetIndicatorShown && _dictation.OverlayState is { ShowsCancelWarning: false, ShowsCancelled: false, CopyChosen: false } targetState
+            && targetState.Phase is DictationPhase.Recording or DictationPhase.Processing or DictationPhase.LoadingModel or DictationPhase.Completed)
         {
             _liveOverlay?.HidePreview();
             return;
@@ -292,8 +311,8 @@ public sealed partial class MainWindow : Window
         }
     }
     private int _overlayRevision;
-    // What the last overlay update saw, so a window switch updates the overlay only when the game's bar comes or goes.
-    private bool _gameIndicatorShown;
+    // What the last overlay update saw, so a window switch updates the overlay only when the app's display comes or goes.
+    private bool _targetIndicatorShown;
     private Guid _completedRecordingId;
     private bool _completedPreviewExpired;
     private async Task HideCompletedOverlayAsync(Guid recordingId)
@@ -364,6 +383,8 @@ public sealed partial class MainWindow : Window
             WorkflowsView.RefreshApiData();
             if (_workflowShortcuts?.Initialize() is { } error) ShowNotice(new AppNotice(error));
         };
+        // Also for a sync started from Sync & backup while the app starts.
+        WinUICloudSync.DataChanged += () => _lexicon?.RefreshApiData();
         _dictation.StopHistoryPlayback = () => { _historyWindow?.StopAudioPlayback(); RecorderView.StopAudioPlayback(); };
         RecorderView.CanPlayAudio = CanPlayHistoryAudio;
         RecorderView.PrepareAudioPlayback = async () =>

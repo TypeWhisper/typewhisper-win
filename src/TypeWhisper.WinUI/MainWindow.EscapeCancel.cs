@@ -46,10 +46,12 @@ public sealed partial class MainWindow
 
     // Windows calls the newest low-level hook first. The shortcut hooks installed after this one would otherwise see
     // a consumed Esc or Enter in their gesture state, so it is reinstalled once they exist.
-    private void MoveDictationKeyHookToFront()
+    private string? MoveDictationKeyHookToFront()
     {
-        if (_closing || _profileRestoreClosing || _dictationKeyHook is null) return;
-        if (_dictationKeyHook.Recover() is not null) AppDiagnostics.Write("escape.hook.reorder-failed");
+        if (_closing || _profileRestoreClosing || _dictationKeyHook is null) return null;
+        var error = _dictationKeyHook.Recover();
+        if (error is not null) AppDiagnostics.Write("escape.hook.reorder-failed");
+        return error;
     }
 
     // Runs inside the keyboard hook callback, like a stop shortcut: the coordinator takes the stop right away.

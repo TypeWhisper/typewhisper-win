@@ -9,12 +9,15 @@ public sealed partial class PluginsView : UserControl
     private LocalDictationSession? _runtime;
     private PluginManagementController? _management;
     private int _refreshGeneration;
+    // A scan before the package store has loaded lists nothing; a page requested meanwhile waits for the next scan.
+    private bool _inventoryLoaded;
     private bool _changingPlugin;
     // The view lives as long as the app and hears every change, also while Settings is closed or shows another page.
     private readonly TypeWhisper.Presentation.DeferredPageRefresh _pageRefresh = new();
-    // The latest inventory scan and the store revision it reads.
+    // The latest inventory scan, the store revision it reads and whether the store had loaded when it started.
     private Task _scan = Task.CompletedTask;
     private long _scannedRevision = -1;
+    private bool _scanAfterLoad;
 
     internal void ConfigureRuntime(LocalDictationSession runtime)
     {
@@ -50,10 +53,15 @@ public sealed partial class PluginsView : UserControl
         if (rescan)
         {
             _scannedRevision = _runtime.Packages.Store.Revision;
+            // Read before scanning: a scan that started earlier can finish after the store has loaded.
+            _scanAfterLoad = _runtime.Packages.Store.Initialized;
             _scan = _management.RefreshAsync();
         }
+        var scanAfterLoad = _scanAfterLoad;
         await _scan;
         if (generation != _refreshGeneration) return;
+        // A failed load is final, so the last scan lists all there will be.
+        _inventoryLoaded = scanAfterLoad || _runtime.LocalPluginError is not null;
         BuildPlugins();
         UpdateUpdateAction();
         RefreshSettingsPages();

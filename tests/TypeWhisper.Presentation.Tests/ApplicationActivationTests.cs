@@ -99,27 +99,90 @@ public sealed class ApplicationActivationTests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void FailedRequestIsConsumedAndLaterRequestsContinueEvenIfReportingFails(bool reportingFails)
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void FailedRequestIsConsumedAndLaterRequestsContinueEvenIfReportingFails(bool reportingFails, bool beforeStartup)
     {
         var inbox = new ActivationInbox();
         inbox.Add(ApplicationActivationRequest.Parse(["--settings"]));
         inbox.Add(ApplicationActivationRequest.Parse(["--files"]));
         var routes = new List<string?>();
         var reported = 0;
-        inbox.Dispatch(request =>
+        Action<ApplicationActivationRequest> handle = request =>
         {
             routes.Add(request.Route);
             if (request.Route == "--settings") throw new InvalidOperationException("View failed");
-        }, error =>
+        };
+        Action<Exception> report = error =>
         {
             reported++; Assert.Equal("View failed", error.Message);
             if (reportingFails) throw new InvalidOperationException("Error view failed");
-        });
+        };
+        if (beforeStartup) inbox.DispatchNavigation(handle, report);
+        else inbox.Dispatch(handle, report);
         Assert.Equal(new[] { "--settings", "--files" }, routes);
         Assert.Equal(1, reported);
         Assert.Empty(inbox.Drain());
+    }
+
+    [Fact]
+    public void NavigationBeforeStartupStopsAtTheFirstRequestThatNeedsTheSession()
+    {
+        var inbox = new ActivationInbox();
+        inbox.Add(ApplicationActivationRequest.Parse(["--settings", "--page", "shortcuts"]));
+        inbox.Add(ApplicationActivationRequest.Parse(["--history"]));
+        inbox.Add(ApplicationActivationRequest.Parse(["--transcribe-file", @"C:\audio.wav"]));
+        inbox.Add(ApplicationActivationRequest.Parse(["--dictionary"]));
+        var routes = new List<string?>();
+        inbox.DispatchNavigation(request => routes.Add(request.Route), _ => { });
+        Assert.Equal(new[] { "--settings", "--history" }, routes);
+        // Still waiting: the file request, and the page queued behind it keeps its place.
+        inbox.DispatchNavigation(request => routes.Add(request.Route), _ => { });
+        Assert.Equal(2, routes.Count);
+        inbox.Dispatch(request => routes.Add(request.Route), _ => { });
+        Assert.Equal(new[] { "--settings", "--history", "--files", "--dictionary" }, routes);
+    }
+
+    [Fact]
+    public void FilesSharesAccountCallbacksAndErrorsWaitForStartup()
+    {
+        var share = ApplicationActivationRequest.Parse(["--files"]) with { AwaitsSharedFiles = true };
+        Assert.False(share.OnlyNavigates);
+        Assert.Equal(StartupPresentation.RequestedDestination, StartupPresentationPolicy.Resolve(share, setupCompleted: true));
+        Assert.True(ApplicationActivationRequest.Parse(["--files"]).OnlyNavigates);
+        ApplicationActivationRequest[] waiting =
+        [
+            ApplicationActivationRequest.Parse(["--transcribe-file", @"C:\audio.wav"]), share,
+            new(null, [], null, true) { AccountCallback = new Uri("typewhisper://callback") },
+            ApplicationActivationRequest.Parse(["--unknown"])
+        ];
+        foreach (var request in waiting)
+        {
+            var inbox = new ActivationInbox();
+            inbox.Add(request);
+            var handled = new List<ApplicationActivationRequest>();
+            inbox.DispatchNavigation(handled.Add, _ => { });
+            Assert.Empty(handled);
+            inbox.Dispatch(handled.Add, _ => { });
+            Assert.Same(request, Assert.Single(handled));
+        }
+    }
+
+    [Fact]
+    public void OverflowWhileWaitingIsReportedOnceStartupHasFinished()
+    {
+        var inbox = new ActivationInbox();
+        inbox.Add(ApplicationActivationRequest.Parse(["--transcribe-file", @"C:\audio.wav"]));
+        for (var i = 0; i < 8; i++) inbox.Add(ApplicationActivationRequest.Parse(["--settings"]));
+        var handled = new List<ApplicationActivationRequest>();
+        inbox.DispatchNavigation(handled.Add, _ => { });
+        Assert.Empty(handled);
+        inbox.Dispatch(handled.Add, _ => { });
+        Assert.Equal(9, handled.Count);
+        Assert.Equal("--files", handled[0].Route);
+        Assert.NotNull(handled[^1].Error);
     }
     [Fact]
     public void RedirectAndInitialArgumentsProduceTheSameFileRequest()

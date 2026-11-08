@@ -20,16 +20,40 @@ internal static partial class WinUICloudSync
     internal static event Action? Changed;
     internal static event Action? DataChanged;
 
-    internal static void Initialize(DispatcherQueue dispatcher)
+    // Startup starts automatic sync after its license and account checks; a page opened before them only loads it.
+    internal static bool AwaitStartupChecks { get; set; }
+    internal static void Open(DispatcherQueue dispatcher)
+    {
+        if (AwaitStartupChecks) Load(dispatcher);
+        else Initialize(dispatcher);
+    }
+
+    // When startup fails before it starts sync, a page opened meanwhile starts it once the license check has finished,
+    // as a page opened afterwards would.
+    internal static void EndStartupWait()
+    {
+        AwaitStartupChecks = false;
+        if (_dispatcher is { } dispatcher) Initialize(dispatcher);
+    }
+
+    private static void Load(DispatcherQueue dispatcher)
     {
         if (_dispatcher is not null || _closing) return;
         _dispatcher = dispatcher;
         try { _service = new(WinUIProfile.Root); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { Status = Loc.T("Could not load sync preferences: {0}", ex.Message); }
+    }
+
+    internal static void Initialize(DispatcherQueue dispatcher)
+    {
+        Load(dispatcher);
+        if (_timer is not null || _closing) return;
         _timer = dispatcher.CreateTimer(); _timer.Interval = TimeSpan.FromSeconds(15);
         _timer.Tick += (_, _) => { if (!ChoosingFolder && Preferences.Enabled && CanUse) _ = SyncAsync(); };
         _timer.Start();
         PremiumView.Access.Changed += AccessChanged;
+        // A page opened during startup shows the checked license.
+        Changed?.Invoke();
         if (Preferences.Enabled && CanUse) _ = SyncAsync();
     }
     private static void AccessChanged() { Changed?.Invoke(); }

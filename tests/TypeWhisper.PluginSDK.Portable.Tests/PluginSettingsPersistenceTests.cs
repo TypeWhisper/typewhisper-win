@@ -50,6 +50,65 @@ public sealed class PluginSettingsPersistenceTests : IDisposable
         var host = new VocabularyHostServices(_root);
         var error = Record.Exception(() => host.SetSetting("Enabled", true));
         Assert.True(error is IOException or UnauthorizedAccessException);
+        Assert.False(host.GetSetting<bool>("Enabled"));
         Assert.False(new VocabularyHostServices(_root).GetSetting<bool>("Enabled"));
+    }
+
+    [Fact]
+    public void RepeatedReadsUseTheParsedFileUntilItsTimeOrSizeChanges()
+    {
+        var host = new VocabularyHostServices(_root);
+        host.SetSetting("Mode", "aaaa");
+        var file = Path.Combine(_root, "settings.json");
+        var written = File.GetLastWriteTimeUtc(file);
+        Assert.Equal("aaaa", host.GetSetting<string>("Mode"));
+        // Same size and write time: the earlier parse is used, so the file is not read again.
+        File.WriteAllText(file, File.ReadAllText(file).Replace("aaaa", "bbbb"));
+        File.SetLastWriteTimeUtc(file, written);
+        Assert.Equal("aaaa", host.GetSetting<string>("Mode"));
+        // Another writer changes the write time, so the file is read again.
+        File.SetLastWriteTimeUtc(file, written.AddSeconds(1));
+        Assert.Equal("bbbb", host.GetSetting<string>("Mode"));
+        File.WriteAllText(file, "{\"Mode\":\"a\"}");
+        File.SetLastWriteTimeUtc(file, written.AddSeconds(1));
+        Assert.Equal("a", host.GetSetting<string>("Mode"));
+    }
+
+    [Fact]
+    public void UnchangedValueIsNotWrittenAgain()
+    {
+        var host = new VocabularyHostServices(_root);
+        host.SetSetting("Enabled", true);
+        host.SetSetting<string?>("Model", null);
+        var file = Path.Combine(_root, "settings.json");
+        var saved = new DateTime(2001, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        File.SetLastWriteTimeUtc(file, saved);
+        host.SetSetting("Enabled", true);
+        host.SetSetting<string?>("Model", null);
+        new VocabularyHostServices(_root).SetSetting("Enabled", true);
+        Assert.Equal(saved, File.GetLastWriteTimeUtc(file));
+        host.SetSetting("Enabled", false);
+        Assert.NotEqual(saved, File.GetLastWriteTimeUtc(file));
+        Assert.False(new VocabularyHostServices(_root).GetSetting<bool>("Enabled"));
+        Assert.Null(new VocabularyHostServices(_root).GetSetting<string>("Model"));
+    }
+
+    [Fact]
+    public void WriteThroughOneHostIsTheNextReadOfAnotherHostOfTheFolder()
+    {
+        var first = new VocabularyHostServices(_root);
+        var second = new VocabularyHostServices(_root);
+        first.SetSetting("Model", "a");
+        Assert.Equal("a", second.GetSetting<string>("Model"));
+        var file = Path.Combine(_root, "settings.json");
+        var written = File.GetLastWriteTimeUtc(file);
+        first.SetSetting("Model", "b");
+        // Same size and, as within one file time tick, the same write time: the new value is still read.
+        File.SetLastWriteTimeUtc(file, written);
+        Assert.Equal("b", second.GetSetting<string>("Model"));
+        second.SetSetting("Other", 1);
+        Assert.Equal("b", first.GetSetting<string>("Model"));
+        Assert.Equal(1, first.GetSetting<int>("Other"));
+        Assert.Contains("\"Model\":\"b\"", File.ReadAllText(file));
     }
 }

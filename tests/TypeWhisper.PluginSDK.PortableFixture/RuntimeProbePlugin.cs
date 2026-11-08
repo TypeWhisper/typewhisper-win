@@ -105,6 +105,8 @@ public class RuntimeProbePlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin
     public Task ActivateAsync(IPluginHostServices host)
     {
         _host = host; _active = true;
+        // Like most packages, a quiet activation neither writes settings nor notifies.
+        if (host.GetSetting<bool>("QuietActivation")) return Task.CompletedTask;
         host.SetSetting("activations", host.GetSetting<int>("activations") + 1);
         host.NotifyCapabilitiesChanged(); // Synchronous activation notification must not deadlock the owner.
         return Task.CompletedTask;
@@ -217,4 +219,11 @@ public sealed class OtherRuntimeProbePlugin : RuntimeProbePlugin
 {
     /// <inheritdoc />
     public override string PluginId => "test.typewhisper.runtime-other";
+}
+
+/// <summary>A third package identity for startup tests using the same fixture binary.</summary>
+public sealed class ThirdRuntimeProbePlugin : RuntimeProbePlugin
+{
+    /// <inheritdoc />
+    public override string PluginId => "test.typewhisper.runtime-third";
 }

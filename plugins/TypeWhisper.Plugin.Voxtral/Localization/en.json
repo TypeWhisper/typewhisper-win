@@ -1,8 +1,16 @@
 {
   "Refresh models": "Refresh models",
   "Load transcription and text models using the saved API key.": "Load transcription and text models using the saved API key.",
-  "Live transcription; the language is detected automatically.": "Live transcription; the language is detected automatically.",
+  "Shows live text while you speak. The final text and files come from Voxtral Mini Transcribe 3.": "Shows live text while you speak. The final text and files come from Voxtral Mini Transcribe 3.",
+  "Shows live text while you speak and keeps it as the final text.": "Shows live text while you speak and keeps it as the final text.",
   "Transcribes after recording stops.": "Transcribes after recording stops.",
+  "Reasoning effort": "Reasoning effort",
+  "Higher levels think longer before answering and take more time. Also applies when a workflow uses this model.": "Higher levels think longer before answering and take more time. Also applies when a workflow uses this model.",
+  "Off": "Off",
+  "Low": "Low",
+  "Medium": "Medium",
+  "High": "High",
+  " (fastest)": " (fastest)",
   "Provider default": "Provider default",
   "Custom": "Custom"
 }

@@ -23,12 +23,15 @@ internal static class GermanNumberWordParser
         ["achtzig"] = 80, ["neunzig"] = 90
     };
 
-    public static NumberWordNormalizer.ParsedWords? Parse(IReadOnlyList<string> words)
+    public static NumberWordNormalizer.ParsedWords? Parse(IReadOnlyList<string> words) =>
+        words.Count == 0 ? null : ParseNormalized([.. words.Select(NormalizeWord)]);
+
+    /// <summary>Parses words that already went through <see cref="NormalizeWord"/>.</summary>
+    internal static NumberWordNormalizer.ParsedWords? ParseNormalized(string[] normalizedWords)
     {
-        if (words.Count == 0)
+        if (normalizedWords.Length == 0)
             return null;
 
-        var normalizedWords = words.Select(NormalizeWord).ToArray();
         var index = 0;
         var isNegative = false;
 
@@ -221,6 +224,6 @@ internal static class GermanNumberWordParser
     private static bool AllowsArticleOne(int index, IReadOnlyList<string> words) =>
         index + 1 < words.Count && words[index + 1] is "hundert" or "tausend" or "million" or "millionen";
 
-    private static string NormalizeWord(string word) =>
+    internal static string NormalizeWord(string word) =>
         NumberWordNormalizer.NormalizeWord(word).Replace("ß", "ss", StringComparison.Ordinal);
 }

@@ -155,6 +155,10 @@ public sealed partial class SettingsWindow : Window
                 NativeWindowAppearance.RemoveSystemBorder(this);
             else foreach (var recorder in Descendants(SettingsRoot).OfType<ShortcutRecorder>()) recorder.Cancel(false);
         };
+        // A refresh after startup that waited for the user runs once focus has moved off the page or a change that
+        // held it back was applied.
+        CatalogContent.LostFocus += (_, _) => RetryRefreshAfterStartup();
+        UnappliedEdits.Settled += RetryRefreshAfterStartup;
         AppWindow.Changed += (_, args) =>
         {
             if (_positioning || !args.DidPositionChange) return;
@@ -164,6 +168,7 @@ public sealed partial class SettingsWindow : Window
         SetPreferences(preferences);
         Closed += (_, _) =>
         {
+            UnappliedEdits.Settled -= RetryRefreshAfterStartup;
             _ = ShutdownSetupImportAsync();
             // Release the hosted view so the next settings window can show it.
             WorkspaceHost.Child = null;
@@ -508,6 +513,8 @@ public sealed partial class SettingsWindow : Window
     private void ShowCategoryCore(string category)
     {
         if (category is not ("Appearance" or "Overlay editor")) PreviewDismissed?.Invoke();
+        // Rendering a page also covers a refresh after startup that was still waiting.
+        _startupRefreshPending = false;
         // TextChanged can arrive after the programmatic clear. It must not rebuild
         // this page again and remove the control focused by OpenSearchResult.
         _searchActive = false;
@@ -602,6 +609,52 @@ public sealed partial class SettingsWindow : Window
         if (SetupHost.Child is null) OpenSearchResult(new(category, key, "", "", ""));
     }
 
+    // A page shown while the app started was rendered before startup registered shortcuts and loaded plugins and
+    // policy problems. Render it again, unless the user is working on it: then when focus leaves the page, a change on
+    // it was applied or a menu or other popup closed, or when the page is shown again anyway.
+    private bool _startupRefreshPending;
+
+    internal void RefreshAfterStartup()
+    {
+        _startupRefreshPending = true;
+        TryRefreshAfterStartup();
+    }
+
+    private void RetryRefreshAfterStartup()
+    {
+        if (_startupRefreshPending) DispatcherQueue.TryEnqueue(TryRefreshAfterStartup);
+    }
+
+    private void RetryRefreshAfterPopup(object? sender, object e)
+    {
+        if (sender is Microsoft.UI.Xaml.Controls.Primitives.Popup popup) popup.Closed -= RetryRefreshAfterPopup;
+        RetryRefreshAfterStartup();
+    }
+
+    private void TryRefreshAfterStartup()
+    {
+        if (!_startupRefreshPending || SetupHost.Child is not null || _searchActive || _checkingNavigation || CatalogScroll.Visibility != Visibility.Visible
+            || ShortcutRecorder.AnyEditing || CatalogContent.XamlRoot is not { } root
+            // A change waiting for Apply (HTTP API port or token, history retention, a license key before Activate)
+            // would be lost with the page, and one still running would show the values from before it.
+            || UnappliedEdits.Any(Descendants(CatalogContent))) return;
+        // A tooltip is not the user's work; any other open popup is. Closing it can leave focus outside the page, as the
+        // search box's menu does, so the refresh is tried again then.
+        var popups = VisualTreeHelper.GetOpenPopupsForXamlRoot(root).Where(popup => popup.Child is not ToolTip).ToList();
+        foreach (var popup in popups)
+        {
+            popup.Closed -= RetryRefreshAfterPopup;
+            popup.Closed += RetryRefreshAfterPopup;
+        }
+        if (popups.Count > 0) return;
+        for (var focused = FocusManager.GetFocusedElement(root) as DependencyObject; focused is not null; focused = VisualTreeHelper.GetParent(focused))
+            if (ReferenceEquals(focused, CatalogContent)) return;
+        var offset = CatalogScroll.VerticalOffset;
+        ShowCategoryCore(_currentCategory);
+        CatalogScroll.UpdateLayout();
+        CatalogScroll.ChangeView(null, offset, null, true);
+    }
+
 
     private void ClearSearch_Click(object sender, RoutedEventArgs e)
     {
@@ -661,8 +714,6 @@ public sealed partial class SettingsWindow : Window
         new("Account & about", AccountView.WhatsNewSettingKey, Loc.T("What's new in TypeWhisper"), Loc.T("Review the latest feature highlights."), "info", "news release features updates"),
         new("Home", "", Loc.T("Home"), Loc.T("Recent activity and transcriptions."), "home", "dashboard overview start"),
         new("Workflows", "", Loc.T("Workflows"), Loc.T("Create and edit workflows, triggers and their LLM."), "workflow", "prompt template automation selected text"),
-        new("Advanced", WowIntegrationSettings.WowChatKey, Loc.T("Dictate into the World of Warcraft chat"), Loc.T("Dictation opens the game chat, inserts the text and sends it."), "gamepad", "game gaming games wow warcraft classic forever chat integration"),
-        new("Advanced", WowIntegrationSettings.WowAddOnKey, Loc.T("TypeWhisper add-on"), Loc.T("Install the World of Warcraft add-on that opens the chat reliably."), "gamepad", "game wow warcraft addon add-on install interface addons cast bar castbar translate whisper reply"),
         new("Dictionary", "", Loc.T("Dictionary"), Loc.T("Your words, corrections and term packs."), "dictionary", "vocabulary words corrections spelling"),
         new("Snippets", "", Loc.T("Snippets"), Loc.T("Reusable text with spoken triggers."), "text", "text expansion shortcut"),
         new("Recorder", "", Loc.T("Recorder"), Loc.T("Record microphone and system audio."), "recorder", "meeting session recordings"),
@@ -800,8 +851,7 @@ public sealed partial class SettingsWindow : Window
         ["LanguageHints"] = "Language",
         ["LockPasteToFocusedField"] = "AutoPaste",
         ["VocabularyBoostingEnabledPackIds"] = "VocabularyBoostingEnabled",
-        ["VocabularyBoostingSelectedIndustryPresetId"] = "VocabularyBoostingEnabled",
-        [WowIntegrationSettings.WowAddOnKey] = WowIntegrationSettings.WowChatKey
+        ["VocabularyBoostingSelectedIndustryPresetId"] = "VocabularyBoostingEnabled"
     };
 
     // False below a page host that is collapsed, true for the sidebar and the shown page.

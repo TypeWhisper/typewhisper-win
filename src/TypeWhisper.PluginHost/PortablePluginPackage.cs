@@ -32,22 +32,26 @@ public sealed class PortablePluginPackage : IAsyncDisposable
     }
 
     public static async Task<PortablePluginPackage> LoadAsync(string directory, IPluginHostServices services, Version hostVersion, CancellationToken ct = default)
-        => await OpenAsync(directory, services, hostVersion, activate: true, ct);
+        => await OpenAsync(directory, null, services, hostVersion, activate: true, ct);
+
+    // For a manifest the caller has just read from the same package directory, which is never changed once installed.
+    internal static async Task<PortablePluginPackage> LoadAsync(string directory, PluginManifest manifest, IPluginHostServices services, Version hostVersion, CancellationToken ct = default)
+        => await OpenAsync(directory, manifest, services, hostVersion, activate: true, ct);
 
     public static async Task RunInstallationHookAsync(string directory, IPluginHostServices services, Version hostVersion,
         string? previousVersion, bool uninstall, CancellationToken ct, IProgress<PluginInstallationProgress>? progress = null)
     {
-        await using var package = await OpenAsync(directory, services, hostVersion, activate: false, ct);
+        await using var package = await OpenAsync(directory, null, services, hostVersion, activate: false, ct);
         if (package.Plugin is not IPluginInstallationLifecycle lifecycle) return;
         var context = new PluginInstallationContext(PackageServices(directory, services), previousVersion, progress);
         if (uninstall) await lifecycle.OnUninstallAsync(context, ct);
         else await lifecycle.OnInstallAsync(context, ct);
     }
 
-    private static async Task<PortablePluginPackage> OpenAsync(string directory, IPluginHostServices services, Version hostVersion, bool activate, CancellationToken ct)
+    private static async Task<PortablePluginPackage> OpenAsync(string directory, PluginManifest? inspected, IPluginHostServices services, Version hostVersion, bool activate, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
-        var manifest = ReadManifest(directory);
+        var manifest = inspected ?? ReadManifest(directory);
         if (manifest.MinHostVersion is not null &&
             (!Version.TryParse(manifest.MinHostVersion, out var minimum) || minimum > hostVersion))
             throw new InvalidDataException("The plugin requires a newer host.");

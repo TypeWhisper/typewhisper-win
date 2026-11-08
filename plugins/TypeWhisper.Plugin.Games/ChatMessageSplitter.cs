@@ -1,11 +1,11 @@
 using System.Text;
 
-namespace TypeWhisper.Core.Services;
+namespace TypeWhisper.Plugin.Games;
 
 /// <summary>
 /// Turns dictated text into single-line game chat messages.
 /// </summary>
-public static class ChatMessageSplitter
+internal static class ChatMessageSplitter
 {
     private const string SentenceEnds = ".!?…";
     private const string FullWidthSentenceEnds = "。！？";

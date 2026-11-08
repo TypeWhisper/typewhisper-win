@@ -1,5 +1,4 @@
-using TypeWhisper.Presentation;
-using Xunit;
+using TypeWhisper.Plugin.Games;
 
 public sealed class WowAddOnSettingsTests : IDisposable
 {
@@ -57,25 +56,6 @@ public sealed class WowAddOnSettingsTests : IDisposable
         Assert.Equal("German", WowAddOnSettings.Read(retail).TranslateTo);
         Assert.Equal(WowAddOnSettings.Default, WowAddOnSettings.Read(Path.Join(_directory, "_classic_")));
         Assert.Equal(WowAddOnSettings.Default, WowAddOnSettings.Read(null));
-    }
-
-    [Fact]
-    public void TranslationWorkflow_BeatsAGlobalFallbackButNotThePlayersOwnGameRule()
-    {
-        var translation = new WowAddOnSettings(TranslateTo: "German").TranslationWorkflow()!;
-        var global = new TypeWhisper.Core.Models.Workflow
-        {
-            Id = "global", Name = "Cleanup", Template = TypeWhisper.Core.Models.WorkflowTemplate.CleanedText, Trigger = TypeWhisper.Core.Models.WorkflowTrigger.Global(),
-            Behavior = new() { ProviderOverride = "p", ModelOverride = "m" }
-        };
-        var own = global with { Id = "own", Trigger = TypeWhisper.Core.Models.WorkflowTrigger.App("Wow") };
-
-        Assert.Null(AutomaticWorkflowSnapshot.UnsupportedReason(translation));
-        Assert.Equal("German", translation.Behavior.TranslationTarget);
-        Assert.Equal("wow-addon-translation", AutomaticWorkflowSnapshot.Select([global, translation], "Wow")?.Id);
-        Assert.Equal("own", AutomaticWorkflowSnapshot.Select([translation, own, global], "Wow")?.Id);
-        Assert.Equal("global", AutomaticWorkflowSnapshot.Select([global, translation], "notepad")?.Id);
-        Assert.Null(WowAddOnSettings.Default.TranslationWorkflow());
     }
 
     [Fact]

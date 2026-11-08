@@ -24,7 +24,7 @@ internal sealed class CloudSyncView : UserControl
 
     internal CloudSyncView()
     {
-        WinUICloudSync.Initialize(DispatcherQueue);
+        WinUICloudSync.Open(DispatcherQueue);
         // One card: the switch, then what it synchronizes and where.
         var body = new SettingsCard(); Content = body;
         AppToggleSwitch.Configure(_enabled); AutomationProperties.SetName(_enabled, Loc.T("Enable cloud folder sync"));
