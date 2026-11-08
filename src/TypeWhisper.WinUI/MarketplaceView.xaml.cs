@@ -215,6 +215,8 @@ public sealed partial class MarketplaceView : UserControl
         IsDetail = false;
         MarketListPage.Visibility = Visibility.Visible;
         MarketDetailPage.Visibility = Visibility.Collapsed;
+        // The detail page showed the plugin's name in the heading.
+        MarketTitle.Text = Loc.T("Discover plugins");
         MarketPrimaryButton.Visibility = MarketCancelButton.Visibility = Visibility.Collapsed;
         MarketNavigationHint.Text = Loc.T("Esc Back   ↑↓ Navigate   Enter Open");
         DetailModeChanged?.Invoke(false);
