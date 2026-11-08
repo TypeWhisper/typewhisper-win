@@ -10,6 +10,8 @@
   "Settings.TranscriptionModel": "Transcription Model",
   "Settings.LlmModel": "LLM Model",
   "Settings.LlmModelHint": "Using the default Groq LLM list. Press Refresh to fetch the current models.",
+  "Settings.RefreshModels": "Refresh models",
+  "Settings.RefreshModelsHint": "Load the text models your Groq account can use.",
   "Settings.ModelsFetched": "Fetched {0} Groq LLM model(s).",
   "Settings.ModelsFetchedHint": "Showing {0} Groq LLM model(s) fetched from the API.",
   "Settings.RefreshFailed": "Could not fetch Groq LLM models. Keeping the saved/default list.",

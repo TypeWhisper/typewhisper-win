@@ -10,6 +10,8 @@
   "Settings.TranscriptionModel": "Transkriptions-Modell",
   "Settings.LlmModel": "LLM-Modell",
   "Settings.LlmModelHint": "Die Standardliste für Groq-LLMs wird verwendet. Mit \"Aktualisieren\" werden die aktuellen Modelle geladen.",
+  "Settings.RefreshModels": "Modelle aktualisieren",
+  "Settings.RefreshModelsHint": "Die Textmodelle laden, die dein Groq-Konto nutzen kann.",
   "Settings.ModelsFetched": "{0} Groq-LLM-Modell(e) geladen.",
   "Settings.ModelsFetchedHint": "{0} Groq-LLM-Modell(e) aus der API geladen.",
   "Settings.RefreshFailed": "Groq-LLM-Modelle konnten nicht geladen werden. Die gespeicherte oder Standardliste bleibt aktiv.",

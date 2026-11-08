@@ -12,7 +12,7 @@ namespace TypeWhisper.Plugin.Groq;
 /// <summary>
 /// Provides groq plugin behavior.
 /// </summary>
-public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin, ILlmRequestHedgingSupport, IApiKeyPlugin, IPluginInstallationLifecycle
+public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin, ILlmRequestHedgingSupport, IApiKeyPlugin, IPluginInstallationLifecycle, IPluginSettingsActions
 {
     private const string BaseUrl = "https://api.groq.com/openai";
     private const int TranscriptionUploadBitRate = 48_000;
@@ -28,6 +28,21 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
     private string? _selectedApiModelName;
     private string? _selectedLlmModelId;
     private List<FetchedLlmModel> _fetchedLlmModels = [];
+    private DateTimeOffset? _fetchedLlmModelsAt;
+    private readonly TimeProvider _clock;
+    private readonly bool _refreshLlmModelsAutomatically;
+    private readonly object _llmModelsLock = new();
+    private CancellationTokenSource? _llmModelRefreshCts;
+
+    private const string FetchedLlmModelsSetting = "fetchedLlmModels";
+    private const string FetchedLlmModelsAtSetting = "fetchedLlmModelsAtUtc";
+    private const string RefreshLlmModelsActionId = "refreshModels";
+
+    /// <summary>Groq's featured production model and its named replacement for the retired Llama models.</summary>
+    internal const string DefaultLlmModelId = "openai/gpt-oss-120b";
+
+    /// <summary>How long a fetched model list counts as current before it is reloaded in the background.</summary>
+    internal static readonly TimeSpan LlmModelRefreshInterval = TimeSpan.FromHours(24);
 
     /// <inheritdoc />
     public bool SupportsRequestHedging => true;
@@ -52,7 +67,7 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
     /// Initializes a new instance of the GroqPlugin class.
     /// </summary>
     public GroqPlugin()
-        : this(CreateHttpClient(), CreateTranscriptionHttpClient())
+        : this(CreateHttpClient(), CreateTranscriptionHttpClient(), refreshLlmModelsAutomatically: true)
     {
     }
 
@@ -64,11 +79,15 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
     internal GroqPlugin(
         HttpClient httpClient,
         HttpClient transcriptionHttpClient,
-        Func<byte[], GroqTranscriptionUpload>? compressedUploadFactory = null)
+        Func<byte[], GroqTranscriptionUpload>? compressedUploadFactory = null,
+        bool refreshLlmModelsAutomatically = false,
+        TimeProvider? clock = null)
     {
         _httpClient = httpClient;
         _transcriptionHttpClient = transcriptionHttpClient;
         _compressedUploadFactory = compressedUploadFactory ?? CreateCompressedUpload;
+        _refreshLlmModelsAutomatically = refreshLlmModelsAutomatically;
+        _clock = clock ?? TimeProvider.System;
     }
 
     // ITypeWhisperPlugin
@@ -111,7 +130,14 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
         _apiKey = await host.LoadSecretAsync("api-key");
         _selectedModelId = host.GetSetting<string>("selectedModel") ?? TranscriptionModelEntries[0].Id;
         _selectedLlmModelId = host.GetSetting<string>("selectedLlmModel");
-        _fetchedLlmModels = NormalizeFetchedLlmModels(host.GetSetting<List<FetchedLlmModel>>("fetchedLlmModels") ?? []);
+        _fetchedLlmModels = NormalizeFetchedLlmModels(host.GetSetting<List<FetchedLlmModel>>(FetchedLlmModelsSetting) ?? []);
+        _fetchedLlmModelsAt = LoadFetchedLlmModelsAt(host);
+        if (_fetchedLlmModels.Count > 0 && _fetchedLlmModelsAt is null)
+        {
+            // Lists saved before 1.2.0 have no fetch date and can still offer models Groq has retired since.
+            _fetchedLlmModels = [];
+            host.SetSetting(FetchedLlmModelsSetting, _fetchedLlmModels);
+        }
 
         var selectedTranscription = TranscriptionModelEntries.FirstOrDefault(m => m.Id == _selectedModelId)
             ?? TranscriptionModelEntries[0];
@@ -120,6 +146,7 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
 
         NormalizeSelectedLlmModel();
         host.Log(PluginLogLevel.Info, $"Activated (configured={IsConfigured})");
+        StartLlmModelRefreshIfStale();
     }
 
     /// <summary>
@@ -127,6 +154,7 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
     /// </summary>
     public Task DeactivateAsync()
     {
+        CancelLlmModelRefresh();
         _host = null;
         return Task.CompletedTask;
     }
@@ -308,6 +336,15 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
 
             _apiKey = normalizedApiKey;
 
+            if (changed)
+            {
+                // A list fetched with another key can offer models this account cannot use.
+                CancelLlmModelRefresh();
+                if (_fetchedLlmModels.Count > 0 || _fetchedLlmModelsAt is not null)
+                    ApplyFetchedLlmModels([], fetchedAt: null);
+                StartLlmModelRefreshIfStale();
+            }
+
             if (changed && wasConfigured != IsConfigured)
                 _host.NotifyCapabilitiesChanged();
         }
@@ -328,20 +365,137 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
         _host?.SetSetting("selectedLlmModel", modelId);
     }
 
-    internal void SetFetchedLlmModels(List<FetchedLlmModel> models)
-    {
-        _fetchedLlmModels = NormalizeFetchedLlmModels(models);
+    internal void SetFetchedLlmModels(List<FetchedLlmModel> models) =>
+        ApplyFetchedLlmModels(models, _clock.GetUtcNow());
 
-        _host?.SetSetting("fetchedLlmModels", _fetchedLlmModels);
-        NormalizeSelectedLlmModel();
+    internal DateTimeOffset? FetchedLlmModelsAt => _fetchedLlmModelsAt;
+    internal Task LlmModelRefreshTask { get; private set; } = Task.CompletedTask;
+
+    private void ApplyFetchedLlmModels(IEnumerable<FetchedLlmModel> models, DateTimeOffset? fetchedAt)
+    {
+        lock (_llmModelsLock)
+        {
+            _fetchedLlmModels = NormalizeFetchedLlmModels(models);
+            _fetchedLlmModelsAt = fetchedAt;
+            _host?.SetSetting(FetchedLlmModelsSetting, _fetchedLlmModels);
+            _host?.SetSetting(FetchedLlmModelsAtSetting, fetchedAt);
+            NormalizeSelectedLlmModel();
+        }
+
         _host?.NotifyCapabilitiesChanged();
     }
 
-    internal async Task<List<FetchedLlmModel>?> FetchLlmModelsAsync(CancellationToken ct = default)
+    internal bool IsLlmModelListStale(DateTimeOffset now) =>
+        _fetchedLlmModelsAt is not { } fetchedAt
+        || fetchedAt > now
+        || now - fetchedAt >= LlmModelRefreshInterval;
+
+    /// <summary>
+    /// Groq retires models for free and developer accounts at short notice. Reloading the list
+    /// once a day drops a retired model instead of failing every request with HTTP 404.
+    /// </summary>
+    private void StartLlmModelRefreshIfStale()
+    {
+        if (!_refreshLlmModelsAutomatically || _host is null || _apiKey is not { } apiKey
+            || !IsLlmModelListStale(_clock.GetUtcNow()))
+            return;
+
+        CancelLlmModelRefresh();
+        var cts = new CancellationTokenSource();
+        _llmModelRefreshCts = cts;
+        LlmModelRefreshTask = Task.Run(() => RefreshLlmModelsInBackgroundAsync(apiKey, cts.Token));
+    }
+
+    private async Task RefreshLlmModelsInBackgroundAsync(string apiKey, CancellationToken ct)
+    {
+        try
+        {
+            await RefreshLlmModelsAsync(apiKey, ct);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            _host?.Log(PluginLogLevel.Warning, $"Groq model refresh failed: {ex.GetType().Name}");
+        }
+    }
+
+    /// <summary>Returns the number of models now offered, or null when Groq returned no usable list.</summary>
+    private async Task<int?> RefreshLlmModelsAsync(string apiKey, CancellationToken ct)
+    {
+        var models = await FetchLlmModelsAsync(apiKey, ct);
+        if (models is not { Count: > 0 })
+            return null;
+
+        lock (_llmModelsLock)
+        {
+            // Drop a result that arrives after deactivation or a key change.
+            if (ct.IsCancellationRequested || _host is null || !string.Equals(_apiKey, apiKey, StringComparison.Ordinal))
+                return null;
+
+            ApplyFetchedLlmModels(models, _clock.GetUtcNow());
+            return _fetchedLlmModels.Count;
+        }
+    }
+
+    private void CancelLlmModelRefresh()
+    {
+        var cts = Interlocked.Exchange(ref _llmModelRefreshCts, null);
+        if (cts is null)
+            return;
+
+        cts.Cancel();
+        cts.Dispose();
+    }
+
+    /// <inheritdoc />
+    public IReadOnlyList<PluginSettingsAction> SettingsActions =>
+    [
+        new(RefreshLlmModelsActionId,
+            Loc?.GetString("Settings.RefreshModels") ?? "Refresh models",
+            Loc?.GetString("Settings.RefreshModelsHint") ?? "Load the text models your Groq account can use.")
+        {
+            Section = PluginSettingsSection.Connection,
+        },
+    ];
+
+    /// <inheritdoc />
+    public async Task<string?> ExecuteSettingsActionAsync(string id, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (id != RefreshLlmModelsActionId)
+            throw new ArgumentException("Unknown Groq action.", nameof(id));
+        if (_apiKey is not { } apiKey)
+            throw new PluginRequestException("API key not configured", PluginRequestFailureKind.Configuration);
+
+        CancelLlmModelRefresh();
+        int? count;
+        try
+        {
+            count = await RefreshLlmModelsAsync(apiKey, cancellationToken);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            count = null;
+        }
+
+        if (count is not { } modelCount)
+            throw new PluginRequestException(
+                Loc?.GetString("Settings.RefreshFailed") ?? "Could not fetch Groq LLM models. Keeping the saved/default list.",
+                PluginRequestFailureKind.Network);
+
+        return Loc?.GetString("Settings.ModelsFetched", modelCount) ?? $"Fetched {modelCount} Groq LLM model(s).";
+    }
+
+    internal Task<List<FetchedLlmModel>?> FetchLlmModelsAsync(CancellationToken ct = default) =>
+        FetchLlmModelsAsync(_apiKey, ct);
+
+    private async Task<List<FetchedLlmModel>?> FetchLlmModelsAsync(string? apiKey, CancellationToken ct)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, $"{BaseUrl}/v1/models");
-        if (!string.IsNullOrEmpty(_apiKey))
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
+        if (!string.IsNullOrEmpty(apiKey))
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
 
         try
         {
@@ -405,7 +559,15 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
     internal string ResolveLlmModelId(string? requestedModel) =>
         !string.IsNullOrWhiteSpace(requestedModel)
             ? requestedModel
-            : _selectedLlmModelId ?? SupportedModels.First().Id;
+            : _selectedLlmModelId ?? DefaultLlmModel();
+
+    /// <summary>A fetched list is sorted by ID, so its first entry is not a sensible default.</summary>
+    private string DefaultLlmModel()
+    {
+        var models = SupportedModels;
+        return models.FirstOrDefault(m => string.Equals(m.Id, DefaultLlmModelId, StringComparison.OrdinalIgnoreCase))?.Id
+            ?? models[0].Id;
+    }
 
     private void NormalizeSelectedLlmModel()
     {
@@ -413,7 +575,7 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
         if (_selectedLlmModelId is not null && availableIds.Contains(_selectedLlmModelId))
             return;
 
-        _selectedLlmModelId = SupportedModels.FirstOrDefault()?.Id;
+        _selectedLlmModelId = SupportedModels.Count > 0 ? DefaultLlmModel() : null;
         if (_selectedLlmModelId is not null)
             _host?.SetSetting("selectedLlmModel", _selectedLlmModelId);
     }
@@ -424,6 +586,19 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
             .DistinctBy(m => m.Id)
             .OrderBy(m => m.Id, StringComparer.OrdinalIgnoreCase)
             .ToList();
+
+    private static DateTimeOffset? LoadFetchedLlmModelsAt(IPluginHostServices host)
+    {
+        try
+        {
+            var value = host.GetSetting<DateTimeOffset?>(FetchedLlmModelsAtSetting);
+            return value == default ? null : value?.ToUniversalTime();
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException)
+        {
+            return null;
+        }
+    }
 
     internal static HttpClient CreateTranscriptionHttpClient(HttpMessageHandler? handler = null) =>
         CreateHttpClient(DefaultTranscriptionHttpTimeout, handler);
@@ -608,6 +783,7 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
     /// </summary>
     public void Dispose()
     {
+        CancelLlmModelRefresh();
         _httpClient.Dispose();
         if (!ReferenceEquals(_httpClient, _transcriptionHttpClient))
             _transcriptionHttpClient.Dispose();

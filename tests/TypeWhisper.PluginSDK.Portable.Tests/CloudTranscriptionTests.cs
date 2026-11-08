@@ -174,7 +174,7 @@ public sealed class CloudTranscriptionTests : IDisposable
     [Fact]
     public async Task FailedSecretSavePreservesWorkingKeyAndConfiguration()
     {
-        using var plugin = new GroqPlugin(); await plugin.ActivateAsync(Host); await plugin.SetApiKeyAsync("original");
+        using var plugin = new GroqPlugin(new HttpClient(new Handler((_, _) => throw new InvalidOperationException("Unexpected network request.")))); await plugin.ActivateAsync(Host); await plugin.SetApiKeyAsync("original");
         _secrets.FailWrites = true;
         await Assert.ThrowsAsync<IOException>(() => plugin.SetApiKeyAsync("replacement"));
         Assert.True(plugin.IsConfigured); Assert.Equal("original", plugin.ApiKey);
@@ -186,7 +186,7 @@ public sealed class CloudTranscriptionTests : IDisposable
         var host = new Mock<IPluginHostServices>();
         host.Setup(h => h.LoadSecretAsync("api-key")).ReturnsAsync("key");
         host.Setup(h => h.SetSetting("selectedModel", "whisper-large-v3-turbo")).Throws<IOException>();
-        using var plugin = new GroqPlugin(); await plugin.ActivateAsync(host.Object);
+        using var plugin = new GroqPlugin(new HttpClient(new Handler((_, _) => throw new InvalidOperationException("Unexpected network request.")))); await plugin.ActivateAsync(host.Object);
         Assert.Throws<IOException>(() => plugin.SelectModel("whisper-large-v3-turbo"));
         Assert.Equal("whisper-large-v3", plugin.SelectedModelId);
     }
