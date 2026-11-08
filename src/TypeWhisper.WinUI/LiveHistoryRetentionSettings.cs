@@ -39,6 +39,7 @@ internal static class LiveHistoryRetentionSettings
         var refreshing = false;
         var busy = false;
         var dirty = false;
+        UnappliedEdits.Track(row, () => dirty);
         void OnChanged() => row.DispatcherQueue.TryEnqueue(() =>
         {
             if (row.IsLoaded && !dirty && !busy) row.Status = controller.Error ?? "";
@@ -112,7 +113,7 @@ internal static class LiveHistoryRetentionSettings
                 Refresh();
                 row.Status = Loc.T("Retention could not be changed. Your previously saved choice still applies.");
             }
-            finally { busy = false; apply.IsEnabled = picker.IsEnabled = duration.IsEnabled = true; }
+            finally { busy = false; apply.IsEnabled = picker.IsEnabled = duration.IsEnabled = true; UnappliedEdits.NotifySettled(); }
         };
         Refresh();
         row.Status = controller.Error ?? "";

@@ -11,6 +11,8 @@ public partial class App : Application
     private TrayIconService? _tray;
     private ProfileOperationWindow? _profileOperation;
     private readonly TypeWhisper.Presentation.ActivationInbox _activations = new();
+    // Main window and tray exist, so requests that only navigate need not wait for the initialized session.
+    private bool _navigationReady;
     private bool _activationReady;
     private int _redirectedActivationReceived;
     private int _redirectedNavigationReceived;
@@ -266,6 +268,10 @@ public partial class App : Application
         var setupPending = presentation == TypeWhisper.Presentation.StartupPresentation.Setup;
         var skipWhenReady = setupPending && TypeWhisper.Presentation.OnboardingPolicy.SkipSetupWhenReady(WinUIManagedPolicy.Current);
         if (setupPending && !skipWhenReady) _window.OpenSetup(returnToTray: true);
+        // A destination such as Settings or History opens now, while models and plugins load. Files, shares,
+        // account callbacks and errors wait for the initialized session, and so does any request queued behind them.
+        _navigationReady = true;
+        DrainActivations();
         if (skipWhenReady)
         {
             // The bounded wait covers initialization itself: a slow or hanging plugin or model load must not leave
@@ -316,8 +322,9 @@ public partial class App : Application
             operation.Activate(); return;
         }
         if (_exiting) { _activations.Close(); return; }
-        if (!_activationReady || _window is null) return;
-        _activations.Dispatch(_window.HandleActivation, _window.ShowActivationFailure);
+        if (_window is null) return;
+        if (_activationReady) _activations.Dispatch(_window.HandleActivation, _window.ShowActivationFailure);
+        else if (_navigationReady) _activations.DispatchNavigation(_window.HandleActivation, _window.ShowActivationFailure);
     }
 
     private bool _exiting;
