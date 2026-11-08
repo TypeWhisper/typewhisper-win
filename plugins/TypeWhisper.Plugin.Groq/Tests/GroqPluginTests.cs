@@ -107,6 +107,38 @@ public class GroqPluginTests
     }
 
     [Fact]
+    public async Task SupportedModels_WithoutFetchedModelsOfferOnlyModelsOpenToAllAccounts()
+    {
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "groq-key";
+
+        var sut = new GroqPlugin();
+        await sut.ActivateAsync(host);
+
+        Assert.Equal(
+            ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b"],
+            sut.SupportedModels.Select(m => m.Id).ToArray());
+        Assert.Equal("openai/gpt-oss-120b", sut.SelectedLlmModelId);
+    }
+
+    [Theory]
+    [InlineData("llama-3.3-70b-versatile")]
+    [InlineData("llama-3.1-8b-instant")]
+    [InlineData("moonshotai/kimi-k2-instruct-0905")]
+    public async Task ActivateAsync_ReplacesSavedRetiredLlmModelWithDefault(string retiredModelId)
+    {
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "groq-key";
+        host.SetSetting("selectedLlmModel", retiredModelId);
+
+        var sut = new GroqPlugin();
+        await sut.ActivateAsync(host);
+
+        Assert.Equal("openai/gpt-oss-120b", sut.SelectedLlmModelId);
+        Assert.Equal("openai/gpt-oss-120b", host.GetSetting<string>("selectedLlmModel"));
+    }
+
+    [Fact]
     public async Task FetchLlmModelsAsync_FiltersAndSortsGroqResults()
     {
         var handler = new CapturingHandler((request, _) =>
@@ -478,7 +510,7 @@ public class GroqPluginTests
         var handler = new CapturingHandler((_, body) =>
         {
             using var doc = JsonDocument.Parse(body ?? throw new InvalidOperationException("Missing request body."));
-            Assert.Equal("qwen/qwen3.8-27b", doc.RootElement.GetProperty("model").GetString());
+            Assert.Equal("openai/gpt-oss-120b", doc.RootElement.GetProperty("model").GetString());
 
             return JsonResponse("""
                 {

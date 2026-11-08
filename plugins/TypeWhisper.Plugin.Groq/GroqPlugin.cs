@@ -38,16 +38,14 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
         new("whisper-large-v3-turbo", "Whisper Large V3 Turbo", "whisper-large-v3-turbo", SupportsTranslation: false),
     ];
 
+    // Groq's production chat models come first, so a fresh install defaults to GPT-OSS 120B.
+    // Llama 3.3 70B, Llama 3.1 8B and Kimi K2 were retired for free and developer accounts.
+    // Refresh fetches the full list, including preview models.
     private static readonly IReadOnlyList<PluginModelInfo> FallbackLlmModels =
     [
-        new("qwen/qwen3.8-27b", "Qwen 3.8 27B"),
         new("openai/gpt-oss-120b", "GPT-OSS 120B"),
         new("openai/gpt-oss-20b", "GPT-OSS 20B"),
-        new("allam-2-7b", "ALLaM 2 7B"),
-        new("minimaxai/minimax-m2.7", "MiniMax M2.7 Enterprise"),
-        new("meta-models/muse-spark-open", "Muse Spark Open Enterprise"),
-        new("llama-3.3-70b-versatile", "Llama 3.3 70B Enterprise"),
-        new("llama-3.1-8b-instant", "Llama 3.1 8B Enterprise"),
+        new("qwen/qwen3.8-27b", "Qwen 3.8 27B"),
     ];
 
     /// <summary>
