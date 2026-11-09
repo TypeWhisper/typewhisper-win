@@ -2,6 +2,8 @@ using System.Net;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
+using PortableMigration.Tests;
+using TypeWhisper.Plugin.Shared;
 using TypeWhisper.Plugin.Xai;
 
 namespace TypeWhisper.PluginSystem.Tests;
@@ -274,6 +276,112 @@ public partial class XaiPluginTests
 
         Assert.Equal(RefreshNow, host.GetSetting<DateTimeOffset?>("fetchedVoicesAtUtc"));
         Assert.Equal(["https://api.x.ai/v1/models", "https://api.x.ai/v1/tts/voices"], handler.Paths);
+    }
+
+    [Fact]
+    public async Task Recheck_ReloadsListsThatAgeWhileThePluginStaysActive()
+    {
+        var clock = new RecheckTestClock(RefreshNow);
+        // One answer per list. A request beyond the queued answers finds the queue empty and fails.
+        var answers = new Queue<HttpStatusCode>([HttpStatusCode.OK, HttpStatusCode.OK]);
+        var handler = new CatalogHandler(request =>
+            Task.FromResult(CatalogResponse(request, RefreshedModels, RefreshedVoices, answers.Dequeue())));
+        var host = CatalogHost("xai-key", RefreshNow, RefreshNow);
+        using var sut = new XaiPlugin(new HttpClient(handler), refreshCatalogsAutomatically: true, clock: clock);
+
+        await sut.ActivateAsync(host);
+        await sut.CatalogRefreshTask;
+        Assert.Empty(handler.Paths);
+
+        clock.Advance(TimeSpan.FromHours(24));
+        await sut.CatalogRefreshTask;
+
+        var dayLater = RefreshNow.AddHours(24);
+        Assert.Equal(["https://api.x.ai/v1/models", "https://api.x.ai/v1/tts/voices"], handler.Paths);
+        Assert.Equal(["grok-4.3", "grok-5"], sut.SupportedModels.Select(m => m.Id).ToArray());
+        Assert.Equal(["ara", "eve"], sut.AvailableVoices.Select(v => v.Id).ToArray());
+        Assert.Equal(["grok-4.3", "grok-5"], host.GetSetting<List<XaiFetchedModel>>("fetchedLlmModels")!.Select(m => m.Id).ToArray());
+        Assert.Equal(["ara", "eve"], host.GetSetting<List<XaiFetchedVoice>>("fetchedVoices")!.Select(v => v.VoiceId).ToArray());
+        Assert.Equal(dayLater, host.GetSetting<DateTimeOffset?>("fetchedLlmModelsAtUtc"));
+        Assert.Equal(dayLater, host.GetSetting<DateTimeOffset?>("fetchedVoicesAtUtc"));
+    }
+
+    [Fact]
+    public async Task Recheck_StopsWhenThePluginDeactivates()
+    {
+        var clock = new RecheckTestClock(RefreshNow);
+        var handler = new CatalogHandler(_ => throw new InvalidOperationException("Unexpected catalog refresh."));
+        using var sut = new XaiPlugin(new HttpClient(handler), refreshCatalogsAutomatically: true, clock: clock);
+        await sut.ActivateAsync(CatalogHost("xai-key", RefreshNow, RefreshNow));
+        Assert.Equal(1, clock.ActiveTimers);
+
+        await sut.DeactivateAsync();
+        clock.Advance(TimeSpan.FromHours(24));
+        await sut.CatalogRefreshTask;
+
+        Assert.Equal(0, clock.ActiveTimers);
+        Assert.Empty(handler.Paths);
+    }
+
+    [Fact]
+    public async Task Recheck_RetriesAFailedRefreshAnHourLater()
+    {
+        var clock = new RecheckTestClock(RefreshNow);
+        var answers = new Queue<HttpStatusCode>([HttpStatusCode.ServiceUnavailable, HttpStatusCode.OK]);
+        var handler = new CatalogHandler(request =>
+            Task.FromResult(CatalogResponse(request, RefreshedModels, RefreshedVoices, answers.Dequeue())));
+        // Only the voices are due, so each refresh is a single request.
+        var host = CatalogHost("xai-key", RefreshNow, RefreshNow.AddDays(-1));
+        using var sut = new XaiPlugin(new HttpClient(handler), refreshCatalogsAutomatically: true, clock: clock);
+
+        await sut.ActivateAsync(host);
+        await sut.CatalogRefreshTask;
+        Assert.Equal(["https://api.x.ai/v1/tts/voices"], handler.Paths);
+        Assert.Equal(["saved-voice"], sut.AvailableVoices.Select(v => v.Id).ToArray());
+
+        clock.Advance(ModelCatalogAutoRefresh.RecheckInterval);
+        await sut.CatalogRefreshTask;
+
+        var hourLater = RefreshNow.Add(ModelCatalogAutoRefresh.RecheckInterval);
+        Assert.Equal(["https://api.x.ai/v1/tts/voices", "https://api.x.ai/v1/tts/voices"], handler.Paths);
+        Assert.Equal(["ara", "eve"], sut.AvailableVoices.Select(v => v.Id).ToArray());
+        Assert.Equal(hourLater, sut.FetchedVoicesAt);
+        Assert.Equal(hourLater, host.GetSetting<DateTimeOffset?>("fetchedVoicesAtUtc"));
+        Assert.Equal(RefreshNow, sut.FetchedLlmModelsAt);
+    }
+
+    // The hourly recheck runs on a timer thread. While a key change waits in its secret write, the old key is still set,
+    // so a recheck must not start a refresh; the key change refreshes with the new key once it is in place.
+    [Fact]
+    public async Task Recheck_DuringAKeyChangeSendsNoRequestWithTheOldKey()
+    {
+        var clock = new RecheckTestClock(RefreshNow);
+        var keys = new List<string?>();
+        var handler = new CatalogHandler(request =>
+        {
+            lock (keys) keys.Add(request.Headers.Authorization?.Parameter);
+            return Task.FromResult(CatalogResponse(request, RefreshedModels, RefreshedVoices));
+        });
+        var host = CatalogHost("first-key", RefreshNow, RefreshNow);
+        using var sut = new XaiPlugin(new HttpClient(handler), refreshCatalogsAutomatically: true, clock: clock);
+        await sut.ActivateAsync(host);
+        var storeStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseStore = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        host.BeforeStoreSecret = async () => { storeStarted.TrySetResult(); await releaseStore.Task; };
+
+        var keyChange = sut.SetApiKeyAsync("second-key");
+        await storeStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        clock.Advance(TimeSpan.FromHours(24));
+        await sut.CatalogRefreshTask.WaitAsync(TimeSpan.FromSeconds(10));
+        lock (keys) Assert.Empty(keys);
+
+        releaseStore.SetResult();
+        await keyChange.WaitAsync(TimeSpan.FromSeconds(10));
+        await sut.CatalogRefreshTask.WaitAsync(TimeSpan.FromSeconds(10));
+
+        lock (keys) Assert.Equal(["second-key", "second-key"], keys);
+        Assert.Equal(["grok-4.3", "grok-5"], sut.SupportedModels.Select(m => m.Id).ToArray());
+        Assert.Equal(Fingerprint("second-key"), host.GetSetting<string>("llmCatalogKeyFingerprint"));
     }
 
     private static XaiPlugin CreateRefreshingPlugin(HttpMessageHandler handler) =>

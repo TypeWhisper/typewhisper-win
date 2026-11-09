@@ -449,10 +449,13 @@ public partial class XaiPluginTests
         public Dictionary<string, string?> Secrets { get; } = [];
         public int NotifyCapabilitiesChangedCount { get; private set; }
 
-        public Task StoreSecretAsync(string key, string value)
+        /// <summary>Runs before a secret is stored, so a test can hold a key change inside its secret write.</summary>
+        public Func<Task>? BeforeStoreSecret { get; set; }
+
+        public async Task StoreSecretAsync(string key, string value)
         {
+            if (BeforeStoreSecret is { } before) await before();
             Secrets[key] = value;
-            return Task.CompletedTask;
         }
 
         public Task<string?> LoadSecretAsync(string key) =>
