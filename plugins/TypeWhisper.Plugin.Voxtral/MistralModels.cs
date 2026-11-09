@@ -104,6 +104,21 @@ public sealed partial class VoxtralPlugin
             ex => host.Log(PluginLogLevel.Warning, $"Mistral model list refresh failed ({Describe(ex)}). Keeping the current model list."));
     }
 
+    /// <summary>
+    /// The hourly check. It runs on a timer thread, so it takes the gate that key changes and deactivation hold. While the
+    /// gate is busy the check is skipped: a key change starts its own refresh, and the next check follows an hour later.
+    /// </summary>
+    private void RecheckModelCatalog()
+    {
+        if (!_refreshGate.Wait(0)) return;
+        try
+        {
+            // A key change can start a refresh after the helper checked for one; that refresh keeps running.
+            if (_modelRefresh.Current.IsCompleted) StartModelRefreshIfStale();
+        }
+        finally { _refreshGate.Release(); }
+    }
+
     private async Task RefreshCatalogInBackgroundAsync(IPluginHostServices host, string key, CancellationToken ct)
     {
         var catalog = await FetchCatalogAsync(key, ct).ConfigureAwait(false);

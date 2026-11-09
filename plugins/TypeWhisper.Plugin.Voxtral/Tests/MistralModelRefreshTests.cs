@@ -2,6 +2,8 @@ using System.Collections.Concurrent;
 using System.Net;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using PortableMigration.Tests;
+using TypeWhisper.Plugin.Shared;
 using TypeWhisper.Plugin.Voxtral;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
@@ -339,6 +341,128 @@ public sealed partial class ProviderTests
         // The background result arrived after the button's and was dropped.
         Assert.Equal(LiveTextModels, plugin.SupportedModels.Select(m => m.Id));
         Assert.Equal(LiveTextModels, SavedCatalog(host).Text.Select(m => m.Id));
+    }
+
+    private const string ModelsUrl = "https://api.mistral.ai/v1/models";
+
+    [Fact]
+    public async Task HourlyRecheckReloadsACatalogThatAgesWhileThePluginStaysActive()
+    {
+        var clock = new RecheckTestClock(RefreshNow);
+        var requests = new ConcurrentQueue<string>();
+        using var http = new HttpClient(new Handler((request, _) =>
+        {
+            var url = request.RequestUri!.AbsoluteUri;
+            requests.Enqueue(url);
+            return url == ModelsUrl ? Json(LiveCatalog) : throw new InvalidOperationException($"Unexpected request: {url}");
+        }));
+        var host = HostWithCatalog("fixture-key", CatalogResponse, RefreshNow);
+
+        using var plugin = new VoxtralPlugin(http, refreshModelsAutomatically: true, clock: clock);
+        await plugin.ActivateAsync(host);
+        await plugin.ModelCatalogRefreshTask;
+        Assert.Empty(requests);
+        Assert.Equal(CatalogResponseTextModels, plugin.SupportedModels.Select(m => m.Id));
+
+        clock.Advance(TimeSpan.FromHours(24));
+        await plugin.ModelCatalogRefreshTask;
+
+        Assert.Equal([ModelsUrl], requests);
+        Assert.Equal(LiveTextModels, plugin.SupportedModels.Select(m => m.Id));
+        Assert.Equal(LiveTextModels, SavedCatalog(host).Text.Select(m => m.Id));
+        Assert.Equal(RefreshNow.AddHours(24), SavedCatalog(host).FetchedAtUtc);
+
+        // The reloaded list is fresh, so the next check makes no request.
+        clock.Advance(ModelCatalogAutoRefresh.RecheckInterval);
+        await plugin.ModelCatalogRefreshTask;
+        Assert.Single(requests);
+    }
+
+    [Fact]
+    public async Task HourlyRecheckStopsWhenThePluginIsDeactivated()
+    {
+        var clock = new RecheckTestClock(RefreshNow);
+        var requests = 0;
+        using var http = new HttpClient(new Handler((_, _) =>
+        {
+            Interlocked.Increment(ref requests);
+            throw new InvalidOperationException("Unexpected model refresh.");
+        }));
+        var host = HostWithCatalog("fixture-key", CatalogResponse, RefreshNow);
+
+        using var plugin = new VoxtralPlugin(http, refreshModelsAutomatically: true, clock: clock);
+        await plugin.ActivateAsync(host);
+        Assert.Equal(1, clock.ActiveTimers);
+        var lastRefresh = plugin.ModelCatalogRefreshTask;
+
+        await plugin.DeactivateAsync();
+        clock.Advance(TimeSpan.FromHours(24));
+
+        Assert.Equal(0, clock.ActiveTimers);
+        Assert.Same(lastRefresh, plugin.ModelCatalogRefreshTask);
+        Assert.Equal(0, requests);
+    }
+
+    [Fact]
+    public async Task HourlyRecheckRetriesAFailedRefresh()
+    {
+        var clock = new RecheckTestClock(RefreshNow);
+        var requests = 0;
+        using var http = new HttpClient(new Handler((request, _) =>
+        {
+            if (request.RequestUri!.AbsoluteUri != ModelsUrl)
+                throw new InvalidOperationException($"Unexpected request: {request.RequestUri}");
+            // The refresh at start fails, as on a PC that starts offline; the next one succeeds.
+            return Interlocked.Increment(ref requests) == 1
+                ? new HttpResponseMessage(HttpStatusCode.ServiceUnavailable) { Content = new StringContent("{}") }
+                : Json(LiveCatalog);
+        }));
+        var fetchedAt = RefreshNow.AddDays(-2);
+        var host = HostWithCatalog("fixture-key", CatalogResponse, fetchedAt);
+
+        using var plugin = new VoxtralPlugin(http, refreshModelsAutomatically: true, clock: clock);
+        await plugin.ActivateAsync(host);
+        await plugin.ModelCatalogRefreshTask;
+        Assert.Equal(1, requests);
+        Assert.Equal(fetchedAt, SavedCatalog(host).FetchedAtUtc);
+
+        clock.Advance(ModelCatalogAutoRefresh.RecheckInterval);
+        await plugin.ModelCatalogRefreshTask;
+
+        Assert.Equal(2, requests);
+        Assert.Equal(LiveTextModels, plugin.SupportedModels.Select(m => m.Id));
+        Assert.Equal(RefreshNow + ModelCatalogAutoRefresh.RecheckInterval, SavedCatalog(host).FetchedAtUtc);
+    }
+
+    [Fact]
+    public async Task HourlyRecheckNeverRefreshesWithAKeyThatIsBeingReplaced()
+    {
+        var clock = new RecheckTestClock(RefreshNow);
+        var keys = new ConcurrentQueue<string>();
+        using var http = new HttpClient(new Handler((request, _) =>
+        {
+            keys.Enqueue(request.Headers.Authorization!.Parameter!);
+            return Json(LiveCatalog);
+        }));
+        var host = HostWithCatalog("first-key", CatalogResponse, RefreshNow);
+
+        using var plugin = new VoxtralPlugin(http, refreshModelsAutomatically: true, clock: clock);
+        await plugin.ActivateAsync(host);
+        var beforeKeyChange = plugin.ModelCatalogRefreshTask;
+        var secretStore = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        host.StoreSecretDelay = secretStore.Task;
+
+        // The key change waits for the secret store. The first list is a day old by then, so a check that fires
+        // meanwhile and ignored the key change would refresh it with the first key.
+        var keyChange = plugin.SetApiKeyAsync("second-key");
+        clock.Advance(TimeSpan.FromHours(24));
+        Assert.Same(beforeKeyChange, plugin.ModelCatalogRefreshTask);
+        secretStore.SetResult();
+        await keyChange;
+        await plugin.ModelCatalogRefreshTask;
+
+        Assert.Equal(["second-key"], keys);
+        Assert.Equal(LiveTextModels, plugin.SupportedModels.Select(m => m.Id));
     }
 
     private static VoxtralPlugin OfflinePlugin(TimeProvider? clock = null) => new(OfflineHttpClient(), clock: clock);
