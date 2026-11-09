@@ -103,8 +103,9 @@ public sealed partial class OpenRouterPlugin
         var keyChanged = !string.Equals(normalized, _apiKey, StringComparison.Ordinal);
         if (keyChanged)
         {
-            // OpenRouter lists are the same for every key, but a refresh started with the old key is dropped.
-            lock (_configurationLock) _catalogVersion++;
+            // OpenRouter lists are the same for every key, but a refresh started with the old key is dropped. Until
+            // the new key is in place, no background refresh may start either: it would still send the old key.
+            lock (_configurationLock) { _catalogVersion++; _keyChangePending = true; }
             _catalogRefresh.Cancel();
         }
 
@@ -114,13 +115,18 @@ public sealed partial class OpenRouterPlugin
             ct.ThrowIfCancellationRequested();
             // The single settings write is the commit point for all fields and the key reference.
             CommitConfiguration(value => change(value) with { SecretName = stagedSecret }, notify: false);
+            _apiKey = normalized;
         }
         catch
         {
             if (stagedSecret is not null) await TryDeleteSecretAsync(stagedSecret);
             throw;
         }
-        _apiKey = normalized;
+        finally
+        {
+            // Also after a failed write, so later refreshes can start again.
+            if (keyChanged) lock (_configurationLock) _keyChangePending = false;
+        }
         host.NotifyCapabilitiesChanged();
         if (oldSecret is not null) await TryDeleteSecretAsync(oldSecret);
         if (keyChanged) StartCatalogRefreshIfStale();

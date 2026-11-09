@@ -45,6 +45,8 @@ public sealed partial class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmP
     private readonly object _configurationLock = new();
     // Bumped on a key change and on deactivation, so a refresh started before either is dropped.
     private int _catalogVersion;
+    // Set while a key change writes the secret. The old key is still set then, so no background refresh starts.
+    private bool _keyChangePending;
     private IPluginHostServices? _host;
     private string? _apiKey;
     // The saved choices. A list that lacks one uses the default in memory and keeps the saved value.
@@ -151,6 +153,8 @@ public sealed partial class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmP
         _draftFetchedAt = null;
         host.Log(PluginLogLevel.Info, $"Activated (configured={IsAvailable})");
         StartCatalogRefreshIfStale();
+        // The app can run for days without activating the plugin again.
+        _catalogRefresh.StartRechecks(StartCatalogRefreshIfStale);
     }
 
     /// <summary>
@@ -165,6 +169,7 @@ public sealed partial class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmP
             _apiKey = null;
         }
 
+        _catalogRefresh.StopRechecks();
         _catalogRefresh.Cancel();
         return Task.CompletedTask;
     }
@@ -617,7 +622,8 @@ public sealed partial class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmP
 
     /// <summary>
     /// A list that only refreshes on request keeps offering retired models. Reloading it once a day
-    /// drops them instead of failing every request. Each list keeps its own fetch date.
+    /// drops them instead of failing every request. Each list keeps its own fetch date. The hourly
+    /// recheck calls this on a timer thread, so it reads its state only under the lock.
     /// </summary>
     private void StartCatalogRefreshIfStale()
     {
@@ -626,7 +632,8 @@ public sealed partial class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmP
         bool text, speech;
         lock (_configurationLock)
         {
-            if (_host is null || _apiKey is not { } key)
+            // While a key change writes the secret, the old key is still set. The key change refreshes afterwards.
+            if (_host is null || _keyChangePending || _apiKey is not { } key)
                 return;
             text = _catalogRefresh.IsStale(_textModelsFetchedAt);
             speech = _catalogRefresh.IsStale(_speechModelsFetchedAt);
