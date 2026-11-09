@@ -53,8 +53,7 @@ public sealed partial class XaiPlugin : IApiKeyPlugin, IPluginTextSettings, IPlu
     {
         ct.ThrowIfCancellationRequested();
         if (!IsConfigured) throw new InvalidOperationException("Store an API key first.");
-        switch (id) { case "models": var models = await FetchLlmModelsAsync(ct); if (models.Count == 0) throw new InvalidOperationException("No models returned; previous catalog retained."); SetFetchedLlmModels(models); break; case "voices": var voices = await FetchVoicesAsync(ct); if (voices.Count == 0) throw new InvalidOperationException("No voices returned; previous catalog retained."); SetFetchedVoices(voices); break; default: throw new ArgumentException("Unknown action.", nameof(id)); }
-        await Task.CompletedTask;
+        switch (id) { case "models": await RefreshLlmModelsNowAsync(ct); break; case "voices": await RefreshVoicesNowAsync(ct); break; default: throw new ArgumentException("Unknown action.", nameof(id)); }
         return L("Updated.", "Aktualisiert.");
     }
 }

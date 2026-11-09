@@ -6,7 +6,7 @@ public sealed class PortableKeyTests
     [Fact]
     public async Task FailedSecretMutation_KeepsPreviouslyConfiguredKey()
     {
-        using var fixture=new PortableFixture(); using var plugin=new XaiPlugin();
+        using var fixture=new PortableFixture(); using var plugin=new XaiPlugin(new HttpClient(new OfflineHandler()));
         await plugin.ActivateAsync(fixture.Host); IApiKeyPlugin key=plugin;
         await key.SetApiKeyAsync("previous"); fixture.Secrets.FailWrites=true;
         await Assert.ThrowsAsync<IOException>(() => key.SetApiKeyAsync("replacement"));

@@ -2,7 +2,7 @@
 
 xAI batch/realtime transcription, Responses LLM completion and TTS with voice/output-device selection.
 
-Version `1.3.3`; plugin ID `com.typewhisper.xai`; minimum host `1.1.5`.
+Version `1.4.0`; plugin ID `com.typewhisper.xai`; minimum host `1.1.5`.
 
 ## Setup
 
@@ -27,7 +27,7 @@ Tests cover HTTP requests, voice/model contracts, local WebSocket finalization a
 
 ## Current settings and protocol
 
-The host provides one Save settings action for the API key and edited preferences. Text models and voices use catalog selections; refreshing a catalog preserves a still-available selection. The optional custom voice ID overrides the selected default voice. xAI branding appears in navigation and provider selections with light/dark variants.
+The host provides one Save settings action for the API key and edited preferences. Text models and voices use catalog selections. With an API key, each list reloads in the background once it is a day old, and a key change reloads both for the new account. A failed or empty reload keeps the current list. When a reloaded list lacks the saved model or voice, Grok 4.3 or Eve is used until a later list offers the saved one again. The optional custom voice ID overrides the selected default voice. xAI branding appears in navigation and provider selections with light/dark variants.
 
 Batch and WebSocket requests explicitly select Grok Voice Transcribe 2.0 or 1.0. The former `grok-stt` selection maps to 2.0. Both transports pass individual dictionary terms (including commas) with a 100-term/50-character budget. Streaming waits for `transcript.created` before releasing captured audio, stitches utterance chunks without duplicates, and waits for `transcript.done` on stop. Premature closure fails explicitly. The language parameter controls xAI text formatting; it does not force recognition to that language.
 
