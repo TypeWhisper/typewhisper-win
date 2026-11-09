@@ -14,8 +14,7 @@ public sealed class StreamingCompletionTests
     public async Task Loopback_AwaitsTerminalResponseAndRejectsPrematureClose(bool prematureClose, bool abruptClose)
     {
         using var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(15));var ct=timeout.Token;
-        using var tcp=new TcpListener(IPAddress.Loopback,0);tcp.Start();var port=((IPEndPoint)tcp.LocalEndpoint).Port;tcp.Stop();
-        using var listener=new HttpListener();listener.Prefixes.Add($"http://127.0.0.1:{port}/");listener.Start();
+        using var listener=StartLoopbackListener(out var port);
         var uri=new Uri($"ws://127.0.0.1:{port}/");
         var endReceived=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -56,10 +55,7 @@ public sealed class StreamingCompletionTests
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
         var ct = timeout.Token;
-        using var tcp = new TcpListener(IPAddress.Loopback, 0);
-        tcp.Start(); var port = ((IPEndPoint)tcp.LocalEndpoint).Port; tcp.Stop();
-        using var listener = new HttpListener();
-        listener.Prefixes.Add($"http://127.0.0.1:{port}/"); listener.Start();
+        using var listener = StartLoopbackListener(out var port);
         var firstObserved = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var releaseLast = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var clientFinished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -116,10 +112,7 @@ public sealed class StreamingCompletionTests
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var ct = timeout.Token;
-        using var tcp = new TcpListener(IPAddress.Loopback, 0);
-        tcp.Start(); var port = ((IPEndPoint)tcp.LocalEndpoint).Port; tcp.Stop();
-        using var listener = new HttpListener();
-        listener.Prefixes.Add($"http://127.0.0.1:{port}/"); listener.Start();
+        using var listener = StartLoopbackListener(out var port);
         var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var server = Task.Run(async () =>
         {
@@ -175,9 +168,7 @@ public sealed class StreamingCompletionTests
     public async Task FailedReceiverIsObservedByNextAudioSend(bool closeSocket)
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10)); var ct = timeout.Token;
-        using var tcp = new TcpListener(IPAddress.Loopback, 0);
-        tcp.Start(); var port = ((IPEndPoint)tcp.LocalEndpoint).Port; tcp.Stop();
-        using var listener = new HttpListener(); listener.Prefixes.Add($"http://127.0.0.1:{port}/"); listener.Start();
+        using var listener = StartLoopbackListener(out var port);
         var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var server = Task.Run(async () =>
         {
@@ -206,9 +197,7 @@ public sealed class StreamingCompletionTests
     public async Task SubscriberAndOversizedFragmentFailuresStopTheSession(bool oversized)
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15)); var ct = timeout.Token;
-        using var tcp = new TcpListener(IPAddress.Loopback, 0);
-        tcp.Start(); var port = ((IPEndPoint)tcp.LocalEndpoint).Port; tcp.Stop();
-        using var listener = new HttpListener(); listener.Prefixes.Add($"http://127.0.0.1:{port}/"); listener.Start();
+        using var listener = StartLoopbackListener(out var port);
         var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var server = Task.Run(async () =>
         {
@@ -272,5 +261,32 @@ public sealed class StreamingCompletionTests
         var bytes=Encoding.UTF8.GetBytes(value);var half=bytes.Length/2;
         await socket.SendAsync(bytes.AsMemory(0,half),WebSocketMessageType.Text,false,ct);
         await socket.SendAsync(bytes.AsMemory(half),WebSocketMessageType.Text,true,ct);
+    }
+
+    // HttpListener cannot listen on port 0, so a free port is reserved and released first. Another process can take
+    // it before the listener starts, which fails with a sharing violation or a conflicting registration; the next
+    // free port is tried then.
+    private static HttpListener StartLoopbackListener(out int port)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            using (var reservation = new TcpListener(IPAddress.Loopback, 0))
+            {
+                reservation.Start();
+                port = ((IPEndPoint)reservation.LocalEndpoint).Port;
+            }
+
+            var listener = new HttpListener();
+            listener.Prefixes.Add($"http://127.0.0.1:{port}/");
+            try
+            {
+                listener.Start();
+                return listener;
+            }
+            catch (HttpListenerException) when (attempt < 10)
+            {
+                listener.Close();
+            }
+        }
     }
 }
