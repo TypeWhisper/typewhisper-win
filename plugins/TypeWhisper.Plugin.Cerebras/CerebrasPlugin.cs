@@ -26,6 +26,8 @@ public sealed partial class CerebrasPlugin : ILlmProviderPlugin, ILlmRequestHedg
     private string[]? _draftModels;
     private string? _draftModelsKey;
     private DateTimeOffset _draftModelsFetchedAt;
+    // Models the settings field showed since the last save; a page opened before a refresh still sends one of them.
+    private readonly HashSet<string> _displayedModels = new(StringComparer.Ordinal);
 
     // Defaults are only a starting point. A refresh uses the account's catalog. In this order they are also the
     // default model when the saved one is not offered.

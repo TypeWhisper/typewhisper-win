@@ -88,6 +88,48 @@ public partial class CerebrasTests
         Assert.Equal("gpt-oss-120b", UsedModel(plugin));
     }
 
+    // Without a saved model the field shows the list's default. A refresh can drop that model while the page is open.
+    [Fact]
+    public async Task AnEditorOpenedBeforeARefreshThatDropsTheShownDefaultStillSaves()
+    {
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var plugin = RefreshingPlugin(new TestClock(Now), async (_, _) =>
+        {
+            await release.Task;
+            return Json("""{"data":[{"id":"qwen-3.8-27b"}]}""");
+        });
+        var host = new TestPluginHostServices();
+        SeedConfiguration(host, [], null);
+        await plugin.ActivateAsync(host);
+        var editor = RenderEditor(plugin);
+        Assert.Equal("gpt-oss-120b", editor["selectedLlmModel"]);
+        release.SetResult();
+        await plugin.ModelRefreshTask;
+
+        editor["llmTemperatureMode"] = "custom";
+        await plugin.SaveProfileSettingsAsync("cerebras", editor, null, default);
+
+        Assert.Null(SavedModel(host));
+        Assert.Equal("custom", Saved(host).GetProperty("TemperatureMode").GetString());
+        Assert.Equal("qwen-3.8-27b", UsedModel(plugin));
+    }
+
+    // A model the page never showed and the list does not offer is still refused.
+    [Fact]
+    public async Task AModelThatWasNeverShownAndIsNotListedIsRefused()
+    {
+        using var plugin = RefreshingPlugin(new TestClock(Now), (_, _) => Task.FromResult(Json("""{"data":[{"id":"qwen-3.8-27b"}]}""")));
+        var host = new TestPluginHostServices();
+        SeedConfiguration(host, ["qwen-3.8-27b"], Now);
+        await plugin.ActivateAsync(host);
+        var editor = RenderEditor(plugin);
+
+        editor["selectedLlmModel"] = "made-up-model";
+
+        await Assert.ThrowsAsync<ArgumentException>(() => plugin.SaveProfileSettingsAsync("cerebras", editor, null, default));
+        Assert.Null(SavedModel(host));
+    }
+
     private static Dictionary<string, string> RenderEditor(CerebrasPlugin plugin) =>
         plugin.TextSettings.Where(f => f.Id != plugin.ProfileSelectorId).ToDictionary(f => f.Id, f => f.Value);
 

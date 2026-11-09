@@ -36,6 +36,7 @@ public sealed partial class CerebrasPlugin
             // A pending draft from Refresh models is shown until Save, even when the saved list changes meanwhile.
             var listed = _draftModels ?? Models(configuration);
             var shown = ShownModelOf(configuration, listed);
+            lock (_displayedModels) _displayedModels.Add(shown);
             return
             [
                 new(ProfileSelectorId, "Cerebras", "", ProfileId)
@@ -91,6 +92,11 @@ public sealed partial class CerebrasPlugin
         var fields = TextSettings.Where(f => f.Id != ProfileSelectorId).ToDictionary(f => f.Id);
         foreach (var (id, value) in values)
         {
+            // Without a saved model the field shows the list's default, and a refresh can drop that model while a page
+            // is open. The page then sends a model it was shown, which is no choice of the user's.
+            if (id == "selectedLlmModel" && fields.TryGetValue(id, out var modelField)
+                && !modelField.Choices.Any(choice => choice.Value == value) && WasDisplayed(value))
+                continue;
             if (!fields.TryGetValue(id, out var field) || value.Length > field.MaxLength
                 || field.Choices.Count > 0 && !field.Choices.Any(choice => choice.Value == value))
                 throw new ArgumentException("Invalid Cerebras setting.");
@@ -110,6 +116,13 @@ public sealed partial class CerebrasPlugin
             throw new ArgumentException("The API key changed after model refresh. Refresh models again.");
         await CommitAsync(next, NormalizeKey(apiKey), cancellationToken, draftModels: _draftModels, draftFetchedAt: _draftModelsFetchedAt);
         ClearDraft();
+        // The page reloads after a save and shows the model again.
+        lock (_displayedModels) _displayedModels.Clear();
+    }
+
+    private bool WasDisplayed(string model)
+    {
+        lock (_displayedModels) return _displayedModels.Contains(model);
     }
 
     private static double ParseTemperature(string value) => double.TryParse(value.Replace(',', '.'), NumberStyles.Float,
