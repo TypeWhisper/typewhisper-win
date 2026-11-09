@@ -556,6 +556,35 @@ public partial class CerebrasTests
         Assert.Equal(["gpt-oss-120b", "zai-glm-4.7"], restarted.SupportedModels.Select(m => m.Id));
     }
 
+    // A recheck that starts after Refresh models must not replace the list the user then saves.
+    [Fact]
+    public async Task ARecheckStartedBeforeSavingADraftCannotReplaceIt()
+    {
+        var clock = new RecheckTestClock(Now);
+        var requests = new RequestLog();
+        var releaseRecheck = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var plugin = RefreshingPlugin(clock, async (_, _) =>
+        {
+            if (requests.Add() == 1)
+                return Json("""{"data":[{"id":"draft-model"}]}""");
+            await releaseRecheck.Task;
+            return Json("""{"data":[{"id":"automatic-model"}]}""");
+        });
+        var host = new TestPluginHostServices();
+        SeedConfiguration(host, ["llama3.1-8b"], Now);
+        await plugin.ActivateAsync(host);
+
+        Assert.True((await plugin.ExecuteProfileActionAsync("cerebras", "refreshModels", Empty, null, default)).HasPendingChanges);
+        clock.Advance(TimeSpan.FromHours(24));
+        var recheck = plugin.ModelRefreshTask;
+        await plugin.SaveProfileSettingsAsync("cerebras", Empty, null, default);
+        releaseRecheck.SetResult();
+        await recheck.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal(2, requests.Count);
+        Assert.Equal(["draft-model"], SavedModels(host));
+    }
+
     [Fact]
     public async Task HourlyRecheckReloadsAListThatAgesWhileThePluginStaysActive()
     {

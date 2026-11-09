@@ -403,6 +403,35 @@ public partial class ClaudeTests
         Assert.Equal(["claude-new", "claude-sonnet-5"], restarted.SupportedModels.Select(m => m.Id));
     }
 
+    // A recheck that starts after Refresh models must not replace the list the user then saves.
+    [Fact]
+    public async Task ARecheckStartedBeforeSavingADraftCannotReplaceIt()
+    {
+        var clock = new RecheckTestClock(Now);
+        var requests = new RequestLog();
+        var releaseRecheck = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var plugin = RefreshingPlugin(clock, async (_, _) =>
+        {
+            if (requests.Add() == 1)
+                return Json("""{"has_more":false,"data":[{"id":"claude-draft"}]}""");
+            await releaseRecheck.Task;
+            return Json("""{"has_more":false,"data":[{"id":"claude-automatic"}]}""");
+        });
+        var host = new TestPluginHostServices();
+        SeedConfiguration(host, ["claude-current"], Now);
+        await plugin.ActivateAsync(host);
+
+        Assert.True((await plugin.ExecuteProfileActionAsync("claude", "refreshModels", Empty, null, default)).HasPendingChanges);
+        clock.Advance(TimeSpan.FromHours(24));
+        var recheck = plugin.ModelRefreshTask;
+        await plugin.SaveProfileSettingsAsync("claude", Empty, null, default);
+        releaseRecheck.SetResult();
+        await recheck.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal(2, requests.Count);
+        Assert.Equal(["claude-draft"], SavedModels(host));
+    }
+
     [Fact]
     public async Task HourlyRecheckReloadsAListThatAgesWhileThePluginStaysActive()
     {

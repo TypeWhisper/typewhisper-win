@@ -168,6 +168,9 @@ public sealed partial class CerebrasPlugin
                 host.SetSetting("configuration", next);
                 _configuration = next;
                 if (replaceKey) _apiKey = key;
+                // A refresh that started after the user's Refresh models would replace the list just saved. Its result
+                // is checked under this lock, so cancelling here drops it.
+                if (draftModels is not null) _modelRefresh.Cancel();
             }
         }
         catch
