@@ -15,7 +15,7 @@ public partial class OpenRouterPluginTests
     public void PluginVersion_MatchesManifestVersion()
     {
         var manifest = LoadManifest();
-        var sut = new OpenRouterPlugin();
+        var sut = CreateOfflinePlugin();
 
         Assert.Equal(manifest.GetProperty("version").GetString(), sut.PluginVersion);
     }
@@ -26,7 +26,7 @@ public partial class OpenRouterPluginTests
         var host = new TestPluginHostServices();
         host.Secrets["api-key"] = "openrouter-key";
 
-        var sut = new OpenRouterPlugin();
+        var sut = CreateOfflinePlugin();
         await sut.ActivateAsync(host);
 
         Assert.IsAssignableFrom<ITranscriptionEnginePlugin>(sut);
@@ -51,12 +51,13 @@ public partial class OpenRouterPluginTests
         });
         host.SetSetting("selectedTranscriptionModel", "missing/stt");
 
-        var sut = new OpenRouterPlugin();
+        var sut = CreateOfflinePlugin();
         await sut.ActivateAsync(host);
 
         Assert.Equal("a/stt", sut.SelectedModelId);
         Assert.Equal(["a/stt", "z/stt"], sut.TranscriptionModels.Select(m => m.Id).ToArray());
-        Assert.Equal("a/stt", host.GetSetting<string>("selectedTranscriptionModel"));
+        // The saved model stays saved and applies again once a later list offers it.
+        Assert.Equal("missing/stt", host.GetSetting<string>("selectedTranscriptionModel"));
     }
 
     [Fact]
@@ -65,7 +66,7 @@ public partial class OpenRouterPluginTests
         var host = new TestPluginHostServices();
         host.Secrets["api-key"] = "openrouter-key";
 
-        var sut = new OpenRouterPlugin();
+        var sut = CreateOfflinePlugin();
         await sut.ActivateAsync(host);
 
         Assert.Equal("openrouter/free", sut.SelectedLlmModelId);
@@ -80,7 +81,7 @@ public partial class OpenRouterPluginTests
         host.Secrets["api-key"] = "openrouter-key";
         host.SetSetting("selectedLlmModel", "openai/gpt-4o");
 
-        var sut = new OpenRouterPlugin();
+        var sut = CreateOfflinePlugin();
         await sut.ActivateAsync(host);
 
         Assert.Equal("openrouter/free", sut.SelectedLlmModelId);
@@ -94,7 +95,7 @@ public partial class OpenRouterPluginTests
         host.Secrets["api-key"] = "openrouter-key";
         host.SetSetting("selectedLlmModel", "openrouter/owl-alpha");
 
-        var sut = new OpenRouterPlugin();
+        var sut = CreateOfflinePlugin();
         await sut.ActivateAsync(host);
 
         Assert.Equal("openrouter/free", sut.SelectedLlmModelId);
@@ -113,7 +114,7 @@ public partial class OpenRouterPluginTests
         });
         host.SetSetting("selectedLlmModel", "missing/model");
 
-        var sut = new OpenRouterPlugin();
+        var sut = CreateOfflinePlugin();
         await sut.ActivateAsync(host);
 
         Assert.Equal("openrouter/free", sut.SelectedLlmModelId);
@@ -129,7 +130,7 @@ public partial class OpenRouterPluginTests
         host.SetSetting("selectedLlmModel", "selected/model");
         host.SetSetting("userSelectedLlmModel", true);
 
-        var sut = new OpenRouterPlugin();
+        var sut = CreateOfflinePlugin();
         await sut.ActivateAsync(host);
 
         Assert.Equal("selected/model", sut.SelectedLlmModelId);
@@ -457,6 +458,10 @@ public partial class OpenRouterPluginTests
         Assert.True(error.IsTransient);
     }
 
+    private static OpenRouterPlugin CreateOfflinePlugin() =>
+        new(new HttpClient(new CapturingHandler((request, _) =>
+            throw new InvalidOperationException($"Unexpected network request to {request.RequestUri?.Host}."))));
+
     private static JsonElement LoadManifest()
     {
         using var doc = JsonDocument.Parse(File.ReadAllText(GetRepoPath(
@@ -505,11 +510,13 @@ public partial class OpenRouterPluginTests
         public Dictionary<string, string?> Secrets { get; } = [];
         public int NotifyCapabilitiesChangedCount { get; private set; }
 
-        public Task StoreSecretAsync(string key, string value)
+        public Func<Task>? SecretWriteGate { get; set; }
+
+        public async Task StoreSecretAsync(string key, string value)
         {
+            if (SecretWriteGate is { } gate) await gate();
             if (FailWrites) throw new IOException();
             Secrets[key] = value;
-            return Task.CompletedTask;
         }
 
         public Task<string?> LoadSecretAsync(string key) =>
@@ -539,7 +546,11 @@ public partial class OpenRouterPluginTests
         public string? ActiveAppName => null;
         public IPluginEventBus EventBus { get; } = new TestPluginEventBus();
         public IReadOnlyList<string> AvailableProfileNames => [];
-        public void Log(PluginLogLevel level, string message) { }
+        public List<string> Warnings { get; } = [];
+        public void Log(PluginLogLevel level, string message)
+        {
+            if (level == PluginLogLevel.Warning) Warnings.Add(message);
+        }
         public void NotifyCapabilitiesChanged() => NotifyCapabilitiesChangedCount++;
         public IPluginLocalization Localization { get; } = new TestPluginLocalization();
     }

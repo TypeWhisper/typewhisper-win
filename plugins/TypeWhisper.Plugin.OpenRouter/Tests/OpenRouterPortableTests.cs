@@ -10,7 +10,7 @@ public partial class OpenRouterPluginTests
     [Fact]
     public async Task LanguageMetadataFollowsModelSelectionAndRestart()
     {
-        var host = new TestPluginHostServices(); using var plugin = new OpenRouterPlugin();
+        var host = new TestPluginHostServices(); using var plugin = CreateOfflinePlugin();
         await plugin.ActivateAsync(host);
         Assert.Contains("en", plugin.SupportedLanguages); Assert.Contains("de", plugin.SupportedLanguages);
         Assert.Contains("de", plugin.TranscriptionModels.Single(m => m.Id == plugin.SelectedModelId).LanguageCodes);
@@ -51,7 +51,7 @@ public partial class OpenRouterPluginTests
     [InlineData("")]
     public async Task InvalidTemperatureDoesNotChangeSettings(string value)
     {
-        using var plugin = new OpenRouterPlugin(); await plugin.ActivateAsync(new TestPluginHostServices());
+        using var plugin = CreateOfflinePlugin(); await plugin.ActivateAsync(new TestPluginHostServices());
         await Assert.ThrowsAsync<ArgumentException>(() => plugin.SaveTextSettingAsync("llmTemperatureValue", value, default));
         Assert.Equal(0.3, plugin.TemperatureValue);
     }
@@ -59,7 +59,7 @@ public partial class OpenRouterPluginTests
     [Fact]
     public async Task FailedWritesPreserveKeyAndTemperature()
     {
-        var host = new TestPluginHostServices(); using var plugin = new OpenRouterPlugin();
+        var host = new TestPluginHostServices(); using var plugin = CreateOfflinePlugin();
         await plugin.ActivateAsync(host); await plugin.SetApiKeyAsync("old");
         host.FailWrites = true;
         await Assert.ThrowsAsync<IOException>(() => plugin.SetApiKeyAsync("new"));

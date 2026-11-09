@@ -40,8 +40,16 @@ public sealed partial class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmP
     };
 
     private readonly HttpClient _httpClient;
+    private readonly ModelCatalogAutoRefresh _catalogRefresh;
+    // Guards the configuration against a refresh that finishes on another thread.
+    private readonly object _configurationLock = new();
+    // Bumped on a key change and on deactivation, so a refresh started before either is dropped.
+    private int _catalogVersion;
     private IPluginHostServices? _host;
     private string? _apiKey;
+    // The saved choices. A list that lacks one uses the default in memory and keeps the saved value.
+    private string? _preferredTranscriptionModelId;
+    private string? _preferredLlmModelId;
     private string? _selectedTranscriptionModelId;
     private string? _selectedLlmModelId;
     private bool _hasUserSelectedLlmModel;
@@ -49,6 +57,8 @@ public sealed partial class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmP
     private double _temperatureValue = 0.3;
     private List<OpenRouterFetchedModel> _fetchedTranscriptionModels = [];
     private List<OpenRouterFetchedModel> _fetchedModels = [];
+    private DateTimeOffset? _speechModelsFetchedAt;
+    private DateTimeOffset? _textModelsFetchedAt;
 
     private static readonly IReadOnlyList<PluginModelInfo> FallbackTranscriptionModels =
     [
@@ -76,13 +86,15 @@ public sealed partial class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmP
     /// Initializes a new instance of the OpenRouterPlugin class.
     /// </summary>
     public OpenRouterPlugin()
-        : this(new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(120) })
+        : this(new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(120) },
+            refreshModelsAutomatically: ModelCatalogAutoRefresh.AllowedInThisProcess)
     {
     }
 
-    internal OpenRouterPlugin(HttpClient httpClient)
+    internal OpenRouterPlugin(HttpClient httpClient, bool refreshModelsAutomatically = false, TimeProvider? clock = null)
     {
         _httpClient = httpClient;
+        _catalogRefresh = new ModelCatalogAutoRefresh(refreshModelsAutomatically, clock);
     }
 
     // ITypeWhisperPlugin
@@ -98,7 +110,7 @@ public sealed partial class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmP
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.1.3";
+    public string PluginVersion => "1.2.0";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
@@ -108,30 +120,37 @@ public sealed partial class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmP
         _host = host;
         if (host.GetSetting<Configuration>("configuration") is { } saved)
         {
+            // A saved model the list lacks stays saved; the default stands in until the list offers it again.
             ApplyConfiguration(saved);
             _apiKey = saved.SecretName is { } secret ? NormalizeApiKey(await host.LoadSecretAsync(secret)) : null;
-            NormalizeSelectedTranscriptionModel(persist: false);
-            NormalizeSelectedLlmModel(persist: false);
-            if (saved.SpeechModel != _selectedTranscriptionModelId || saved.TextModel != _selectedLlmModelId)
-                CommitConfiguration(CaptureConfiguration(), notify: false);
         }
         else
         {
+            // Settings saved before the configuration record existed. Their lists have no fetch date and
+            // stay until the refresh replaces them.
             _activeSecretName = ApiKeySecretName;
             _apiKey = NormalizeApiKey(await host.LoadSecretAsync(ApiKeySecretName));
             _fetchedTranscriptionModels = NormalizeFetchedTranscriptionModels(
                 host.GetSetting<List<OpenRouterFetchedModel>>(FetchedTranscriptionModelsSettingName) ?? []);
-            _selectedTranscriptionModelId = host.GetSetting<string>(SelectedTranscriptionModelSettingName);
+            _preferredTranscriptionModelId = host.GetSetting<string>(SelectedTranscriptionModelSettingName);
             _fetchedModels = NormalizeFetchedModels(host.GetSetting<List<OpenRouterFetchedModel>>(FetchedModelsSettingName) ?? []);
-            _selectedLlmModelId = host.GetSetting<string>(SelectedLlmModelSettingName);
+            _preferredLlmModelId = host.GetSetting<string>(SelectedLlmModelSettingName);
             _hasUserSelectedLlmModel = host.GetSetting<bool?>(UserSelectedLlmModelSettingName) == true;
             _temperatureMode = NormalizeTemperatureMode(host.GetSetting<string>(TemperatureModeSettingName));
             _temperatureValue = NormalizeTemperatureValue(host.GetSetting<double?>(TemperatureValueSettingName));
-            NormalizeSelectedTranscriptionModel(persist: true);
-            NormalizeSelectedLlmModel(persist: true);
+            _speechModelsFetchedAt = _textModelsFetchedAt = null;
+            ResolveSelections();
+            // Only a text model the user never chose follows the default. A chosen one stays saved.
+            if (!_hasUserSelectedLlmModel && _selectedLlmModelId is { } textModel && textModel != _preferredLlmModelId)
+            {
+                host.SetSetting(SelectedLlmModelSettingName, textModel);
+                _preferredLlmModelId = textModel;
+            }
         }
         _draftTextModels = _draftSpeechModels = null;
+        _draftFetchedAt = null;
         host.Log(PluginLogLevel.Info, $"Activated (configured={IsAvailable})");
+        StartCatalogRefreshIfStale();
     }
 
     /// <summary>
@@ -139,8 +158,14 @@ public sealed partial class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmP
     /// </summary>
     public Task DeactivateAsync()
     {
-        _host = null;
-        _apiKey = null;
+        lock (_configurationLock)
+        {
+            _catalogVersion++;
+            _host = null;
+            _apiKey = null;
+        }
+
+        _catalogRefresh.Cancel();
         return Task.CompletedTask;
     }
 
@@ -190,7 +215,7 @@ public sealed partial class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmP
         if (TranscriptionModels.All(model => !string.Equals(model.Id, modelId, StringComparison.Ordinal)))
             throw new ArgumentException($"Unknown model: {modelId}");
 
-        CommitConfiguration(CaptureConfiguration() with { SpeechModel = modelId });
+        CommitConfiguration(value => value with { SpeechModel = modelId });
     }
 
     /// <summary>
@@ -263,11 +288,14 @@ public sealed partial class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmP
     internal IReadOnlyList<OpenRouterFetchedModel> FetchedTranscriptionModels => _fetchedTranscriptionModels;
     internal string? SelectedLlmModelId => _selectedLlmModelId;
     internal IReadOnlyList<OpenRouterFetchedModel> FetchedModels => _fetchedModels;
+    internal DateTimeOffset? TextModelsFetchedAt => _textModelsFetchedAt;
+    internal DateTimeOffset? SpeechModelsFetchedAt => _speechModelsFetchedAt;
+    internal Task CatalogRefreshTask => _catalogRefresh.Current;
     internal string TemperatureMode => _temperatureMode;
     internal double TemperatureValue => _temperatureValue;
 
     /// <inheritdoc />
-    public Task SetApiKeyAsync(string apiKey) => CommitWithKeyAsync(CaptureConfiguration(), apiKey, default);
+    public Task SetApiKeyAsync(string apiKey) => CommitWithKeyAsync(value => value, apiKey, default);
 
     internal async Task<bool> ValidateApiKeyAsync(string apiKey, CancellationToken ct = default)
     {
@@ -294,36 +322,41 @@ public sealed partial class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmP
         if (SupportedModels.All(model => !string.Equals(model.Id, modelId, StringComparison.Ordinal)))
             modelId = SupportedModels.FirstOrDefault()?.Id ?? modelId;
 
-        CommitConfiguration(CaptureConfiguration() with { TextModel = modelId, UserSelectedTextModel = true });
+        CommitConfiguration(value => value with { TextModel = modelId, UserSelectedTextModel = true });
     }
 
+    // A list never overwrites a saved model; the default stands in while the list lacks it.
     internal void SetFetchedModels(List<OpenRouterFetchedModel> models)
     {
         var normalized = NormalizeFetchedModels(models);
-        var selected = normalized.Count == 0 || normalized.Any(m => m.Id == _selectedLlmModelId)
-            ? _selectedLlmModelId : normalized[0].Id;
-        CommitConfiguration(CaptureConfiguration() with { TextModels = normalized, TextModel = selected });
+        var fetchedAt = _catalogRefresh.UtcNow;
+        CommitConfiguration(value => value with { TextModels = normalized, TextModelsFetchedAt = fetchedAt });
     }
 
     internal void SetFetchedTranscriptionModels(List<OpenRouterFetchedModel> models)
     {
         var normalized = NormalizeFetchedTranscriptionModels(models);
-        var selected = normalized.Count == 0 || normalized.Any(m => m.Id == _selectedTranscriptionModelId)
-            ? _selectedTranscriptionModelId : normalized[0].Id;
-        CommitConfiguration(CaptureConfiguration() with { SpeechModels = normalized, SpeechModel = selected });
+        var fetchedAt = _catalogRefresh.UtcNow;
+        CommitConfiguration(value => value with { SpeechModels = normalized, SpeechModelsFetchedAt = fetchedAt });
     }
 
     internal void SetTemperatureMode(string mode) =>
-        CommitConfiguration(CaptureConfiguration() with { TemperatureMode = NormalizeTemperatureMode(mode) });
+        CommitConfiguration(value => value with { TemperatureMode = NormalizeTemperatureMode(mode) });
 
     internal void SetTemperatureValue(double value) =>
-        CommitConfiguration(CaptureConfiguration() with { Temperature = NormalizeTemperatureValue(value) });
+        CommitConfiguration(configuration => configuration with { Temperature = NormalizeTemperatureValue(value) });
 
-    internal async Task<List<OpenRouterFetchedModel>> FetchModelsAsync(CancellationToken ct = default)
+    internal Task<List<OpenRouterFetchedModel>> FetchModelsAsync(CancellationToken ct = default) =>
+        FetchModelsAsync(_apiKey, ct);
+
+    internal Task<List<OpenRouterFetchedModel>> FetchTranscriptionModelsAsync(CancellationToken ct = default) =>
+        FetchTranscriptionModelsAsync(_apiKey, ct);
+
+    private async Task<List<OpenRouterFetchedModel>> FetchModelsAsync(string? apiKey, CancellationToken ct)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, $"{BaseUrl}/v1/models");
-        if (!string.IsNullOrWhiteSpace(_apiKey))
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
+        if (!string.IsNullOrWhiteSpace(apiKey))
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
 
         try
         {
@@ -366,13 +399,13 @@ public sealed partial class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmP
         }
     }
 
-    internal async Task<List<OpenRouterFetchedModel>> FetchTranscriptionModelsAsync(CancellationToken ct = default)
+    private async Task<List<OpenRouterFetchedModel>> FetchTranscriptionModelsAsync(string? apiKey, CancellationToken ct)
     {
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
             $"{BaseUrl}/v1/models?output_modalities=transcription");
-        if (!string.IsNullOrWhiteSpace(_apiKey))
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
+        if (!string.IsNullOrWhiteSpace(apiKey))
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
 
         try
         {
@@ -557,49 +590,87 @@ public sealed partial class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmP
         return ParseTranscriptionResponse(json);
     }
 
-    private void NormalizeSelectedTranscriptionModel(bool persist)
+    /// <summary>
+    /// Uses a saved model only while the current list offers it, so a retired model falls back to the
+    /// default instead of failing every request. The saved value stays and applies again once a later
+    /// list offers it. A text model the user never chose always follows the default.
+    /// </summary>
+    private void ResolveSelections()
     {
-        var available = TranscriptionModels;
-        if (available.Count == 0)
-            return;
+        var speechModels = TranscriptionModels;
+        _selectedTranscriptionModelId =
+            speechModels.FirstOrDefault(model => string.Equals(model.Id, _preferredTranscriptionModelId, StringComparison.Ordinal))?.Id
+            ?? speechModels.FirstOrDefault(model => string.Equals(model.Id, DefaultTranscriptionModelId, StringComparison.Ordinal))?.Id
+            ?? speechModels.FirstOrDefault()?.Id
+            ?? _preferredTranscriptionModelId;
 
-        if (_selectedTranscriptionModelId is not null
-            && available.Any(model => string.Equals(model.Id, _selectedTranscriptionModelId, StringComparison.Ordinal)))
-        {
-            return;
-        }
-
-        _selectedTranscriptionModelId = available.First().Id;
-        if (persist)
-            _host?.SetSetting(SelectedTranscriptionModelSettingName, _selectedTranscriptionModelId);
+        var textModels = SupportedModels;
+        var defaultTextModel = textModels.FirstOrDefault(model => model.Id == DefaultLlmModelId)?.Id
+            ?? textModels.FirstOrDefault()?.Id;
+        _selectedLlmModelId = !_hasUserSelectedLlmModel || string.IsNullOrWhiteSpace(_preferredLlmModelId)
+            ? defaultTextModel ?? _preferredLlmModelId
+            // The built-in list is only a sample, so a model chosen from a fetched list stays in use.
+            : _fetchedModels.Count == 0 || textModels.Any(model => string.Equals(model.Id, _preferredLlmModelId, StringComparison.Ordinal))
+                ? _preferredLlmModelId
+                : defaultTextModel ?? _preferredLlmModelId;
     }
 
-    private void NormalizeSelectedLlmModel(bool persist)
+    /// <summary>
+    /// A list that only refreshes on request keeps offering retired models. Reloading it once a day
+    /// drops them instead of failing every request. Each list keeps its own fetch date.
+    /// </summary>
+    private void StartCatalogRefreshIfStale()
     {
-        var available = SupportedModels;
-        if (available.Count == 0)
-            return;
-
-        if (!_hasUserSelectedLlmModel
-            || string.IsNullOrWhiteSpace(_selectedLlmModelId))
+        string apiKey;
+        int version;
+        bool text, speech;
+        lock (_configurationLock)
         {
-            _selectedLlmModelId = available.First().Id;
-            if (persist)
-                _host?.SetSetting(SelectedLlmModelSettingName, _selectedLlmModelId);
-            return;
+            if (_host is null || _apiKey is not { } key)
+                return;
+            text = _catalogRefresh.IsStale(_textModelsFetchedAt);
+            speech = _catalogRefresh.IsStale(_speechModelsFetchedAt);
+            if (!text && !speech)
+                return;
+            (apiKey, version) = (key, _catalogVersion);
         }
 
-        if (_fetchedModels.Count == 0)
-            return;
+        _catalogRefresh.Start(
+            ct => RefreshCatalogsInBackgroundAsync(apiKey, version, text, speech, ct),
+            error => _host?.Log(PluginLogLevel.Warning, $"OpenRouter model refresh failed: {error.GetType().Name}"));
+    }
 
-        if (available.Any(model => string.Equals(model.Id, _selectedLlmModelId, StringComparison.Ordinal)))
+    private async Task RefreshCatalogsInBackgroundAsync(string apiKey, int version, bool text, bool speech, CancellationToken ct)
+    {
+        var textModels = text ? await FetchModelsAsync(apiKey, ct) : [];
+        var speechModels = speech ? await FetchTranscriptionModelsAsync(apiKey, ct) : [];
+        IPluginHostServices host;
+        lock (_configurationLock)
         {
-            return;
+            // A result that arrives after deactivation or a key change belongs to an old connection.
+            if (ct.IsCancellationRequested || version != _catalogVersion || _host is null)
+                return;
+            host = _host;
+            // Both requests return an empty list on failure, which never replaces the current one.
+            if (text && textModels.Count == 0)
+                host.Log(PluginLogLevel.Warning, "OpenRouter returned no usable text model list. Keeping the current list.");
+            if (speech && speechModels.Count == 0)
+                host.Log(PluginLogLevel.Warning, "OpenRouter returned no usable transcription model list. Keeping the current list.");
+            if (textModels.Count == 0 && speechModels.Count == 0)
+                return;
+
+            var fetchedAt = _catalogRefresh.UtcNow;
+            CommitConfiguration(value =>
+            {
+                if (textModels.Count > 0)
+                    value = value with { TextModels = textModels, TextModelsFetchedAt = fetchedAt };
+                if (speechModels.Count > 0)
+                    value = value with { SpeechModels = speechModels, SpeechModelsFetchedAt = fetchedAt };
+                return value;
+            }, notify: false);
         }
 
-        _selectedLlmModelId = available.First().Id;
-        if (persist)
-            _host?.SetSetting(SelectedLlmModelSettingName, _selectedLlmModelId);
+        host.NotifyCapabilitiesChanged();
     }
 
     private static List<OpenRouterFetchedModel> NormalizeFetchedModels(IEnumerable<OpenRouterFetchedModel> models)
@@ -667,6 +738,7 @@ public sealed partial class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmP
     /// </summary>
     public void Dispose()
     {
+        _catalogRefresh.Dispose();
         _httpClient.Dispose();
     }
 
