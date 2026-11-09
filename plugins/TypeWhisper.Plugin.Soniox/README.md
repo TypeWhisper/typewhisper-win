@@ -2,7 +2,7 @@
 
 Soniox live transcription over WebSocket, recorded-audio transcription with upload, Windows audio compression, polling, cleanup and region selection, translation to English, and text-to-speech.
 
-Version `1.4.0`; plugin ID `com.typewhisper.soniox`; minimum host `1.1.5`.
+Version `1.5.0`; plugin ID `com.typewhisper.soniox`; minimum host `1.1.5`.
 
 ## Setup
 
@@ -12,7 +12,7 @@ Enter the API key, select the account region and choose Soniox in the transcript
 
 **Model** defaults to *Automatic*: live text uses the newest real-time model and recordings the newest async model from Soniox's model list (`GET /v1/models`). A version such as `v5` pins both modes to that generation (`stt-rt-v5`, `stt-async-v5`). Aliases are not offered, and a preview model never becomes automatic.
 
-The list is cached per region. It loads when the key passes **Check connection**, through **Refresh models**, and in the background when Soniox is used without a list for the region or with one older than 24 hours; a failed background load waits ten minutes before the next try. Until a list exists, Automatic uses `stt-rt-v6` and `stt-async-v6`. Soniox retires v5 on 2026-12-15 and routes it to v6.
+The list is cached per region with its fetch date. It loads when the key passes **Check connection**, through **Refresh models**, right after a key or region change, and in the background when the plugin starts or Soniox is used without a list for the region, with one that is 24 hours old or with a date in the future; a failed background load waits ten minutes before the next try, which a key or region change skips. While the plugin stays active, it also checks every hour, so a list that ages while the app runs reloads and a failed load is tried again. Soniox lists the same models for every key of a region, so a key change keeps the cached list until the new key's list arrives. A failed background load keeps the cached list, and an empty voice list keeps the cached voices. Saved model, speech model and voice choices are resolved when they are read, so a refresh never changes them; a voice the list lacks falls back to a listed one until a list offers it again. Until a list exists, Automatic uses `stt-rt-v6` and `stt-async-v6`. Soniox retires v5 on 2026-12-15 and routes it to v6.
 
 v6 writes prices closer to how they are spoken ("578.000 Euro" instead of "578.000 €") and adds hyphens to codes only when they are spoken.
 

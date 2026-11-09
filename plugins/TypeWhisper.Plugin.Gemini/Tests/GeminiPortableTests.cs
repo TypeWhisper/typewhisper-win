@@ -11,16 +11,18 @@ public sealed partial class GeminiPluginTests
     public async Task SuccessfulTextOnlyCatalogDisablesTranscriptionUntilTheCatalogChanges()
     {
         var host = new TestPluginHostServices(); host.Secrets["api-key"] = "fixture";
-        using var plugin = new GeminiPlugin();
+        var clock = new TestClock(new DateTimeOffset(2026, 11, 9, 12, 0, 0, TimeSpan.Zero));
+        using var plugin = CreateOfflinePlugin(clock);
         await plugin.ActivateAsync(host);
         Assert.NotEmpty(plugin.TranscriptionModels);
-        var fetched = DateTimeOffset.UtcNow;
+        var fetched = clock.Now;
         Assert.True(await plugin.SetFetchedModelCatalogAsync(new(
             [new("gemini-3.7-flash", "Gemini 3.7 Flash")], [], fetched)));
         Assert.Empty(plugin.TranscriptionModels);
         Assert.Null(plugin.SelectedModelId);
         Assert.False(plugin.SupportsStreaming);
-        Assert.False(plugin.ShouldRefreshModelCatalog(fetched.AddMinutes(1)));
+        clock.Advance(TimeSpan.FromMinutes(1));
+        Assert.False(plugin.IsModelCatalogStale);
         var failure = await Assert.ThrowsAsync<PluginRequestException>(() =>
             plugin.TranscribeAsync([1], "en", false, null, default));
         Assert.Equal(PluginRequestFailureKind.Configuration, failure.FailureKind);
@@ -83,7 +85,7 @@ public sealed partial class GeminiPluginTests
     [InlineData("transcriptionMode", "unknown")]
     public async Task InvalidSettings_DoNotWrite(string id, string value)
     {
-        var host = new TestPluginHostServices(); using var plugin = new GeminiPlugin(); await plugin.ActivateAsync(host);
+        var host = new TestPluginHostServices(); using var plugin = CreateOfflinePlugin(); await plugin.ActivateAsync(host);
         await Assert.ThrowsAsync<ArgumentException>(() => plugin.SaveTextSettingAsync(id, value, default));
         Assert.Equal(0, host.SetSettingCount);
     }
@@ -93,7 +95,7 @@ public sealed partial class GeminiPluginTests
     [InlineData("transcriptionMode", "verbatim")]
     public async Task FailedSettingSave_RetainsActiveValue(string id, string value)
     {
-        var host = new TestPluginHostServices(); using var plugin = new GeminiPlugin(); await plugin.ActivateAsync(host);
+        var host = new TestPluginHostServices(); using var plugin = CreateOfflinePlugin(); await plugin.ActivateAsync(host);
         var before = plugin.TextSettings.Single(s => s.Id == id).Value;
         host.SetSettingException = new IOException("disk unavailable");
         await Assert.ThrowsAsync<IOException>(() => plugin.SaveTextSettingAsync(id, value, default));
@@ -103,7 +105,7 @@ public sealed partial class GeminiPluginTests
     [Fact]
     public async Task CanceledSettingsAndInvalidKey_DoNotWrite()
     {
-        var host = new TestPluginHostServices(); using var plugin = new GeminiPlugin(); await plugin.ActivateAsync(host);
+        var host = new TestPluginHostServices(); using var plugin = CreateOfflinePlugin(); await plugin.ActivateAsync(host);
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => plugin.SaveTextSettingAsync("transcriptionMode", "verbatim", new(true)));
         await Assert.ThrowsAsync<ArgumentException>(() => plugin.SetApiKeyAsync("bad\r\nkey"));
         Assert.Equal(0, host.SetSettingCount); Assert.Empty(host.Secrets);

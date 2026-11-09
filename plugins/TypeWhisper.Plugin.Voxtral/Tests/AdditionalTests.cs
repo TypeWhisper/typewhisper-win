@@ -8,7 +8,7 @@ public sealed partial class ProviderTests
     [Fact]
     public async Task SettingsRenderThroughActualPortableHostServices()
     {
-        using var plugin=new VoxtralPlugin();
+        using var plugin=OfflinePlugin();
         var path=Path.Combine(Path.GetTempPath(),"portable-settings-"+Guid.NewGuid().ToString("N"));
         var host=new TypeWhisper.PluginHost.VocabularyHostServices(path);
         await plugin.ActivateAsync(host);
@@ -40,7 +40,7 @@ public sealed partial class ProviderTests
     [Fact]
     public async Task SelectModelAsyncWaitsForAContendedSaveWithoutBlocking()
     {
-        using var plugin=new VoxtralPlugin(); var host=new Host();
+        using var plugin=OfflinePlugin(); var host=new Host();
         await plugin.ActivateAsync(host); await Configure(plugin);
         var release=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         host.StoreSecretDelay=release.Task;

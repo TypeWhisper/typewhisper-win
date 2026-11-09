@@ -1,6 +1,6 @@
 # Gemini for the portable host
 
-Portable .NET 10 package `com.typewhisper.gemini` version `1.3.10`, requiring host `1.1.5`.
+Portable .NET 10 package `com.typewhisper.gemini` version `1.4.0`, requiring host `1.1.5`.
 
 ## Features
 
@@ -9,6 +9,7 @@ Portable .NET 10 package `com.typewhisper.gemini` version `1.3.10`, requiring ho
 - Live WebSocket setup, PCM16 audio, fragmented text/binary JSON frames and transcript events. Manual activity boundaries keep a dictation turn open through pauses; finalization retains both the final transcript and full-audio boundary acknowledgement before the host uses it. Unexpected earlier final segments or boundaries invalidate the stream. Provider errors, malformed frames, premature closure and cancellation fail the stream so the host can fall back to the recorded audio.
 - Text processing, selected default model, explicit workflow overrides, provider-default/custom temperature (0–2).
 - Native paginated model discovery, separate transcription/text catalogs and host-rendered English/German settings. Refresh explicitly saves the catalog using the stored key; opening settings makes no requests. API keys remain in the host secret store.
+- The catalog also reloads in the background when the plugin starts with a catalog that is a day old, has no fetch date or a date in the future, and right after a key change. While the plugin stays active, it checks every hour, so a catalog that ages while the app runs reloads and a failed refresh is tried again. A key change first drops the previous account's catalog. The background refresh keeps the current catalog when it fails or when the new list has no text or no transcription models, so it never switches a capability off; the button still applies such a list. Saved transcription and text models stay in the settings while a list lacks them, the default model is used meanwhile, and they apply again once a list offers them.
 - Mac response variants (`output_text`, `steps`, `outputs`) are accepted; incomplete interactions remain errors. Repeated pagination tokens and empty refreshes preserve the saved catalog.
 - Existing Gemini logo reused by the WinUI host.
 

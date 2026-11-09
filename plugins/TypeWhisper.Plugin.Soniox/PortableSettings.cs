@@ -23,6 +23,8 @@ public sealed partial class SonioxPlugin : IApiKeyPlugin, IPluginTextSettings, I
             throw new InvalidOperationException("The API key could not be validated.");
 
         // A verified key also loads the current models and voices, as checking a key does on the Mac.
+        // A background refresh would only repeat the request.
+        _catalogRefresh.Cancel();
         try
         {
             await RefreshCatalogAsync(ct);
@@ -209,6 +211,8 @@ public sealed partial class SonioxPlugin : IApiKeyPlugin, IPluginTextSettings, I
         if (!IsConfigured)
             throw new InvalidOperationException(L("Save a Soniox API key first.", "Speichere zuerst einen Soniox-API-Key."));
 
+        // The button loads the same lists; a background refresh would only repeat the request.
+        _catalogRefresh.Cancel();
         var catalog = await RefreshCatalogAsync(cancellationToken);
         return string.Format(CultureInfo.CurrentCulture,
             L("Models refreshed. Automatic uses {0} for live text and {1} for recordings.",

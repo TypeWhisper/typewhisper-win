@@ -1,16 +1,16 @@
 # Mistral for the portable host
 
-Portable .NET 10 package `com.typewhisper.voxtral`, version `1.4.0`, requiring host `1.1.2`. The visible provider is **Mistral**. Its existing package and provider IDs remain unchanged so encrypted credentials, enabled state and dictation selections survive the rename.
+Portable .NET 10 package `com.typewhisper.voxtral`, version `1.5.0`, requiring host `1.1.2`. The visible provider is **Mistral**. Its existing package and provider IDs remain unchanged so encrypted credentials, enabled state and dictation selections survive the rename.
 
 ## Models
 
-The plugin uses one Mistral API key for Voxtral transcription and Mistral chat completions. Until the user presses **Refresh models**, it offers the current lineup: Voxtral Mini Transcribe 3 (default), Voxtral Small Transcribe 3 and Voxtral Mini Transcribe Realtime 3 for transcription; Mistral Large 4, Medium 3.5, Small 4 (default) and Ministral 3 14B, 8B and 3B for text.
+The plugin uses one Mistral API key for Voxtral transcription and Mistral chat completions. Until the account's list is loaded, it offers the current lineup: Voxtral Mini Transcribe 3 (default), Voxtral Small Transcribe 3 and Voxtral Mini Transcribe Realtime 3 for transcription; Mistral Large 4, Medium 3.5, Small 4 (default) and Ministral 3 14B, 8B and 3B for text.
 
-**Refresh models** reads `/v1/models` and keeps a cleaned account catalog:
+**Refresh models** reads `/v1/models` and keeps a cleaned account catalog with its fetch date. The list also reloads in the background when the plugin starts with a list that is a day old, has no fetch date (catalogs saved before 1.5.0) or a date in the future, and right after a key change. While the plugin stays active, it checks every hour, so a list that ages while the app runs reloads and a failed refresh is tried again. The saved list stays in use until the new one arrives. A failed background refresh, or one whose list has no transcription or no text models, keeps the current list, so it never switches a capability off; the button still saves such a list.
 
 - Mistral lists every alias as its own model. Aliases of one model become one entry; known models get their product name and a fixed order. Unknown models keep their catalog name and a dated ID rather than a moving `-latest` alias.
 - Voxtral Transcribe 2 and Realtime 2 are hidden while their version 3 successors are listed. Code completion, Labs, audio-understanding chat and speech models are not offered for text processing. Archived models are skipped.
-- Saved selections that name an alias, a Voxtral 2 model or a retired chat model (the list matches the macOS plugin) resolve to the listed model. Catalogs saved by earlier versions fall back to the current lineup until the next refresh.
+- Saved selections that name an alias, a Voxtral 2 model or a retired chat model (the list matches the macOS plugin) resolve to the listed model. Saved selections stay in the settings while a list lacks them: the default model is used meanwhile, and the saved one applies again once a list offers it. Catalogs saved before 1.4.0 fall back to the current lineup until the next refresh.
 - Model listing is not a guarantee of quota or inference permission; a workspace can set a model's limit to zero requests.
 
 ## Transcription
@@ -33,7 +33,7 @@ Models with documented reasoning levels get a **Reasoning effort** setting, show
 
 ## Settings and errors
 
-Settings use the host's single **Save settings** button. The key stays in encrypted host storage. Opening settings performs no network request. A failed model fetch or settings write retains the previous catalog. Changing accounts resets the old catalog, and a concurrent refresh cannot publish models fetched using a replaced key. Redirects are disabled; HTTP status, retry information and cancellation remain typed. Mistral error bodies are reduced to their message, without the request fields that validation errors echo.
+Settings use the host's single **Save settings** button. The key stays in encrypted host storage. Opening settings performs no network request. A failed model fetch or settings write retains the previous catalog. Changing accounts resets the old catalog, and neither the button nor the background refresh can publish models fetched using a replaced key. Deactivation cancels a running background refresh, and a save that was already under way keeps the saved key. Redirects are disabled; HTTP status, retry information and cancellation remain typed. Mistral error bodies are reduced to their message, without the request fields that validation errors echo.
 
 Mac `VoxtralPlugin` is a local MLX engine; `MistralAIPlugin` is the comparable cloud provider.
 

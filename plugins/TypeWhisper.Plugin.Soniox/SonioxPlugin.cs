@@ -73,8 +73,6 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
     // blocking the settings Test flow for the full HttpClient timeout.
     private static readonly TimeSpan RegionProbeTimeout = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan CatalogRequestTimeout = TimeSpan.FromSeconds(10);
-    // A cached model list older than this is reloaded in the background when Soniox is used.
-    internal static readonly TimeSpan CatalogMaximumAge = TimeSpan.FromHours(24);
 
     private readonly HttpClient _httpClient;
     private readonly TimeSpan _initialPollDelay;
@@ -83,8 +81,7 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
     private readonly Func<byte[], SonioxTranscriptionUpload> _compressedUploadFactory;
     private readonly SemaphoreSlim _apiKeyWriteLock = new(1, 1);
     private readonly SemaphoreSlim _catalogLock = new(1, 1);
-    private readonly TimeProvider _time;
-    private readonly bool _backgroundCatalogRefresh;
+    private readonly ModelCatalogAutoRefresh _catalogRefresh;
 
     private IPluginHostServices? _host;
     private string? _apiKey;
@@ -93,16 +90,17 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
     private string _modelSelection = SonioxModels.Automatic;
     private string _transcriptionContext = "";
     private SonioxCatalog? _catalog;
-    private CancellationTokenSource _backgroundCancellation = new();
     private readonly object _cleanupLock = new();
     private readonly List<Task> _cleanupTasks = [];
+    // True while the hourly model list check may start a refresh. Guarded by _cleanupLock; see RecheckCatalog.
+    private bool _catalogRechecksActive;
     private int _disposed;
 
     /// <summary>
     /// Initializes a new instance of the SonioxPlugin class.
     /// </summary>
     public SonioxPlugin()
-        : this(CreateHttpClient(), backgroundCatalogRefresh: true)
+        : this(CreateHttpClient(), backgroundCatalogRefresh: ModelCatalogAutoRefresh.AllowedInThisProcess)
     {
     }
 
@@ -119,8 +117,7 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
             throw new ArgumentOutOfRangeException(nameof(maxPollAttempts), "Poll attempts must be positive.");
 
         _httpClient = httpClient;
-        _time = time ?? TimeProvider.System;
-        _backgroundCatalogRefresh = backgroundCatalogRefresh;
+        _catalogRefresh = new ModelCatalogAutoRefresh(backgroundCatalogRefresh, time);
         // A caller-supplied pollDelay (used by tests for determinism) pins both bounds to a
         // fixed interval; otherwise poll with an adaptive initial delay that backs off to a cap.
         _initialPollDelay = pollDelay ?? DefaultInitialPollDelay;
@@ -144,19 +141,13 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.4.0";
+    public string PluginVersion => "1.5.0";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
     /// </summary>
     public async Task ActivateAsync(IPluginHostServices host)
     {
-        if (_backgroundCancellation.IsCancellationRequested)
-        {
-            _backgroundCancellation.Dispose();
-            _backgroundCancellation = new CancellationTokenSource();
-        }
-
         _host = host;
         _apiKey = NormalizeApiKey(await host.LoadSecretAsync(ApiKeySecretName));
         _selectedModelId = DefaultModelId;
@@ -166,6 +157,12 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
         Volatile.Write(ref _catalog, SonioxModels.Sanitize(ReadSetting<SonioxCatalog>(host, CatalogSettingKey)));
         RestoreSpeechSettings(host);
         host.Log(PluginLogLevel.Info, $"Activated (configured={IsConfigured}, region={_region}, model={_modelSelection})");
+        // Loading the list at start drops a retired model before the first dictation needs it.
+        RefreshCatalogInBackgroundIfStale();
+        // Dictations refresh a stale list too, but the app may run for days without one, so an active plugin also
+        // checks every hour.
+        lock (_cleanupLock) _catalogRechecksActive = true;
+        _catalogRefresh.StartRechecks(RecheckCatalog);
     }
 
     /// <summary>
@@ -173,7 +170,7 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
     /// </summary>
     public async Task DeactivateAsync()
     {
-        _backgroundCancellation.Cancel();
+        StopCatalogRechecks();
         await LastCleanupTask.ConfigureAwait(false);
         _host = null;
     }
@@ -397,9 +394,13 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
             return;
 
         _host?.SetSetting(RegionSettingKey, normalized);
+        // A refresh still loading the previous region's list must not replace the new region's list.
+        _catalogRefresh.Cancel();
         _region = normalized;
-        // The cached list belongs to the previous region. CurrentCatalog ignores it, and the next
-        // use, key test or explicit refresh loads the new region's list.
+        // The cached list belongs to the previous region and CurrentCatalog ignores it, so the new
+        // region's list loads right away. A failure in the old region says nothing about the new one.
+        Interlocked.Exchange(ref _catalogRetryAfterTicks, 0);
+        StartCatalogRefresh();
     }
 
     /// <summary>
@@ -441,7 +442,7 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
     /// </summary>
     internal Task LastCleanupTask
     {
-        get { lock (_cleanupLock) return Task.WhenAll(_cleanupTasks); }
+        get { lock (_cleanupLock) return Task.WhenAll([.. _cleanupTasks, _catalogRefresh.Current]); }
     }
 
     internal async Task SetApiKeyAsync(string apiKey)
@@ -468,6 +469,11 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
                 hostToNotify = _host;
             }
 
+            // A refresh started with the previous key must not save its list, and its failure must not hold
+            // back the new key's list. Soniox lists the same models for every key of a region, so the cached
+            // list stays until the new key's list arrives.
+            _catalogRefresh.Cancel();
+            Interlocked.Exchange(ref _catalogRetryAfterTicks, 0);
             _apiKey = normalized;
 
             if (wasConfigured == IsConfigured)
@@ -479,6 +485,7 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
         }
 
         hostToNotify?.NotifyCapabilitiesChanged();
+        StartCatalogRefresh();
     }
 
     internal async Task<bool> ValidateApiKeyAsync(string apiKey, CancellationToken ct = default)
@@ -1235,14 +1242,13 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
-        _backgroundCancellation.Cancel();
+        StopCatalogRechecks();
         try { LastCleanupTask.GetAwaiter().GetResult(); }
         finally
         {
             _httpClient.Dispose();
             _apiKeyWriteLock.Dispose();
             _catalogLock.Dispose();
-            // The token source stays undisposed: a later DeactivateAsync may still cancel it.
         }
     }
 }

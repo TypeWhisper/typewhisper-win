@@ -9,7 +9,7 @@ using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.PluginSystem.Tests;
 
-public sealed class SonioxFeatureTests
+public sealed partial class SonioxFeatureTests
 {
     private const string ModelsJson = """
         {
@@ -597,7 +597,7 @@ public sealed class SonioxFeatureTests
     }
 
     [Fact]
-    public async Task Speak_RefreshesAStaleModelListInTheBackground()
+    public async Task Speak_RefreshesAListThatAgedWhileTheAppRan()
     {
         var modelRequests = 0;
         var handler = new RoutingHandler(request =>
@@ -605,7 +605,7 @@ public sealed class SonioxFeatureTests
             switch (request.RequestUri!.AbsolutePath)
             {
                 case "/tts": return new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent([1, 0]) };
-                case "/v1/models": modelRequests++; return Json(ModelsJson);
+                case "/v1/models": Interlocked.Increment(ref modelRequests); return Json(ModelsJson);
                 case "/v1/tts-models": return Json(TtsModelsJson);
                 default: throw new InvalidOperationException(request.RequestUri.ToString());
             }
@@ -613,12 +613,54 @@ public sealed class SonioxFeatureTests
         var host = new FeatureHost();
         host.Secrets["api-key"] = "key";
         var time = new ManualTime(new DateTimeOffset(2026, 11, 3, 12, 0, 0, TimeSpan.Zero));
-        host.SetSetting("catalog", Catalog("us") with { FetchedAt = time.GetUtcNow() - TimeSpan.FromDays(2) });
+        // Fresh at start, so activation loads nothing and only the later use can reload the list.
+        host.SetSetting("catalog", Catalog("us") with { FetchedAt = time.GetUtcNow() - TimeSpan.FromHours(1) });
         using var sut = new SonioxPlugin(new HttpClient(handler), time: time, backgroundCatalogRefresh: true);
         sut.SpeechPlaybackFactory = (_, _) => new FakePlayback();
         await sut.ActivateAsync(host);
+        await sut.LastCleanupTask;
+        Assert.Equal(0, modelRequests);
 
+        time.Advance(TimeSpan.FromHours(24));
         await sut.SpeakAsync(new TtsSpeakRequest("Hallo") { VoiceId = "Nina" }, default);
+        await sut.LastCleanupTask;
+
+        Assert.Equal(1, modelRequests);
+        Assert.Equal(time.GetUtcNow(), sut.CurrentCatalog!.FetchedAt);
+    }
+
+    [Fact]
+    public async Task Transcribe_RefreshesAListThatAgedWhileTheAppRan()
+    {
+        var modelRequests = 0;
+        var handler = new RoutingHandler(request =>
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            if (path == "/v1/models") { Interlocked.Increment(ref modelRequests); return Json(ModelsJson); }
+            if (path == "/v1/tts-models") return Json(TtsModelsJson);
+            if (request.Method == HttpMethod.Delete) return Json("{}");
+            return path switch
+            {
+                "/v1/files" => Json("""{ "id": "file-1" }""", HttpStatusCode.Created),
+                "/v1/transcriptions" => Json("""{ "id": "job-1" }""", HttpStatusCode.Created),
+                "/v1/transcriptions/job-1" => Json("""{ "status": "completed", "audio_duration_ms": 5000 }"""),
+                "/v1/transcriptions/job-1/transcript" => Json(TranslatedTranscriptJson),
+                _ => throw new InvalidOperationException($"Unexpected request: {request.Method} {request.RequestUri}")
+            };
+        });
+        var host = new FeatureHost();
+        host.Secrets["api-key"] = "key";
+        var time = new ManualTime(new DateTimeOffset(2026, 11, 3, 12, 0, 0, TimeSpan.Zero));
+        host.SetSetting("catalog", Catalog("us") with { FetchedAt = time.GetUtcNow() - TimeSpan.FromHours(1) });
+        using var sut = new SonioxPlugin(new HttpClient(handler), pollDelay: TimeSpan.Zero, maxPollAttempts: 2,
+            compressedUploadFactory: _ => new SonioxTranscriptionUpload([1, 2], "audio.m4a", "audio/mp4", SonioxUploadFormat.M4a),
+            time: time, backgroundCatalogRefresh: true);
+        await sut.ActivateAsync(host);
+        await sut.LastCleanupTask;
+        Assert.Equal(0, modelRequests);
+
+        time.Advance(TimeSpan.FromHours(24));
+        await sut.TranscribeAsync([1, 2, 3], "en", translate: false, prompt: null, default);
         await sut.LastCleanupTask;
 
         Assert.Equal(1, modelRequests);
@@ -795,7 +837,8 @@ public sealed class SonioxFeatureTests
         public string? ActiveAppName => null;
         public IPluginEventBus EventBus { get; } = new NoEvents();
         public IReadOnlyList<string> AvailableProfileNames => [];
-        public void Log(PluginLogLevel level, string message) { }
+        public System.Collections.Concurrent.ConcurrentQueue<(PluginLogLevel Level, string Message)> Logs { get; } = new();
+        public void Log(PluginLogLevel level, string message) => Logs.Enqueue((level, message));
         public void NotifyCapabilitiesChanged() => NotifyCount++;
         public IPluginLocalization Localization => new FixedLocalization(Language);
     }

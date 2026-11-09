@@ -35,7 +35,7 @@ public sealed class SonioxStreamingTests
     [Fact]
     public async Task ExistingModelAdvertisesLiveCompletionAndRequiresCredentials()
     {
-        using var plugin = new SonioxPlugin();
+        using var plugin = OfflineSoniox.Plugin();
         Assert.True(plugin.SupportsStreaming); Assert.True(plugin.SupportsStreamingCompletion);
         Assert.Equal("default", plugin.SelectedModelId);
         Assert.Single(plugin.TranscriptionModels);

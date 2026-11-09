@@ -17,7 +17,7 @@ public class SonioxPluginTests
     public void PluginVersion_MatchesManifestVersion()
     {
         var manifest = LoadManifest();
-        var sut = new SonioxPlugin();
+        var sut = OfflineSoniox.Plugin();
 
         Assert.Equal(manifest.GetProperty("version").GetString(), sut.PluginVersion);
     }
@@ -26,10 +26,10 @@ public class SonioxPluginTests
     public void PluginVersion_IsSonioxMarketplaceReleaseVersion()
     {
         var manifest = LoadManifest();
-        var sut = new SonioxPlugin();
+        var sut = OfflineSoniox.Plugin();
 
-        Assert.Equal("1.4.0", manifest.GetProperty("version").GetString());
-        Assert.Equal("1.4.0", sut.PluginVersion);
+        Assert.Equal("1.5.0", manifest.GetProperty("version").GetString());
+        Assert.Equal("1.5.0", sut.PluginVersion);
     }
 
     [WindowsMediaFoundationFact]
@@ -68,7 +68,7 @@ public class SonioxPluginTests
         var host = new TestPluginHostServices();
         host.Secrets["api-key"] = "soniox-key";
 
-        var sut = new SonioxPlugin();
+        var sut = OfflineSoniox.Plugin();
         await sut.ActivateAsync(host);
 
         Assert.Equal("com.typewhisper.soniox", sut.PluginId);
@@ -85,7 +85,7 @@ public class SonioxPluginTests
     public async Task SetApiKeyAsync_NotifiesOnlyWhenConfigurationStateChanges()
     {
         var host = new TestPluginHostServices();
-        var sut = new SonioxPlugin();
+        var sut = OfflineSoniox.Plugin();
         await sut.ActivateAsync(host);
 
         await sut.SetApiKeyAsync(" soniox-key ");
@@ -104,7 +104,7 @@ public class SonioxPluginTests
         {
             StoreSecretException = new InvalidOperationException("store failed")
         };
-        var sut = new SonioxPlugin();
+        var sut = OfflineSoniox.Plugin();
         await sut.ActivateAsync(host);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => sut.SetApiKeyAsync("soniox-key"));
@@ -120,7 +120,7 @@ public class SonioxPluginTests
     {
         var host = new TestPluginHostServices();
         host.Secrets["api-key"] = "soniox-key";
-        var sut = new SonioxPlugin();
+        var sut = OfflineSoniox.Plugin();
         await sut.ActivateAsync(host);
         host.DeleteSecretException = new InvalidOperationException("delete failed");
 
@@ -173,7 +173,7 @@ public class SonioxPluginTests
     {
         var host = new TestPluginHostServices();
         host.SetSetting("region", "mars");
-        var sut = new SonioxPlugin();
+        var sut = OfflineSoniox.Plugin();
         await sut.ActivateAsync(host);
 
         Assert.Equal("us", sut.RegionId);

@@ -27,14 +27,13 @@ public sealed partial class GeminiPlugin :
     private const string ModelCatalogFetchedAtSettingName = "modelCatalogFetchedAtUtc";
     private const string SelectedTranscriptionModelSettingName = "selectedTranscriptionModel";
     private const string TranscriptionModeSettingName = "transcriptionMode";
-    private const string PluginVersionValue = "1.3.10";
+    private const string PluginVersionValue = "1.4.0";
     private const string SmartModeSettingValue = "smart";
     private const string VerbatimModeSettingValue = "verbatim";
 
     internal const string DefaultModel = "gemini-flash-lite-latest";
     internal const string DefaultTranscriptionModel = "gemini-3.5-transcribe";
     internal const string DefaultLiveTranscriptionModel = "gemini-3.5-transcribe-live";
-    internal static readonly TimeSpan ModelCatalogRefreshInterval = TimeSpan.FromHours(24);
 
     private static readonly IReadOnlyList<PluginModelInfo> FallbackLlmModels =
     [
@@ -79,27 +78,37 @@ public sealed partial class GeminiPlugin :
         IReadOnlyList<string> vocabulary, GeminiTranscriptionMode mode, CancellationToken ct);
     private readonly StreamConnector _connectStream;
     private readonly SemaphoreSlim _configurationGate = new(1, 1);
+    private readonly ModelCatalogAutoRefresh _modelRefresh;
     private IPluginHostServices? _host;
     private string? _apiKey;
     private List<GeminiFetchedModel> _fetchedLlmModels = [];
     private List<GeminiFetchedTranscriptionModel> _fetchedTranscriptionModels = [];
     private DateTimeOffset? _modelCatalogFetchedAt;
-    private string _selectedTranscriptionModelId = DefaultTranscriptionModel;
+    // The saved choice. It stays when a model list lacks it and applies again once a list offers it.
+    private string? _preferredTranscriptionModelId;
     private GeminiTranscriptionMode _transcriptionMode = GeminiTranscriptionMode.Smart;
 
     /// <summary>
     /// Initializes a new instance of the Gemini plugin.
     /// </summary>
     public GeminiPlugin()
-        : this(new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromMinutes(15) })
+        : this(
+            new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromMinutes(15) },
+            refreshModelsAutomatically: ModelCatalogAutoRefresh.AllowedInThisProcess)
     {
     }
 
-    internal GeminiPlugin(HttpClient httpClient, StreamConnector? connectStream = null)
+    // Tests keep the background model list refresh off unless they opt in, so they never reach Gemini.
+    internal GeminiPlugin(
+        HttpClient httpClient,
+        StreamConnector? connectStream = null,
+        bool refreshModelsAutomatically = false,
+        TimeProvider? clock = null)
     {
         _httpClient = httpClient;
         _connectStream = connectStream ?? (async (key, model, languages, vocabulary, mode, ct) =>
             await GeminiStreamingSession.ConnectAsync(key, model, languages, vocabulary, mode, ct));
+        _modelRefresh = new ModelCatalogAutoRefresh(refreshModelsAutomatically, clock);
     }
 
     /// <inheritdoc />
@@ -128,8 +137,10 @@ public sealed partial class GeminiPlugin :
         _modelCatalogFetchedAt = LoadCatalogFetchedAt(host);
         _transcriptionMode = ParseTranscriptionMode(
             host.GetSetting<string>(TranscriptionModeSettingName));
-        _selectedTranscriptionModelId = NormalizeSelectedTranscriptionModelId(
-            host.GetSetting<string>(SelectedTranscriptionModelSettingName));
+        _preferredTranscriptionModelId = TryNormalizeModelId(
+            host.GetSetting<string>(SelectedTranscriptionModelSettingName), out var savedTranscriptionModel)
+                ? savedTranscriptionModel
+                : null;
         var options = host.GetSetting<LlmOptions>("llmOptions") ?? new();
         _llmOptions = options with
         {
@@ -141,14 +152,28 @@ public sealed partial class GeminiPlugin :
             PluginLogLevel.Info,
             $"Activated (configured={HasApiKey}, llmModels={_fetchedLlmModels.Count}, " +
             $"transcriptionModels={_fetchedTranscriptionModels.Count})");
+        StartModelCatalogRefreshIfStale();
+        // The app often runs for days without activating plugins again, so an active plugin checks every hour.
+        _modelRefresh.StartRechecks(RecheckModelCatalog);
     }
 
     /// <inheritdoc />
-    public Task DeactivateAsync()
+    public async Task DeactivateAsync()
     {
-        _host = null;
-        _apiKey = null;
-        return Task.CompletedTask;
+        // Under the gate, so an hourly check on a timer thread either started its refresh before this cancels
+        // it, or finds the plugin deactivated.
+        await _configurationGate.WaitAsync();
+        try
+        {
+            _modelRefresh.StopRechecks();
+            _modelRefresh.Cancel();
+            _host = null;
+            _apiKey = null;
+        }
+        finally
+        {
+            _configurationGate.Release();
+        }
     }
 
     // ITranscriptionEnginePlugin
@@ -247,7 +272,7 @@ public sealed partial class GeminiPlugin :
         }
 
         if (string.Equals(
-            _selectedTranscriptionModelId,
+            _preferredTranscriptionModelId,
             normalized,
             StringComparison.OrdinalIgnoreCase))
         {
@@ -255,7 +280,7 @@ public sealed partial class GeminiPlugin :
         }
 
         _host?.SetSetting(SelectedTranscriptionModelSettingName, normalized);
-        _selectedTranscriptionModelId = normalized;
+        _preferredTranscriptionModelId = normalized;
         _host?.NotifyCapabilitiesChanged();
     }
 
@@ -407,10 +432,13 @@ public sealed partial class GeminiPlugin :
     internal DateTimeOffset? ModelCatalogFetchedAt => _modelCatalogFetchedAt;
     internal GeminiTranscriptionMode TranscriptionMode => _transcriptionMode;
 
-    internal bool ShouldRefreshModelCatalog(DateTimeOffset now) =>
-        HasApiKey
-        && (_modelCatalogFetchedAt is not { } fetchedAt
-            || now - fetchedAt >= ModelCatalogRefreshInterval);
+    /// <summary>True when the saved catalog has no fetch date, is a day old or is dated in the future.</summary>
+    internal bool IsModelCatalogStale => _modelRefresh.IsStale(_modelCatalogFetchedAt);
+
+    /// <summary>The running or last background model list refresh. Tests await it.</summary>
+    internal Task ModelCatalogRefreshTask => _modelRefresh.Current;
+
+    internal bool RefreshesModelsAutomatically => _modelRefresh.Enabled;
 
     /// <inheritdoc />
     public async Task SetApiKeyAsync(string apiKey)
@@ -428,14 +456,6 @@ public sealed partial class GeminiPlugin :
             var previousLlmModels = _fetchedLlmModels;
             var previousTranscriptionModels = _fetchedTranscriptionModels;
             var previousFetchedAt = _modelCatalogFetchedAt;
-            var previousSelectedModelId = _selectedTranscriptionModelId;
-            var nextSelectedModelId = NormalizeSelectedTranscriptionModelId(
-                previousSelectedModelId,
-                FallbackTranscriptionModels);
-            var selectionChanged = !string.Equals(
-                previousSelectedModelId,
-                nextSelectedModelId,
-                StringComparison.OrdinalIgnoreCase);
             var catalogChanged = previousLlmModels.Count > 0
                 || previousTranscriptionModels.Count > 0
                 || previousFetchedAt is not null;
@@ -454,12 +474,6 @@ public sealed partial class GeminiPlugin :
                             llmModels: [],
                             transcriptionModels: [],
                             fetchedAt: null);
-                    }
-                    if (selectionChanged)
-                    {
-                        _host.SetSetting(
-                            SelectedTranscriptionModelSettingName,
-                            nextSelectedModelId);
                     }
                 }
                 catch (Exception writeException)
@@ -487,20 +501,6 @@ public sealed partial class GeminiPlugin :
                         }
                     }
 
-                    if (selectionChanged)
-                    {
-                        try
-                        {
-                            _host.SetSetting(
-                                SelectedTranscriptionModelSettingName,
-                                previousSelectedModelId);
-                        }
-                        catch (Exception rollbackException)
-                        {
-                            rollbackFailures.Add(rollbackException);
-                        }
-                    }
-
                     if (rollbackFailures.Count > 0)
                     {
                         throw new InvalidOperationException(
@@ -512,14 +512,19 @@ public sealed partial class GeminiPlugin :
                 }
             }
 
+            // A refresh still loading the previous account's catalog must not apply it. The catalog is
+            // dropped because another account can see other models; the saved model choices stay and
+            // apply again once the new account's catalog offers them.
+            _modelRefresh.Cancel();
             _apiKey = normalized;
             _fetchedLlmModels = [];
             _fetchedTranscriptionModels = [];
             _modelCatalogFetchedAt = null;
-            _selectedTranscriptionModelId = nextSelectedModelId;
 
             if (_host is not null && (wasAvailable != IsAvailable || catalogChanged))
                 _host.NotifyCapabilitiesChanged();
+
+            StartModelCatalogRefreshIfStale();
         }
         finally
         {
@@ -536,9 +541,11 @@ public sealed partial class GeminiPlugin :
         _transcriptionMode = mode;
     }
 
-    internal async Task<GeminiModelCatalog?> FetchModelCatalogAsync(CancellationToken ct = default)
+    internal Task<GeminiModelCatalog?> FetchModelCatalogAsync(CancellationToken ct = default) =>
+        FetchModelCatalogAsync(_apiKey, ct);
+
+    private async Task<GeminiModelCatalog?> FetchModelCatalogAsync(string? apiKey, CancellationToken ct)
     {
-        var apiKey = _apiKey;
         if (apiKey is null)
             return null;
 
@@ -612,7 +619,7 @@ public sealed partial class GeminiPlugin :
             return new GeminiModelCatalog(
                 NormalizeFetchedLlmModels(nativeModels),
                 NormalizeFetchedTranscriptionModels(nativeModels),
-                DateTimeOffset.UtcNow);
+                _modelRefresh.UtcNow);
         }
         catch (TaskCanceledException) when (!ct.IsCancellationRequested)
         {
@@ -644,18 +651,34 @@ public sealed partial class GeminiPlugin :
     internal async Task<List<GeminiFetchedModel>?> FetchLlmModelsAsync(CancellationToken ct = default) =>
         (await FetchModelCatalogAsync(ct))?.LlmModels.ToList();
 
-    internal async Task<bool> SetFetchedModelCatalogAsync(
+    internal Task<bool> SetFetchedModelCatalogAsync(
         GeminiModelCatalog catalog,
-        string? expectedApiKey = null)
+        string? expectedApiKey = null) =>
+        ApplyModelCatalogAsync(catalog, expectedApiKey, automatic: false, CancellationToken.None);
+
+    /// <summary>
+    /// Saves a fetched catalog with its fetch date. The saved model choices stay even when the catalog lacks
+    /// them, so a model that returns later applies again.
+    /// </summary>
+    private async Task<bool> ApplyModelCatalogAsync(
+        GeminiModelCatalog catalog,
+        string? expectedApiKey,
+        bool automatic,
+        CancellationToken refreshToken)
     {
         var normalizedLlmModels = NormalizeFetchedLlmModels(catalog.LlmModels);
         var normalizedTranscriptionModels = NormalizeFetchedTranscriptionModels(
             catalog.TranscriptionModels);
         var normalizedFetchedAt = catalog.FetchedAtUtc.ToUniversalTime();
 
-        await _configurationGate.WaitAsync();
+        await _configurationGate.WaitAsync(refreshToken);
         try
         {
+            // Checked under the gate that guards the key: deactivation and a key change cancel the
+            // background refresh before they change anything, so a cancelled result arrived too late.
+            if (automatic && (refreshToken.IsCancellationRequested || _host is null))
+                return false;
+
             if (expectedApiKey is not null
                 && !string.Equals(_apiKey, expectedApiKey, StringComparison.Ordinal))
             {
@@ -665,21 +688,23 @@ public sealed partial class GeminiPlugin :
                 return false;
             }
 
-            var nextSelectedModelId = NormalizeSelectedTranscriptionModelId(
-                _selectedTranscriptionModelId,
-                normalizedTranscriptionModels);
-            var selectionChanged = !string.Equals(
-                _selectedTranscriptionModelId,
-                nextSelectedModelId,
-                StringComparison.OrdinalIgnoreCase);
+            if (automatic && SwitchesOffACapability(normalizedLlmModels, normalizedTranscriptionModels))
+            {
+                _host?.Log(
+                    PluginLogLevel.Warning,
+                    "Gemini listed no text or no transcription models. Keeping the current model list.");
+                return false;
+            }
 
+            var previousSelectedModelId = SelectedTranscriptionModel?.Id;
             var catalogsChanged = _modelCatalogFetchedAt is null
                 || !ModelCatalogsEqual(_fetchedLlmModels, normalizedLlmModels)
                 || !TranscriptionModelCatalogsEqual(
                     _fetchedTranscriptionModels,
                     normalizedTranscriptionModels);
 
-            if (_host is not null)
+            var host = _host;
+            if (host is not null)
             {
                 var previousLlmModels = _fetchedLlmModels;
                 var previousTranscriptionModels = _fetchedTranscriptionModels;
@@ -687,32 +712,20 @@ public sealed partial class GeminiPlugin :
                 try
                 {
                     PersistCatalogSettings(
-                        _host,
+                        host,
                         normalizedLlmModels,
                         normalizedTranscriptionModels,
                         normalizedFetchedAt);
-                    if (selectionChanged)
-                    {
-                        _host.SetSetting(
-                            SelectedTranscriptionModelSettingName,
-                            nextSelectedModelId);
-                    }
                 }
                 catch (Exception writeException)
                 {
                     try
                     {
                         PersistCatalogSettings(
-                            _host,
+                            host,
                             previousLlmModels,
                             previousTranscriptionModels,
                             previousFetchedAt);
-                        if (selectionChanged)
-                        {
-                            _host.SetSetting(
-                                SelectedTranscriptionModelSettingName,
-                                _selectedTranscriptionModelId);
-                        }
                     }
                     catch (Exception rollbackException)
                     {
@@ -729,16 +742,84 @@ public sealed partial class GeminiPlugin :
             _fetchedTranscriptionModels = normalizedTranscriptionModels;
             _modelCatalogFetchedAt = normalizedFetchedAt;
 
-            _selectedTranscriptionModelId = nextSelectedModelId;
-
+            var selectionChanged = !string.Equals(
+                previousSelectedModelId,
+                SelectedTranscriptionModel?.Id,
+                StringComparison.OrdinalIgnoreCase);
             if (catalogsChanged || selectionChanged)
-                _host?.NotifyCapabilitiesChanged();
+                host?.NotifyCapabilitiesChanged();
             return true;
         }
         finally
         {
             _configurationGate.Release();
         }
+    }
+
+    /// <summary>
+    /// A catalog that lacks every text or every transcription model a saved catalog had would switch that
+    /// capability off. The button applies such a catalog on purpose; the background refresh keeps the saved
+    /// one, because a short or broken listing must not disable a provider that worked a moment ago. The
+    /// built-in lists prove nothing about the account, so a first catalog applies as listed, for example for
+    /// an account without transcription models. A catalog without any model is always refused.
+    /// </summary>
+    private bool SwitchesOffACapability(
+        IReadOnlyList<GeminiFetchedModel> llmModels,
+        IReadOnlyList<GeminiFetchedTranscriptionModel> transcriptionModels) =>
+        (llmModels.Count == 0 && transcriptionModels.Count == 0)
+        || (llmModels.Count == 0 && _fetchedLlmModels.Count > 0)
+        || (transcriptionModels.Count == 0 && _fetchedTranscriptionModels.Count > 0);
+
+    /// <summary>
+    /// Gemini renames and retires models. Reloading the catalog once a day drops a retired model instead of
+    /// failing every request with HTTP 404.
+    /// </summary>
+    private void StartModelCatalogRefreshIfStale()
+    {
+        if (_host is not { } host || _apiKey is not { } apiKey || !_modelRefresh.IsStale(_modelCatalogFetchedAt))
+            return;
+
+        _modelRefresh.Start(
+            ct => RefreshModelCatalogInBackgroundAsync(apiKey, ct),
+            ex => host.Log(
+                PluginLogLevel.Warning,
+                $"Gemini model list refresh failed with {ex.GetType().Name}. Keeping the current model list."));
+    }
+
+    /// <summary>
+    /// The hourly check. It runs on a timer thread, so it reads the key, host and catalog date under the gate that
+    /// a key change and deactivation hold while they change them; otherwise it could refresh with a replaced key
+    /// or after deactivation. While the gate is busy the check is skipped, and the next one follows an hour later.
+    /// </summary>
+    private void RecheckModelCatalog()
+    {
+        if (!_configurationGate.Wait(0))
+            return;
+
+        try
+        {
+            // A key change can start a refresh after the helper checked for one; that refresh keeps running.
+            if (_modelRefresh.Current.IsCompleted)
+                StartModelCatalogRefreshIfStale();
+        }
+        finally
+        {
+            _configurationGate.Release();
+        }
+    }
+
+    private async Task RefreshModelCatalogInBackgroundAsync(string apiKey, CancellationToken ct)
+    {
+        var catalog = await FetchModelCatalogAsync(apiKey, ct);
+        ct.ThrowIfCancellationRequested();
+        if (catalog is null)
+        {
+            // The fetch already logged why; a request for a replaced key ends here as well.
+            _host?.Log(PluginLogLevel.Warning, "Keeping the current Gemini model list.");
+            return;
+        }
+
+        await ApplyModelCatalogAsync(catalog, apiKey, automatic: true, ct);
     }
 
     internal async Task<bool> SetFetchedLlmModelsAsync(
@@ -748,7 +829,7 @@ public sealed partial class GeminiPlugin :
         var catalog = new GeminiModelCatalog(
             models.ToList(),
             _fetchedTranscriptionModels,
-            DateTimeOffset.UtcNow);
+            _modelRefresh.UtcNow);
         return await SetFetchedModelCatalogAsync(catalog, expectedApiKey);
     }
 
@@ -912,26 +993,26 @@ public sealed partial class GeminiPlugin :
             ? _fetchedTranscriptionModels
             : FallbackTranscriptionModels;
 
-    private GeminiFetchedTranscriptionModel? SelectedTranscriptionModel =>
-        AvailableTranscriptionModels.FirstOrDefault(model => string.Equals(
-            model.Id,
-            _selectedTranscriptionModelId,
-            StringComparison.OrdinalIgnoreCase));
-
-    private string NormalizeSelectedTranscriptionModelId(string? modelId)
-        => NormalizeSelectedTranscriptionModelId(modelId, AvailableTranscriptionModels);
-
-    private static string NormalizeSelectedTranscriptionModelId(
-        string? modelId,
-        IReadOnlyList<GeminiFetchedTranscriptionModel> available)
+    /// <summary>The saved model while the current list offers it, otherwise the list's default.</summary>
+    private GeminiFetchedTranscriptionModel? SelectedTranscriptionModel
     {
-        var normalized = TryNormalizeModelId(modelId, out var persisted) ? persisted : null;
-        return available.FirstOrDefault(model => string.Equals(
-                model.Id,
-                normalized,
-                StringComparison.OrdinalIgnoreCase))?.Id
-            ?? ResolveDefaultTranscriptionModelId(available);
+        get
+        {
+            var available = AvailableTranscriptionModels;
+            return FindTranscriptionModel(available, _preferredTranscriptionModelId)
+                ?? FindTranscriptionModel(available, ResolveDefaultTranscriptionModelId(available));
+        }
     }
+
+    private static GeminiFetchedTranscriptionModel? FindTranscriptionModel(
+        IReadOnlyList<GeminiFetchedTranscriptionModel> available,
+        string? modelId) =>
+        modelId is null
+            ? null
+            : available.FirstOrDefault(model => string.Equals(
+                model.Id,
+                modelId,
+                StringComparison.OrdinalIgnoreCase));
 
     private static Task PersistApiKeyAsync(IPluginHostServices host, string? apiKey) =>
         apiKey is null
@@ -1213,6 +1294,7 @@ public sealed partial class GeminiPlugin :
     /// <inheritdoc />
     public void Dispose()
     {
+        _modelRefresh.Dispose();
         _configurationGate.Dispose();
         _httpClient.Dispose();
     }

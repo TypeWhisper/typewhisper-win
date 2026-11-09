@@ -10,5 +10,8 @@
     <ProjectReference Include="../../../src/TypeWhisper.PluginHost/TypeWhisper.PluginHost.csproj" />
     <ProjectReference Include="../TypeWhisper.Plugin.Voxtral.csproj" />
     <None Include="../manifest.json" Link="manifest.json" CopyToOutputDirectory="PreserveNewest" />
+    <Compile Include="../../shared/tests/ModelCatalogAutoRefreshTests.cs" Link="Shared/ModelCatalogAutoRefreshTests.cs" />
+    <!-- The package test loads the built plugin through its public constructor, which would refresh the model list from Mistral. -->
+    <RuntimeHostConfigurationOption Include="TypeWhisper.Plugins.DisableAutomaticModelRefresh" Value="true" />
   </ItemGroup>
 </Project>

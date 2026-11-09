@@ -19,6 +19,20 @@ the host, with the supplied bilingual strings as a fallback on older hosts. Link
 helper into settings providers; it needs no new SDK entry point. Resources belong to
 each plugin's `Localization` folder and must be copied to the staged package.
 
+`ModelCatalogAutoRefresh` refreshes a fetched model list in the background once the saved copy
+is a day old. The plugin keeps the list, its fetch date and the request; the helper decides when
+the list is stale and runs one refresh at a time. The plugin runs its staleness check on
+activation and passes the same check to `StartRechecks`, which repeats it every hour while the
+plugin stays active, and calls `StopRechecks` on deactivation. Tests drive the rechecks with
+`RecheckTestClock` from the shared test file. Only the public constructor enables it, by passing
+`ModelCatalogAutoRefresh.AllowedInThisProcess`; the internal test constructor leaves it off. Link
+`tests/ModelCatalogAutoRefreshTests.cs` into the plugin's test project and set the switch there, so
+package tests that load the built plugin through its public constructor stay offline as well:
+
+```xml
+<RuntimeHostConfigurationOption Include="TypeWhisper.Plugins.DisableAutomaticModelRefresh" Value="true" />
+```
+
 ## Rules
 
 - A shared file must not depend on any plugin: no plugin types, no plugin namespaces, no
