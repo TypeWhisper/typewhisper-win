@@ -8,21 +8,21 @@ public partial class OpenAiPluginTests
     public async Task ConnectionModeAndTextModelAreSavedTogether()
     {
         var host = new TestPluginHostServices();
-        using var plugin = new OpenAiPlugin();
+        using var plugin = CreateOfflinePlugin();
         await plugin.ActivateAsync(host);
         plugin.SelectLlmModel("gpt-4o");
         host.FailSettingKey = "llmSelection";
         Assert.Throws<IOException>(() => plugin.SetAuthMode(OpenAiAuthMode.ChatGpt));
         Assert.Equal(OpenAiAuthMode.ApiKey, plugin.AuthMode);
         Assert.Equal("gpt-4o", plugin.SelectedLlmModelId);
-        using var afterFailure = new OpenAiPlugin();
+        using var afterFailure = CreateOfflinePlugin();
         await afterFailure.ActivateAsync(host);
         Assert.Equal(OpenAiAuthMode.ApiKey, afterFailure.AuthMode);
         Assert.Equal("gpt-4o", afterFailure.SelectedLlmModelId);
         host.FailSettingKey = null;
         plugin.SetAuthMode(OpenAiAuthMode.ChatGpt);
         Assert.Contains(plugin.SupportedModels, model => model.Id == plugin.SelectedLlmModelId);
-        using var afterSuccess = new OpenAiPlugin();
+        using var afterSuccess = CreateOfflinePlugin();
         await afterSuccess.ActivateAsync(host);
         Assert.Equal(OpenAiAuthMode.ChatGpt, afterSuccess.AuthMode);
         Assert.Equal(plugin.SelectedLlmModelId, afterSuccess.SelectedLlmModelId);
@@ -50,7 +50,7 @@ public partial class OpenAiPluginTests
         await plugin.RefreshAvailableLlmModelsAsync();
         Assert.Equal(expectedPlan, plugin.ChatGptPlanType);
         Assert.Equal(expectedPlan + "-model", Assert.Single(plugin.SupportedModels).Id);
-        using var reloaded = new OpenAiPlugin();
+        using var reloaded = CreateOfflinePlugin();
         await reloaded.ActivateAsync(host);
         Assert.Equal(expectedPlan, reloaded.ChatGptPlanType);
     }
@@ -59,14 +59,14 @@ public partial class OpenAiPluginTests
     public async Task FailedTranscriptionSelectionKeepsThePreviousModel()
     {
         var host = new TestPluginHostServices();
-        using var plugin = new OpenAiPlugin();
+        using var plugin = CreateOfflinePlugin();
         await plugin.ActivateAsync(host);
         plugin.SelectModel("whisper-1");
         host.FailSettingKey = "selectedModel";
         var other = plugin.TranscriptionModels.First(model => model.Id != "whisper-1").Id;
         Assert.Throws<IOException>(() => plugin.SelectModel(other));
         Assert.Equal("whisper-1", plugin.SelectedModelId);
-        using var reloaded = new OpenAiPlugin();
+        using var reloaded = CreateOfflinePlugin();
         await reloaded.ActivateAsync(host);
         Assert.Equal("whisper-1", reloaded.SelectedModelId);
     }
@@ -119,13 +119,13 @@ public partial class OpenAiPluginTests
             host.SetSetting("authMode", "chatgpt");
             host.SetSetting("chatGPTModelCatalogSnapshot", new OpenAiPlugin.ChatGptCatalogSnapshot(true,
                 [new("old-model", "Old model", "list", null, null)]));
-            using var plugin = new OpenAiPlugin();
+            using var plugin = CreateOfflinePlugin();
             await plugin.ActivateAsync(host);
             host.FailSettingKey = failure == "snapshot" ? "chatGPTModelCatalogSnapshot" : null;
             host.FailSecretWrites = failure == "secret";
             host.FailAfterSecretWrite = failure == "after-secret";
             await Assert.ThrowsAsync<IOException>(() => plugin.ImportExistingLoginAsync(file));
-            using var reloaded = new OpenAiPlugin();
+            using var reloaded = CreateOfflinePlugin();
             await reloaded.ActivateAsync(host);
             if (failure == "after-secret")
             {

@@ -23,6 +23,7 @@ public sealed partial class MetaPlugin : ITranscriptionEnginePlugin, ILlmProvide
     private const string SelectedLlmModelSettingName = "selectedLlmModel";
     private const string FetchedLlmModelsSettingName = "fetchedLlmModels";
     private const string FetchedTranscriptionModelsSettingName = "fetchedTranscriptionModels";
+    private const string FetchedModelsAtSettingName = "fetchedModelsAtUtc";
     private const string ReasoningEffortSettingName = "reasoningEffort";
     private const string SpeakerDiarizationSettingName = "speakerDiarizationEnabled";
     private static readonly DictionaryTermsBudget KeywordBudget = new(
@@ -83,29 +84,42 @@ public sealed partial class MetaPlugin : ITranscriptionEnginePlugin, ILlmProvide
     private readonly HttpClient _httpClient;
     private readonly Func<MetaRealtimeConnectionOptions, CancellationToken, Task<IStreamingSession>>
         _streamingSessionFactory;
+    private readonly ModelCatalogAutoRefresh _modelRefresh;
+    // Guards the key, the catalog and the selections against a refresh that finishes on another thread.
+    private readonly object _catalogLock = new();
+    // Bumped on a key change and on deactivation, so a refresh started before either is dropped.
+    private int _catalogVersion;
+    private bool _keyChangePending;
     private IPluginHostServices? _host;
     private string? _apiKey;
+    // The saved choices. A list that lacks one uses the default in memory and keeps the saved value.
+    private string? _preferredModelId;
+    private string? _preferredLlmModelId;
     private string? _selectedModelId;
     private string? _selectedLlmModelId;
     private string _reasoningEffort = "medium";
     private bool _speakerDiarizationEnabled;
     private List<MetaFetchedModel> _fetchedLlmModels = [];
     private List<MetaFetchedModel> _fetchedTranscriptionModels = [];
+    private DateTimeOffset? _fetchedModelsAt;
 
     /// <summary>
     /// Initializes a new Meta plugin instance.
     /// </summary>
     public MetaPlugin()
-        : this(new HttpClient { Timeout = TimeSpan.FromMinutes(10) })
+        : this(new HttpClient { Timeout = TimeSpan.FromMinutes(10) }, refreshModelsAutomatically: ModelCatalogAutoRefresh.AllowedInThisProcess)
     {
     }
 
     internal MetaPlugin(
         HttpClient httpClient,
         Func<MetaRealtimeConnectionOptions, CancellationToken, Task<IStreamingSession>>?
-            streamingSessionFactory = null)
+            streamingSessionFactory = null,
+        bool refreshModelsAutomatically = false,
+        TimeProvider? clock = null)
     {
         _httpClient = httpClient;
+        _modelRefresh = new ModelCatalogAutoRefresh(refreshModelsAutomatically, clock);
         _streamingSessionFactory = streamingSessionFactory
             ?? (async (options, ct) => await MetaRealtimeStreamingSession.ConnectAsync(
                 options.ApiKey,
@@ -123,7 +137,7 @@ public sealed partial class MetaPlugin : ITranscriptionEnginePlugin, ILlmProvide
     public string PluginName => "Meta";
 
     /// <inheritdoc />
-    public string PluginVersion => "1.2.14";
+    public string PluginVersion => "1.3.0";
 
     /// <inheritdoc />
     public bool SupportsRequestHedging => true;
@@ -139,23 +153,30 @@ public sealed partial class MetaPlugin : ITranscriptionEnginePlugin, ILlmProvide
         _fetchedTranscriptionModels = NormalizeModels(
             host.GetSetting<List<MetaFetchedModel>>(FetchedTranscriptionModelsSettingName) ?? [],
             IsTranscriptionModel);
-        _selectedModelId = NormalizeSelection(
-            host.GetSetting<string>(SelectedTranscriptionModelSettingName),
-            TranscriptionModels,
-            DefaultTranscriptionModelId);
-        _selectedLlmModelId = NormalizeSelection(
-            host.GetSetting<string>(SelectedLlmModelSettingName),
-            SupportedModels,
-            DefaultLlmModelId);
+        // Lists saved before 1.3.0 have no fetch date. They stay until the refresh replaces them.
+        _fetchedModelsAt = LoadFetchedModelsAt(host);
+        _preferredModelId = host.GetSetting<string>(SelectedTranscriptionModelSettingName);
+        _preferredLlmModelId = host.GetSetting<string>(SelectedLlmModelSettingName);
+        ResolveSelections();
         _reasoningEffort = NormalizeReasoningEffort(host.GetSetting<string>(ReasoningEffortSettingName));
         _speakerDiarizationEnabled = host.GetSetting<bool>(SpeakerDiarizationSettingName);
         host.Log(PluginLogLevel.Info, $"Activated (configured={IsConfigured})");
+        StartModelRefreshIfStale();
+        // The app can run for days without activating the plugin again.
+        _modelRefresh.StartRechecks(StartModelRefreshIfStale);
     }
 
     /// <inheritdoc />
     public Task DeactivateAsync()
     {
-        _host = null;
+        lock (_catalogLock)
+        {
+            _catalogVersion++;
+            _host = null;
+        }
+
+        _modelRefresh.StopRechecks();
+        _modelRefresh.Cancel();
         return Task.CompletedTask;
     }
 
@@ -222,8 +243,12 @@ public sealed partial class MetaPlugin : ITranscriptionEnginePlugin, ILlmProvide
             throw new ArgumentException($"Unknown transcription model: {modelId}", nameof(modelId));
         }
 
-        _host?.SetSetting(SelectedTranscriptionModelSettingName, modelId);
-        _selectedModelId = modelId;
+        lock (_catalogLock)
+        {
+            _host?.SetSetting(SelectedTranscriptionModelSettingName, modelId);
+            _preferredModelId = modelId;
+            _selectedModelId = modelId;
+        }
     }
 
     /// <inheritdoc />
@@ -364,71 +389,105 @@ public sealed partial class MetaPlugin : ITranscriptionEnginePlugin, ILlmProvide
     internal bool IsUiAutomation => _host?.IsUiAutomation == true;
     internal int FetchedLlmModelCount => _fetchedLlmModels.Count;
     internal int FetchedTranscriptionModelCount => _fetchedTranscriptionModels.Count;
+    internal DateTimeOffset? FetchedModelsAt => _fetchedModelsAt;
+    internal Task ModelRefreshTask => _modelRefresh.Current;
 
     internal async Task SetApiKeyAsync(string? apiKey)
     {
         var normalized = NormalizeApiKey(apiKey);
         var changed = !string.Equals(_apiKey, normalized, StringComparison.Ordinal);
 
-        if (_host is null)
+        if (_host is not { } host)
         {
             _apiKey = normalized;
             return;
         }
 
-        if (changed)
-            await CommitCatalogAsync([], [], normalized, changeCredential: true);
-        else if (normalized is null)
-            await _host.DeleteSecretAsync(ApiKeySecretName);
-        else
-            await _host.StoreSecretAsync(ApiKeySecretName, normalized);
-    }
-
-    private async Task CommitCatalogAsync(List<MetaFetchedModel> llm, List<MetaFetchedModel> transcription,
-        string? credential = null, bool changeCredential = false)
-    {
-        var selectedLlm = NormalizeSelection(_selectedLlmModelId,
-            llm.Count == 0 ? FallbackLlmModels : llm.Select(m => new PluginModelInfo(m.Id, DisplayName(m.Id))).ToArray(), DefaultLlmModelId);
-        var selectedTranscription = NormalizeSelection(_selectedModelId,
-            transcription.Count == 0 ? FallbackTranscriptionModels : transcription.Select(m => new PluginModelInfo(m.Id, DisplayName(m.Id))).ToArray(), DefaultTranscriptionModelId);
-        if (_host is { } host)
+        if (!changed)
         {
-            var undo = new Stack<Action>();
-            void Write<T>(string key, T value)
-            {
-                var previous = host.GetSetting<T>(key);
-                undo.Push(() => host.SetSetting(key, previous));
-                host.SetSetting(key, value);
-            }
+            if (normalized is null) await host.DeleteSecretAsync(ApiKeySecretName);
+            else await host.StoreSecretAsync(ApiKeySecretName, normalized);
+            return;
+        }
+
+        // The catalog belongs to the old account, and a refresh still running for it must not land. Until the
+        // new key is in place, no refresh may save a list either: one started now still sends the old key.
+        lock (_catalogLock) { _catalogVersion++; _keyChangePending = true; }
+        try
+        {
+            _modelRefresh.Cancel();
+            // Persist dependent settings first. A failed reset must never replace the secret.
+            var undo = WriteCatalog(host, [], [], fetchedAt: null);
             try
             {
-                Write(FetchedLlmModelsSettingName, llm);
-                Write(FetchedTranscriptionModelsSettingName, transcription);
-                Write(SelectedLlmModelSettingName, selectedLlm);
-                Write(SelectedTranscriptionModelSettingName, selectedTranscription);
-                // Persist dependent settings first. A failed reset must never replace the secret.
-                if (changeCredential)
-                {
-                    if (credential is null) await host.DeleteSecretAsync(ApiKeySecretName);
-                    else await host.StoreSecretAsync(ApiKeySecretName, credential);
-                }
+                if (normalized is null) await host.DeleteSecretAsync(ApiKeySecretName);
+                else await host.StoreSecretAsync(ApiKeySecretName, normalized);
             }
             catch (Exception error) when (error is not OutOfMemoryException)
             {
-                var failures = new List<Exception> { error };
-                while (undo.TryPop(out var rollback))
-                    try { rollback(); }
-                    catch (Exception failure) when (failure is not OutOfMemoryException) { failures.Add(failure); }
-                if (failures.Count > 1) throw new AggregateException("Meta settings rollback failed.", failures);
+                Rollback(undo, error);
                 throw;
             }
+
+            lock (_catalogLock)
+            {
+                ApplyCatalog([], [], fetchedAt: null);
+                _apiKey = normalized;
+                // A refresh that started during the secret write captured the old key with the new version.
+                _catalogVersion++;
+            }
         }
+        finally
+        {
+            // Also after a failed write, so later refreshes can save again.
+            lock (_catalogLock) _keyChangePending = false;
+        }
+
+        host.NotifyCapabilitiesChanged();
+        StartModelRefreshIfStale();
+    }
+
+    // Writes the catalog and its fetch date. A failed write restores the values written before it.
+    private static Stack<Action> WriteCatalog(IPluginHostServices host, List<MetaFetchedModel> llm,
+        List<MetaFetchedModel> transcription, DateTimeOffset? fetchedAt)
+    {
+        var undo = new Stack<Action>();
+        void Write<T>(string key, T previous, T value)
+        {
+            undo.Push(() => host.SetSetting(key, previous));
+            host.SetSetting(key, value);
+        }
+        try
+        {
+            Write(FetchedLlmModelsSettingName, host.GetSetting<List<MetaFetchedModel>>(FetchedLlmModelsSettingName), llm);
+            Write(FetchedTranscriptionModelsSettingName,
+                host.GetSetting<List<MetaFetchedModel>>(FetchedTranscriptionModelsSettingName), transcription);
+            Write(FetchedModelsAtSettingName, LoadFetchedModelsAt(host), fetchedAt);
+        }
+        catch (Exception error) when (error is not OutOfMemoryException)
+        {
+            Rollback(undo, error);
+            throw;
+        }
+
+        return undo;
+    }
+
+    private static void Rollback(Stack<Action> undo, Exception error)
+    {
+        var failures = new List<Exception> { error };
+        while (undo.TryPop(out var rollback))
+            try { rollback(); }
+            catch (Exception failure) when (failure is not OutOfMemoryException) { failures.Add(failure); }
+        if (failures.Count > 1) throw new AggregateException("Meta settings rollback failed.", failures);
+    }
+
+    private void ApplyCatalog(List<MetaFetchedModel> llm, List<MetaFetchedModel> transcription, DateTimeOffset? fetchedAt)
+    {
         _fetchedLlmModels = llm;
         _fetchedTranscriptionModels = transcription;
-        _selectedLlmModelId = selectedLlm;
-        _selectedModelId = selectedTranscription;
-        if (changeCredential) _apiKey = credential;
-        _host?.NotifyCapabilitiesChanged();
+        _fetchedModelsAt = fetchedAt;
+        ResolveSelections();
     }
 
     internal void SelectLlmModel(string modelId)
@@ -439,8 +498,12 @@ public sealed partial class MetaPlugin : ITranscriptionEnginePlugin, ILlmProvide
             throw new ArgumentException($"Unknown language model: {modelId}", nameof(modelId));
         }
 
-        _host?.SetSetting(SelectedLlmModelSettingName, modelId);
-        _selectedLlmModelId = modelId;
+        lock (_catalogLock)
+        {
+            _host?.SetSetting(SelectedLlmModelSettingName, modelId);
+            _preferredLlmModelId = modelId;
+            _selectedLlmModelId = modelId;
+        }
     }
 
     internal void SetReasoningEffort(string reasoningEffort)
@@ -468,12 +531,44 @@ public sealed partial class MetaPlugin : ITranscriptionEnginePlugin, ILlmProvide
         return true;
     }
 
-    internal async Task<MetaModelCatalog?> RefreshAvailableModelsAsync(CancellationToken ct = default)
+    internal Task<MetaModelCatalog?> RefreshAvailableModelsAsync(CancellationToken ct = default)
     {
-        if (!IsConfigured)
-            return null;
+        string? apiKey;
+        int version;
+        lock (_catalogLock) (apiKey, version) = (_apiKey, _catalogVersion);
+        if (apiKey is null)
+            return Task.FromResult<MetaModelCatalog?>(null);
 
-        using var request = CreateModelsRequest(_apiKey!);
+        // The button supersedes a background refresh, which would otherwise land after it.
+        _modelRefresh.Cancel();
+        return RefreshModelsAsync(apiKey, version, automatic: false, ct);
+    }
+
+    /// <summary>
+    /// A list that only refreshes on request keeps offering retired models. Reloading it once a day
+    /// drops them instead of failing every request with HTTP 404. The hourly recheck calls this on a
+    /// timer thread, so it reads its state only under the lock.
+    /// </summary>
+    private void StartModelRefreshIfStale()
+    {
+        string apiKey;
+        int version;
+        lock (_catalogLock)
+        {
+            // While a key change writes the secret, the old key is still set. The key change refreshes afterwards.
+            if (_host is null || _keyChangePending || _apiKey is not { } key || !_modelRefresh.IsStale(_fetchedModelsAt))
+                return;
+            (apiKey, version) = (key, _catalogVersion);
+        }
+
+        _modelRefresh.Start(
+            ct => RefreshModelsAsync(apiKey, version, automatic: true, ct),
+            error => _host?.Log(PluginLogLevel.Warning, $"Meta model refresh failed: {error.GetType().Name}"));
+    }
+
+    private async Task<MetaModelCatalog?> RefreshModelsAsync(string apiKey, int version, bool automatic, CancellationToken ct)
+    {
+        using var request = CreateModelsRequest(apiKey);
         try
         {
             using var response = await _httpClient.SendAsync(request, ct);
@@ -505,8 +600,7 @@ public sealed partial class MetaPlugin : ITranscriptionEnginePlugin, ILlmProvide
             }
             var llmModels = NormalizeModels(models, IsLlmModel);
             var transcriptionModels = NormalizeModels(models, IsTranscriptionModel);
-            await CommitCatalogAsync(llmModels, transcriptionModels);
-            return new MetaModelCatalog(_fetchedLlmModels, _fetchedTranscriptionModels);
+            return CommitRefreshedCatalog(version, automatic, llmModels, transcriptionModels, ct);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -655,7 +749,11 @@ public sealed partial class MetaPlugin : ITranscriptionEnginePlugin, ILlmProvide
     }
 
     /// <inheritdoc />
-    public void Dispose() => _httpClient.Dispose();
+    public void Dispose()
+    {
+        _modelRefresh.Dispose();
+        _httpClient.Dispose();
+    }
 
     private static HttpRequestMessage CreateModelsRequest(string apiKey)
     {
@@ -674,20 +772,65 @@ public sealed partial class MetaPlugin : ITranscriptionEnginePlugin, ILlmProvide
         }
     }
 
-    private void NormalizeSelections(bool persist)
+    /// <summary>
+    /// Uses a saved model only while the current list offers it, so a retired model falls back to the
+    /// default instead of failing every request with HTTP 404. The saved value stays and applies again
+    /// once a later list offers it.
+    /// </summary>
+    private void ResolveSelections()
     {
         _selectedModelId = NormalizeSelection(
-            _selectedModelId,
+            _preferredModelId,
             TranscriptionModels,
             DefaultTranscriptionModelId);
         _selectedLlmModelId = NormalizeSelection(
-            _selectedLlmModelId,
+            _preferredLlmModelId,
             SupportedModels,
             DefaultLlmModelId);
-        if (persist && _host is not null)
+    }
+
+    private MetaModelCatalog? CommitRefreshedCatalog(int version, bool automatic,
+        List<MetaFetchedModel> llm, List<MetaFetchedModel> transcription, CancellationToken ct)
+    {
+        IPluginHostServices host;
+        lock (_catalogLock)
         {
-            _host.SetSetting(SelectedTranscriptionModelSettingName, _selectedModelId);
-            _host.SetSetting(SelectedLlmModelSettingName, _selectedLlmModelId);
+            // A result that arrives after deactivation or a key change belongs to an old connection.
+            if ((automatic && ct.IsCancellationRequested) || version != _catalogVersion || _keyChangePending || _host is null)
+                return null;
+            host = _host;
+            if (automatic && WouldDropFetchedModels(llm, transcription))
+            {
+                host.Log(PluginLogLevel.Warning, "Meta returned no usable model list. Keeping the current list.");
+                return null;
+            }
+
+            var fetchedAt = _modelRefresh.UtcNow;
+            WriteCatalog(host, llm, transcription, fetchedAt);
+            ApplyCatalog(llm, transcription, fetchedAt);
+        }
+
+        host.NotifyCapabilitiesChanged();
+        return new MetaModelCatalog(llm, transcription);
+    }
+
+    // The background refresh never trades a fetched list for an empty one: an empty answer is more
+    // likely a provider hiccup than a retired model family, and the button can still apply it.
+    private bool WouldDropFetchedModels(List<MetaFetchedModel> llm, List<MetaFetchedModel> transcription) =>
+        (llm.Count == 0 && transcription.Count == 0)
+        || (llm.Count == 0 && _fetchedLlmModels.Count > 0)
+        || (transcription.Count == 0 && _fetchedTranscriptionModels.Count > 0);
+
+    private static DateTimeOffset? LoadFetchedModelsAt(IPluginHostServices host)
+    {
+        try
+        {
+            return host.GetSetting<DateTimeOffset?>(FetchedModelsAtSettingName)?.ToUniversalTime();
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException)
+        {
+            // A damaged date reads as "no date", which refreshes the list.
+            return null;
         }
     }
 

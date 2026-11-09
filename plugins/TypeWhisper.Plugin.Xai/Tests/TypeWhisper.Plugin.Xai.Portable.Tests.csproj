@@ -10,5 +10,7 @@
     <ProjectReference Include="../../../src/TypeWhisper.PluginHost/TypeWhisper.PluginHost.csproj" />
     <ProjectReference Include="../TypeWhisper.Plugin.Xai.csproj" />
     <None Include="../manifest.json" Link="manifest.json" CopyToOutputDirectory="PreserveNewest" />
+    <Compile Include="../../shared/tests/ModelCatalogAutoRefreshTests.cs" Link="Shared/ModelCatalogAutoRefreshTests.cs" />
+    <RuntimeHostConfigurationOption Include="TypeWhisper.Plugins.DisableAutomaticModelRefresh" Value="true" />
   </ItemGroup>
 </Project>

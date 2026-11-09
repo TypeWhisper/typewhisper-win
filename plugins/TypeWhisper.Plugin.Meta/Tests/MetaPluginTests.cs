@@ -3,12 +3,13 @@ using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
+using PortableMigration.Tests;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.Plugin.Meta.Tests;
 
-public sealed class MetaPluginTests
+public sealed partial class MetaPluginTests
 {
     [Fact]
     public async Task RefreshAvailableModelsAsync_LoadsAndPartitionsMetaCatalog()
@@ -268,7 +269,7 @@ public sealed class MetaPluginTests
         Assert.Equal("Meta", sut.PluginName);
         Assert.Equal("Meta", sut.ProviderDisplayName);
         Assert.Equal("Meta", sut.ProviderName);
-        Assert.Equal("1.2.14", sut.PluginVersion);
+        Assert.Equal("1.3.0", sut.PluginVersion);
         Assert.True(sut.SupportsStreamingForPrompt("TypeWhisper, Muse"));
     }
 
@@ -480,7 +481,7 @@ public sealed class MetaPluginTests
 
         Assert.Equal("com.typewhisper.meta", root.GetProperty("id").GetString());
         Assert.Equal("Meta", root.GetProperty("name").GetString());
-        Assert.Equal("1.2.14", root.GetProperty("version").GetString());
+        Assert.Equal("1.3.0", root.GetProperty("version").GetString());
         Assert.Equal("1.1.5", root.GetProperty("minHostVersion").GetString());
         Assert.Equal("TypeWhisper.Plugin.Meta.MetaPlugin", root.GetProperty("pluginClass").GetString());
         Assert.Contains(
@@ -513,11 +514,11 @@ public sealed class MetaPluginTests
         return stream.ToArray();
     }
 
+    // A refresh no longer writes the model selections, so only the catalog keys can fail it.
     [Theory]
     [InlineData("fetchedLlmModels")]
     [InlineData("fetchedTranscriptionModels")]
-    [InlineData("selectedLlmModel")]
-    [InlineData("selectedModel")]
+    [InlineData("fetchedModelsAtUtc")]
     public async Task CatalogWriteFailureRetainsCredentialAndBothCatalogs(string failKey)
     {
         var handler = new RecordingHandler(HttpStatusCode.OK,
@@ -538,7 +539,7 @@ public sealed class MetaPluginTests
         await Assert.ThrowsAsync<IOException>(() => plugin.SetApiKeyAsync("replacement"));
         Assert.Equal("previous", plugin.ApiKey);
         Assert.Equal("previous", await host.LoadSecretAsync("api-key"));
-        using var restarted = new MetaPlugin();
+        using var restarted = new MetaPlugin(new HttpClient(new OfflineHandler()));
         await restarted.ActivateAsync(host);
         Assert.Equal("muse-spark-9", Assert.Single(restarted.SupportedModels).Id);
         Assert.Equal("muse-voice-transcribe-9", Assert.Single(restarted.TranscriptionModels).Id);
@@ -587,7 +588,7 @@ public sealed class MetaPluginTests
         Assert.Equal(notifications, host.NotifyCapabilitiesChangedCount);
         Assert.Equal("muse-spark-9", Assert.Single(plugin.SupportedModels).Id);
         Assert.Equal("muse-voice-transcribe-9", Assert.Single(plugin.TranscriptionModels).Id);
-        using var restarted = new MetaPlugin();
+        using var restarted = new MetaPlugin(new HttpClient(new OfflineHandler()));
         await restarted.ActivateAsync(host);
         Assert.Equal("muse-spark-9", Assert.Single(restarted.SupportedModels).Id);
         Assert.Equal("muse-voice-transcribe-9", Assert.Single(restarted.TranscriptionModels).Id);

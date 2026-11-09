@@ -91,17 +91,29 @@ public sealed partial class OpenRouterPlugin
             case "refreshModels":
                 return (await ExecuteProfileActionAsync(ProfileId, id, new Dictionary<string, string>(), null, cancellationToken)).Message;
             case "refreshTextModels":
-                var text = await FetchModelsAsync(cancellationToken);
+            {
+                var (apiKey, version) = CaptureConnection();
+                _catalogRefresh.Cancel();
+                var text = await FetchModelsAsync(apiKey, cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
-                if (text.Count == 0) throw new InvalidOperationException(L("Could not refresh text models. The saved list is unchanged.", "Textmodelle konnten nicht aktualisiert werden. Die gespeicherte Liste bleibt erhalten."));
-                SetFetchedModels(text);
+                var fetchedAt = _catalogRefresh.UtcNow;
+                if (text.Count == 0 || !CommitIfCurrent(version, value => value with { TextModels = text, TextModelsFetchedAt = fetchedAt }))
+                    throw new InvalidOperationException(L("Could not refresh text models. The saved list is unchanged.", "Textmodelle konnten nicht aktualisiert werden. Die gespeicherte Liste bleibt erhalten."));
+                StartCatalogRefreshIfStale();
                 return L($"{text.Count} text models loaded.", $"{text.Count} Textmodelle geladen.");
+            }
             case "refreshTranscriptionModels":
-                var speech = await FetchTranscriptionModelsAsync(cancellationToken);
+            {
+                var (apiKey, version) = CaptureConnection();
+                _catalogRefresh.Cancel();
+                var speech = await FetchTranscriptionModelsAsync(apiKey, cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
-                if (speech.Count == 0) throw new InvalidOperationException(L("Could not refresh transcription models. The saved list is unchanged.", "Transkriptionsmodelle konnten nicht aktualisiert werden. Die gespeicherte Liste bleibt erhalten."));
-                SetFetchedTranscriptionModels(speech);
+                var fetchedAt = _catalogRefresh.UtcNow;
+                if (speech.Count == 0 || !CommitIfCurrent(version, value => value with { SpeechModels = speech, SpeechModelsFetchedAt = fetchedAt }))
+                    throw new InvalidOperationException(L("Could not refresh transcription models. The saved list is unchanged.", "Transkriptionsmodelle konnten nicht aktualisiert werden. Die gespeicherte Liste bleibt erhalten."));
+                StartCatalogRefreshIfStale();
                 return L($"{speech.Count} transcription models loaded.", $"{speech.Count} Transkriptionsmodelle geladen.");
+            }
             case "checkBudget":
                 using (var key = await ReadKeyInfoAsync(cancellationToken))
                 {
@@ -112,6 +124,29 @@ public sealed partial class OpenRouterPlugin
                 }
             default: throw new ArgumentException("Unknown OpenRouter settings action.", nameof(id));
         }
+    }
+
+    private (string? ApiKey, int Version) CaptureConnection()
+    {
+        lock (_configurationLock)
+            return (_apiKey, _catalogVersion);
+    }
+
+    // These actions commit directly and supersede a background refresh, which would otherwise land after
+    // them. A list fetched before a key change is dropped.
+    private bool CommitIfCurrent(int version, Func<Configuration, Configuration> change)
+    {
+        IPluginHostServices host;
+        lock (_configurationLock)
+        {
+            if (version != _catalogVersion || _host is null)
+                return false;
+            host = _host;
+            CommitConfiguration(change, notify: false);
+        }
+
+        host.NotifyCapabilitiesChanged();
+        return true;
     }
 
     /// <inheritdoc />

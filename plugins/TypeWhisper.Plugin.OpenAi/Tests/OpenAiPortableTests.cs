@@ -16,7 +16,7 @@ public partial class OpenAiPluginTests
     {
         var host = new TestPluginHostServices();
         host.Secrets["api-key"] = "fixture-key";
-        using var plugin = new OpenAiPlugin(); await plugin.ActivateAsync(host);
+        using var plugin = CreateOfflinePlugin(); await plugin.ActivateAsync(host);
         host.FailWrites = true;
         await Assert.ThrowsAsync<IOException>(() => plugin.SetApiKeyAsync("replacement"));
         Assert.Equal("fixture-key", plugin.ApiKey);
@@ -149,7 +149,7 @@ public partial class OpenAiPluginTests
     {
         var host = new TestPluginHostServices(); host.Secrets["api-key"] = "fixture-key";
         host.Secrets["oauth-access-token"] = "old-access"; host.Secrets["oauth-refresh-token"] = "old-refresh";
-        using var plugin = new OpenAiPlugin(); await plugin.ActivateAsync(host);
+        using var plugin = CreateOfflinePlugin(); await plugin.ActivateAsync(host);
         await plugin.ExecuteSettingsActionAsync("logout", default);
         await plugin.DeactivateAsync(); await plugin.ActivateAsync(host);
         Assert.False(plugin.HasChatGptCredentials); Assert.True(plugin.IsConfigured);
@@ -184,7 +184,7 @@ public partial class OpenAiPluginTests
         try
         {
             System.Globalization.CultureInfo.CurrentUICulture = new("de-DE");
-            using var plugin = new OpenAiPlugin(); await plugin.ActivateAsync(new TestPluginHostServices());
+            using var plugin = CreateOfflinePlugin(); await plugin.ActivateAsync(new TestPluginHostServices());
             Assert.Contains("Wörterbuchbegriffe", plugin.TextSettings.Single(f => f.Id == "transcriptionContext").Description);
             Assert.Equal("Verzögerung der Live-Transkription", plugin.TextSettings.Single(f => f.Id == "liveDelay").Title);
             await plugin.SaveTextSettingAsync("authMode", "chatgpt", default);
@@ -196,7 +196,7 @@ public partial class OpenAiPluginTests
     [Fact]
     public async Task ConnectionSectionComesFirstAndSwitchingMethodsExposesLoginBesideIt()
     {
-        using var plugin = new OpenAiPlugin(); await plugin.ActivateAsync(new TestPluginHostServices());
+        using var plugin = CreateOfflinePlugin(); await plugin.ActivateAsync(new TestPluginHostServices());
         var connection = plugin.TextSettings.First();
         Assert.Equal("authMode", connection.Id); Assert.True(connection.SaveChoiceOnChange);
         Assert.Equal(PluginSettingsSection.Connection, connection.Section);

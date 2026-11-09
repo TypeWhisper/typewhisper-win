@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json;
 using TypeWhisper.Plugin.OpenRouter;
 
 namespace TypeWhisper.PluginSystem.Tests;
@@ -8,7 +9,7 @@ public partial class OpenRouterPluginTests
     [Fact]
     public async Task OneSaveCommitsAllFieldsAndReplacementKeyAcrossRestart()
     {
-        var host = new TestPluginHostServices(); using var plugin = new OpenRouterPlugin();
+        var host = new TestPluginHostServices(); using var plugin = CreateOfflinePlugin();
         await plugin.ActivateAsync(host); await plugin.SetApiKeyAsync("previous");
         var before = host.SettingWrites;
         await plugin.SaveProfileSettingsAsync("openrouter", new Dictionary<string, string>
@@ -33,7 +34,7 @@ public partial class OpenRouterPluginTests
     [Fact]
     public async Task FailedCommitDoesNotActivateStagedKeyOrPartialFields()
     {
-        var host = new TestPluginHostServices(); using var plugin = new OpenRouterPlugin();
+        var host = new TestPluginHostServices(); using var plugin = CreateOfflinePlugin();
         await plugin.ActivateAsync(host); await plugin.SetApiKeyAsync("previous");
         host.FailSettings = true;
         await Assert.ThrowsAsync<IOException>(() => plugin.SaveProfileSettingsAsync("openrouter", new Dictionary<string, string>
@@ -48,7 +49,7 @@ public partial class OpenRouterPluginTests
     [Fact]
     public async Task InvalidBatchRejectsEverythingBeforeWriting()
     {
-        var host = new TestPluginHostServices(); using var plugin = new OpenRouterPlugin();
+        var host = new TestPluginHostServices(); using var plugin = CreateOfflinePlugin();
         await plugin.ActivateAsync(host); var before = host.SettingWrites;
         await Assert.ThrowsAsync<ArgumentException>(() => plugin.SaveProfileSettingsAsync("openrouter", new Dictionary<string, string>
         { ["llmTemperatureMode"] = "custom", ["llmTemperatureValue"] = "NaN" }, "replacement", default));
@@ -107,7 +108,7 @@ public partial class OpenRouterPluginTests
     }
 
     [Fact]
-    public async Task ActivationRepairsAndPersistsInvalidSelectionsOnlyOnce()
+    public async Task ActivationRepairsInvalidSelectionsWithoutOverwritingThem()
     {
         var host = new TestPluginHostServices();
         host.SetSetting("configuration", new
@@ -120,13 +121,17 @@ public partial class OpenRouterPluginTests
         });
         await host.StoreSecretAsync("saved-key", "fixture-key");
         var writes = host.SettingWrites;
-        using var plugin = new OpenRouterPlugin(); await plugin.ActivateAsync(host);
+        using var plugin = CreateOfflinePlugin(); await plugin.ActivateAsync(host);
         Assert.Equal("provider/speech", plugin.SelectedModelId);
         Assert.Equal(OpenRouterPlugin.DefaultLlmModelId, plugin.SelectedLlmModelId);
         Assert.Equal("fixture-key", plugin.ApiKey); Assert.Equal(0.7, plugin.TemperatureValue);
-        Assert.Equal(writes + 1, host.SettingWrites);
+        // Activation resolves the selections in memory; the saved models apply again once a list offers them.
+        Assert.Equal(writes, host.SettingWrites);
+        var saved = host.GetSetting<JsonElement>("configuration");
+        Assert.Equal("removed/speech", saved.GetProperty("SpeechModel").GetString());
+        Assert.Equal("removed/text", saved.GetProperty("TextModel").GetString());
         await plugin.DeactivateAsync(); await plugin.ActivateAsync(host);
-        Assert.Equal(writes + 1, host.SettingWrites);
+        Assert.Equal(writes, host.SettingWrites);
         Assert.Equal("provider/speech", plugin.SelectedModelId);
         Assert.Equal(OpenRouterPlugin.DefaultLlmModelId, plugin.SelectedLlmModelId);
     }
@@ -134,7 +139,7 @@ public partial class OpenRouterPluginTests
     [Fact]
     public async Task EmptyReplacementFieldKeepsKeyUntilExplicitRemoval()
     {
-        var host = new TestPluginHostServices(); using var plugin = new OpenRouterPlugin();
+        var host = new TestPluginHostServices(); using var plugin = CreateOfflinePlugin();
         await plugin.ActivateAsync(host); await plugin.SetApiKeyAsync("saved-key");
         await plugin.SaveProfileSettingsAsync("openrouter", new Dictionary<string, string>(), "", default);
         Assert.Equal("saved-key", plugin.ApiKey); Assert.Single(host.Secrets);

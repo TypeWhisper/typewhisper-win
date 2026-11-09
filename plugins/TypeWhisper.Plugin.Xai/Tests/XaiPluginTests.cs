@@ -3,19 +3,20 @@ using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
+using PortableMigration.Tests;
 using TypeWhisper.Plugin.Xai;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.PluginSystem.Tests;
 
-public class XaiPluginTests
+public partial class XaiPluginTests
 {
     [Fact]
     public void PluginVersion_MatchesManifestVersion()
     {
         var manifest = LoadManifest();
-        var sut = new XaiPlugin();
+        var sut = CreateOfflinePlugin();
 
         Assert.Equal(manifest.GetProperty("version").GetString(), sut.PluginVersion);
     }
@@ -39,7 +40,7 @@ public class XaiPluginTests
         var host = new TestPluginHostServices();
         host.Secrets["api-key"] = "xai-key";
 
-        var sut = new XaiPlugin();
+        var sut = CreateOfflinePlugin();
         await sut.ActivateAsync(host);
 
         Assert.Equal("com.typewhisper.xai", sut.PluginId);
@@ -63,7 +64,7 @@ public class XaiPluginTests
     public async Task SetApiKeyAsync_NotifiesOnlyWhenConfigurationStateChanges()
     {
         var host = new TestPluginHostServices();
-        var sut = new XaiPlugin();
+        var sut = CreateOfflinePlugin();
         await sut.ActivateAsync(host);
 
         await sut.SetApiKeyAsync("xai-key");
@@ -79,7 +80,7 @@ public class XaiPluginTests
     {
         var host = new TestPluginHostServices();
         host.Secrets["api-key"] = "first-account";
-        using var sut = new XaiPlugin();
+        using var sut = CreateOfflinePlugin();
         await sut.ActivateAsync(host);
         sut.SetFetchedLlmModels([new("grok-first-only", "first")]);
         sut.SetFetchedVoices([new("first-only", "First", "en")]);
@@ -92,13 +93,13 @@ public class XaiPluginTests
         Assert.DoesNotContain(sut.AvailableVoices, voice => voice.Id == "first-only");
         Assert.Equal("grok-4.3", sut.SelectedLlmModelId);
         Assert.Equal("eve", sut.SelectedVoiceId);
-        using var reopened = new XaiPlugin();
+        using var reopened = CreateOfflinePlugin();
         await reopened.ActivateAsync(host);
         Assert.DoesNotContain(reopened.SupportedModels, model => model.Id == "grok-first-only");
         Assert.DoesNotContain(reopened.AvailableVoices, voice => voice.Id == "first-only");
 
         sut.SetFetchedLlmModels([new("grok-second-only", "second")]);
-        using var reopenedAgain = new XaiPlugin();
+        using var reopenedAgain = CreateOfflinePlugin();
         await reopenedAgain.ActivateAsync(host);
         Assert.Contains(reopenedAgain.SupportedModels, model => model.Id == "grok-second-only");
         Assert.DoesNotContain(reopenedAgain.AvailableVoices, voice => voice.Id == "first-only");
@@ -241,7 +242,7 @@ public class XaiPluginTests
     {
         var host = new TestPluginHostServices();
         host.Secrets["api-key"] = "xai-key";
-        var sut = new XaiPlugin();
+        var sut = CreateOfflinePlugin();
         await sut.ActivateAsync(host);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -404,6 +405,8 @@ public class XaiPluginTests
         Assert.False(playbackStarted);
     }
 
+    private static XaiPlugin CreateOfflinePlugin() => new(new HttpClient(new OfflineHandler()));
+
     private static JsonElement LoadManifest()
     {
         var basePath = Path.GetFullPath(AppContext.BaseDirectory);
@@ -446,10 +449,13 @@ public class XaiPluginTests
         public Dictionary<string, string?> Secrets { get; } = [];
         public int NotifyCapabilitiesChangedCount { get; private set; }
 
-        public Task StoreSecretAsync(string key, string value)
+        /// <summary>Runs before a secret is stored, so a test can hold a key change inside its secret write.</summary>
+        public Func<Task>? BeforeStoreSecret { get; set; }
+
+        public async Task StoreSecretAsync(string key, string value)
         {
+            if (BeforeStoreSecret is { } before) await before();
             Secrets[key] = value;
-            return Task.CompletedTask;
         }
 
         public Task<string?> LoadSecretAsync(string key) =>
@@ -474,7 +480,11 @@ public class XaiPluginTests
         public string? ActiveAppName => null;
         public IPluginEventBus EventBus { get; } = new TestPluginEventBus();
         public IReadOnlyList<string> AvailableProfileNames => [];
-        public void Log(PluginLogLevel level, string message) { }
+        public List<string> Warnings { get; } = [];
+        public void Log(PluginLogLevel level, string message)
+        {
+            if (level == PluginLogLevel.Warning) lock (Warnings) Warnings.Add(message);
+        }
         public void NotifyCapabilitiesChanged() => NotifyCapabilitiesChangedCount++;
         public IPluginLocalization Localization { get; } = new TestPluginLocalization();
     }

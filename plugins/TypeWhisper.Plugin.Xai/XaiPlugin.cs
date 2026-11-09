@@ -25,6 +25,8 @@ public sealed partial class XaiPlugin : ITranscriptionEnginePlugin, ILlmProvider
     private const string FetchedVoicesSettingName = "fetchedVoices";
     private const string LlmCatalogKeyFingerprintSettingName = "llmCatalogKeyFingerprint";
     private const string VoiceCatalogKeyFingerprintSettingName = "voiceCatalogKeyFingerprint";
+    private const string FetchedLlmModelsAtSettingName = "fetchedLlmModelsAtUtc";
+    private const string FetchedVoicesAtSettingName = "fetchedVoicesAtUtc";
     private const long MaximumSpeechAudioBytes = 64L * 1024 * 1024;
     private const string CustomVoiceIdSettingName = "customVoiceId";
     private const string TtsLowLatencySettingName = "ttsLowLatency";
@@ -58,13 +60,25 @@ public sealed partial class XaiPlugin : ITranscriptionEnginePlugin, ILlmProvider
     private readonly Func<string, string?, string, IReadOnlyList<string>, CancellationToken, Task<IStreamingSession>> _connectStreaming;
     private readonly bool _usePortablePlayback;
     private readonly Func<byte[], ITtsPlaybackSession> _ttsPlaybackFactory;
+    private readonly ModelCatalogAutoRefresh _catalogRefresh;
+    // Guards the key, the catalogs and the selections against a refresh that finishes on another thread.
+    private readonly object _catalogLock = new();
+    // Bumped on a key change and on deactivation, so a refresh started before either is dropped.
+    private int _catalogVersion;
+    // Set while a key change writes the secret. The old key is still set then, so no background refresh starts.
+    private bool _keyChangePending;
     private IPluginHostServices? _host;
     private string? _apiKey;
     private string? _selectedModelId;
+    // The saved choices. A list that lacks one uses the default in memory and keeps the saved value.
+    private string? _preferredLlmModelId;
+    private string? _preferredVoiceId;
     private string? _selectedLlmModelId;
     private List<XaiFetchedModel> _fetchedLlmModels = [];
+    private DateTimeOffset? _fetchedLlmModelsAt;
     private string? _selectedVoiceId;
     private List<XaiFetchedVoice> _fetchedVoices = [];
+    private DateTimeOffset? _fetchedVoicesAt;
     private string _customVoiceId = "";
     private bool _ttsLowLatency;
     private bool _ttsTextNormalization;
@@ -73,14 +87,16 @@ public sealed partial class XaiPlugin : ITranscriptionEnginePlugin, ILlmProvider
     /// Initializes a new instance of the XaiPlugin class.
     /// </summary>
     public XaiPlugin()
-        : this(CreateHttpClient())
+        : this(CreateHttpClient(), refreshCatalogsAutomatically: ModelCatalogAutoRefresh.AllowedInThisProcess)
     {
     }
 
     internal XaiPlugin(HttpClient httpClient, Func<byte[], ITtsPlaybackSession>? ttsPlaybackFactory = null,
-        Func<string, string?, string, IReadOnlyList<string>, CancellationToken, Task<IStreamingSession>>? connectStreaming = null)
+        Func<string, string?, string, IReadOnlyList<string>, CancellationToken, Task<IStreamingSession>>? connectStreaming = null,
+        bool refreshCatalogsAutomatically = false, TimeProvider? clock = null)
     {
         _httpClient = httpClient;
+        _catalogRefresh = new ModelCatalogAutoRefresh(refreshCatalogsAutomatically, clock);
         _httpClient.MaxResponseContentBufferSize = Math.Min(_httpClient.MaxResponseContentBufferSize, MaximumSpeechAudioBytes);
         _connectStreaming = connectStreaming ?? (async (key, language, model, terms, ct) =>
             await XaiStreamingSession.ConnectAsync(key, language, ct, model: model, terms: terms));
@@ -103,7 +119,7 @@ public sealed partial class XaiPlugin : ITranscriptionEnginePlugin, ILlmProvider
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.3.3";
+    public string PluginVersion => "1.4.0";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
@@ -113,23 +129,33 @@ public sealed partial class XaiPlugin : ITranscriptionEnginePlugin, ILlmProvider
         _host = host;
         _apiKey = NormalizeApiKey(await host.LoadSecretAsync(ApiKeySecretName));
         _selectedModelId = NormalizeSttModelId(host.GetSetting<string>(SelectedModelSettingName));
-        _selectedLlmModelId = host.GetSetting<string>(SelectedLlmModelSettingName) ?? DefaultLlmModelId;
-        _fetchedLlmModels = string.Equals(
-            host.GetSetting<string>(LlmCatalogKeyFingerprintSettingName), CatalogKeyFingerprint(), StringComparison.Ordinal)
+        _preferredLlmModelId = host.GetSetting<string>(SelectedLlmModelSettingName);
+        var fingerprint = CatalogKeyFingerprint(_apiKey);
+        // A list fetched with another key belongs to another account. Lists saved before 1.4.0 have no
+        // fetch date; they stay until the refresh replaces them.
+        var llmCatalogMatches = string.Equals(
+            host.GetSetting<string>(LlmCatalogKeyFingerprintSettingName), fingerprint, StringComparison.Ordinal);
+        _fetchedLlmModels = llmCatalogMatches
             ? NormalizeFetchedLlmModels(host.GetSetting<List<XaiFetchedModel>>(FetchedLlmModelsSettingName) ?? [])
             : [];
-        _selectedVoiceId = NormalizeVoiceId(host.GetSetting<string>(SelectedVoiceSettingName));
-        _fetchedVoices = string.Equals(
-            host.GetSetting<string>(VoiceCatalogKeyFingerprintSettingName), CatalogKeyFingerprint(), StringComparison.Ordinal)
+        _fetchedLlmModelsAt = llmCatalogMatches ? LoadFetchedAt(host, FetchedLlmModelsAtSettingName) : null;
+        _preferredVoiceId = NormalizeVoiceId(host.GetSetting<string>(SelectedVoiceSettingName));
+        var voiceCatalogMatches = string.Equals(
+            host.GetSetting<string>(VoiceCatalogKeyFingerprintSettingName), fingerprint, StringComparison.Ordinal);
+        _fetchedVoices = voiceCatalogMatches
             ? NormalizeFetchedVoices(host.GetSetting<List<XaiFetchedVoice>>(FetchedVoicesSettingName) ?? [])
             : [];
+        _fetchedVoicesAt = voiceCatalogMatches ? LoadFetchedAt(host, FetchedVoicesAtSettingName) : null;
         _customVoiceId = host.GetSetting<string>(CustomVoiceIdSettingName)?.Trim() ?? "";
         _ttsLowLatency = host.GetSetting<bool?>(TtsLowLatencySettingName) ?? false;
         _ttsTextNormalization = host.GetSetting<bool?>(TtsTextNormalizationSettingName) ?? false;
 
-        NormalizeSelectedLlmModel(persist: false);
-        NormalizeSelectedVoice(persist: false);
+        ResolveSelectedLlmModel();
+        ResolveSelectedVoice();
         host.Log(PluginLogLevel.Info, $"Activated (configured={IsConfigured})");
+        StartCatalogRefreshIfStale();
+        // The app can run for days without activating the plugin again.
+        _catalogRefresh.StartRechecks(StartCatalogRefreshIfStale);
     }
 
     /// <summary>
@@ -137,7 +163,14 @@ public sealed partial class XaiPlugin : ITranscriptionEnginePlugin, ILlmProvider
     /// </summary>
     public Task DeactivateAsync()
     {
-        _host = null;
+        lock (_catalogLock)
+        {
+            _catalogVersion++;
+            _host = null;
+        }
+
+        _catalogRefresh.StopRechecks();
+        _catalogRefresh.Cancel();
         return Task.CompletedTask;
     }
 
@@ -336,8 +369,13 @@ public sealed partial class XaiPlugin : ITranscriptionEnginePlugin, ILlmProvider
     /// </summary>
     public void SelectVoice(string? voiceId)
     {
-        _host?.SetSetting(SelectedVoiceSettingName, NormalizeVoiceId(voiceId));
-        _selectedVoiceId = NormalizeVoiceId(voiceId);
+        lock (_catalogLock)
+        {
+            _host?.SetSetting(SelectedVoiceSettingName, NormalizeVoiceId(voiceId));
+            _preferredVoiceId = NormalizeVoiceId(voiceId);
+            _selectedVoiceId = _preferredVoiceId;
+        }
+
         _host?.NotifyCapabilitiesChanged();
     }
 
@@ -382,6 +420,9 @@ public sealed partial class XaiPlugin : ITranscriptionEnginePlugin, ILlmProvider
     internal string? SelectedLlmModelId => _selectedLlmModelId;
     internal IReadOnlyList<XaiFetchedModel> FetchedLlmModels => _fetchedLlmModels;
     internal IReadOnlyList<XaiFetchedVoice> FetchedVoices => _fetchedVoices;
+    internal DateTimeOffset? FetchedLlmModelsAt => _fetchedLlmModelsAt;
+    internal DateTimeOffset? FetchedVoicesAt => _fetchedVoicesAt;
+    internal Task CatalogRefreshTask => _catalogRefresh.Current;
     internal string CustomVoiceId => _customVoiceId;
     internal bool TtsLowLatency => _ttsLowLatency;
     internal bool TtsTextNormalization => _ttsTextNormalization;
@@ -390,51 +431,150 @@ public sealed partial class XaiPlugin : ITranscriptionEnginePlugin, ILlmProvider
     {
         var normalized = NormalizeApiKey(apiKey);
         var changed = !string.Equals(_apiKey, normalized, StringComparison.Ordinal);
-
-        if (_host is not null)
-        {
-            if (normalized is null)
-                await _host.DeleteSecretAsync(ApiKeySecretName);
-            else
-                await _host.StoreSecretAsync(ApiKeySecretName, normalized);
-        }
-        _apiKey = normalized;
         if (changed)
         {
-            _fetchedLlmModels = [];
-            _fetchedVoices = [];
-            NormalizeSelectedLlmModel(persist: false);
-            NormalizeSelectedVoice(persist: false);
+            // The lists belong to the old account, and a refresh still running for it must not land. Until the new
+            // key is in place, no background refresh may start either: it would still send the old key.
+            lock (_catalogLock) { _catalogVersion++; _keyChangePending = true; }
+            _catalogRefresh.Cancel();
+        }
+
+        try
+        {
+            if (_host is not null)
+            {
+                if (normalized is null)
+                    await _host.DeleteSecretAsync(ApiKeySecretName);
+                else
+                    await _host.StoreSecretAsync(ApiKeySecretName, normalized);
+            }
+
+            lock (_catalogLock)
+            {
+                _apiKey = normalized;
+                if (changed)
+                {
+                    // A refresh button pressed during the secret write captured the old key with the new version.
+                    _catalogVersion++;
+                    _fetchedLlmModels = [];
+                    _fetchedVoices = [];
+                    _fetchedLlmModelsAt = _fetchedVoicesAt = null;
+                    ResolveSelectedLlmModel();
+                    ResolveSelectedVoice();
+                }
+            }
+        }
+        finally
+        {
+            // Also after a failed write, so later refreshes can start again.
+            if (changed) lock (_catalogLock) _keyChangePending = false;
+        }
+
+        if (changed)
+        {
             _host?.NotifyCapabilitiesChanged();
+            StartCatalogRefreshIfStale();
         }
     }
 
     internal void SelectLlmModel(string modelId)
     {
-        if (SupportedModels.All(model => !string.Equals(model.Id, modelId, StringComparison.Ordinal)))
-            modelId = SupportedModels.FirstOrDefault()?.Id ?? modelId;
+        lock (_catalogLock)
+        {
+            if (SupportedModels.All(model => !string.Equals(model.Id, modelId, StringComparison.Ordinal)))
+                modelId = SupportedModels.FirstOrDefault()?.Id ?? modelId;
 
-        _host?.SetSetting(SelectedLlmModelSettingName, modelId);
-        _selectedLlmModelId = modelId;
+            _host?.SetSetting(SelectedLlmModelSettingName, modelId);
+            _preferredLlmModelId = modelId;
+            _selectedLlmModelId = modelId;
+        }
+
         _host?.NotifyCapabilitiesChanged();
+    }
+
+    // The buttons supersede a background refresh, which would otherwise land after them. The background refresh
+    // covers both lists, so it starts again afterwards for whatever is still due, also when the button failed.
+    private async Task RefreshLlmModelsNowAsync(CancellationToken ct)
+    {
+        var (apiKey, version) = CaptureConnection();
+        _catalogRefresh.Cancel();
+        try
+        {
+            var models = await FetchLlmModelsAsync(apiKey, ct);
+            if (models.Count == 0 || !ApplyIfCurrent(version, host => ApplyLlmModels(host, models, apiKey, _catalogRefresh.UtcNow)))
+                throw new InvalidOperationException("No models returned; previous catalog retained.");
+        }
+        finally
+        {
+            StartCatalogRefreshIfStale();
+        }
+    }
+
+    private async Task RefreshVoicesNowAsync(CancellationToken ct)
+    {
+        var (apiKey, version) = CaptureConnection();
+        _catalogRefresh.Cancel();
+        try
+        {
+            var voices = await FetchVoicesAsync(apiKey, ct);
+            if (voices.Count == 0 || !ApplyIfCurrent(version, host => ApplyVoices(host, voices, apiKey, _catalogRefresh.UtcNow)))
+                throw new InvalidOperationException("No voices returned; previous catalog retained.");
+        }
+        finally
+        {
+            StartCatalogRefreshIfStale();
+        }
+    }
+
+    private (string ApiKey, int Version) CaptureConnection()
+    {
+        lock (_catalogLock)
+            return (_apiKey ?? throw new InvalidOperationException("Store an API key first."), _catalogVersion);
+    }
+
+    // Applies a list fetched for the given connection, unless the key changed or the plugin deactivated meanwhile.
+    private bool ApplyIfCurrent(int version, Action<IPluginHostServices> apply)
+    {
+        IPluginHostServices host;
+        lock (_catalogLock)
+        {
+            if (version != _catalogVersion || _host is null)
+                return false;
+            host = _host;
+            apply(host);
+        }
+
+        host.NotifyCapabilitiesChanged();
+        return true;
     }
 
     internal void SetFetchedLlmModels(List<XaiFetchedModel> models)
     {
-        _host?.SetSetting(FetchedLlmModelsSettingName, NormalizeFetchedLlmModels(models));
-        _host?.SetSetting(LlmCatalogKeyFingerprintSettingName, CatalogKeyFingerprint());
-        _fetchedLlmModels = NormalizeFetchedLlmModels(models);
-        NormalizeSelectedLlmModel(persist: true);
+        lock (_catalogLock)
+            ApplyLlmModels(_host, models, _apiKey, _catalogRefresh.UtcNow);
         _host?.NotifyCapabilitiesChanged();
     }
 
-    internal async Task<List<XaiFetchedModel>> FetchLlmModelsAsync(CancellationToken ct = default)
+    // The fingerprint is taken from the key the list was fetched with, not the key at write time,
+    // so a list fetched before a key change can never be saved under the new key.
+    private void ApplyLlmModels(IPluginHostServices? host, IEnumerable<XaiFetchedModel> models, string? apiKey, DateTimeOffset fetchedAt)
     {
-        if (!IsConfigured)
-            return [];
+        var normalized = NormalizeFetchedLlmModels(models);
+        host?.SetSetting(FetchedLlmModelsSettingName, normalized);
+        host?.SetSetting(LlmCatalogKeyFingerprintSettingName, CatalogKeyFingerprint(apiKey));
+        host?.SetSetting<DateTimeOffset?>(FetchedLlmModelsAtSettingName, fetchedAt);
+        _fetchedLlmModels = normalized;
+        _fetchedLlmModelsAt = fetchedAt;
+        ResolveSelectedLlmModel();
+    }
 
+    internal Task<List<XaiFetchedModel>> FetchLlmModelsAsync(CancellationToken ct = default) =>
+        _apiKey is { } apiKey ? FetchLlmModelsAsync(apiKey, ct) : Task.FromResult(new List<XaiFetchedModel>());
+
+    private async Task<List<XaiFetchedModel>> FetchLlmModelsAsync(string apiKey, CancellationToken ct)
+    {
         using var request = new HttpRequestMessage(HttpMethod.Get, $"{BaseUrl}/v1/models");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
 
         try
         {
@@ -488,20 +628,29 @@ public sealed partial class XaiPlugin : ITranscriptionEnginePlugin, ILlmProvider
 
     internal void SetFetchedVoices(List<XaiFetchedVoice> voices)
     {
-        _host?.SetSetting(FetchedVoicesSettingName, NormalizeFetchedVoices(voices));
-        _host?.SetSetting(VoiceCatalogKeyFingerprintSettingName, CatalogKeyFingerprint());
-        _fetchedVoices = NormalizeFetchedVoices(voices);
-        NormalizeSelectedVoice(persist: true);
+        lock (_catalogLock)
+            ApplyVoices(_host, voices, _apiKey, _catalogRefresh.UtcNow);
         _host?.NotifyCapabilitiesChanged();
     }
 
-    internal async Task<List<XaiFetchedVoice>> FetchVoicesAsync(CancellationToken ct = default)
+    private void ApplyVoices(IPluginHostServices? host, IEnumerable<XaiFetchedVoice> voices, string? apiKey, DateTimeOffset fetchedAt)
     {
-        if (!IsConfigured)
-            return [];
+        var normalized = NormalizeFetchedVoices(voices);
+        host?.SetSetting(FetchedVoicesSettingName, normalized);
+        host?.SetSetting(VoiceCatalogKeyFingerprintSettingName, CatalogKeyFingerprint(apiKey));
+        host?.SetSetting<DateTimeOffset?>(FetchedVoicesAtSettingName, fetchedAt);
+        _fetchedVoices = normalized;
+        _fetchedVoicesAt = fetchedAt;
+        ResolveSelectedVoice();
+    }
 
+    internal Task<List<XaiFetchedVoice>> FetchVoicesAsync(CancellationToken ct = default) =>
+        _apiKey is { } apiKey ? FetchVoicesAsync(apiKey, ct) : Task.FromResult(new List<XaiFetchedVoice>());
+
+    private async Task<List<XaiFetchedVoice>> FetchVoicesAsync(string apiKey, CancellationToken ct)
+    {
         using var request = new HttpRequestMessage(HttpMethod.Get, $"{BaseUrl}/v1/tts/voices");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
 
         try
         {
@@ -610,41 +759,107 @@ public sealed partial class XaiPlugin : ITranscriptionEnginePlugin, ILlmProvider
         return !excluded.Any(lowered.Contains);
     }
 
-    private void NormalizeSelectedLlmModel(bool persist)
+    /// <summary>
+    /// Uses the saved model only while the current list offers it, so a retired model falls back to
+    /// Grok's default instead of failing every request with HTTP 404. A fetched list is sorted by ID, so
+    /// its first entry is not a sensible default. The saved value stays and applies again once a later
+    /// list offers it.
+    /// </summary>
+    private void ResolveSelectedLlmModel()
     {
         var available = SupportedModels;
-        if (available.Count == 0)
-            return;
-
-        if (_selectedLlmModelId is null
-            || available.All(model => !string.Equals(model.Id, _selectedLlmModelId, StringComparison.Ordinal)))
-        {
-            _selectedLlmModelId = available.First().Id;
-            if (persist)
-                _host?.SetSetting(SelectedLlmModelSettingName, _selectedLlmModelId);
-        }
+        _selectedLlmModelId =
+            available.FirstOrDefault(model => string.Equals(model.Id, _preferredLlmModelId, StringComparison.Ordinal))?.Id
+            ?? available.FirstOrDefault(model => string.Equals(model.Id, DefaultLlmModelId, StringComparison.Ordinal))?.Id
+            ?? available.FirstOrDefault()?.Id
+            ?? _preferredLlmModelId;
     }
 
-    private void NormalizeSelectedVoice(bool persist)
+    // The same rule for voices. A custom voice ID still overrides the result.
+    private void ResolveSelectedVoice()
     {
         var available = AvailableVoices;
-        if (available.Count == 0)
-            return;
+        _selectedVoiceId =
+            available.FirstOrDefault(voice => string.Equals(voice.Id, _preferredVoiceId, StringComparison.Ordinal))?.Id
+            ?? available.FirstOrDefault(voice => string.Equals(voice.Id, XaiTtsConfiguration.DefaultVoiceId, StringComparison.Ordinal))?.Id
+            ?? available.FirstOrDefault()?.Id
+            ?? _preferredVoiceId;
+    }
 
-        if (_selectedVoiceId is null
-            || available.All(voice => !string.Equals(voice.Id, _selectedVoiceId, StringComparison.Ordinal)))
+    /// <summary>
+    /// A list that only refreshes on request keeps offering retired models and voices. Reloading it once
+    /// a day drops them instead of failing every request with HTTP 404. Each list keeps its own fetch date.
+    /// The hourly recheck calls this on a timer thread, so it reads its state only under the lock.
+    /// </summary>
+    private void StartCatalogRefreshIfStale()
+    {
+        string apiKey;
+        int version;
+        bool models, voices;
+        lock (_catalogLock)
         {
-            _selectedVoiceId = available.First().Id;
-            if (persist)
-                _host?.SetSetting(SelectedVoiceSettingName, _selectedVoiceId);
+            // While a key change writes the secret, the old key is still set. The key change refreshes afterwards.
+            if (_host is null || _keyChangePending || _apiKey is not { } key)
+                return;
+            models = _catalogRefresh.IsStale(_fetchedLlmModelsAt);
+            voices = _catalogRefresh.IsStale(_fetchedVoicesAt);
+            if (!models && !voices)
+                return;
+            (apiKey, version) = (key, _catalogVersion);
+        }
+
+        _catalogRefresh.Start(
+            ct => RefreshCatalogsInBackgroundAsync(apiKey, version, models, voices, ct),
+            error => _host?.Log(PluginLogLevel.Warning, $"xAI catalog refresh failed: {error.GetType().Name}"));
+    }
+
+    private async Task RefreshCatalogsInBackgroundAsync(string apiKey, int version, bool models, bool voices, CancellationToken ct)
+    {
+        var llmModels = models ? await FetchLlmModelsAsync(apiKey, ct) : [];
+        var fetchedVoices = voices ? await FetchVoicesAsync(apiKey, ct) : [];
+        IPluginHostServices host;
+        lock (_catalogLock)
+        {
+            // A result that arrives after deactivation or a key change belongs to an old connection.
+            if (ct.IsCancellationRequested || version != _catalogVersion || _host is null)
+                return;
+            host = _host;
+            // An empty answer keeps the current list; the fetch already swallowed the reason.
+            if (models && llmModels.Count == 0)
+                host.Log(PluginLogLevel.Warning, "xAI returned no usable model list. Keeping the current list.");
+            if (voices && fetchedVoices.Count == 0)
+                host.Log(PluginLogLevel.Warning, "xAI returned no usable voice list. Keeping the current list.");
+            if (llmModels.Count == 0 && fetchedVoices.Count == 0)
+                return;
+
+            var fetchedAt = _catalogRefresh.UtcNow;
+            if (llmModels.Count > 0)
+                ApplyLlmModels(host, llmModels, apiKey, fetchedAt);
+            if (fetchedVoices.Count > 0)
+                ApplyVoices(host, fetchedVoices, apiKey, fetchedAt);
+        }
+
+        host.NotifyCapabilitiesChanged();
+    }
+
+    private static DateTimeOffset? LoadFetchedAt(IPluginHostServices host, string settingName)
+    {
+        try
+        {
+            return host.GetSetting<DateTimeOffset?>(settingName)?.ToUniversalTime();
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException)
+        {
+            // A damaged date reads as "no date", which refreshes the list.
+            return null;
         }
     }
 
     private static string? NormalizeApiKey(string? apiKey) =>
         string.IsNullOrWhiteSpace(apiKey) ? null : apiKey.Trim();
 
-    private string CatalogKeyFingerprint() =>
-        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(_apiKey ?? "")));
+    private static string CatalogKeyFingerprint(string? apiKey) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(apiKey ?? "")));
 
     private static string NormalizeSttModelId(string? modelId) =>
         SttModels.Any(model => model.Id == modelId) ? modelId! : DefaultSttModelId;
@@ -700,6 +915,7 @@ public sealed partial class XaiPlugin : ITranscriptionEnginePlugin, ILlmProvider
     /// </summary>
     public void Dispose()
     {
+        _catalogRefresh.Dispose();
         _httpClient.Dispose();
     }
 }
