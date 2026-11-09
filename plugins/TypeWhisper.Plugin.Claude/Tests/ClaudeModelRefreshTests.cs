@@ -1,6 +1,8 @@
 using System.Net;
 using System.Text.Json;
+using PortableMigration.Tests;
 using TypeWhisper.Plugin.Claude;
+using TypeWhisper.Plugin.Shared;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
 
@@ -20,10 +22,11 @@ public partial class ClaudeTests
     {
         private int _count;
         public int Count => Volatile.Read(ref _count);
-        public void Add() => Interlocked.Increment(ref _count);
+        /// <summary>Returns the number of this request, starting at 1.</summary>
+        public int Add() => Interlocked.Increment(ref _count);
     }
 
-    private static ClaudePlugin RefreshingPlugin(TestClock clock,
+    private static ClaudePlugin RefreshingPlugin(TimeProvider clock,
         Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> send) =>
         new(new HttpClient(new Handler(send)), refreshModelsAutomatically: true, clock: clock);
 
@@ -398,5 +401,109 @@ public partial class ClaudeTests
         Assert.Equal(0, requests.Count);
         Assert.Equal(Now, restarted.ModelsFetchedAt);
         Assert.Equal(["claude-new", "claude-sonnet-5"], restarted.SupportedModels.Select(m => m.Id));
+    }
+
+    [Fact]
+    public async Task HourlyRecheckReloadsAListThatAgesWhileThePluginStaysActive()
+    {
+        var clock = new RecheckTestClock(Now);
+        var requests = new RequestLog();
+        using var plugin = RefreshingPlugin(clock, (request, _) =>
+        {
+            requests.Add();
+            Assert.Equal("saved-key", request.Headers.GetValues("x-api-key").Single());
+            return Task.FromResult(Json(NewCatalog));
+        });
+        var host = new TestPluginHostServices();
+        SeedConfiguration(host, ["claude-current"], Now);
+
+        await plugin.ActivateAsync(host);
+        await plugin.ModelRefreshTask;
+        Assert.Equal(0, requests.Count);
+        Assert.Equal(1, clock.ActiveTimers);
+
+        clock.Advance(TimeSpan.FromHours(24));
+        await plugin.ModelRefreshTask;
+
+        Assert.Equal(1, requests.Count);
+        Assert.Equal(["claude-new", "claude-sonnet-5"], SavedModels(host));
+        Assert.Equal(Now.AddHours(24), SavedFetchDate(host));
+        Assert.Equal(Now.AddHours(24), plugin.ModelsFetchedAt);
+        Assert.Contains(plugin.SupportedModels, m => m.Id == "claude-new");
+
+        // The new date counts from now, so the next check leaves the list alone.
+        clock.Advance(ModelCatalogAutoRefresh.RecheckInterval);
+        await plugin.ModelRefreshTask;
+        Assert.Equal(1, requests.Count);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DeactivationOrDisposalStopsTheHourlyRecheck(bool dispose)
+    {
+        var clock = new RecheckTestClock(Now);
+        var requests = new RequestLog();
+        var plugin = RefreshingPlugin(clock, (_, _) => { requests.Add(); return Task.FromResult(Json(NewCatalog)); });
+        var host = new TestPluginHostServices();
+        SeedConfiguration(host, ["claude-current"], Now);
+        await plugin.ActivateAsync(host);
+        Assert.Equal(1, clock.ActiveTimers);
+
+        if (dispose) plugin.Dispose(); else await plugin.DeactivateAsync();
+        // A live timer would keep the plugin and its assembly loaded.
+        Assert.Equal(0, clock.ActiveTimers);
+        clock.Advance(TimeSpan.FromHours(24));
+        await plugin.ModelRefreshTask;
+
+        Assert.Equal(0, requests.Count);
+        Assert.Equal(["claude-current"], SavedModels(host));
+        if (!dispose) plugin.Dispose();
+    }
+
+    [Fact]
+    public async Task HourlyRecheckRetriesAFailedRefresh()
+    {
+        var clock = new RecheckTestClock(Now);
+        var requests = new RequestLog();
+        // The first attempt fails like a PC that is still offline after startup.
+        using var plugin = RefreshingPlugin(clock, (_, _) => requests.Add() == 1
+            ? Task.FromException<HttpResponseMessage>(new HttpRequestException("offline"))
+            : Task.FromResult(Json(NewCatalog)));
+        var host = new TestPluginHostServices();
+        SeedConfiguration(host, ["claude-working"], Now.AddDays(-2));
+
+        await plugin.ActivateAsync(host);
+        await plugin.ModelRefreshTask;
+        Assert.Equal(1, requests.Count);
+        Assert.Equal(["claude-working"], SavedModels(host));
+        Assert.Single(host.Logs, log => log.Level == PluginLogLevel.Warning);
+
+        clock.Advance(ModelCatalogAutoRefresh.RecheckInterval);
+        await plugin.ModelRefreshTask;
+
+        Assert.Equal(2, requests.Count);
+        Assert.Equal(["claude-new", "claude-sonnet-5"], SavedModels(host));
+        Assert.Equal(Now + ModelCatalogAutoRefresh.RecheckInterval, SavedFetchDate(host));
+        Assert.Single(host.Logs);
+    }
+
+    [Fact]
+    public async Task HourlyRecheckStartsNothingAfterTheKeyIsRemoved()
+    {
+        var clock = new RecheckTestClock(Now);
+        var requests = new RequestLog();
+        using var plugin = RefreshingPlugin(clock, (_, _) => { requests.Add(); return Task.FromResult(Json(NewCatalog)); });
+        var host = new TestPluginHostServices();
+        SeedConfiguration(host, ["claude-current"], Now);
+        await plugin.ActivateAsync(host);
+
+        // Removing the key also discards the list, so only the missing key keeps the check from refreshing.
+        await plugin.SetApiKeyAsync("");
+        clock.Advance(TimeSpan.FromHours(24));
+        await plugin.ModelRefreshTask;
+
+        Assert.Equal(0, requests.Count);
+        Assert.Empty(SavedModels(host));
     }
 }
