@@ -6,7 +6,7 @@ public sealed class PortableKeyTests
     [Fact]
     public async Task FailedSecretMutation_KeepsPreviouslyConfiguredKey()
     {
-        using var fixture=new PortableFixture(); using var plugin=new SmallestAiPlugin();
+        using var fixture=new PortableFixture(); using var plugin=new SmallestAiPlugin(new HttpClient(new NoNetwork()));
         await plugin.ActivateAsync(fixture.Host); IApiKeyPlugin key=plugin;
         await key.SetApiKeyAsync("previous"); fixture.Secrets.FailWrites=true;
         await Assert.ThrowsAsync<IOException>(() => key.SetApiKeyAsync("replacement"));
@@ -14,5 +14,12 @@ public sealed class PortableKeyTests
         await Assert.ThrowsAsync<IOException>(() => key.SetApiKeyAsync("")); Assert.True(key.IsConfigured);
         fixture.Secrets.FailWrites=false; await key.SetApiKeyAsync(""); Assert.False(key.IsConfigured);
         await plugin.DeactivateAsync();
+    }
+
+    // The internal constructor leaves the background refresh off; any request fails the test.
+    private sealed class NoNetwork : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException($"Unexpected request to {request.RequestUri}.");
     }
 }

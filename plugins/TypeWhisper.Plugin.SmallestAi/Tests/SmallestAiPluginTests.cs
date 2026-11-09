@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.IO;
 using System.Net;
 using System.Net.Http;
@@ -9,7 +10,7 @@ using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.PluginSystem.Tests;
 
-public class SmallestAiPluginTests
+public partial class SmallestAiPluginTests
 {
     [Fact]
     public void PluginVersion_MatchesManifestVersion()
@@ -50,7 +51,7 @@ public class SmallestAiPluginTests
         var host = new TestPluginHostServices();
         host.Secrets["api-key"] = "smallest-key";
 
-        var sut = new SmallestAiPlugin();
+        var sut = CreateOfflinePlugin();
         await sut.ActivateAsync(host);
 
         Assert.Equal("com.typewhisper.smallest-ai", sut.PluginId);
@@ -73,7 +74,7 @@ public class SmallestAiPluginTests
     public async Task SetApiKeyAsync_NotifiesOnlyWhenConfigurationStateChanges()
     {
         var host = new TestPluginHostServices();
-        var sut = new SmallestAiPlugin();
+        var sut = CreateOfflinePlugin();
         await sut.ActivateAsync(host);
 
         await sut.SetApiKeyAsync(" smallest-key ");
@@ -91,7 +92,7 @@ public class SmallestAiPluginTests
         {
             SecretWriteDelay = TimeSpan.FromMilliseconds(30)
         };
-        var sut = new SmallestAiPlugin();
+        var sut = CreateOfflinePlugin();
         await sut.ActivateAsync(host);
 
         await Task.WhenAll(Enumerable.Range(0, 8)
@@ -172,7 +173,7 @@ public class SmallestAiPluginTests
     {
         var host = new TestPluginHostServices();
         host.Secrets["api-key"] = "smallest-key";
-        var sut = new SmallestAiPlugin();
+        var sut = CreateOfflinePlugin();
         await sut.ActivateAsync(host);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -273,6 +274,11 @@ public class SmallestAiPluginTests
         return doc.RootElement.Clone();
     }
 
+    // The background refresh stays off unless a test asks for it, and every request fails the test.
+    private static SmallestAiPlugin CreateOfflinePlugin(bool refreshVoices = false, TimeProvider? clock = null) =>
+        new(new HttpClient(new CapturingHandler((request, _) =>
+            throw new InvalidOperationException($"Unexpected request to {request.RequestUri}."))), refreshVoices, clock);
+
     private static HttpResponseMessage JsonResponse(string json, HttpStatusCode statusCode = HttpStatusCode.OK) =>
         new(statusCode)
         {
@@ -301,13 +307,16 @@ public class SmallestAiPluginTests
         };
 
         private readonly Dictionary<string, JsonElement> _settings = [];
+        private readonly object _settingsLock = new();
         private readonly object _secretLock = new();
+        private int _notifications;
         private int _activeSecretWrites;
         private int _maxConcurrentSecretWrites;
         public Dictionary<string, string?> Secrets { get; } = [];
         public TimeSpan SecretWriteDelay { get; init; }
         public int MaxConcurrentSecretWrites => Volatile.Read(ref _maxConcurrentSecretWrites);
-        public int NotifyCapabilitiesChangedCount { get; private set; }
+        public int NotifyCapabilitiesChangedCount => Volatile.Read(ref _notifications);
+        public ConcurrentQueue<string> Logs { get; } = new();
 
         public Task StoreSecretAsync(string key, string value) =>
             TrackSecretWriteAsync(() => Secrets[key] = value);
@@ -351,21 +360,27 @@ public class SmallestAiPluginTests
             } while (Interlocked.CompareExchange(ref _maxConcurrentSecretWrites, active, current) != current);
         }
 
-        public T? GetSetting<T>(string key) =>
-            _settings.TryGetValue(key, out var value)
-                ? value.Deserialize<T>(JsonOptions)
-                : default;
+        public T? GetSetting<T>(string key)
+        {
+            lock (_settingsLock)
+                return _settings.TryGetValue(key, out var value)
+                    ? value.Deserialize<T>(JsonOptions)
+                    : default;
+        }
 
-        public void SetSetting<T>(string key, T value) =>
-            _settings[key] = JsonSerializer.SerializeToElement(value, JsonOptions);
+        public void SetSetting<T>(string key, T value)
+        {
+            lock (_settingsLock)
+                _settings[key] = JsonSerializer.SerializeToElement(value, JsonOptions);
+        }
 
         public string PluginDataDirectory => Path.GetTempPath();
         public string? ActiveAppProcessName => null;
         public string? ActiveAppName => null;
         public IPluginEventBus EventBus { get; } = new TestPluginEventBus();
         public IReadOnlyList<string> AvailableProfileNames => [];
-        public void Log(PluginLogLevel level, string message) { }
-        public void NotifyCapabilitiesChanged() => NotifyCapabilitiesChangedCount++;
+        public void Log(PluginLogLevel level, string message) => Logs.Enqueue(message);
+        public void NotifyCapabilitiesChanged() => Interlocked.Increment(ref _notifications);
         public IPluginLocalization Localization { get; } = new TestPluginLocalization();
     }
 

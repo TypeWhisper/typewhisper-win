@@ -32,6 +32,9 @@ public sealed partial class SmallestAiPlugin : ITranscriptionEnginePlugin
 
     private readonly HttpClient _httpClient;
     private readonly SemaphoreSlim _apiKeyWriteLock = new(1, 1);
+    // Guards the host, the key and the voice list against the background voice refresh.
+    private readonly object _voiceLock = new();
+    private readonly ModelCatalogAutoRefresh _voiceRefresh;
     private IPluginHostServices? _host;
     private string? _apiKey;
     private string _selectedModelId = DefaultModelId;
@@ -40,13 +43,15 @@ public sealed partial class SmallestAiPlugin : ITranscriptionEnginePlugin
     /// Initializes a new instance of the SmallestAiPlugin class.
     /// </summary>
     public SmallestAiPlugin()
-        : this(CreateHttpClient())
+        : this(CreateHttpClient(), refreshVoicesAutomatically: ModelCatalogAutoRefresh.AllowedInThisProcess)
     {
     }
 
-    internal SmallestAiPlugin(HttpClient httpClient)
+    // Tests leave the background refresh off, so they never reach Smallest AI.
+    internal SmallestAiPlugin(HttpClient httpClient, bool refreshVoicesAutomatically = false, TimeProvider? clock = null)
     {
         _httpClient = httpClient;
+        _voiceRefresh = new(refreshVoicesAutomatically, clock);
     }
 
     // ITypeWhisperPlugin
@@ -62,7 +67,7 @@ public sealed partial class SmallestAiPlugin : ITranscriptionEnginePlugin
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.2";
+    public string PluginVersion => "1.3.0";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
@@ -70,10 +75,15 @@ public sealed partial class SmallestAiPlugin : ITranscriptionEnginePlugin
     public async Task ActivateAsync(IPluginHostServices host)
     {
         _host = host;
-        _apiKey = NormalizeApiKey(await host.LoadSecretAsync(ApiKeySecretName));
-        _selectedModelId = DefaultModelId;
-        RestoreSpeechSettings(host);
+        var apiKey = NormalizeApiKey(await host.LoadSecretAsync(ApiKeySecretName));
+        lock (_voiceLock)
+        {
+            _apiKey = apiKey;
+            _selectedModelId = DefaultModelId;
+            RestoreSpeechSettings(host);
+        }
         host.Log(PluginLogLevel.Info, $"Activated (configured={IsConfigured})");
+        StartVoiceRefreshIfStale();
     }
 
     /// <summary>
@@ -81,8 +91,12 @@ public sealed partial class SmallestAiPlugin : ITranscriptionEnginePlugin
     /// </summary>
     public Task DeactivateAsync()
     {
-        _host = null;
-        _apiKey = null;
+        lock (_voiceLock)
+        {
+            _voiceRefresh.Cancel();
+            _host = null;
+            _apiKey = null;
+        }
         return Task.CompletedTask;
     }
 
@@ -203,8 +217,17 @@ public sealed partial class SmallestAiPlugin : ITranscriptionEnginePlugin
                 else
                     await host.StoreSecretAsync(ApiKeySecretName, normalized);
 
-                _apiKey = normalized;
+                lock (_voiceLock)
+                {
+                    _apiKey = normalized;
+                    // The voices are Smallest AI's public Lightning catalogs, the same for every account, so they stay.
+                    // A refresh still running with the previous key stops; a stale list loads again with the new one.
+                    if (changed)
+                        _voiceRefresh.Cancel();
+                }
 
+                if (changed)
+                    StartVoiceRefreshIfStale();
                 if (changed && wasConfigured != IsConfigured)
                     hostToNotify = host;
             }
@@ -417,6 +440,7 @@ public sealed partial class SmallestAiPlugin : ITranscriptionEnginePlugin
     /// </summary>
     public void Dispose()
     {
+        _voiceRefresh.Dispose();
         _httpClient.Dispose();
         _apiKeyWriteLock.Dispose();
     }

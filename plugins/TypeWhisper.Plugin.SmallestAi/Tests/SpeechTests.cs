@@ -41,8 +41,17 @@ public sealed class SpeechTests
         await plugin.SaveTextSettingAsync("speech-speed", "1.25", default);
         await plugin.DeactivateAsync();
         Assert.False(plugin.IsConfigured);
-        using var restored = new SmallestAiPlugin();
+        // The refresh above dated the catalogs, so the restored plugin's background refresh makes no request.
+        var requests = 0;
+        using var offline = new HttpClient(new Transport((_, _) =>
+        {
+            Interlocked.Increment(ref requests);
+            throw new InvalidOperationException("Unexpected network request.");
+        }));
+        using var restored = new SmallestAiPlugin(offline, refreshVoicesAutomatically: true);
         await restored.ActivateAsync(fixture.Host);
+        await restored.VoiceRefreshTask;
+        Assert.Equal(0, requests);
         Assert.Equal("lightning_v3.1_pro:ben", restored.SelectedVoiceId);
         Assert.Equal(2, restored.AvailableVoices.Count);
         Assert.Contains("1.25", restored.SettingsSummary);

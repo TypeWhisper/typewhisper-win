@@ -2,7 +2,7 @@
   "id": "com.typewhisper.smallest-ai",
   "locality": "cloud",
   "name": "Smallest AI",
-  "version": "1.2.2",
+  "version": "1.3.0",
   "author": "TypeWhisper",
   "description": "Pulse transcription and Lightning text-to-speech",
   "category": "transcription",
