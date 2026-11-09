@@ -174,7 +174,7 @@ public sealed class CloudTranscriptionTests : IDisposable
     [Fact]
     public async Task FailedSecretSavePreservesWorkingKeyAndConfiguration()
     {
-        using var plugin = new GroqPlugin(); await plugin.ActivateAsync(Host); await plugin.SetApiKeyAsync("original");
+        using var plugin = new GroqPlugin(new HttpClient(new Handler((_, _) => throw new InvalidOperationException("Unexpected network request.")))); await plugin.ActivateAsync(Host); await plugin.SetApiKeyAsync("original");
         _secrets.FailWrites = true;
         await Assert.ThrowsAsync<IOException>(() => plugin.SetApiKeyAsync("replacement"));
         Assert.True(plugin.IsConfigured); Assert.Equal("original", plugin.ApiKey);
@@ -186,7 +186,7 @@ public sealed class CloudTranscriptionTests : IDisposable
         var host = new Mock<IPluginHostServices>();
         host.Setup(h => h.LoadSecretAsync("api-key")).ReturnsAsync("key");
         host.Setup(h => h.SetSetting("selectedModel", "whisper-large-v3-turbo")).Throws<IOException>();
-        using var plugin = new GroqPlugin(); await plugin.ActivateAsync(host.Object);
+        using var plugin = new GroqPlugin(new HttpClient(new Handler((_, _) => throw new InvalidOperationException("Unexpected network request.")))); await plugin.ActivateAsync(host.Object);
         Assert.Throws<IOException>(() => plugin.SelectModel("whisper-large-v3-turbo"));
         Assert.Equal("whisper-large-v3", plugin.SelectedModelId);
     }
@@ -211,7 +211,7 @@ public sealed class CloudTranscriptionTests : IDisposable
         var directory = Path.Combine(_root, "package"); Directory.CreateDirectory(directory);
         File.Copy(typeof(GroqPlugin).Assembly.Location, Path.Combine(directory, "TypeWhisper.Plugin.Groq.dll"));
         File.WriteAllText(Path.Combine(directory, "manifest.json"), """
-            {"id":"com.typewhisper.groq","name":"Groq","version":"1.1.1","minHostVersion":"1.1.0","assemblyName":"TypeWhisper.Plugin.Groq.dll","pluginClass":"TypeWhisper.Plugin.Groq.GroqPlugin"}
+            {"id":"com.typewhisper.groq","name":"Groq","version":"1.2.0","minHostVersion":"1.1.0","assemblyName":"TypeWhisper.Plugin.Groq.dll","pluginClass":"TypeWhisper.Plugin.Groq.GroqPlugin"}
             """);
         var context = LoadInspectAndReleasePackage(directory, Host);
         // Unload requests collection; all package/type roots must leave their stack frame first.
