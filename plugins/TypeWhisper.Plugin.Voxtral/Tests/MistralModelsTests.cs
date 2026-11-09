@@ -21,7 +21,7 @@ public sealed partial class ProviderTests
     [Fact]
     public async Task ContendedKeyAndModelSavesDoNotCaptureUiContext()
     {
-        using var plugin = new VoxtralPlugin(); var host = new Host();
+        using var plugin = OfflinePlugin(); var host = new Host();
         await plugin.ActivateAsync(host); await Configure(plugin);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         host.StoreSecretDelay = release.Task;

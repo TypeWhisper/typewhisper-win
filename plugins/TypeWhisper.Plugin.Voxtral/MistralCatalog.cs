@@ -1,4 +1,6 @@
+using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace TypeWhisper.Plugin.Voxtral;
 
@@ -14,6 +16,13 @@ internal sealed record MistralTextModel(string Id, string Name);
 internal sealed record MistralModelCatalog(
     int Version, MistralTranscriptionModel[] Transcription, MistralTextModel[] Text, Dictionary<string, string> Aliases)
 {
+    /// <summary>
+    /// When the catalog was fetched. Null for the default catalog and for catalogs saved before 1.5.0; a damaged value
+    /// also reads as null, so the catalog stays and is refreshed.
+    /// </summary>
+    [JsonConverter(typeof(LenientDateConverter))]
+    public DateTimeOffset? FetchedAtUtc { get; init; }
+
     /// <summary>Maps a saved, alias or retired model ID to the ID of an entry in <paramref name="ids"/>.</summary>
     internal string? Resolve(string? saved, IEnumerable<string> ids)
     {
@@ -31,6 +40,24 @@ internal sealed record MistralModelCatalog(
     }
 
     private string Canonical(string id) => Aliases.GetValueOrDefault(id, id);
+
+    private sealed class LenientDateConverter : JsonConverter<DateTimeOffset?>
+    {
+        public override DateTimeOffset? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            if (reader.TokenType == JsonTokenType.String
+                && DateTimeOffset.TryParse(reader.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var value))
+                return value.ToUniversalTime();
+            reader.Skip();
+            return null;
+        }
+
+        public override void Write(Utf8JsonWriter writer, DateTimeOffset? value, JsonSerializerOptions options)
+        {
+            if (value is { } date) writer.WriteStringValue(date.ToUniversalTime());
+            else writer.WriteNullValue();
+        }
+    }
 }
 
 /// <summary>Builds the cleaned model catalog from Mistral's <c>/v1/models</c> response.</summary>

@@ -75,11 +75,14 @@ internal sealed partial class ProviderConnection(HttpClient http) : IDisposable
         await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
+            // One read, before the checks: Deactivate resets the configuration without the gate, and a save built from the
+            // reset copy would drop the key reference. A copy read before the reset belongs to the checked host and key.
+            var current = Volatile.Read(ref _configuration);
             var host = Host ?? throw new InvalidOperationException("Activate the plugin first."); ct.ThrowIfCancellationRequested();
             if (expectedKey is not null && !string.Equals(expectedKey, Key, StringComparison.Ordinal))
                 throw new InvalidOperationException("The API key changed. Refresh models again.");
-            var values = new Dictionary<string, string>(_configuration.Values) { [id] = value };
-            var next = _configuration with { Values = values };
+            var values = new Dictionary<string, string>(current.Values) { [id] = value };
+            var next = current with { Values = values };
             host.SetSetting("configuration", next); _configuration = next; host.NotifyCapabilitiesChanged();
         }
         finally { _gate.Release(); }

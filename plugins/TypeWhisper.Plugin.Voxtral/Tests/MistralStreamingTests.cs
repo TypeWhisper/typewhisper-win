@@ -23,7 +23,7 @@ public sealed partial class ProviderTests
     [Fact]
     public async Task StreamingCapabilityFollowsSelectedModelAndSessionCarriesLanguageAndDictionary()
     {
-        using var plugin = new VoxtralPlugin(); await plugin.ActivateAsync(new Host()); await Configure(plugin);
+        using var plugin = OfflinePlugin(); await plugin.ActivateAsync(new Host()); await Configure(plugin);
         Assert.False(plugin.SupportsStreaming); Assert.Contains("de", plugin.SupportedLanguages);
         await Assert.ThrowsAsync<NotSupportedException>(() => plugin.StartStreamingAsync("de", default));
         plugin.SelectModel(VoxtralPlugin.RealtimeModel);
@@ -56,7 +56,7 @@ public sealed partial class ProviderTests
     [Fact]
     public async Task AutomaticLanguageAndEmptyDictionaryStayOutOfSessionUpdate()
     {
-        using var plugin = new VoxtralPlugin(); await plugin.ActivateAsync(new Host()); await Configure(plugin);
+        using var plugin = OfflinePlugin(); await plugin.ActivateAsync(new Host()); await Configure(plugin);
         plugin.SelectModel(VoxtralPlugin.RealtimeModel);
         var socket = new MistralSocket();
         plugin.ConnectStreaming = async (_, options, _, ct) => await ReadySession(socket, options: options, ct: ct);
@@ -194,7 +194,7 @@ public sealed partial class ProviderTests
     [Fact]
     public async Task ActualHostShowsPreviewAndLeavesTheFinalTextToTheUpload()
     {
-        using var plugin = new VoxtralPlugin(); await plugin.ActivateAsync(new Host()); await Configure(plugin);
+        using var plugin = OfflinePlugin(); await plugin.ActivateAsync(new Host()); await Configure(plugin);
         plugin.SelectModel(VoxtralPlugin.RealtimeModel);
         var socket = new MistralSocket { CompleteAutomatically = true };
         MistralSessionOptions? opened = null;

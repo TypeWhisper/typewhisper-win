@@ -10,6 +10,7 @@ internal sealed partial class ProviderConnection
     private static partial string NormalizeLanguage(string language) => language;
     private static partial IEnumerable<string> ParseTerms(string? prompt) => PluginDictionaryTerms.ParsePrompt(prompt);
     // The model catalog was fetched with the previous key; a new key may see a different set of models.
+    // The catalog carries its fetch date, so the date goes with it and the new key's list loads right away.
     partial void OnKeyReplacing(ref Configuration next, string? key)
     {
         if (string.Equals(key, Key, StringComparison.Ordinal)) return;

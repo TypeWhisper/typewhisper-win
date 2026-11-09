@@ -12,26 +12,44 @@ namespace TypeWhisper.Plugin.Voxtral;
 public sealed partial class VoxtralPlugin : ITranscriptionEnginePlugin, IApiKeyPlugin, IPluginTextSettings, ILlmProviderPlugin, ILlmRequestHedgingSupport, IPluginSettingsActions
 {
     private readonly ProviderConnection Connection;
+    private readonly ModelCatalogAutoRefresh _modelRefresh;
     /// <summary>Creates a provider with isolated HTTP transport.</summary>
-    public VoxtralPlugin() : this(new HttpClient(new MistralErrorHandler(new HttpClientHandler { AllowAutoRedirect = false })) { Timeout = TimeSpan.FromMinutes(5) }) { }
-    internal VoxtralPlugin(HttpClient http) => Connection = new(http);
+    public VoxtralPlugin() : this(new HttpClient(new MistralErrorHandler(new HttpClientHandler { AllowAutoRedirect = false })) { Timeout = TimeSpan.FromMinutes(5) },
+        refreshModelsAutomatically: ModelCatalogAutoRefresh.AllowedInThisProcess) { }
+    // Tests keep the background model list refresh off unless they opt in, so they never reach Mistral.
+    internal VoxtralPlugin(HttpClient http, bool refreshModelsAutomatically = false, TimeProvider? clock = null)
+    {
+        Connection = new(http);
+        _modelRefresh = new(refreshModelsAutomatically, clock);
+    }
     /// <inheritdoc />
     public string PluginId => "com.typewhisper.voxtral";
     /// <inheritdoc />
     public string PluginName => "Mistral";
     /// <inheritdoc />
-    public string PluginVersion => "1.4.0";
+    public string PluginVersion => "1.5.0";
     /// <inheritdoc />
-    public Task ActivateAsync(IPluginHostServices host) => Connection.ActivateAsync(host);
+    public async Task ActivateAsync(IPluginHostServices host)
+    {
+        await Connection.ActivateAsync(host).ConfigureAwait(false);
+        StartModelRefreshIfStale();
+    }
     /// <inheritdoc />
-    public Task DeactivateAsync() { Connection.Deactivate(); return Task.CompletedTask; }
+    public Task DeactivateAsync() { _modelRefresh.Cancel(); Connection.Deactivate(); return Task.CompletedTask; }
     /// <inheritdoc />
     public bool IsConfigured => Connection.Configured;
     bool ITranscriptionEnginePlugin.IsConfigured => Connection.Configured && SelectedModelId is not null;
     /// <inheritdoc />
-    public Task SetApiKeyAsync(string apiKey) => Connection.SetKeyAsync(apiKey);
+    public async Task SetApiKeyAsync(string apiKey)
+    {
+        // A refresh still loading the previous account's list must not save it. A new key drops the saved list
+        // (OnKeyReplacing), so the refresh that follows loads the new account's models.
+        _modelRefresh.Cancel();
+        try { await Connection.SetKeyAsync(apiKey).ConfigureAwait(false); }
+        finally { StartModelRefreshIfStale(); }
+    }
     /// <inheritdoc />
-    public void Dispose() => Connection.Dispose();
+    public void Dispose() { _modelRefresh.Dispose(); Connection.Dispose(); }
 
     private PluginTextSetting Field(string id, string en, string de, string fallback, PluginSettingsSection section,
         params PluginSettingChoice[] choices) => new(id, Connection.L(en, de), "", Connection.Get(id, fallback)) { Section = section, Choices = choices };

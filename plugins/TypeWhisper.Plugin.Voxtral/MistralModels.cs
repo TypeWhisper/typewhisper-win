@@ -66,11 +66,71 @@ public sealed partial class VoxtralPlugin
         cancellationToken.ThrowIfCancellationRequested();
         if (id != "refreshModels") throw new ArgumentException("Unknown Mistral action.");
         var key = Connection.RequireKey();
-        using var request = Connection.Request(HttpMethod.Get, "https://api.mistral.ai/v1/models", key);
-        using var document = await Connection.ReadAsync(request, cancellationToken);
-        var catalog = MistralCatalog.Parse(document.RootElement);
-        await Connection.SaveAsync("modelCatalog", JsonSerializer.Serialize(catalog), cancellationToken, key);
+        // The button loads the same list; a background refresh would only repeat the request.
+        _modelRefresh.Cancel();
+        var catalog = await FetchCatalogAsync(key, cancellationToken);
+        await SaveCatalogAsync(catalog, key, cancellationToken);
         return Connection.L($"Models updated: {catalog.Transcription.Length} transcription, {catalog.Text.Length} text.",
             $"Modelle aktualisiert: {catalog.Transcription.Length} für Transkription, {catalog.Text.Length} für Text.");
     }
+
+    /// <summary>The running or last background model list refresh. Tests await it.</summary>
+    internal Task ModelCatalogRefreshTask => _modelRefresh.Current;
+    internal bool RefreshesModelsAutomatically => _modelRefresh.Enabled;
+    /// <summary>True when the saved list has no fetch date, is a day old or is dated in the future.</summary>
+    internal bool IsModelCatalogStale => _modelRefresh.IsStale(Catalog.FetchedAtUtc);
+
+    private async Task<MistralModelCatalog> FetchCatalogAsync(string key, CancellationToken ct)
+    {
+        using var request = Connection.Request(HttpMethod.Get, "https://api.mistral.ai/v1/models", key);
+        using var document = await Connection.ReadAsync(request, ct).ConfigureAwait(false);
+        return MistralCatalog.Parse(document.RootElement) with { FetchedAtUtc = _modelRefresh.UtcNow };
+    }
+
+    // The fetch date travels inside the saved list, so both are written at once and a key change drops both.
+    private Task SaveCatalogAsync(MistralModelCatalog catalog, string key, CancellationToken ct) =>
+        Connection.SaveAsync("modelCatalog", JsonSerializer.Serialize(catalog), ct, key);
+
+    /// <summary>
+    /// Mistral retires models and moves its aliases to newer ones. Reloading the list once a day drops a retired model
+    /// instead of failing every request with HTTP 404.
+    /// </summary>
+    private void StartModelRefreshIfStale()
+    {
+        if (Connection.Host is not { } host || Connection.Key is not { } key || !IsModelCatalogStale)
+            return;
+
+        _modelRefresh.Start(ct => RefreshCatalogInBackgroundAsync(host, key, ct),
+            ex => host.Log(PluginLogLevel.Warning, $"Mistral model list refresh failed ({Describe(ex)}). Keeping the current model list."));
+    }
+
+    private async Task RefreshCatalogInBackgroundAsync(IPluginHostServices host, string key, CancellationToken ct)
+    {
+        var catalog = await FetchCatalogAsync(key, ct).ConfigureAwait(false);
+        var current = Catalog;
+        // A list without transcription or text models would switch that capability off. The button saves such a list on
+        // purpose; the background refresh keeps the current one, because a short or broken listing must not disable a
+        // provider that worked a moment ago.
+        if ((catalog.Transcription.Length == 0 && current.Transcription.Length > 0) || (catalog.Text.Length == 0 && current.Text.Length > 0))
+        {
+            host.Log(PluginLogLevel.Warning, "Mistral listed no transcription or no text models. Keeping the current model list.");
+            return;
+        }
+
+        try
+        {
+            // The save checks the refresh token and the key again under the connection gate, so a result that arrives
+            // after deactivation or a key change is dropped.
+            await SaveCatalogAsync(catalog, key, ct).ConfigureAwait(false);
+        }
+        catch (InvalidOperationException) when (!ReferenceEquals(Connection.Host, host) || !string.Equals(Connection.Key, key, StringComparison.Ordinal))
+        {
+            // Deactivated or given another key meanwhile; the next activation or the new key loads the list again.
+        }
+    }
+
+    // Logs never carry the key or a response body.
+    private static string Describe(Exception ex) => ex is PluginRequestException request
+        ? request.HttpStatusCode is { } status ? $"{request.FailureKind}, HTTP {status}" : request.FailureKind.ToString()
+        : ex.GetType().Name;
 }

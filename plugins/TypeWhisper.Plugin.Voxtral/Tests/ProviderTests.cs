@@ -30,7 +30,7 @@ public sealed partial class ProviderTests
     [Fact]
     public async Task ConfiguresRestartsRemovesKeyAndNeverExposesSecrets()
     {
-        var host=new Host(); using var plugin=new VoxtralPlugin(); await plugin.ActivateAsync(host); await Configure(plugin);
+        var host=new Host(); using var plugin=OfflinePlugin(); await plugin.ActivateAsync(host); await Configure(plugin);
         Assert.True(plugin.IsConfigured); Assert.DoesNotContain("fixture-key",JsonSerializer.Serialize(plugin.TextSettings));
         Assert.DoesNotContain("fixture-key",JsonSerializer.Serialize(host.Settings));
         await plugin.DeactivateAsync(); Assert.False(plugin.IsConfigured); await plugin.ActivateAsync(host); Assert.True(plugin.IsConfigured);
@@ -40,7 +40,7 @@ public sealed partial class ProviderTests
     [Fact]
     public async Task FailedSecretOrConfigurationSaveKeepsOldConnection()
     {
-        var host=new Host(); using var plugin=new VoxtralPlugin(); await plugin.ActivateAsync(host); await Configure(plugin);
+        var host=new Host(); using var plugin=OfflinePlugin(); await plugin.ActivateAsync(host); await Configure(plugin);
         var before=JsonSerializer.Serialize(host.Settings); var secrets=host.Secrets.ToArray();
         host.FailSecret=true; await Assert.ThrowsAsync<IOException>(()=>plugin.SetApiKeyAsync("replacement"));
         Assert.Equal(before,JsonSerializer.Serialize(host.Settings)); Assert.Equal(secrets,host.Secrets.ToArray());
@@ -50,7 +50,7 @@ public sealed partial class ProviderTests
     [Fact]
     public async Task InvalidOrCanceledSettingsDoNotWrite()
     {
-        var host=new Host(); using var plugin=new VoxtralPlugin(); await plugin.ActivateAsync(host);
+        var host=new Host(); using var plugin=OfflinePlugin(); await plugin.ActivateAsync(host);
         await Assert.ThrowsAsync<ArgumentException>(()=>plugin.SetApiKeyAsync("bad\r\nkey"));
         await Assert.ThrowsAsync<ArgumentException>(()=>plugin.SaveTextSettingAsync("unknown","value",default));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(()=>plugin.SaveTextSettingAsync("unknown","value",new(true)));
@@ -98,7 +98,7 @@ public sealed partial class ProviderTests
     [Fact]
     public async Task EmptyAudioAndUnsupportedTranslationAreRejected()
     {
-        using var plugin=new VoxtralPlugin();await plugin.ActivateAsync(new Host());await Configure(plugin);
+        using var plugin=OfflinePlugin();await plugin.ActivateAsync(new Host());await Configure(plugin);
         if((ITypeWhisperPlugin)plugin is not ITranscriptionEnginePlugin engine) return;
         await Assert.ThrowsAsync<ArgumentException>(()=>engine.TranscribeAsync([],"en",false,null,default));
         if(!engine.SupportsTranslation) await Assert.ThrowsAsync<NotSupportedException>(()=>engine.TranscribeAsync(Audio(),"en",true,null,default));
@@ -115,7 +115,7 @@ public sealed partial class ProviderTests
             Assert.Equal(3,Directory.GetFiles(source).Length);
             using var http=new HttpClient(new Handler((r,_)=>new(HttpStatusCode.OK){RequestMessage=r,Content=new ByteArrayContent(bytes)}));var host=new Host();
             PortablePluginStore Store()=>new(Path.Combine(root,"store"),new(1,1,2),http,_=>host);
-            var entry=new PortableCatalogEntry{Id=Id,Name="Voxtral",Version="1.4.0",MinHostVersion="1.1.2",DownloadUrl="https://fixture.invalid/plugin.zip",Sha256=Convert.ToHexString(SHA256.HashData(bytes)),Size=bytes.Length,SupportedArchitectures=[PortablePluginCatalog.Architecture]};
+            var entry=new PortableCatalogEntry{Id=Id,Name="Voxtral",Version="1.5.0",MinHostVersion="1.1.2",DownloadUrl="https://fixture.invalid/plugin.zip",Sha256=Convert.ToHexString(SHA256.HashData(bytes)),Size=bytes.Length,SupportedArchitectures=[PortablePluginCatalog.Architecture]};
             var store=Store();await store.InitializeAsync();await store.InstallAsync(entry);
             await using(var runtime=new PortablePluginRuntimeRegistry(store,new(1,1,2),_=>host))
             {
@@ -153,7 +153,8 @@ public sealed partial class ProviderTests
         public T? GetSetting<T>(string key)=>Settings.TryGetValue(key,out var value)?value.Deserialize<T>():default;
         public void SetSetting<T>(string key,T value){if(FailSetting){FailSetting=false;throw new IOException("settings failed");}Settings[key]=JsonSerializer.SerializeToElement(value);}
         public string PluginDataDirectory=>Path.GetTempPath();public string? ActiveAppProcessName=>null;public string? ActiveAppName=>null;
-        public IReadOnlyList<string> AvailableProfileNames=>[];public void Log(PluginLogLevel level,string text){}public void NotifyCapabilitiesChanged(){}
+        public IReadOnlyList<string> AvailableProfileNames=>[];public void Log(PluginLogLevel level,string text)=>Logs.Enqueue((level,text));public void NotifyCapabilitiesChanged(){}
+        public ConcurrentQueue<(PluginLogLevel Level,string Message)> Logs {get;}=new();
         public IPluginLocalization Localization {get;}=new LocalizationStub();public IPluginEventBus EventBus=>throw new NotSupportedException();
     }
     private sealed class LocalizationStub:IPluginLocalization

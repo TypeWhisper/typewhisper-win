@@ -133,7 +133,7 @@ public sealed partial class ProviderTests
     public async Task CatalogSavedByEarlierVersionsFallsBackToCurrentModels()
     {
         var host = new Host();
-        using (var plugin = new VoxtralPlugin()) { await plugin.ActivateAsync(host); await Configure(plugin); }
+        using (var plugin = OfflinePlugin()) { await plugin.ActivateAsync(host); await Configure(plugin); }
         var configuration = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(host.Settings["configuration"])!;
         var old = """{"Transcription":[{"Id":"voxtral-mini-latest","DisplayName":"voxtral-mini-latest"}],"Text":[{"Id":"codestral-latest","DisplayName":"codestral-latest"}],"Realtime":[]}""";
         host.Settings["configuration"] = JsonSerializer.SerializeToElement(new
@@ -141,7 +141,7 @@ public sealed partial class ProviderTests
             SecretName = configuration["SecretName"].GetString(),
             Values = new Dictionary<string, string> { ["modelCatalog"] = old, ["model"] = "voxtral-mini-latest", ["llmModel"] = "mistral-small-latest" }
         });
-        using var restarted = new VoxtralPlugin(); await restarted.ActivateAsync(host);
+        using var restarted = OfflinePlugin(); await restarted.ActivateAsync(host);
         Assert.Equal(new[] { MiniTranscribe, "voxtral-small-transcribe-3-0", VoxtralPlugin.RealtimeModel }, restarted.TranscriptionModels.Select(m => m.Id));
         Assert.Equal(DefaultTextModels, restarted.SupportedModels.Select(m => m.Id));
         Assert.Equal(MiniTranscribe, restarted.SelectedModelId);
@@ -153,7 +153,7 @@ public sealed partial class ProviderTests
     public async Task SettingsAcceptAliasesAndSaveTheListedModel()
     {
         var host = new Host();
-        using var plugin = new VoxtralPlugin(); await plugin.ActivateAsync(host); await Configure(plugin);
+        using var plugin = OfflinePlugin(); await plugin.ActivateAsync(host); await Configure(plugin);
         await plugin.SaveTextSettingAsync("model", "voxtral-mini-transcribe-realtime-3", default);
         await plugin.SaveTextSettingAsync("llmModel", "mistral-medium-latest", default);
         var values = host.Settings["configuration"].GetProperty("Values");
