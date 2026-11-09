@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using NAudio.MediaFoundation;
 using NAudio.Wave;
 using TypeWhisper.PluginSDK;
@@ -19,7 +20,7 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
 {
     private const string BaseUrl = "https://api.openai.com";
     private const string ChatGptModelsEndpoint = "https://chatgpt.com/backend-api/codex/models";
-    private const string PluginVersionValue = "1.1.6";
+    private const string PluginVersionValue = "1.2.0";
     private const int TranscriptionUploadBitRate = 48_000;
     private const string ApiKeySecretName = "api-key";
     private const string SelectedModelSettingName = "selectedModel";
@@ -57,6 +58,18 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
     private readonly SemaphoreSlim _oauthRefreshLock = new(1, 1);
     private readonly Func<byte[], ITtsPlaybackSession>? _ttsPlaybackFactory;
     private readonly Func<byte[], OpenAiTranscriptionUpload> _compressedUploadFactory;
+    // Only the API-key catalog refreshes in the background. The ChatGPT catalog can rotate the login's
+    // tokens, so it refreshes only when the user asks.
+    private readonly ModelCatalogAutoRefresh _apiCatalogRefresh;
+    // Guards the key, the catalogs and the selections against a refresh that finishes on another thread.
+    private readonly object _catalogLock = new();
+    // Bumped on a key change, an auth-mode change and deactivation, so a refresh started before is dropped.
+    private int _catalogVersion;
+    private bool _keyChangePending;
+    private DateTimeOffset? _apiCatalogFetchedAt;
+    // The saved choices. A list that lacks one uses the default in memory and keeps the saved value.
+    private string? _preferredLlmModelId;
+    private string? _preferredTranscriptionModelId;
     private IPluginHostServices? _host;
     private string? _apiKey;
     private string? _selectedModelId;
@@ -112,9 +125,13 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
             Transport: TranscriptionTransport.Realtime),
     ];
 
+    /// <summary>The recommended text model, and the first entry of the built-in list.</summary>
+    internal const string DefaultLlmModelId = "gpt-5.5";
+
+    // The order is also the preference order for a default when a fetched list lacks the saved model.
     private static readonly IReadOnlyList<PluginModelInfo> FallbackLlmModels =
     [
-        new("gpt-5.5", "GPT-5.5"),
+        new(DefaultLlmModelId, "GPT-5.5"),
         new("gpt-4.1-nano", "GPT-4.1 Nano"),
         new("gpt-4.1-mini", "GPT-4.1 Mini"),
         new("gpt-4.1", "GPT-4.1"),
@@ -142,18 +159,21 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
     /// Initializes a new instance of the OpenAiPlugin class.
     /// </summary>
     public OpenAiPlugin()
-        : this(new HttpClient { Timeout = TimeSpan.FromSeconds(120) })
+        : this(new HttpClient { Timeout = TimeSpan.FromSeconds(120) }, refreshApiModelsAutomatically: ModelCatalogAutoRefresh.AllowedInThisProcess)
     {
     }
 
     internal OpenAiPlugin(
         HttpClient httpClient,
         Func<byte[], ITtsPlaybackSession>? ttsPlaybackFactory = null,
-        Func<byte[], OpenAiTranscriptionUpload>? compressedUploadFactory = null)
+        Func<byte[], OpenAiTranscriptionUpload>? compressedUploadFactory = null,
+        bool refreshApiModelsAutomatically = false,
+        TimeProvider? clock = null)
     {
         _httpClient = httpClient;
         _ttsPlaybackFactory = ttsPlaybackFactory;
         _compressedUploadFactory = compressedUploadFactory ?? CreateCompressedUpload;
+        _apiCatalogRefresh = new ModelCatalogAutoRefresh(refreshApiModelsAutomatically, clock);
     }
 
     // ITypeWhisperPlugin
@@ -182,11 +202,11 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
         _oauthRefreshToken = NormalizeApiKey(await host.LoadSecretAsync(OAuthRefreshTokenSecretName));
         _oauthIdToken = NormalizeApiKey(await host.LoadSecretAsync(OAuthIdTokenSecretName));
         _authMode = OpenAiAuthModeExtensions.Parse(host.GetSetting<string>(AuthModeSettingName));
-        _selectedLlmModelId = host.GetSetting<string>(SelectedLlmModelSettingName);
+        _preferredLlmModelId = host.GetSetting<string>(SelectedLlmModelSettingName);
         if (host.GetSetting<LlmSelectionSnapshot>(LlmSelectionSettingName) is { } selection)
         {
             _authMode = OpenAiAuthModeExtensions.Parse(selection.AuthMode);
-            _selectedLlmModelId = selection.ModelId;
+            _preferredLlmModelId = selection.ModelId;
         }
         _selectedVoiceId = NormalizeVoiceId(host.GetSetting<string>(SelectedVoiceSettingName));
         _ttsInstructions = host.GetSetting<string>(TtsInstructionsSettingName) ?? "";
@@ -201,11 +221,14 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
         _fetchedTranscriptionModels =
             host.GetSetting<List<OpenAiFetchedModel>>(FetchedTranscriptionModelsSettingName) ?? [];
         _hasFetchedApiCatalog |= _fetchedTranscriptionModels.Count > 0;
+        // Catalogs saved before 1.2.0 have no fetch date. They stay until the refresh replaces them.
+        _apiCatalogFetchedAt = null;
         if (host.GetSetting<ApiCatalogSnapshot>(ApiCatalogSnapshotSettingName) is { } snapshot)
         {
             _hasFetchedApiCatalog = snapshot.HasFetched;
             _fetchedLlmModels = snapshot.LlmModels ?? [];
             _fetchedTranscriptionModels = snapshot.TranscriptionModels ?? [];
+            _apiCatalogFetchedAt = snapshot.HasFetched ? snapshot.FetchedAt : null;
         }
         _fetchedChatGptModels =
             host.GetSetting<List<OpenAiChatGptModel>>(FetchedChatGptModelsSettingName) ?? [];
@@ -231,15 +254,12 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
             catch (JsonException) { host.Log(PluginLogLevel.Warning, "Stored ChatGPT login is invalid; sign in again."); }
         }
 
-        ApplyTranscriptionCatalog(_fetchedTranscriptionModels, persist: false);
-        SelectModelCore(
-            host.GetSetting<string>(SelectedModelSettingName)
-                ?? FallbackTranscriptionModelEntries[0].Id,
-            persist: false);
-        NormalizeSelectedLlmModel(
-            persist: false,
-            preserveUnknownWhenCatalogUnavailable: true);
+        _preferredTranscriptionModelId = host.GetSetting<string>(SelectedModelSettingName)
+            ?? FallbackTranscriptionModelEntries[0].Id;
+        ApplyTranscriptionCatalog(_fetchedTranscriptionModels);
+        NormalizeSelectedLlmModel(preserveUnknownWhenCatalogUnavailable: true);
         host.Log(PluginLogLevel.Info, $"Activated (configured={IsConfigured})");
+        StartApiCatalogRefreshIfStale();
     }
 
     /// <summary>
@@ -247,8 +267,14 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
     /// </summary>
     public Task DeactivateAsync()
     {
-        _host = null;
-        _apiKey = _oauthAccessToken = _oauthRefreshToken = _oauthIdToken = null;
+        lock (_catalogLock)
+        {
+            _catalogVersion++;
+            _host = null;
+            _apiKey = _oauthAccessToken = _oauthRefreshToken = _oauthIdToken = null;
+        }
+
+        _apiCatalogRefresh.Cancel();
         return Task.CompletedTask;
     }
 
@@ -319,7 +345,11 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
     /// <summary>
     /// Selects the provider model used for subsequent requests.
     /// </summary>
-    public void SelectModel(string modelId) => SelectModelCore(modelId, persist: true);
+    public void SelectModel(string modelId)
+    {
+        lock (_catalogLock)
+            SelectModelCore(modelId);
+    }
 
     /// <summary>
     /// Transcribes PCM audio using the selected provider configuration.
@@ -562,6 +592,8 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
             : FallbackLlmModels;
 
     internal OpenAiAuthMode AuthMode => _authMode;
+    internal DateTimeOffset? ApiCatalogFetchedAt => _apiCatalogFetchedAt;
+    internal Task ApiCatalogRefreshTask => _apiCatalogRefresh.Current;
     internal bool HasChatGptCredentials =>
         !string.IsNullOrWhiteSpace(_oauthRefreshToken)
         || !string.IsNullOrWhiteSpace(_oauthAccessToken);
@@ -706,10 +738,14 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
                 return [];
 
             var catalog = chatGptModels.ToList();
-            _host?.SetSetting(ChatGptCatalogSnapshotSettingName, new ChatGptCatalogSnapshot(true, catalog));
-            _fetchedChatGptModels = catalog;
-            _hasFetchedChatGptCatalog = true;
-            NormalizeSelectedLlmModel(persist: true);
+            lock (_catalogLock)
+            {
+                _host?.SetSetting(ChatGptCatalogSnapshotSettingName, new ChatGptCatalogSnapshot(true, catalog));
+                _fetchedChatGptModels = catalog;
+                _hasFetchedChatGptCatalog = true;
+                NormalizeSelectedLlmModel();
+            }
+
             _host?.NotifyCapabilitiesChanged();
             _lastModelRefreshSucceeded = apiRefreshed;
             return SupportedModels;
@@ -721,10 +757,52 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
 
     private async Task<bool> RefreshApiCatalogAsync(CancellationToken ct)
     {
-        var models = await FetchApiModelsAsync(ct);
-        if (models is null)
+        string? apiKey;
+        int version;
+        lock (_catalogLock) (apiKey, version) = (_apiKey, _catalogVersion);
+        if (apiKey is null)
             return false;
 
+        // The button supersedes a background refresh, which would otherwise land after it.
+        _apiCatalogRefresh.Cancel();
+        var models = await FetchApiModelsAsync(apiKey, ct);
+        return models is not null && CommitApiCatalog(models, version, automatic: false, ct);
+    }
+
+    /// <summary>
+    /// A catalog that only refreshes on request keeps offering retired models. Reloading it once a day
+    /// drops them instead of failing every request with HTTP 404.
+    /// </summary>
+    private void StartApiCatalogRefreshIfStale()
+    {
+        string apiKey;
+        int version;
+        lock (_catalogLock)
+        {
+            if (_host is null || _apiKey is not { } key || !_apiCatalogRefresh.IsStale(_apiCatalogFetchedAt))
+                return;
+            (apiKey, version) = (key, _catalogVersion);
+        }
+
+        _apiCatalogRefresh.Start(
+            ct => RefreshApiCatalogInBackgroundAsync(apiKey, version, ct),
+            error => _host?.Log(PluginLogLevel.Warning, $"OpenAI model refresh failed: {error.GetType().Name}"));
+    }
+
+    private async Task RefreshApiCatalogInBackgroundAsync(string apiKey, int version, CancellationToken ct)
+    {
+        var models = await FetchApiModelsAsync(apiKey, ct);
+        if (models is null)
+        {
+            _host?.Log(PluginLogLevel.Warning, "OpenAI returned no usable model list. Keeping the current list.");
+            return;
+        }
+
+        CommitApiCatalog(models, version, automatic: true, ct);
+    }
+
+    private bool CommitApiCatalog(IReadOnlyList<OpenAiFetchedModel> models, int version, bool automatic, CancellationToken ct)
+    {
         var llmModels = models
             .Where(model => IsChatModel(model.Id))
             .OrderBy(model => model.Id, StringComparer.Ordinal)
@@ -733,24 +811,47 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
             .Where(model => CreateDiscoveredTranscriptionModelEntry(model.Id) is not null)
             .DistinctBy(model => model.Id, StringComparer.OrdinalIgnoreCase)
             .ToList();
-        _host?.SetSetting(ApiCatalogSnapshotSettingName, new ApiCatalogSnapshot(true, llmModels, transcriptionModels));
-        _fetchedLlmModels = llmModels;
-        _fetchedTranscriptionModels = transcriptionModels;
-        _hasFetchedApiCatalog = true;
-        ApplyTranscriptionCatalog(_fetchedTranscriptionModels, persist: true);
-        NormalizeSelectedLlmModel(persist: true);
-        _host?.NotifyCapabilitiesChanged();
+        IPluginHostServices host;
+        lock (_catalogLock)
+        {
+            // A result that arrives after deactivation, a key change or an auth-mode change belongs to an
+            // old connection.
+            if ((automatic && ct.IsCancellationRequested) || version != _catalogVersion || _keyChangePending || _host is null)
+                return false;
+            host = _host;
+            if (automatic && WouldSwitchOffApiModels(llmModels, transcriptionModels))
+            {
+                host.Log(PluginLogLevel.Warning, "OpenAI returned a model list without text or transcription models. Keeping the current list.");
+                return false;
+            }
+
+            var fetchedAt = _apiCatalogRefresh.UtcNow;
+            host.SetSetting(ApiCatalogSnapshotSettingName, new ApiCatalogSnapshot(true, llmModels, transcriptionModels, fetchedAt));
+            _fetchedLlmModels = llmModels;
+            _fetchedTranscriptionModels = transcriptionModels;
+            _hasFetchedApiCatalog = true;
+            _apiCatalogFetchedAt = fetchedAt;
+            ApplyTranscriptionCatalog(_fetchedTranscriptionModels);
+            NormalizeSelectedLlmModel();
+        }
+
+        host.NotifyCapabilitiesChanged();
         return true;
     }
 
-    internal async Task<IReadOnlyList<OpenAiFetchedModel>?> FetchApiModelsAsync(
-        CancellationToken ct = default)
-    {
-        if (!IsConfigured)
-            return null;
+    // The background refresh never empties a list that offers models now: that would switch off text
+    // processing or dictation that worked. The button can still apply such a list.
+    private bool WouldSwitchOffApiModels(List<OpenAiFetchedModel> llmModels, List<OpenAiFetchedModel> transcriptionModels) =>
+        (llmModels.Count == 0 && ModelsForAuthMode(OpenAiAuthMode.ApiKey).Count > 0)
+        || (transcriptionModels.Count == 0 && AvailableTranscriptionModelEntries.Count > 0);
 
+    internal Task<IReadOnlyList<OpenAiFetchedModel>?> FetchApiModelsAsync(CancellationToken ct = default) =>
+        _apiKey is { } apiKey ? FetchApiModelsAsync(apiKey, ct) : Task.FromResult<IReadOnlyList<OpenAiFetchedModel>?>(null);
+
+    private async Task<IReadOnlyList<OpenAiFetchedModel>?> FetchApiModelsAsync(string apiKey, CancellationToken ct)
+    {
         using var request = new HttpRequestMessage(HttpMethod.Get, $"{BaseUrl}/v1/models");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
 
         try
         {
@@ -894,16 +995,27 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
         if (_authMode == mode)
             return;
 
-        ApplyLlmSelection(mode, NormalizedLlmModel(mode, preserveUnknownWhenCatalogUnavailable: false), persist: true);
+        lock (_catalogLock)
+        {
+            ApplyLlmSelection(mode, NormalizedLlmModel(mode, preserveUnknownWhenCatalogUnavailable: false), persist: true);
+            // The mode decides which text list applies, so a refresh started before the switch is dropped.
+            _catalogVersion++;
+        }
+
+        _apiCatalogRefresh.Cancel();
         _host?.NotifyCapabilitiesChanged();
+        StartApiCatalogRefreshIfStale();
     }
 
     internal void SelectLlmModel(string modelId)
     {
-        if (SupportedModels.All(model => !string.Equals(model.Id, modelId, StringComparison.Ordinal)))
-            modelId = SupportedModels.FirstOrDefault()?.Id ?? modelId;
+        lock (_catalogLock)
+        {
+            if (SupportedModels.All(model => !string.Equals(model.Id, modelId, StringComparison.Ordinal)))
+                modelId = SupportedModels.FirstOrDefault()?.Id ?? modelId;
 
-        ApplyLlmSelection(_authMode, modelId, persist: true);
+            ApplyLlmSelection(_authMode, modelId, persist: true);
+        }
     }
 
     internal void SetReasoningEffort(string effort)
@@ -1067,46 +1179,72 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
 
         if (_host is not null)
         {
-            var previousCatalog = new ApiCatalogSnapshot(_hasFetchedApiCatalog, _fetchedLlmModels, _fetchedTranscriptionModels);
             if (changed)
-                _host.SetSetting(ApiCatalogSnapshotSettingName, new ApiCatalogSnapshot(false, [], []));
+            {
+                // The catalog belongs to the old account, and a refresh still running for it must not land. Until the
+                // new key is in place, no refresh may save a list either: one started now still sends the old key.
+                lock (_catalogLock) { _catalogVersion++; _keyChangePending = true; }
+                _apiCatalogRefresh.Cancel();
+            }
 
             try
             {
-                if (normalized is null)
-                    await _host.DeleteSecretAsync(ApiKeySecretName);
-                else
-                    await _host.StoreSecretAsync(ApiKeySecretName, normalized);
-            }
-            catch (Exception ex) when (ex is not OutOfMemoryException)
-            {
+                var previousCatalog = new ApiCatalogSnapshot(_hasFetchedApiCatalog, _fetchedLlmModels, _fetchedTranscriptionModels,
+                    _apiCatalogFetchedAt);
                 if (changed)
+                    _host.SetSetting(ApiCatalogSnapshotSettingName, new ApiCatalogSnapshot(false, [], []));
+
+                try
                 {
-                    try
-                    {
-                        // A host can throw after committing a secret. Restore only for the unchanged key.
-                        var savedKey = NormalizeApiKey(await _host.LoadSecretAsync(ApiKeySecretName));
-                        if (string.Equals(savedKey, _apiKey, StringComparison.Ordinal))
-                            _host.SetSetting(ApiCatalogSnapshotSettingName, previousCatalog);
-                    }
-                    catch (Exception restoreError) when (restoreError is not OutOfMemoryException)
-                    { _host.Log(PluginLogLevel.Warning, "Could not restore the previous model catalog after a failed API key change."); }
+                    if (normalized is null)
+                        await _host.DeleteSecretAsync(ApiKeySecretName);
+                    else
+                        await _host.StoreSecretAsync(ApiKeySecretName, normalized);
                 }
-                throw;
+                catch (Exception ex) when (ex is not OutOfMemoryException)
+                {
+                    if (changed)
+                    {
+                        try
+                        {
+                            // A host can throw after committing a secret. Restore only for the unchanged key.
+                            var savedKey = NormalizeApiKey(await _host.LoadSecretAsync(ApiKeySecretName));
+                            if (string.Equals(savedKey, _apiKey, StringComparison.Ordinal))
+                                _host.SetSetting(ApiCatalogSnapshotSettingName, previousCatalog);
+                        }
+                        catch (Exception restoreError) when (restoreError is not OutOfMemoryException)
+                        { _host.Log(PluginLogLevel.Warning, "Could not restore the previous model catalog after a failed API key change."); }
+                    }
+                    throw;
+                }
+
+                lock (_catalogLock)
+                {
+                    _apiKey = normalized;
+                    if (changed)
+                    {
+                        // A refresh that started during the secret write captured the old key with the new version.
+                        _catalogVersion++;
+                        _fetchedLlmModels = [];
+                        _hasFetchedApiCatalog = false;
+                        _fetchedTranscriptionModels = [];
+                        _apiCatalogFetchedAt = null;
+                        // The built-in lists stand in until the new account's catalog arrives.
+                        ApplyTranscriptionCatalog(_fetchedTranscriptionModels);
+                        NormalizeSelectedLlmModel(preserveUnknownWhenCatalogUnavailable: true);
+                    }
+                }
             }
-
-            _apiKey = normalized;
-
-            if (changed)
+            finally
             {
-                _fetchedLlmModels = [];
-                _hasFetchedApiCatalog = false;
-                _fetchedTranscriptionModels = [];
-                ApplyTranscriptionCatalog(_fetchedTranscriptionModels, persist: true);
+                // Also after a failed write, so later refreshes can save again.
+                if (changed) lock (_catalogLock) _keyChangePending = false;
             }
 
             if (changed && (wasConfigured != IsConfigured || hadFetchedModels))
                 _host.NotifyCapabilitiesChanged();
+            if (changed)
+                StartApiCatalogRefreshIfStale();
         }
     }
 
@@ -1136,6 +1274,7 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
     /// </summary>
     public void Dispose()
     {
+        _apiCatalogRefresh.Dispose();
         _oauthRefreshLock.Dispose();
         _httpClient.Dispose();
     }
@@ -1160,31 +1299,35 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
         AvailableTranscriptionModelEntries.FirstOrDefault(model =>
             string.Equals(model.Id, _selectedModelId, StringComparison.OrdinalIgnoreCase));
 
-    private void SelectModelCore(string modelId, bool persist)
+    // A selection the user makes: it is saved and becomes the choice that later lists resolve.
+    private void SelectModelCore(string modelId)
     {
         if (AvailableTranscriptionModelEntries.Count == 0)
         {
-            if (persist) _host?.SetSetting<string?>(SelectedModelSettingName, null);
-            _selectedModelId = _selectedApiModelName = null;
+            _host?.SetSetting<string?>(SelectedModelSettingName, null);
+            _preferredTranscriptionModelId = _selectedModelId = _selectedApiModelName = null;
             return;
         }
-        var entry = AvailableTranscriptionModelEntries.FirstOrDefault(model =>
-                string.Equals(model.Id, modelId, StringComparison.OrdinalIgnoreCase))
-            ?? AvailableTranscriptionModelEntries.FirstOrDefault(model =>
-                string.Equals(
-                    model.Id,
-                    FallbackTranscriptionModelEntries[0].Id,
-                    StringComparison.OrdinalIgnoreCase))
-            ?? AvailableTranscriptionModelEntries[0];
-        if (persist)
-            _host?.SetSetting(SelectedModelSettingName, entry.Id);
+        var entry = ResolveTranscriptionModel(modelId);
+        _host?.SetSetting(SelectedModelSettingName, entry.Id);
+        _preferredTranscriptionModelId = entry.Id;
         _selectedModelId = entry.Id;
         _selectedApiModelName = entry.ApiModelName;
     }
 
-    private void ApplyTranscriptionCatalog(
-        IReadOnlyList<OpenAiFetchedModel> models,
-        bool persist)
+    /// <summary>
+    /// Uses the saved model only while the current list offers it, so a retired model falls back to GPT
+    /// Transcribe instead of failing every request with HTTP 404. The saved value stays and applies again
+    /// once a later list offers it.
+    /// </summary>
+    private TranscriptionModelEntry ResolveTranscriptionModel(string? modelId) =>
+        AvailableTranscriptionModelEntries.FirstOrDefault(model =>
+            string.Equals(model.Id, modelId, StringComparison.OrdinalIgnoreCase))
+        ?? AvailableTranscriptionModelEntries.FirstOrDefault(model =>
+            string.Equals(model.Id, FallbackTranscriptionModelEntries[0].Id, StringComparison.OrdinalIgnoreCase))
+        ?? AvailableTranscriptionModelEntries[0];
+
+    private void ApplyTranscriptionCatalog(IReadOnlyList<OpenAiFetchedModel> models)
     {
         var discoveredModels = models
             .Select(model => CreateDiscoveredTranscriptionModelEntry(model.Id))
@@ -1199,7 +1342,15 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
             ? discoveredModels
             : FallbackTranscriptionModelEntries;
 
-        SelectModelCore(_selectedModelId ?? FallbackTranscriptionModelEntries[0].Id, persist);
+        if (AvailableTranscriptionModelEntries.Count == 0)
+        {
+            _selectedModelId = _selectedApiModelName = null;
+            return;
+        }
+
+        var entry = ResolveTranscriptionModel(_preferredTranscriptionModelId);
+        _selectedModelId = entry.Id;
+        _selectedApiModelName = entry.ApiModelName;
     }
 
     private static TranscriptionModelEntry? CreateDiscoveredTranscriptionModelEntry(string modelId)
@@ -1322,13 +1473,17 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
             }
             throw;
         }
-        ApplyOAuthSession(session);
-        if (resetCatalog)
+        lock (_catalogLock)
         {
-            _fetchedChatGptModels = [];
-            _hasFetchedChatGptCatalog = false;
+            ApplyOAuthSession(session);
+            if (resetCatalog)
+            {
+                _fetchedChatGptModels = [];
+                _hasFetchedChatGptCatalog = false;
+            }
+            NormalizeSelectedLlmModel();
         }
-        NormalizeSelectedLlmModel(persist: true);
+
         _host.NotifyCapabilitiesChanged();
     }
 
@@ -1342,32 +1497,51 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
         _oauthExpiresAt = session.ExpiresAt;
     }
 
-    private void NormalizeSelectedLlmModel(
-        bool persist,
-        bool preserveUnknownWhenCatalogUnavailable = false)
-        => ApplyLlmSelection(_authMode, NormalizedLlmModel(_authMode, preserveUnknownWhenCatalogUnavailable), persist);
+    // Resolves the text model in use from the saved choice. Lists never overwrite the saved choice.
+    private void NormalizeSelectedLlmModel(bool preserveUnknownWhenCatalogUnavailable = false) =>
+        _selectedLlmModelId = NormalizedLlmModel(_authMode, preserveUnknownWhenCatalogUnavailable);
 
+    // A selection the user makes, or a connection-method switch: it is saved and becomes the choice.
     private void ApplyLlmSelection(OpenAiAuthMode mode, string? modelId, bool persist)
     {
         if (persist) _host?.SetSetting(LlmSelectionSettingName, new LlmSelectionSnapshot(mode.ToStorageValue(), modelId));
         _authMode = mode;
+        _preferredLlmModelId = modelId;
         _selectedLlmModelId = modelId;
     }
 
+    /// <summary>
+    /// Uses the saved model only while the current list offers it, so a retired model falls back to a
+    /// default instead of failing every request with HTTP 404. The saved value applies again once a later
+    /// list offers it. Without a fetched list, an unknown saved model stays: the built-in list is a guess.
+    /// </summary>
     private string? NormalizedLlmModel(OpenAiAuthMode mode, bool preserveUnknownWhenCatalogUnavailable)
     {
         var available = ModelsForAuthMode(mode);
         var hasFetchedCatalog = mode == OpenAiAuthMode.ChatGpt ? _hasFetchedChatGptCatalog : _hasFetchedApiCatalog;
         if (available.Count == 0)
-            return hasFetchedCatalog ? null : _selectedLlmModelId;
+            return hasFetchedCatalog ? null : _preferredLlmModelId;
 
-        if (_selectedLlmModelId is null
-            || (!preserveUnknownWhenCatalogUnavailable || hasFetchedCatalog)
-            && available.All(model =>
-                !string.Equals(model.Id, _selectedLlmModelId, StringComparison.Ordinal)))
-            return available.First().Id;
-        return _selectedLlmModelId;
+        if (_preferredLlmModelId is { } preferred)
+        {
+            if (available.Any(model => string.Equals(model.Id, preferred, StringComparison.Ordinal)))
+                return preferred;
+            if (preserveUnknownWhenCatalogUnavailable && !hasFetchedCatalog)
+                return preferred;
+        }
+
+        return DefaultLlmModel(mode, available);
     }
+
+    // A fetched API list is sorted by ID, so its first entry is not a sensible default. The ChatGPT
+    // catalog is sorted by priority and keeps its first entry.
+    private static string DefaultLlmModel(OpenAiAuthMode mode, IReadOnlyList<PluginModelInfo> available) =>
+        mode == OpenAiAuthMode.ChatGpt
+            ? available[0].Id
+            : FallbackLlmModels
+                .Select(fallback => available.FirstOrDefault(model => string.Equals(model.Id, fallback.Id, StringComparison.Ordinal))?.Id)
+                .FirstOrDefault(id => id is not null)
+                ?? available[0].Id;
 
     private double? ResolvedTemperature(string modelId)
     {
@@ -1466,7 +1640,31 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
     }
 
     private sealed record OpenAiModelsResponse(List<OpenAiFetchedModel?> Data);
-    internal sealed record ApiCatalogSnapshot(bool HasFetched, List<OpenAiFetchedModel> LlmModels, List<OpenAiFetchedModel> TranscriptionModels);
+    // FetchedAt sits next to the lists, so one write keeps both consistent and a key change clears both.
+    internal sealed record ApiCatalogSnapshot(bool HasFetched, List<OpenAiFetchedModel> LlmModels, List<OpenAiFetchedModel> TranscriptionModels,
+        [property: JsonConverter(typeof(FetchDateConverter))] DateTimeOffset? FetchedAt = null);
+
+    /// <summary>
+    /// Reads a damaged fetch date as "no date", so the catalog refreshes instead of failing to load.
+    /// </summary>
+    private sealed class FetchDateConverter : JsonConverter<DateTimeOffset?>
+    {
+        public override DateTimeOffset? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            if (reader.TokenType == JsonTokenType.String && reader.TryGetDateTimeOffset(out var value))
+                return value.ToUniversalTime();
+            reader.Skip();
+            return null;
+        }
+
+        public override void Write(Utf8JsonWriter writer, DateTimeOffset? value, JsonSerializerOptions options)
+        {
+            if (value is { } fetchedAt)
+                writer.WriteStringValue(fetchedAt.ToUniversalTime());
+            else
+                writer.WriteNullValue();
+        }
+    }
     internal sealed record ChatGptCatalogSnapshot(bool HasFetched, List<OpenAiChatGptModel> Models);
     internal sealed record LlmSelectionSnapshot(string AuthMode, string? ModelId);
     private sealed record OpenAiChatGptModelsResponse(List<OpenAiChatGptModel?> Models);

@@ -24,7 +24,7 @@ public partial class OpenAiPluginTests
         host.FailAfterSecretWrite = afterCommit;
         await Assert.ThrowsAsync<IOException>(() => plugin.SetApiKeyAsync(replacement));
         Assert.Equal("existing-key", plugin.ApiKey);
-        using var reloaded = new OpenAiPlugin();
+        using var reloaded = CreateOfflinePlugin();
         await reloaded.ActivateAsync(host);
         var snapshot = host.GetSetting<OpenAiPlugin.ApiCatalogSnapshot>("apiModelCatalogSnapshot");
         Assert.NotNull(snapshot);
@@ -56,7 +56,7 @@ public partial class OpenAiPluginTests
         Assert.Equal("existing-key", host.Secrets["api-key"]);
         Assert.Equal("existing-key", plugin.ApiKey);
         Assert.Equal("o3", Assert.Single(plugin.SupportedModels).Id);
-        using var reloaded = new OpenAiPlugin();
+        using var reloaded = CreateOfflinePlugin();
         await reloaded.ActivateAsync(host);
         Assert.Equal("existing-key", reloaded.ApiKey);
         Assert.Equal("o3", Assert.Single(reloaded.SupportedModels).Id);
@@ -84,7 +84,7 @@ public partial class OpenAiPluginTests
         await Assert.ThrowsAsync<IOException>(() => plugin.RefreshAvailableLlmModelsAsync());
         Assert.Equal(text, plugin.SupportedModels.Select(model => model.Id));
         Assert.Equal(audio, plugin.TranscriptionModels.Select(model => model.Id));
-        using var reloaded = new OpenAiPlugin();
+        using var reloaded = CreateOfflinePlugin();
         await reloaded.ActivateAsync(host);
         Assert.Equal(text, reloaded.SupportedModels.Select(model => model.Id));
         Assert.Equal(audio, reloaded.TranscriptionModels.Select(model => model.Id));
@@ -105,7 +105,7 @@ public partial class OpenAiPluginTests
         host.FailSettingKey = "chatGPTModelCatalogSnapshot";
         await Assert.ThrowsAsync<IOException>(() => plugin.RefreshAvailableLlmModelsAsync());
         Assert.Null(host.GetSetting<OpenAiPlugin.ChatGptCatalogSnapshot>("chatGPTModelCatalogSnapshot"));
-        using var reloaded = new OpenAiPlugin();
+        using var reloaded = CreateOfflinePlugin();
         await reloaded.ActivateAsync(host);
         Assert.NotEmpty(reloaded.SupportedModels);
     }
@@ -135,7 +135,7 @@ public partial class OpenAiPluginTests
         fail = true;
         await plugin.RefreshAvailableLlmModelsAsync();
         Assert.Empty(plugin.SupportedModels);
-        using var reloaded = new OpenAiPlugin();
+        using var reloaded = CreateOfflinePlugin();
         await reloaded.ActivateAsync(host);
         Assert.Empty(reloaded.SupportedModels);
         Assert.Null(reloaded.SelectedLlmModelId);
@@ -162,7 +162,7 @@ public partial class OpenAiPluginTests
         Assert.Null(plugin.SelectedModelId);
         plugin.SelectModel("whisper-1");
         Assert.Null(plugin.SelectedModelId);
-        using var reloaded = new OpenAiPlugin();
+        using var reloaded = CreateOfflinePlugin();
         await reloaded.ActivateAsync(host);
         Assert.Empty(reloaded.TranscriptionModels);
         Assert.Null(reloaded.SelectedModelId);
@@ -198,13 +198,13 @@ public partial class OpenAiPluginTests
         fail = true;
         Assert.Contains("could not be refreshed", await plugin.ExecuteSettingsActionAsync("refresh", default));
         Assert.Empty(plugin.SupportedModels);
-        using var reloaded = new OpenAiPlugin();
+        using var reloaded = CreateOfflinePlugin();
         await reloaded.ActivateAsync(host);
         Assert.Empty(reloaded.SupportedModels);
         Assert.Null(reloaded.SelectedLlmModelId);
         await reloaded.SetApiKeyAsync("replacement-key");
         Assert.NotEmpty(reloaded.SupportedModels);
-        using var afterKeyChange = new OpenAiPlugin();
+        using var afterKeyChange = CreateOfflinePlugin();
         await afterKeyChange.ActivateAsync(host);
         Assert.NotEmpty(afterKeyChange.SupportedModels);
     }

@@ -18,7 +18,7 @@ public partial class OpenAiPluginTests
         host.Secrets["chatgpt-session"] = json;
         host.Secrets["oauth-access-token"] = "obsolete-access";
         host.Secrets["oauth-refresh-token"] = "obsolete-refresh";
-        using var plugin = new OpenAiPlugin();
+        using var plugin = CreateOfflinePlugin();
         await plugin.ActivateAsync(host);
         Assert.True(plugin.IsConfigured);
         Assert.False(plugin.HasChatGptCredentials);
@@ -34,7 +34,7 @@ public partial class OpenAiPluginTests
         try
         {
             await File.WriteAllTextAsync(file, json);
-            using var plugin = new OpenAiPlugin();
+            using var plugin = CreateOfflinePlugin();
             await plugin.ActivateAsync(new TestPluginHostServices());
             var error = await Assert.ThrowsAsync<InvalidOperationException>(() => plugin.ImportExistingLoginAsync(file));
             Assert.Equal("Existing login file could not be parsed.", error.Message);

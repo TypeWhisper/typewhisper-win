@@ -7,5 +7,7 @@
     <ProjectReference Include="../TypeWhisper.Plugin.OpenAi.csproj" />
     <ProjectReference Include="../../../src/TypeWhisper.Core/TypeWhisper.Core.csproj" />
     <ProjectReference Include="../../../src/TypeWhisper.PluginHost/TypeWhisper.PluginHost.csproj" />
+    <Compile Include="../../shared/tests/ModelCatalogAutoRefreshTests.cs" Link="Shared/ModelCatalogAutoRefreshTests.cs" />
+    <RuntimeHostConfigurationOption Include="TypeWhisper.Plugins.DisableAutomaticModelRefresh" Value="true" />
   </ItemGroup>
 </Project>

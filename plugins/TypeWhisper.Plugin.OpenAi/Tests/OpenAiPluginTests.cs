@@ -24,7 +24,7 @@ public partial class OpenAiPluginTests
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
         using var manifestDocument = JsonDocument.Parse(manifestJson);
 
-        var sut = new OpenAiPlugin();
+        var sut = CreateOfflinePlugin();
 
         Assert.NotNull(manifest);
         Assert.Equal(manifest.Version, sut.PluginVersion);
@@ -41,7 +41,7 @@ public partial class OpenAiPluginTests
         var host = new TestPluginHostServices();
         host.Secrets["api-key"] = "sk-test";
 
-        var sut = new OpenAiPlugin();
+        var sut = CreateOfflinePlugin();
         await sut.ActivateAsync(host);
 
         Assert.IsAssignableFrom<ITtsProviderPlugin>(sut);
@@ -67,7 +67,7 @@ public partial class OpenAiPluginTests
         host.Secrets["api-key"] = "sk-test";
         host.SetSetting("selectedModel", "whisper-1");
 
-        var sut = new OpenAiPlugin();
+        var sut = CreateOfflinePlugin();
         await sut.ActivateAsync(host);
 
         Assert.Equal("whisper-1", sut.SelectedModelId);
@@ -81,7 +81,7 @@ public partial class OpenAiPluginTests
         host.Secrets["api-key"] = "sk-test";
         host.SetSetting("selectedModel", "retired-model");
 
-        var sut = new OpenAiPlugin();
+        var sut = CreateOfflinePlugin();
         await sut.ActivateAsync(host);
 
         Assert.Equal("gpt-transcribe", sut.SelectedModelId);
@@ -101,7 +101,7 @@ public partial class OpenAiPluginTests
             });
         host.SetSetting("selectedModel", "gpt-live-transcribe-2026-07-28");
 
-        var sut = new OpenAiPlugin();
+        var sut = CreateOfflinePlugin();
         await sut.ActivateAsync(host);
 
         Assert.Equal(
@@ -127,7 +127,7 @@ public partial class OpenAiPluginTests
         host.Secrets["oauth-access-token"] = "access-token";
         host.Secrets["oauth-refresh-token"] = "refresh-token";
 
-        var sut = new OpenAiPlugin();
+        var sut = CreateOfflinePlugin();
         await sut.ActivateAsync(host);
 
         Assert.Equal(
@@ -141,7 +141,7 @@ public partial class OpenAiPluginTests
     {
         var host = new TestPluginHostServices();
         host.Secrets["api-key"] = "sk-test";
-        var sut = new OpenAiPlugin();
+        var sut = CreateOfflinePlugin();
         await sut.ActivateAsync(host);
 
         sut.SelectVoice("nova");
@@ -815,7 +815,9 @@ public partial class OpenAiPluginTests
         Assert.Equal(["gpt-4.1-mini", "o4-mini"], models.Select(m => m.Id).ToArray());
         Assert.Equal(["gpt-4.1-mini", "o4-mini"], sut.SupportedModels.Select(m => m.Id).ToArray());
         Assert.Equal("gpt-4.1-mini", sut.SelectedLlmModelId);
-        Assert.Equal("gpt-4.1-mini", host.GetSetting<OpenAiPlugin.LlmSelectionSnapshot>("llmSelection")?.ModelId);
+        // A refresh never overwrites the saved model; it applies again once a later list offers it.
+        Assert.Null(host.GetSetting<OpenAiPlugin.LlmSelectionSnapshot>("llmSelection"));
+        Assert.Equal("stale-model", host.GetSetting<string>("selectedLLMModel"));
         Assert.Equal("whisper-1", sut.SelectedModelId);
         Assert.Equal(
             [
@@ -934,9 +936,11 @@ public partial class OpenAiPluginTests
         Assert.Equal(["gpt-5.6-sol", "gpt-5.5"], models.Select(model => model.Id).ToArray());
         Assert.Equal("GPT-5.6-Sol", models.First().DisplayName);
         Assert.Equal("gpt-5.6-sol", sut.SelectedLlmModelId);
-        Assert.Equal("gpt-5.6-sol", host.GetSetting<OpenAiPlugin.LlmSelectionSnapshot>("llmSelection")?.ModelId);
+        // A refresh never overwrites the saved model; it applies again once a later list offers it.
+        Assert.Null(host.GetSetting<OpenAiPlugin.LlmSelectionSnapshot>("llmSelection"));
+        Assert.Equal("stale-model", host.GetSetting<string>("selectedLLMModel"));
         Assert.Equal(
-            "https://chatgpt.com/backend-api/codex/models?client_version=1.1.6",
+            "https://chatgpt.com/backend-api/codex/models?client_version=1.2.0",
             capturedRequest?.RequestUri?.ToString());
         Assert.Equal("Bearer access-token", capturedRequest?.Headers.Authorization?.ToString());
         Assert.Equal(
@@ -1001,7 +1005,7 @@ public partial class OpenAiPluginTests
         Assert.Equal(
             [
                 "https://auth.openai.com/oauth/token",
-                "https://chatgpt.com/backend-api/codex/models?client_version=1.1.6",
+                "https://chatgpt.com/backend-api/codex/models?client_version=1.2.0",
             ],
             requestedUris);
         Assert.Equal(["gpt-5.6-sol"], models.Select(model => model.Id).ToArray());
@@ -1257,6 +1261,10 @@ public partial class OpenAiPluginTests
         }
     }
 
+    private static OpenAiPlugin CreateOfflinePlugin() =>
+        new(new HttpClient(new CapturingHandler((request, _) =>
+            throw new InvalidOperationException($"Unexpected network request to {request.RequestUri?.Host}."))));
+
     private static Dictionary<string, string> ParseQuery(Uri uri)
     {
         var query = uri.Query.TrimStart('?');
@@ -1310,12 +1318,15 @@ public partial class OpenAiPluginTests
         public Dictionary<string, string?> Secrets { get; } = [];
         public int NotifyCapabilitiesChangedCount { get; private set; }
 
-        public Task StoreSecretAsync(string key, string value)
+        /// <summary>Runs before a secret is stored, so a test can hold a key change inside its secret write.</summary>
+        public Func<Task>? BeforeStoreSecret { get; set; }
+
+        public async Task StoreSecretAsync(string key, string value)
         {
+            if (BeforeStoreSecret is { } before) await before();
             if (FailWrites || FailSecretWrites) throw new IOException("Fixture write failed.");
             Secrets[key] = value;
             if (FailAfterSecretWrite) throw new IOException("Fixture failure after write.");
-            return Task.CompletedTask;
         }
 
         public Task<string?> LoadSecretAsync(string key) =>
@@ -1345,7 +1356,11 @@ public partial class OpenAiPluginTests
         public string? ActiveAppName => null;
         public IPluginEventBus EventBus { get; } = new TestPluginEventBus();
         public IReadOnlyList<string> AvailableProfileNames => [];
-        public void Log(PluginLogLevel level, string message) { }
+        public List<string> Warnings { get; } = [];
+        public void Log(PluginLogLevel level, string message)
+        {
+            if (level == PluginLogLevel.Warning) Warnings.Add(message);
+        }
         public void NotifyCapabilitiesChanged() => NotifyCapabilitiesChangedCount++;
         public IPluginLocalization Localization { get; } = new TestPluginLocalization();
     }

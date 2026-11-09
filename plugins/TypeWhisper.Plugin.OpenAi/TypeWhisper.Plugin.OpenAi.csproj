@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <Version>1.1.6</Version>
+    <Version>1.2.0</Version>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
@@ -9,6 +9,7 @@
     <Compile Remove="Tests/**/*.cs" />
     <Using Include="TypeWhisper.Plugin.Shared" />
     <Compile Include="../shared/PluginLocalization.cs" Link="Shared/PluginLocalization.cs" />
+    <Compile Include="../shared/ModelCatalogAutoRefresh.cs" Link="Shared/ModelCatalogAutoRefresh.cs" />
     <ProjectReference Include="../../src/TypeWhisper.PluginSDK/TypeWhisper.PluginSDK.csproj" />
     <PackageReference Include="NAudio.Wasapi" />
     <InternalsVisibleTo Include="TypeWhisper.Plugin.OpenAi.Portable.Tests" />
