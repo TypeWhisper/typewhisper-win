@@ -1,6 +1,9 @@
+using System.Collections.Concurrent;
 using System.Net;
 using System.Text.Json;
+using PortableMigration.Tests;
 using TypeWhisper.Plugin.Gemini;
+using TypeWhisper.Plugin.Shared;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
 
@@ -432,6 +435,136 @@ public sealed partial class GeminiPluginTests
         Assert.Equal(
             ["gemini-pro-latest"],
             host.GetSetting<List<GeminiFetchedModel>>("fetchedLlmModels.v2")!.Select(m => m.Id));
+    }
+
+    [Fact]
+    public async Task HourlyRecheck_ReloadsACatalogThatAgesWhileThePluginStaysActive()
+    {
+        var clock = new RecheckTestClock(RefreshNow);
+        var requests = new ConcurrentQueue<string>();
+        var handler = new CapturingHandler((request, _) =>
+        {
+            var url = request.RequestUri!.ToString();
+            requests.Enqueue(url);
+            return url == ModelsUrl
+                ? JsonResponse(RefreshedCatalogJson)
+                : throw new InvalidOperationException($"Unexpected request: {url}");
+        });
+        var host = HostWithCatalog("gemini-key", RefreshNow);
+
+        using var sut = new GeminiPlugin(new HttpClient(handler), refreshModelsAutomatically: true, clock: clock);
+        await sut.ActivateAsync(host);
+        await sut.ModelCatalogRefreshTask;
+        Assert.Empty(requests);
+
+        clock.Advance(TimeSpan.FromHours(24));
+        await sut.ModelCatalogRefreshTask;
+
+        var refreshedAt = RefreshNow.AddHours(24);
+        Assert.Equal([ModelsUrl], requests);
+        Assert.Equal(["gemini-flash-lite-latest", "gemini-3.8-flash"], sut.SupportedModels.Select(m => m.Id));
+        Assert.Equal(["gemini-3.6-transcribe"], sut.TranscriptionModels.Select(m => m.Id));
+        Assert.Equal(refreshedAt, sut.ModelCatalogFetchedAt);
+        Assert.Equal(refreshedAt, host.GetSetting<DateTimeOffset?>("modelCatalogFetchedAtUtc"));
+        Assert.Equal(
+            ["gemini-flash-lite-latest", "gemini-3.8-flash"],
+            host.GetSetting<List<GeminiFetchedModel>>("fetchedLlmModels.v2")!.Select(m => m.Id));
+
+        // The reloaded catalog is fresh, so the next check makes no request.
+        clock.Advance(ModelCatalogAutoRefresh.RecheckInterval);
+        await sut.ModelCatalogRefreshTask;
+        Assert.Single(requests);
+    }
+
+    [Fact]
+    public async Task HourlyRecheck_StopsWhenThePluginIsDeactivated()
+    {
+        var clock = new RecheckTestClock(RefreshNow);
+        var requests = 0;
+        var handler = new CapturingHandler((_, _) =>
+        {
+            Interlocked.Increment(ref requests);
+            throw new InvalidOperationException("Unexpected model refresh.");
+        });
+        var host = HostWithCatalog("gemini-key", RefreshNow);
+
+        using var sut = new GeminiPlugin(new HttpClient(handler), refreshModelsAutomatically: true, clock: clock);
+        await sut.ActivateAsync(host);
+        Assert.Equal(1, clock.ActiveTimers);
+        var lastRefresh = sut.ModelCatalogRefreshTask;
+
+        await sut.DeactivateAsync();
+        clock.Advance(TimeSpan.FromHours(24));
+
+        Assert.Equal(0, clock.ActiveTimers);
+        Assert.Same(lastRefresh, sut.ModelCatalogRefreshTask);
+        Assert.Equal(0, requests);
+    }
+
+    [Fact]
+    public async Task HourlyRecheck_RetriesAFailedRefresh()
+    {
+        var clock = new RecheckTestClock(RefreshNow);
+        var requests = 0;
+        var handler = new CapturingHandler((request, _) =>
+        {
+            if (request.RequestUri!.ToString() != ModelsUrl)
+                throw new InvalidOperationException($"Unexpected request: {request.RequestUri}");
+            // The refresh at start fails, as on a PC that starts offline; the next one succeeds.
+            return Interlocked.Increment(ref requests) == 1
+                ? new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
+                : JsonResponse(RefreshedCatalogJson);
+        });
+        var fetchedAt = RefreshNow.AddDays(-2);
+        var host = HostWithCatalog("gemini-key", fetchedAt);
+
+        using var sut = new GeminiPlugin(new HttpClient(handler), refreshModelsAutomatically: true, clock: clock);
+        await sut.ActivateAsync(host);
+        await sut.ModelCatalogRefreshTask;
+        Assert.Equal(1, requests);
+        Assert.Equal(fetchedAt, sut.ModelCatalogFetchedAt);
+
+        clock.Advance(ModelCatalogAutoRefresh.RecheckInterval);
+        await sut.ModelCatalogRefreshTask;
+
+        Assert.Equal(2, requests);
+        Assert.Equal(["gemini-flash-lite-latest", "gemini-3.8-flash"], sut.SupportedModels.Select(m => m.Id));
+        Assert.Equal(
+            RefreshNow + ModelCatalogAutoRefresh.RecheckInterval,
+            host.GetSetting<DateTimeOffset?>("modelCatalogFetchedAtUtc"));
+    }
+
+    [Fact]
+    public async Task HourlyRecheck_NeverRefreshesWithAKeyThatIsBeingReplaced()
+    {
+        var clock = new RecheckTestClock(RefreshNow);
+        var keys = new ConcurrentQueue<string>();
+        var handler = new CapturingHandler((request, _) =>
+        {
+            keys.Enqueue(request.Headers.GetValues("x-goog-api-key").Single());
+            return JsonResponse(SecondAccountCatalogJson);
+        });
+        var host = HostWithCatalog("first-key", RefreshNow);
+
+        using var sut = new GeminiPlugin(new HttpClient(handler), refreshModelsAutomatically: true, clock: clock);
+        await sut.ActivateAsync(host);
+        var beforeKeyChange = sut.ModelCatalogRefreshTask;
+        Task? duringKeyChange = null;
+        // The key change saves the emptied catalog while it holds the gate. The first catalog is a day old by then,
+        // so a check that fires there and ignored the gate would refresh it with the first key.
+        host.BeforeSetSetting = _ =>
+        {
+            host.BeforeSetSetting = null;
+            clock.Advance(TimeSpan.FromHours(24));
+            duringKeyChange = sut.ModelCatalogRefreshTask;
+        };
+
+        await sut.SetApiKeyAsync("second-key");
+        await sut.ModelCatalogRefreshTask;
+
+        Assert.Same(beforeKeyChange, duringKeyChange);
+        Assert.Equal(["second-key"], keys);
+        Assert.Equal(["gemini-pro-latest"], sut.SupportedModels.Select(m => m.Id));
     }
 
     private static GeminiPlugin CreateOfflinePlugin(TimeProvider? clock = null) =>

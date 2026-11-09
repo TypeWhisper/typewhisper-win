@@ -153,15 +153,27 @@ public sealed partial class GeminiPlugin :
             $"Activated (configured={HasApiKey}, llmModels={_fetchedLlmModels.Count}, " +
             $"transcriptionModels={_fetchedTranscriptionModels.Count})");
         StartModelCatalogRefreshIfStale();
+        // The app often runs for days without activating plugins again, so an active plugin checks every hour.
+        _modelRefresh.StartRechecks(RecheckModelCatalog);
     }
 
     /// <inheritdoc />
-    public Task DeactivateAsync()
+    public async Task DeactivateAsync()
     {
-        _modelRefresh.Cancel();
-        _host = null;
-        _apiKey = null;
-        return Task.CompletedTask;
+        // Under the gate, so an hourly check on a timer thread either started its refresh before this cancels
+        // it, or finds the plugin deactivated.
+        await _configurationGate.WaitAsync();
+        try
+        {
+            _modelRefresh.StopRechecks();
+            _modelRefresh.Cancel();
+            _host = null;
+            _apiKey = null;
+        }
+        finally
+        {
+            _configurationGate.Release();
+        }
     }
 
     // ITranscriptionEnginePlugin
@@ -772,6 +784,28 @@ public sealed partial class GeminiPlugin :
             ex => host.Log(
                 PluginLogLevel.Warning,
                 $"Gemini model list refresh failed with {ex.GetType().Name}. Keeping the current model list."));
+    }
+
+    /// <summary>
+    /// The hourly check. It runs on a timer thread, so it reads the key, host and catalog date under the gate that
+    /// a key change and deactivation hold while they change them; otherwise it could refresh with a replaced key
+    /// or after deactivation. While the gate is busy the check is skipped, and the next one follows an hour later.
+    /// </summary>
+    private void RecheckModelCatalog()
+    {
+        if (!_configurationGate.Wait(0))
+            return;
+
+        try
+        {
+            // A key change can start a refresh after the helper checked for one; that refresh keeps running.
+            if (_modelRefresh.Current.IsCompleted)
+                StartModelCatalogRefreshIfStale();
+        }
+        finally
+        {
+            _configurationGate.Release();
+        }
     }
 
     private async Task RefreshModelCatalogInBackgroundAsync(string apiKey, CancellationToken ct)
