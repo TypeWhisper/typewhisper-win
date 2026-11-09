@@ -771,8 +771,8 @@ public sealed partial class XaiPlugin : ITranscriptionEnginePlugin, ILlmProvider
     }
 
     /// <summary>
-    /// xAI retires models and voices without notice. Reloading a list once a day drops a retired entry
-    /// instead of failing every request with HTTP 404. Each list keeps its own fetch date.
+    /// A list that only refreshes on request keeps offering retired models and voices. Reloading it once
+    /// a day drops them instead of failing every request with HTTP 404. Each list keeps its own fetch date.
     /// </summary>
     private void StartCatalogRefreshIfStale()
     {

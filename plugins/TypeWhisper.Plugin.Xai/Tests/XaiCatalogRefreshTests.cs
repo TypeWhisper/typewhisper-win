@@ -227,7 +227,12 @@ public partial class XaiPluginTests
     public async Task SavedModelAndVoiceSurviveListsThatLackThemAndApplyAgainOnceOffered()
     {
         var models = """{ "data": [ { "id": "grok-5" }, { "id": "grok-4.3" }, { "id": "grok-3-mini" } ] }""";
-        var handler = new CatalogHandler(request => Task.FromResult(CatalogResponse(request, models, RefreshedVoices)));
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var handler = new CatalogHandler(async request =>
+        {
+            await release.Task;
+            return CatalogResponse(request, models, RefreshedVoices);
+        });
         var host = CatalogHost("xai-key", null, null);
         host.SetSetting("selectedLlmModel", "grok-saved");
         host.SetSetting("selectedVoice", "saved-voice");
@@ -235,6 +240,7 @@ public partial class XaiPluginTests
 
         await sut.ActivateAsync(host);
         Assert.Equal("grok-saved", sut.SelectedLlmModelId);
+        release.SetResult();
         await sut.CatalogRefreshTask;
 
         // Grok 4.3 and Eve stand in, not the alphabetically first entries; the saved values stay.

@@ -189,7 +189,12 @@ public sealed partial class MetaPluginTests
     public async Task SavedModelsSurviveARefreshThatLacksThemAndApplyAgainOnceOffered()
     {
         var body = """{"data":[{"id":"muse-spark-2.0"},{"id":"muse-spark-1.2"},{"id":"muse-voice-transcribe-2.0"}]}""";
-        var handler = new CatalogHandler(_ => Task.FromResult(Json(body)));
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var handler = new CatalogHandler(async _ =>
+        {
+            await release.Task;
+            return Json(body);
+        });
         var host = CatalogHost("meta-key", fetchedAt: null);
         host.SetSetting("selectedLlmModel", "muse-spark-1.1");
         host.SetSetting("selectedModel", "muse-voice-transcribe-1.0");
@@ -197,6 +202,7 @@ public sealed partial class MetaPluginTests
 
         await sut.ActivateAsync(host);
         Assert.Equal("muse-spark-1.1", sut.SelectedLlmModelId);
+        release.SetResult();
         await sut.ModelRefreshTask;
 
         // Requests use the default while the saved models are missing; the saved values stay.

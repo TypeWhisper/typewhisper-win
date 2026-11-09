@@ -542,8 +542,8 @@ public sealed partial class MetaPlugin : ITranscriptionEnginePlugin, ILlmProvide
     }
 
     /// <summary>
-    /// Meta retires models without notice. Reloading the list once a day drops a retired model
-    /// instead of failing every request with HTTP 404.
+    /// A list that only refreshes on request keeps offering retired models. Reloading it once a day
+    /// drops them instead of failing every request with HTTP 404.
     /// </summary>
     private void StartModelRefreshIfStale()
     {
