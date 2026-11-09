@@ -11,5 +11,6 @@
   "Test the entered key before saving.": "Den eingegebenen Key vor dem Speichern prüfen.",
   "Refresh models": "Modelle aktualisieren",
   "Fetch available text models. Save settings to keep the list.": "Verfügbare Textmodelle laden. Zum Übernehmen die Einstellungen speichern.",
-  "Connection verified. No changes saved.": "Verbindung geprüft. Keine Änderungen gespeichert."
+  "Connection verified. No changes saved.": "Verbindung geprüft. Keine Änderungen gespeichert.",
+  "{0} (not in the list, {1} is used)": "{0} (nicht in der Liste, {1} wird verwendet)"
 }

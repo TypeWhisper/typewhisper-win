@@ -11,5 +11,6 @@
   "Test the entered key before saving.": "Test the entered key before saving.",
   "Refresh models": "Refresh models",
   "Fetch available text models. Save settings to keep the list.": "Fetch available text models. Save settings to keep the list.",
-  "Connection verified. No changes saved.": "Connection verified. No changes saved."
+  "Connection verified. No changes saved.": "Connection verified. No changes saved.",
+  "{0} (not in the list, {1} is used)": "{0} (not in the list, {1} is used)"
 }

@@ -3,6 +3,7 @@
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Helpers;
 using TypeWhisper.PluginSDK.Models;
@@ -15,13 +16,19 @@ public sealed partial class CerebrasPlugin : ILlmProviderPlugin, ILlmRequestHedg
 {
     private const string BaseUrl = "https://api.cerebras.ai";
     private readonly HttpClient _http;
+    private readonly ModelCatalogAutoRefresh _modelRefresh;
+    // The background model refresh writes the saved configuration from another thread. This lock orders that
+    // write with the settings commits and guards the host, key and configuration it checks.
+    private readonly object _configurationLock = new();
     private IPluginHostServices? _host;
     private string? _apiKey;
     private Configuration _configuration = new();
     private string[]? _draftModels;
     private string? _draftModelsKey;
+    private DateTimeOffset _draftModelsFetchedAt;
 
-    // Defaults are only a starting point. An explicit refresh uses the account's catalog.
+    // Defaults are only a starting point. A refresh uses the account's catalog. In this order they are also the
+    // default model when the saved one is not offered.
     private static readonly string[] FallbackModels = ["gpt-oss-120b", "qwen-3.8-27b"];
 
     private sealed record Configuration
@@ -31,13 +38,21 @@ public sealed partial class CerebrasPlugin : ILlmProviderPlugin, ILlmRequestHedg
         public string TemperatureMode { get; init; } = "providerDefault";
         public double Temperature { get; init; } = 0.3;
         public string[] Models { get; init; } = [];
+        /// <summary>When <see cref="Models"/> was fetched. Lists saved before 1.2.0 have none.</summary>
+        [JsonConverter(typeof(FetchDateConverter))]
+        public DateTimeOffset? ModelsFetchedAtUtc { get; init; }
     }
 
     /// <summary>Creates an isolated transport that does not forward keys to redirects.</summary>
     public CerebrasPlugin() : this(new HttpClient(new HttpClientHandler { AllowAutoRedirect = false })
-        { Timeout = TimeSpan.FromSeconds(120) }) { }
+        { Timeout = TimeSpan.FromSeconds(120) }, refreshModelsAutomatically: ModelCatalogAutoRefresh.AllowedInThisProcess) { }
 
-    internal CerebrasPlugin(HttpClient http) => _http = http;
+    // Tests use this constructor. It leaves the background refresh off, so they never reach Cerebras.
+    internal CerebrasPlugin(HttpClient http, bool refreshModelsAutomatically = false, TimeProvider? clock = null)
+    {
+        _http = http;
+        _modelRefresh = new ModelCatalogAutoRefresh(refreshModelsAutomatically, clock);
+    }
 
     /// <inheritdoc />
     public string PluginId => "com.typewhisper.cerebras";
@@ -46,7 +61,7 @@ public sealed partial class CerebrasPlugin : ILlmProviderPlugin, ILlmRequestHedg
     /// <inheritdoc />
     public string ProviderName => PluginName;
     /// <inheritdoc />
-    public string PluginVersion => "1.1.2";
+    public string PluginVersion => "1.2.0";
     /// <inheritdoc />
     public bool IsAvailable => _host is not null && _apiKey is not null;
     /// <inheritdoc />
@@ -54,10 +69,43 @@ public sealed partial class CerebrasPlugin : ILlmProviderPlugin, ILlmRequestHedg
     /// <inheritdoc />
     public bool SupportsRequestHedging => true;
     /// <inheritdoc />
-    public IReadOnlyList<PluginModelInfo> SupportedModels => Models(_configuration)
-        .Select(id => new PluginModelInfo(id, DisplayName(id)) { IsRecommended = id == SelectedModel }).ToArray();
+    public IReadOnlyList<PluginModelInfo> SupportedModels
+    {
+        get
+        {
+            // One snapshot: the background refresh may replace the configuration meanwhile.
+            var configuration = _configuration;
+            var selected = SelectedModelOf(configuration);
+            return Models(configuration)
+                .Select(id => new PluginModelInfo(id, DisplayName(id)) { IsRecommended = id == selected }).ToArray();
+        }
+    }
 
-    private string SelectedModel => _configuration.Model ?? Models(_configuration)[0];
+    private string SelectedModel => SelectedModelOf(_configuration);
+
+    /// <summary>
+    /// The saved model while the list offers it, otherwise the default model. The saved value stays, so it applies
+    /// again once a later list offers it.
+    /// </summary>
+    private static string SelectedModelOf(Configuration configuration)
+    {
+        var models = Models(configuration);
+        if (configuration.Model is { } saved && models.Contains(saved, StringComparer.Ordinal)) return saved;
+        return DefaultModelOf(models);
+    }
+
+    // The list is sorted by ID, so its first entry is no sensible default.
+    private static string DefaultModelOf(string[] models) =>
+        FallbackModels.FirstOrDefault(model => models.Contains(model, StringComparer.Ordinal)) ?? models[0];
+
+    /// <summary>
+    /// What the settings field shows: the saved model even when the list lacks it, otherwise the list's default. The
+    /// editor sends every field on Save, and a page opened before a background refresh still sends this value, so an
+    /// untouched field never replaces the saved model.
+    /// </summary>
+    private static string ShownModelOf(Configuration configuration, string[] listed) =>
+        configuration.Model ?? DefaultModelOf(listed);
+
     private static string[] Models(Configuration configuration) => configuration.Models.Length > 0 ? configuration.Models : FallbackModels;
     private static string DisplayName(string id) => id switch
     {
@@ -72,31 +120,95 @@ public sealed partial class CerebrasPlugin : ILlmProviderPlugin, ILlmRequestHedg
     /// <inheritdoc />
     public async Task ActivateAsync(IPluginHostServices host)
     {
+        _modelRefresh.Cancel();
         var saved = host.GetSetting<Configuration>("configuration") ?? new();
         var models = NormalizeModels(saved.Models ?? []);
         saved = saved with
         {
             Models = models,
+            // The fallback list was never fetched, so a date without a list means nothing.
+            ModelsFetchedAtUtc = models.Length > 0 ? saved.ModelsFetchedAtUtc : null,
+            // A saved model the list does not offer is kept; SelectedModelOf decides what is used.
+            Model = IsModelId(saved.Model) ? saved.Model : null,
             TemperatureMode = saved.TemperatureMode == "custom" ? "custom" : "providerDefault",
             Temperature = double.IsFinite(saved.Temperature) ? Math.Clamp(saved.Temperature, 0, 2) : 0.3
         };
-        if (!Models(saved).Contains(saved.Model, StringComparer.Ordinal))
-            saved = saved with { Model = Models(saved)[0] };
         var key = saved.SecretName is null ? null : NormalizeKey(await host.LoadSecretAsync(saved.SecretName));
-        _configuration = saved;
-        _apiKey = key;
-        _host = host;
+        lock (_configurationLock)
+        {
+            _configuration = saved;
+            _apiKey = key;
+            _host = host;
+        }
         ClearDraft();
+        // A list without a date, saved by an older version, stays in use until the refresh replaces it.
+        StartModelRefreshIfStale();
     }
 
     /// <inheritdoc />
     public Task DeactivateAsync()
     {
-        _host = null;
-        _apiKey = null;
-        _configuration = new();
+        _modelRefresh.Cancel();
+        lock (_configurationLock)
+        {
+            _host = null;
+            _apiKey = null;
+            _configuration = new();
+        }
         ClearDraft();
         return Task.CompletedTask;
+    }
+
+    internal Task ModelRefreshTask => _modelRefresh.Current;
+    internal bool RefreshesModelsAutomatically => _modelRefresh.Enabled;
+    internal DateTimeOffset? ModelsFetchedAt => _configuration.ModelsFetchedAtUtc;
+
+    /// <summary>
+    /// Cerebras retires models, and a list that only changes on Refresh models keeps offering them. Activation and a
+    /// key change reload a saved list that is a day old or has no date.
+    /// </summary>
+    private void StartModelRefreshIfStale()
+    {
+        IPluginHostServices? host;
+        string? key;
+        DateTimeOffset? fetchedAt;
+        lock (_configurationLock)
+        {
+            host = _host;
+            key = _apiKey;
+            fetchedAt = _configuration.ModelsFetchedAtUtc;
+        }
+        if (host is null || key is null || !_modelRefresh.IsStale(fetchedAt)) return;
+        _modelRefresh.Start(ct => RefreshSavedModelsAsync(host, key, ct), ex => LogRefreshFailure(host, ex));
+    }
+
+    // A failed or empty catalog throws in FetchModelsAsync, so the saved list stays.
+    private async Task RefreshSavedModelsAsync(IPluginHostServices host, string key, CancellationToken ct)
+    {
+        var models = await FetchModelsAsync(key, ct);
+        bool changed;
+        lock (_configurationLock)
+        {
+            // A result that arrives after deactivation or a key change belongs to another connection.
+            if (ct.IsCancellationRequested || !ReferenceEquals(_host, host) || !string.Equals(_apiKey, key, StringComparison.Ordinal))
+                return;
+            // Only the saved list and its date change; a pending draft and the other settings stay as they are.
+            var current = _configuration;
+            var next = current with { Models = models, ModelsFetchedAtUtc = _modelRefresh.UtcNow };
+            host.SetSetting("configuration", next);
+            _configuration = next;
+            changed = !current.Models.SequenceEqual(models, StringComparer.Ordinal);
+        }
+        if (changed) host.NotifyCapabilitiesChanged();
+    }
+
+    // Kind and status only: provider error messages can quote the response.
+    private static void LogRefreshFailure(IPluginHostServices host, Exception ex)
+    {
+        var reason = ex is PluginRequestException request
+            ? request.HttpStatusCode is { } status ? $"{request.FailureKind}, HTTP {status}" : request.FailureKind.ToString()
+            : ex.GetType().Name;
+        host.Log(PluginLogLevel.Warning, $"Automatic Cerebras model refresh failed ({reason}). The saved list is unchanged.");
     }
 
     /// <inheritdoc />
@@ -105,7 +217,7 @@ public sealed partial class CerebrasPlugin : ILlmProviderPlugin, ILlmRequestHedg
         ct.ThrowIfCancellationRequested();
         var key = RequireKey(_apiKey);
         var configuration = _configuration;
-        var selected = string.IsNullOrWhiteSpace(model) ? configuration.Model ?? Models(configuration)[0] : model.Trim();
+        var selected = string.IsNullOrWhiteSpace(model) ? SelectedModelOf(configuration) : model.Trim();
         if (!IsModelId(selected)) throw new ArgumentException("Invalid Cerebras model ID.", nameof(model));
         // Explicit workflow IDs remain usable even when the cached catalog is outdated.
         var reasoningModel = selected is "gpt-oss-120b" or "qwen-3.8-27b" or "zai-glm-4.7" or "kimi-k2.7-code";
@@ -205,8 +317,33 @@ public sealed partial class CerebrasPlugin : ILlmProviderPlugin, ILlmRequestHedg
     }
     private string RequireKey(string? key) => _host is not null && key is not null ? key
         : throw new PluginRequestException("Cerebras API key not configured.", PluginRequestFailureKind.Configuration);
-    private void ClearDraft() { _draftModels = null; _draftModelsKey = null; }
+    private void ClearDraft() { _draftModels = null; _draftModelsKey = null; _draftModelsFetchedAt = default; }
 
     /// <inheritdoc />
-    public void Dispose() { _http.Dispose(); _apiKey = null; _host = null; ClearDraft(); }
+    public void Dispose()
+    {
+        // Cancel first, so a refresh in flight stops before its transport goes away.
+        _modelRefresh.Dispose();
+        _http.Dispose();
+        lock (_configurationLock) { _apiKey = null; _host = null; }
+        ClearDraft();
+    }
+
+    /// <summary>Reads a damaged fetch date as no date, so activation refreshes the list instead of failing to load.</summary>
+    private sealed class FetchDateConverter : JsonConverter<DateTimeOffset?>
+    {
+        public override DateTimeOffset? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            if (reader.TokenType == JsonTokenType.String && reader.TryGetDateTimeOffset(out var value) && value != default)
+                return value.ToUniversalTime();
+            reader.Skip();
+            return null;
+        }
+
+        public override void Write(Utf8JsonWriter writer, DateTimeOffset? value, JsonSerializerOptions options)
+        {
+            if (value is { } fetchedAt) writer.WriteStringValue(fetchedAt.ToUniversalTime());
+            else writer.WriteNullValue();
+        }
+    }
 }
