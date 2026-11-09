@@ -162,6 +162,8 @@ public sealed partial class MetaPlugin : ITranscriptionEnginePlugin, ILlmProvide
         _speakerDiarizationEnabled = host.GetSetting<bool>(SpeakerDiarizationSettingName);
         host.Log(PluginLogLevel.Info, $"Activated (configured={IsConfigured})");
         StartModelRefreshIfStale();
+        // The app can run for days without activating the plugin again.
+        _modelRefresh.StartRechecks(StartModelRefreshIfStale);
     }
 
     /// <inheritdoc />
@@ -173,6 +175,7 @@ public sealed partial class MetaPlugin : ITranscriptionEnginePlugin, ILlmProvide
             _host = null;
         }
 
+        _modelRefresh.StopRechecks();
         _modelRefresh.Cancel();
         return Task.CompletedTask;
     }
@@ -543,7 +546,8 @@ public sealed partial class MetaPlugin : ITranscriptionEnginePlugin, ILlmProvide
 
     /// <summary>
     /// A list that only refreshes on request keeps offering retired models. Reloading it once a day
-    /// drops them instead of failing every request with HTTP 404.
+    /// drops them instead of failing every request with HTTP 404. The hourly recheck calls this on a
+    /// timer thread, so it reads its state only under the lock.
     /// </summary>
     private void StartModelRefreshIfStale()
     {
@@ -551,7 +555,8 @@ public sealed partial class MetaPlugin : ITranscriptionEnginePlugin, ILlmProvide
         int version;
         lock (_catalogLock)
         {
-            if (_host is null || _apiKey is not { } key || !_modelRefresh.IsStale(_fetchedModelsAt))
+            // While a key change writes the secret, the old key is still set. The key change refreshes afterwards.
+            if (_host is null || _keyChangePending || _apiKey is not { } key || !_modelRefresh.IsStale(_fetchedModelsAt))
                 return;
             (apiKey, version) = (key, _catalogVersion);
         }

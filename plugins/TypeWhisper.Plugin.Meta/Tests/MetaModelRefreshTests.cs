@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http;
 using System.Text;
 using PortableMigration.Tests;
+using TypeWhisper.Plugin.Shared;
 
 namespace TypeWhisper.Plugin.Meta.Tests;
 
@@ -232,6 +233,73 @@ public sealed partial class MetaPluginTests
         Assert.Equal(1, handler.Requests);
         Assert.Equal(RefreshNow, sut.FetchedModelsAt);
         Assert.Equal(RefreshNow, host.GetSetting<DateTimeOffset?>("fetchedModelsAtUtc"));
+    }
+
+    [Fact]
+    public async Task Recheck_ReloadsACatalogThatAgesWhileThePluginStaysActive()
+    {
+        var clock = new RecheckTestClock(RefreshNow);
+        // A request beyond the queued answers finds the queue empty and fails.
+        var answers = new Queue<HttpResponseMessage>([Json(RefreshedCatalog)]);
+        var handler = new CatalogHandler(_ => Task.FromResult(answers.Dequeue()));
+        var host = CatalogHost("meta-key", RefreshNow);
+        using var sut = new MetaPlugin(new HttpClient(handler), refreshModelsAutomatically: true, clock: clock);
+
+        await sut.ActivateAsync(host);
+        await sut.ModelRefreshTask;
+        Assert.Equal(0, handler.Requests);
+
+        clock.Advance(TimeSpan.FromHours(24));
+        await sut.ModelRefreshTask;
+
+        var dayLater = RefreshNow.AddHours(24);
+        Assert.Equal(1, handler.Requests);
+        Assert.Equal("muse-spark-2.0", Assert.Single(sut.SupportedModels).Id);
+        Assert.Equal(dayLater, sut.FetchedModelsAt);
+        Assert.Equal(dayLater, host.GetSetting<DateTimeOffset?>("fetchedModelsAtUtc"));
+        Assert.Equal("muse-spark-2.0", Assert.Single(host.GetSetting<List<MetaFetchedModel>>("fetchedLlmModels")!).Id);
+    }
+
+    [Fact]
+    public async Task Recheck_StopsWhenThePluginDeactivates()
+    {
+        var clock = new RecheckTestClock(RefreshNow);
+        var handler = new CatalogHandler(_ => throw new InvalidOperationException("Unexpected model refresh."));
+        using var sut = new MetaPlugin(new HttpClient(handler), refreshModelsAutomatically: true, clock: clock);
+        await sut.ActivateAsync(CatalogHost("meta-key", RefreshNow));
+        Assert.Equal(1, clock.ActiveTimers);
+
+        await sut.DeactivateAsync();
+        clock.Advance(TimeSpan.FromHours(24));
+        await sut.ModelRefreshTask;
+
+        Assert.Equal(0, clock.ActiveTimers);
+        Assert.Equal(0, handler.Requests);
+    }
+
+    [Fact]
+    public async Task Recheck_RetriesAFailedRefreshAnHourLater()
+    {
+        var clock = new RecheckTestClock(RefreshNow);
+        var answers = new Queue<HttpResponseMessage>([Json("{}", HttpStatusCode.ServiceUnavailable), Json(RefreshedCatalog)]);
+        var handler = new CatalogHandler(_ => Task.FromResult(answers.Dequeue()));
+        var dayOld = RefreshNow.AddDays(-1);
+        var host = CatalogHost("meta-key", dayOld);
+        using var sut = new MetaPlugin(new HttpClient(handler), refreshModelsAutomatically: true, clock: clock);
+
+        await sut.ActivateAsync(host);
+        await sut.ModelRefreshTask;
+        Assert.Equal(1, handler.Requests);
+        Assert.Equal(dayOld, sut.FetchedModelsAt);
+
+        clock.Advance(ModelCatalogAutoRefresh.RecheckInterval);
+        await sut.ModelRefreshTask;
+
+        var hourLater = RefreshNow.Add(ModelCatalogAutoRefresh.RecheckInterval);
+        Assert.Equal(2, handler.Requests);
+        Assert.Equal("muse-spark-2.0", Assert.Single(sut.SupportedModels).Id);
+        Assert.Equal(hourLater, sut.FetchedModelsAt);
+        Assert.Equal(hourLater, host.GetSetting<DateTimeOffset?>("fetchedModelsAtUtc"));
     }
 
     private static FakePluginHostServices CatalogHost(string? apiKey, DateTimeOffset? fetchedAt)

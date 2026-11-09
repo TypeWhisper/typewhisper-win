@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http;
 using System.Text;
+using PortableMigration.Tests;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
 
@@ -40,6 +41,38 @@ public sealed class MetaKeyChangeRaceTests
         await restarted.ModelRefreshTask.WaitAsync(TimeSpan.FromSeconds(10));
         Assert.Contains(restarted.SupportedModels, model => model.Id == "muse-spark-second");
         Assert.DoesNotContain(restarted.SupportedModels, model => model.Id == "muse-spark-first");
+    }
+
+    // The hourly recheck runs on a timer thread. While a key change waits in its secret write, the old key is still set,
+    // so a recheck must not start a refresh; the key change refreshes with the new key once it is in place.
+    [Fact]
+    public async Task RecheckDuringAKeyChangeSendsNoRequestWithTheOldKey()
+    {
+        var keys = new List<string?>();
+        var handler = new Handler(request =>
+        {
+            lock (keys) keys.Add(request.Headers.Authorization?.Parameter);
+            return """{"data":[{"id":"muse-spark-second"},{"id":"muse-voice-transcribe-second"}]}""";
+        });
+        var host = new BlockingHost();
+        host.Secrets["api-key"] = "first-key";
+        host.SetSetting<DateTimeOffset?>("fetchedModelsAtUtc", Now);
+        var clock = new RecheckTestClock(Now);
+        using var sut = new MetaPlugin(new HttpClient(handler), refreshModelsAutomatically: true, clock: clock);
+        await sut.ActivateAsync(host);
+
+        var keyChange = sut.SetApiKeyAsync("second-key");
+        await host.StoreStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        clock.Advance(TimeSpan.FromHours(24));
+        await sut.ModelRefreshTask.WaitAsync(TimeSpan.FromSeconds(10));
+        lock (keys) Assert.Empty(keys);
+
+        host.ReleaseStore.SetResult();
+        await keyChange.WaitAsync(TimeSpan.FromSeconds(10));
+        await sut.ModelRefreshTask.WaitAsync(TimeSpan.FromSeconds(10));
+
+        lock (keys) Assert.Equal(["second-key"], keys);
+        Assert.Contains(sut.SupportedModels, model => model.Id == "muse-spark-second");
     }
 
     private sealed class Handler(Func<HttpRequestMessage, string> body) : HttpMessageHandler
