@@ -1,6 +1,6 @@
 # Claude for the portable host
 
-Portable .NET 10 implementation of `com.typewhisper.claude`, version `1.1.1`, requiring host `1.1.2` or later.
+Portable .NET 10 implementation of `com.typewhisper.claude`, version `1.2.0`, requiring host `1.1.2` or later.
 
 ## Features
 
@@ -12,9 +12,11 @@ Portable .NET 10 implementation of `com.typewhisper.claude`, version `1.1.1`, re
 
 Only complete `end_turn` responses are delivered. All text blocks are concatenated; thinking and redacted-thinking blocks are excluded. Empty, malformed, truncated, refused, paused and tool-use responses fail explicitly. HTTP errors retain status, retry information and failure classification; timeouts and user cancellation stay distinct. Redirects are disabled.
 
-Opening settings and activating the plugin are offline. Refresh stages a catalog until Save settings. Failed refreshes preserve the existing catalog; changed credentials require a new refresh. A refresh finishing after a key change, deactivation or newer action cannot stage obsolete results. Configuration and its encrypted-secret reference commit in one settings write, and failed writes retain the preceding configuration.
+Opening settings is offline. Activation and a key change reload the saved catalog in the background once it is a day old, has no fetch date (lists saved before 1.2.0), or has a date in the future; the request never blocks activation. While the plugin is active, it checks again every hour, so a list that ages while the app keeps running reloads and a failed refresh is retried. The saved list stays in use until a complete catalog replaces it, and a failed or empty refresh keeps it and logs a warning without the key or the response. A new key discards the previous account's list and refreshes with the new key; the selected default model stays. The fetch date is saved with the list in the `configuration` setting (`ModelsFetchedAtUtc`); a damaged date counts as missing.
 
-This is an API-key provider. Claude Code sign-in is part of the separate Authenticated CLI integration. This package does not advertise transcription, TTS, tools or streaming. Compared with macOS, Windows uses explicit refresh instead of automatic background refresh, and does not expose per-request temperature overrides.
+Refresh models stages a catalog until Save settings, and saving records when it was fetched. The background refresh never changes that draft: Save keeps the draft because the user fetched it, while a Save without a draft keeps whatever list is saved at that moment, including one the background refresh saved while the settings were open. Failed refreshes preserve the existing catalog; changed credentials require a new refresh. A refresh finishing after a key change, deactivation or newer action cannot stage or save obsolete results. Configuration and its encrypted-secret reference commit in one settings write, and failed writes retain the preceding configuration.
+
+This is an API-key provider. Claude Code sign-in is part of the separate Authenticated CLI integration. This package does not advertise transcription, TTS, tools or streaming. Compared with macOS, Windows does not expose per-request temperature overrides.
 
 ## Verification
 
@@ -23,9 +25,9 @@ dotnet test plugins/TypeWhisper.Plugin.Claude/Tests/TypeWhisper.Plugin.Claude.Po
 dotnet test tests/TypeWhisper.PluginSDK.Portable.Tests/TypeWhisper.PluginSDK.Portable.Tests.csproj -c Release
 ```
 
-Tests cover request bodies and headers, Unicode, multi-block text, incomplete output, HTTP failures, cancellation, pagination bounds, stale refreshes, draft settings, persistence failures, default preservation, temperature compatibility and retired model errors.
+Tests cover request bodies and headers, Unicode, multi-block text, incomplete output, HTTP failures, cancellation, pagination bounds, stale refreshes, draft settings, persistence failures, default preservation, temperature compatibility, retired model errors, and the background refresh: staleness, hourly rechecks, key changes, late results, failures, the draft rule and damaged dates. Tests use the internal constructor with the background refresh off, or turn it on with a fake transport and clock.
 
-The package lifecycle test uses the real immutable store and runtime to exercise ZIP/hash/identity validation, installation, activation, configuration, restart, duplicate-install rejection, uninstall/reinstall and minimum host version. The package contains the provider DLL, dependency manifest and plugin manifest.
+The package lifecycle test uses the real immutable store and runtime to exercise ZIP/hash/identity validation, installation, activation, configuration, restart, duplicate-install rejection, uninstall/reinstall and minimum host version. The package contains the provider DLL, dependency manifest and plugin manifest. The test project sets the `TypeWhisper.Plugins.DisableAutomaticModelRefresh` switch, so the packaged plugin's background refresh stays off and no request leaves the machine.
 
 Authenticated provider requests and microphone-to-Claude workflow execution are deferred because no Anthropic account is available for acceptance testing. Fake-transport tests do not establish live provider behavior.
 

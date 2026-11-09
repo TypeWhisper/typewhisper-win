@@ -13,14 +13,19 @@ public partial class ClaudeTests {
         public bool FailWrites;
         public bool FailSettings;
         public int SettingWrites;
+        /// <summary>Runs before a secret is stored, so a test can hold a save between its secret and settings writes.</summary>
+        public Func<Task>? BeforeStoreSecret;
         public Dictionary<string, string?> Secrets { get; } = [];
-        public int NotifyCapabilitiesChangedCount { get; private set; }
+        public System.Collections.Concurrent.ConcurrentQueue<(PluginLogLevel Level, string Message)> Logs { get; } = new();
+        private int _notifyCapabilitiesChangedCount;
+        // The background model refresh notifies from another thread.
+        public int NotifyCapabilitiesChangedCount => Volatile.Read(ref _notifyCapabilitiesChangedCount);
 
-        public Task StoreSecretAsync(string key, string value)
+        public async Task StoreSecretAsync(string key, string value)
         {
+            if (BeforeStoreSecret is { } before) await before();
             if (FailWrites) throw new IOException();
             Secrets[key] = value;
-            return Task.CompletedTask;
         }
 
         public Task<string?> LoadSecretAsync(string key) =>
@@ -50,8 +55,8 @@ public partial class ClaudeTests {
         public string? ActiveAppName => null;
         public IPluginEventBus EventBus { get; } = new TestPluginEventBus();
         public IReadOnlyList<string> AvailableProfileNames => [];
-        public void Log(PluginLogLevel level, string message) { }
-        public void NotifyCapabilitiesChanged() => NotifyCapabilitiesChangedCount++;
+        public void Log(PluginLogLevel level, string message) => Logs.Enqueue((level, message));
+        public void NotifyCapabilitiesChanged() => Interlocked.Increment(ref _notifyCapabilitiesChangedCount);
         public IPluginLocalization Localization { get; } = new TestPluginLocalization();
     }
 

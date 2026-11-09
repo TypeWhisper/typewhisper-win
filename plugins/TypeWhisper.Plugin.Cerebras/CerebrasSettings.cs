@@ -20,30 +20,48 @@ public sealed partial class CerebrasPlugin
 
     private string L(string en, string de) => PluginLocalization.Get(_host, en, de);
 
+    // A saved model the list lacks stays selectable and names the model that requests use meanwhile.
+    private string ChoiceName(string id, string[] listed) => listed.Contains(id, StringComparer.Ordinal)
+        ? DisplayName(id)
+        : string.Format(CultureInfo.CurrentCulture, L("{0} (not in the list, {1} is used)", "{0} (nicht in der Liste, {1} wird verwendet)"),
+            DisplayName(id), DisplayName(DefaultModelOf(listed)));
+
     /// <inheritdoc />
-    public IReadOnlyList<PluginTextSetting> TextSettings =>
-    [
-        new(ProfileSelectorId, "Cerebras", "", ProfileId)
-        { Section = PluginSettingsSection.Connection, Choices = [new(ProfileId, "Cerebras")] },
-        new("selectedLlmModel", L("Default text model", "Standard-Textmodell"),
-            L("Used when a workflow does not specify a model. Refresh to load models available to your account.",
-              "Wird verwendet, wenn ein Workflow kein Modell vorgibt. Aktualisiere die Liste, um verfügbare Modelle für dein Konto zu laden."), SelectedModel)
+    public IReadOnlyList<PluginTextSetting> TextSettings
+    {
+        get
         {
-            Section = PluginSettingsSection.TextProcessing,
-            Choices = (_draftModels ?? Models(_configuration)).Append(SelectedModel).Distinct(StringComparer.Ordinal)
-                .Select(id => new PluginSettingChoice(id, DisplayName(id))).ToArray()
-        },
-        new("llmTemperatureMode", L("Temperature mode", "Temperaturmodus"),
-            L("Use the provider default or set a custom sampling temperature.", "Anbietervorgabe oder eigene Temperatur verwenden."), _configuration.TemperatureMode)
-        {
-            Section = PluginSettingsSection.TextProcessing,
-            Choices = [new("providerDefault", L("Provider default", "Anbietervorgabe")), new("custom", L("Custom", "Benutzerdefiniert"))]
-        },
-        new("llmTemperatureValue", L("Temperature", "Temperatur"),
-            L("A value between 0 and 2. Model support varies.", "Ein Wert zwischen 0 und 2. Die Unterstützung hängt vom Modell ab."),
-            _configuration.Temperature.ToString(CultureInfo.InvariantCulture), 16)
-        { Section = PluginSettingsSection.TextProcessing, VisibleWhen = new("llmTemperatureMode", ["custom"]) }
-    ];
+            // One snapshot: the background refresh may replace the configuration meanwhile.
+            var configuration = _configuration;
+            // A pending draft from Refresh models is shown until Save, even when the saved list changes meanwhile.
+            var listed = _draftModels ?? Models(configuration);
+            var shown = ShownModelOf(configuration, listed);
+            lock (_displayedModels) _displayedModels.Add(shown);
+            return
+            [
+                new(ProfileSelectorId, "Cerebras", "", ProfileId)
+                { Section = PluginSettingsSection.Connection, Choices = [new(ProfileId, "Cerebras")] },
+                new("selectedLlmModel", L("Default text model", "Standard-Textmodell"),
+                    L("Used when a workflow does not specify a model. Refresh to load models available to your account.",
+                      "Wird verwendet, wenn ein Workflow kein Modell vorgibt. Aktualisiere die Liste, um verfügbare Modelle für dein Konto zu laden."), shown)
+                {
+                    Section = PluginSettingsSection.TextProcessing,
+                    Choices = listed.Append(shown).Distinct(StringComparer.Ordinal)
+                        .Select(id => new PluginSettingChoice(id, ChoiceName(id, listed))).ToArray()
+                },
+                new("llmTemperatureMode", L("Temperature mode", "Temperaturmodus"),
+                    L("Use the provider default or set a custom sampling temperature.", "Anbietervorgabe oder eigene Temperatur verwenden."), configuration.TemperatureMode)
+                {
+                    Section = PluginSettingsSection.TextProcessing,
+                    Choices = [new("providerDefault", L("Provider default", "Anbietervorgabe")), new("custom", L("Custom", "Benutzerdefiniert"))]
+                },
+                new("llmTemperatureValue", L("Temperature", "Temperatur"),
+                    L("A value between 0 and 2. Model support varies.", "Ein Wert zwischen 0 und 2. Die Unterstützung hängt vom Modell ab."),
+                    configuration.Temperature.ToString(CultureInfo.InvariantCulture), 16)
+                { Section = PluginSettingsSection.TextProcessing, VisibleWhen = new("llmTemperatureMode", ["custom"]) }
+            ];
+        }
+    }
 
     /// <inheritdoc />
     public IReadOnlyList<PluginSettingsAction> SettingsActions =>
@@ -74,12 +92,19 @@ public sealed partial class CerebrasPlugin
         var fields = TextSettings.Where(f => f.Id != ProfileSelectorId).ToDictionary(f => f.Id);
         foreach (var (id, value) in values)
         {
+            // Without a saved model the field shows the list's default, and a refresh can drop that model while a page
+            // is open. The page then sends a model it was shown, which is no choice of the user's.
+            if (id == "selectedLlmModel" && fields.TryGetValue(id, out var modelField)
+                && !modelField.Choices.Any(choice => choice.Value == value) && WasDisplayed(value))
+                continue;
             if (!fields.TryGetValue(id, out var field) || value.Length > field.MaxLength
                 || field.Choices.Count > 0 && !field.Choices.Any(choice => choice.Value == value))
                 throw new ArgumentException("Invalid Cerebras setting.");
             next = id switch
             {
-                "selectedLlmModel" => next with { Model = value },
+                // The editor sends every field. The model it shows is the saved one, so an untouched field keeps it,
+                // also when the current list does not offer it.
+                "selectedLlmModel" => value == field.Value ? next : next with { Model = value },
                 "llmTemperatureMode" => next with { TemperatureMode = value },
                 "llmTemperatureValue" => next with { Temperature = ParseTemperature(value) },
                 _ => throw new ArgumentException("Unknown Cerebras setting.")
@@ -87,14 +112,17 @@ public sealed partial class CerebrasPlugin
         }
         // A catalog fetched with an entered key belongs to that key, not to a later edit.
         var effectiveKey = NormalizeKey(apiKey) ?? _apiKey;
-        if (_draftModels is not null)
-        {
-            if (_draftModelsKey != effectiveKey) throw new ArgumentException("The API key changed after model refresh. Refresh models again.");
-            next = next with { Models = _draftModels };
-            if (!next.Models.Contains(next.Model, StringComparer.Ordinal)) next = next with { Model = next.Models[0] };
-        }
-        await CommitAsync(next, NormalizeKey(apiKey), cancellationToken);
+        if (_draftModels is not null && _draftModelsKey != effectiveKey)
+            throw new ArgumentException("The API key changed after model refresh. Refresh models again.");
+        await CommitAsync(next, NormalizeKey(apiKey), cancellationToken, draftModels: _draftModels, draftFetchedAt: _draftModelsFetchedAt);
         ClearDraft();
+        // The page reloads after a save and shows the model again.
+        lock (_displayedModels) _displayedModels.Clear();
+    }
+
+    private bool WasDisplayed(string model)
+    {
+        lock (_displayedModels) return _displayedModels.Contains(model);
     }
 
     private static double ParseTemperature(string value) => double.TryParse(value.Replace(',', '.'), NumberStyles.Float,
@@ -108,28 +136,54 @@ public sealed partial class CerebrasPlugin
         ClearDraft();
     }
 
-    private async Task CommitAsync(Configuration next, string? key, CancellationToken ct, bool replaceKey = false)
+    /// <summary>
+    /// Commits the settings in <paramref name="next"/>. The model list is decided at commit time, under the lock the
+    /// background refresh uses: a draft from Refresh models wins because the user fetched it, a new key discards the
+    /// old account's list, and otherwise the list saved now stays, so a save never undoes an automatic refresh that
+    /// finished while the settings were open. A background refresh never touches a draft.
+    /// </summary>
+    private async Task CommitAsync(Configuration next, string? key, CancellationToken ct, bool replaceKey = false,
+        string[]? draftModels = null, DateTimeOffset draftFetchedAt = default)
     {
         ct.ThrowIfCancellationRequested();
         var host = _host ?? throw new InvalidOperationException("Activate the plugin first.");
         replaceKey |= key is not null;
-        var oldSecret = _configuration.SecretName;
         var stagedSecret = replaceKey && key is not null ? "api-key-" + Guid.NewGuid().ToString("N") : null;
+        string? oldSecret;
+        bool keyChanged;
         try
         {
             if (stagedSecret is not null) await host.StoreSecretAsync(stagedSecret, key!);
             ct.ThrowIfCancellationRequested();
-            if (replaceKey) next = next with { SecretName = stagedSecret };
-            // One settings write commits the full configuration and the encrypted-key reference.
-            host.SetSetting("configuration", next);
+            lock (_configurationLock)
+            {
+                var current = _configuration;
+                oldSecret = current.SecretName;
+                keyChanged = replaceKey && !string.Equals(key, _apiKey, StringComparison.Ordinal);
+                next = draftModels is not null ? next with { Models = draftModels, ModelsFetchedAtUtc = draftFetchedAt }
+                    : keyChanged ? next with { Models = [], ModelsFetchedAtUtc = null }
+                    : next with { Models = current.Models, ModelsFetchedAtUtc = current.ModelsFetchedAtUtc };
+                if (replaceKey) next = next with { SecretName = stagedSecret };
+                // One settings write commits the full configuration and the encrypted-key reference.
+                host.SetSetting("configuration", next);
+                _configuration = next;
+                if (replaceKey) _apiKey = key;
+                // A refresh that started after the user's Refresh models would replace the list just saved. Its result
+                // is checked under this lock, so cancelling here drops it.
+                if (draftModels is not null) _modelRefresh.Cancel();
+            }
         }
         catch
         {
             if (stagedSecret is not null) await TryDeleteSecretAsync(host, stagedSecret);
             throw;
         }
-        _configuration = next;
-        if (replaceKey) _apiKey = key;
+        if (keyChanged)
+        {
+            // The old key's refresh must not finish; a cleared key starts none.
+            _modelRefresh.Cancel();
+            StartModelRefreshIfStale();
+        }
         host.NotifyCapabilitiesChanged();
         if (replaceKey && oldSecret is not null) await TryDeleteSecretAsync(host, oldSecret);
     }
@@ -152,12 +206,17 @@ public sealed partial class CerebrasPlugin
         cancellationToken.ThrowIfCancellationRequested();
         if (profileId != ProfileId) throw new ArgumentException("Unknown Cerebras configuration.");
         if (actionId is not ("checkConnection" or "refreshModels")) throw new ArgumentException("Unknown Cerebras action.");
+        // The button loads the list itself. A background refresh still running would otherwise land after a Save of
+        // this draft and replace it with its older answer.
+        if (actionId == "refreshModels") _modelRefresh.Cancel();
         var key = NormalizeKey(apiKey) ?? _apiKey;
         var models = await FetchModelsAsync(key, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         if (actionId == "checkConnection") return new(L("Connection verified. No changes saved.", "Verbindung geprüft. Keine Änderungen gespeichert."));
         _draftModels = models;
         _draftModelsKey = key;
+        // Saved with the list, so the button also resets the 24 hours until the next automatic refresh.
+        _draftModelsFetchedAt = _modelRefresh.UtcNow;
         return new(L($"{models.Length} text models loaded. Save settings to keep them.",
             $"{models.Length} Textmodelle geladen. Zum Übernehmen die Einstellungen speichern."), true);
     }
