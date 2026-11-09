@@ -480,7 +480,7 @@ public partial class XaiPluginTests
         public List<string> Warnings { get; } = [];
         public void Log(PluginLogLevel level, string message)
         {
-            if (level == PluginLogLevel.Warning) Warnings.Add(message);
+            if (level == PluginLogLevel.Warning) lock (Warnings) Warnings.Add(message);
         }
         public void NotifyCapabilitiesChanged() => NotifyCapabilitiesChangedCount++;
         public IPluginLocalization Localization { get; } = new TestPluginLocalization();
