@@ -83,7 +83,7 @@ public sealed partial class ProviderTests
     [Fact]
     public async Task SelectModelAsyncWaitsForAContendedSaveWithoutBlocking()
     {
-        using var plugin=new FireworksPlugin(); var host=new Host();
+        using var plugin=Offline(); var host=new Host();
         await plugin.ActivateAsync(host); await Configure(plugin);
         var release=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         host.StoreSecretDelay=release.Task;

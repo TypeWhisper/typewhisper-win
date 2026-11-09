@@ -30,7 +30,7 @@ public sealed partial class ProviderTests
     [Fact]
     public async Task ConfiguresRestartsRemovesKeyAndNeverExposesSecrets()
     {
-        var host=new Host(); using var plugin=new FireworksPlugin(); await plugin.ActivateAsync(host); await Configure(plugin);
+        var host=new Host(); using var plugin=Offline(); await plugin.ActivateAsync(host); await Configure(plugin);
         Assert.Equal(new Version(plugin.PluginVersion + ".0"), typeof(FireworksPlugin).Assembly.GetName().Version);
         Assert.True(plugin.IsConfigured); Assert.DoesNotContain("fixture-key",JsonSerializer.Serialize(plugin.TextSettings));
         Assert.DoesNotContain("fixture-key",JsonSerializer.Serialize(host.Settings));
@@ -41,7 +41,7 @@ public sealed partial class ProviderTests
     [Fact]
     public async Task FailedSecretOrConfigurationSaveKeepsOldConnection()
     {
-        var host=new Host(); using var plugin=new FireworksPlugin(); await plugin.ActivateAsync(host); await Configure(plugin);
+        var host=new Host(); using var plugin=Offline(); await plugin.ActivateAsync(host); await Configure(plugin);
         var before=JsonSerializer.Serialize(host.Settings); var secrets=host.Secrets.ToArray();
         host.FailSecret=true; await Assert.ThrowsAsync<IOException>(()=>plugin.SetApiKeyAsync("replacement"));
         Assert.Equal(before,JsonSerializer.Serialize(host.Settings)); Assert.Equal(secrets,host.Secrets.ToArray());
@@ -51,7 +51,7 @@ public sealed partial class ProviderTests
     [Fact]
     public async Task InvalidOrCanceledSettingsDoNotWrite()
     {
-        var host=new Host(); using var plugin=new FireworksPlugin(); await plugin.ActivateAsync(host);
+        var host=new Host(); using var plugin=Offline(); await plugin.ActivateAsync(host);
         await Assert.ThrowsAsync<ArgumentException>(()=>plugin.SetApiKeyAsync("bad\r\nkey"));
         await Assert.ThrowsAsync<ArgumentException>(()=>plugin.SaveTextSettingAsync("unknown","value",default));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(()=>plugin.SaveTextSettingAsync("unknown","value",new(true)));
@@ -99,7 +99,7 @@ public sealed partial class ProviderTests
     [Fact]
     public async Task EmptyAudioAndUnsupportedTranslationAreRejected()
     {
-        using var plugin=new FireworksPlugin();await plugin.ActivateAsync(new Host());await Configure(plugin);
+        using var plugin=Offline();await plugin.ActivateAsync(new Host());await Configure(plugin);
         if((ITypeWhisperPlugin)plugin is not ITranscriptionEnginePlugin engine) return;
         await Assert.ThrowsAsync<ArgumentException>(()=>engine.TranscribeAsync([],"en",false,null,default));
         if(!engine.SupportsTranslation) await Assert.ThrowsAsync<NotSupportedException>(()=>engine.TranscribeAsync(Audio(),"en",true,null,default));
@@ -137,6 +137,9 @@ public sealed partial class ProviderTests
         }
         finally {GC.Collect();GC.WaitForPendingFinalizers();GC.Collect();try{Directory.Delete(root,true);}catch(Exception ex)when(ex is IOException or UnauthorizedAccessException){} }
     }
+    // The background refresh stays off unless a test asks for it, and every request fails the test.
+    private static FireworksPlugin Offline(TimeProvider? clock=null,bool refresh=false)=>new(new HttpClient(new Handler((request,_)=>
+        throw new InvalidOperationException($"Unexpected request to {request.RequestUri}."))),refresh,clock);
     private static HttpResponseMessage Json(string json)=>new(HttpStatusCode.OK){Content=new StringContent(json,Encoding.UTF8,"application/json")};
     private sealed class Handler(Func<HttpRequestMessage,string?,HttpResponseMessage> respond):HttpMessageHandler
     {
@@ -154,7 +157,8 @@ public sealed partial class ProviderTests
         public T? GetSetting<T>(string key)=>Settings.TryGetValue(key,out var value)?value.Deserialize<T>():default;
         public void SetSetting<T>(string key,T value){if(FailSetting){FailSetting=false;throw new IOException("settings failed");}Settings[key]=JsonSerializer.SerializeToElement(value);}
         public string PluginDataDirectory=>Path.GetTempPath();public string? ActiveAppProcessName=>null;public string? ActiveAppName=>null;
-        public IReadOnlyList<string> AvailableProfileNames=>[];public void Log(PluginLogLevel level,string text){}public void NotifyCapabilitiesChanged(){}
+        public ConcurrentQueue<string> Logs {get;}=new();public int Notifications=>_notifications;private int _notifications;
+        public IReadOnlyList<string> AvailableProfileNames=>[];public void Log(PluginLogLevel level,string text)=>Logs.Enqueue(text);public void NotifyCapabilitiesChanged()=>Interlocked.Increment(ref _notifications);
         public IPluginLocalization Localization {get;}=new LocalizationStub();public IPluginEventBus EventBus=>throw new NotSupportedException();
     }
     private sealed class LocalizationStub:IPluginLocalization

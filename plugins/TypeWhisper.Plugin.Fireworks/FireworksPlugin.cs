@@ -12,25 +12,57 @@ namespace TypeWhisper.Plugin.Fireworks;
 public sealed partial class FireworksPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin, ILlmRequestHedgingSupport, IApiKeyPlugin, IPluginTextSettings
 {
     private readonly ProviderConnection Connection;
+    private readonly ModelCatalogAutoRefresh _catalogRefresh;
+    // Held while the staleness check starts a refresh and while deactivation or a key change cancels it.
+    private readonly object _refreshLock = new();
     /// <summary>Creates a provider with isolated HTTP transport.</summary>
-    public FireworksPlugin() : this(new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromMinutes(5) }) { }
-    internal FireworksPlugin(HttpClient http) => Connection = new(http);
+    public FireworksPlugin() : this(new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromMinutes(5) },
+        refreshCatalogAutomatically: ModelCatalogAutoRefresh.AllowedInThisProcess) { }
+    // Tests leave the background refresh off, so they never reach Fireworks.
+    internal FireworksPlugin(HttpClient http, bool refreshCatalogAutomatically = false, TimeProvider? clock = null)
+    {
+        Connection = new(http);
+        _catalogRefresh = new(refreshCatalogAutomatically, clock);
+    }
     /// <inheritdoc />
     public string PluginId => "com.typewhisper.fireworks";
     /// <inheritdoc />
     public string PluginName => "Fireworks AI";
     /// <inheritdoc />
-    public string PluginVersion => "1.1.8";
+    public string PluginVersion => "1.2.0";
     /// <inheritdoc />
-    public Task ActivateAsync(IPluginHostServices host) => Connection.ActivateAsync(host);
+    public async Task ActivateAsync(IPluginHostServices host)
+    {
+        await Connection.ActivateAsync(host);
+        StartCatalogRefreshIfStale();
+        // Checks again every hour: the app often runs for days without activating plugins again.
+        _catalogRefresh.StartRechecks(StartCatalogRefreshIfStale);
+    }
     /// <inheritdoc />
-    public Task DeactivateAsync() { Connection.Deactivate(); return Task.CompletedTask; }
+    public Task DeactivateAsync()
+    {
+        lock (_refreshLock)
+        {
+            _catalogRefresh.StopRechecks();
+            _catalogRefresh.Cancel();
+            Connection.Deactivate();
+        }
+        return Task.CompletedTask;
+    }
     /// <inheritdoc />
     public bool IsConfigured => Connection.Configured;
     /// <inheritdoc />
-    public Task SetApiKeyAsync(string apiKey) => Connection.SetKeyAsync(apiKey);
+    public async Task SetApiKeyAsync(string apiKey)
+    {
+        var previous = Connection.Key;
+        await Connection.SetKeyAsync(apiKey);
+        if (string.Equals(previous, Connection.Key, StringComparison.Ordinal)) return;
+        // The key change dropped the previous account's catalog; a refresh still running with that key stops.
+        lock (_refreshLock) _catalogRefresh.Cancel();
+        StartCatalogRefreshIfStale();
+    }
     /// <inheritdoc />
-    public void Dispose() => Connection.Dispose();
+    public void Dispose() { _catalogRefresh.Dispose(); Connection.Dispose(); }
 
     private PluginTextSetting Field(string id, string en, string de, string fallback, PluginSettingsSection section,
         params PluginSettingChoice[] choices) => new(id, Connection.L(en, de), "", Connection.Get(id, fallback)) { Section = section, Choices = choices };

@@ -12,7 +12,7 @@ public partial class Reson8PluginTests
     [InlineData("bad\0key")]
     public async Task InvalidCredentialsPreserveKeyAndAccountModels(string invalid)
     {
-        using var plugin = new Reson8Plugin();
+        using var plugin = CreateOfflinePlugin();
         var host = new TestPluginHostServices(); host.Secrets["api-key"] = "first";
         await plugin.ActivateAsync(host);
         plugin.SetFetchedCustomModels([new("custom", "Custom", null, null)]); plugin.SelectModel("custom");
@@ -28,7 +28,7 @@ public partial class Reson8PluginTests
     [InlineData("authorization", false)]
     public async Task AuthHeaderChangesInvalidateConnectionModels(string header, bool changed)
     {
-        using var plugin = new Reson8Plugin(); var host = new TestPluginHostServices();
+        using var plugin = CreateOfflinePlugin(); var host = new TestPluginHostServices();
         await plugin.ActivateAsync(host);
         plugin.SetFetchedCustomModels([new("custom", "Custom", null, null)]); plugin.SelectModel("custom");
         var notifications = host.NotifyCapabilitiesChangedCount;
@@ -41,10 +41,11 @@ public partial class Reson8PluginTests
     [Theory]
     [InlineData("selectedModel")]
     [InlineData("fetchedCustomModels")]
+    [InlineData("modelListsFetchedAtUtc")]
     [InlineData("customAuthHeader")]
     public async Task FailedHeaderChangePreservesConfiguration(string failingSetting)
     {
-        using var plugin = new Reson8Plugin(); var host = new TestPluginHostServices();
+        using var plugin = CreateOfflinePlugin(); var host = new TestPluginHostServices();
         await plugin.ActivateAsync(host);
         plugin.SetFetchedCustomModels([new("custom", "Custom", null, null)]); plugin.SelectModel("custom");
         host.FailSettingName = failingSetting;
@@ -55,28 +56,46 @@ public partial class Reson8PluginTests
         Assert.Equal("custom", plugin.SelectedModelId); Assert.Single(plugin.FetchedCustomModels);
     }
 
-    [Theory]
-    [InlineData("selectedModel")]
-    [InlineData("fetchedCustomModels")]
-    public async Task FailedModelPersistencePreservesCatalogAndSelection(string failingSetting)
+    [Fact]
+    public async Task FailedModelPersistencePreservesCatalogAndSelection()
     {
-        using var plugin = new Reson8Plugin(); var host = new TestPluginHostServices();
+        using var plugin = CreateOfflinePlugin(); var host = new TestPluginHostServices();
         await plugin.ActivateAsync(host);
         plugin.SetFetchedCustomModels([new("custom", "Custom", null, null)]); plugin.SelectModel("custom");
-        host.FailSettingName = failingSetting;
+        host.FailSettingName = "fetchedCustomModels";
         Assert.Throws<IOException>(() => plugin.SetFetchedCustomModels([]));
         Assert.Equal("custom", plugin.SelectedModelId); Assert.Single(plugin.FetchedCustomModels);
         await plugin.DeactivateAsync(); await plugin.ActivateAsync(host);
         Assert.Equal("custom", plugin.SelectedModelId); Assert.Single(plugin.FetchedCustomModels);
     }
 
+    [Fact]
+    public async Task ModelListWithoutTheSavedModelNeverOverwritesTheSelection()
+    {
+        using var plugin = CreateOfflinePlugin(); var host = new TestPluginHostServices();
+        await plugin.ActivateAsync(host);
+        plugin.SetFetchedCustomModels([new("custom", "Custom", null, null)]); plugin.SelectModel("custom");
+        // A list never writes the selection, so a failing selection write cannot stop it.
+        host.FailSettingName = "selectedModel";
+        plugin.SetFetchedCustomModels([]);
+        Assert.Equal(Reson8Plugin.DefaultModelId, plugin.SelectedModelId);
+        host.FailSettingName = null;
+        await plugin.DeactivateAsync(); await plugin.ActivateAsync(host);
+        Assert.Equal("custom", host.GetSetting<string>("selectedModel"));
+        Assert.Equal(Reson8Plugin.DefaultModelId, plugin.SelectedModelId);
+        plugin.SetFetchedCustomModels([new("custom", "Custom", null, null)]);
+        Assert.Equal("custom", plugin.SelectedModelId);
+    }
+
     [Theory]
     [InlineData("selectedModel")]
     [InlineData("fetchedCustomModels")]
+    [InlineData("fetchedModels")]
+    [InlineData("modelListsFetchedAtUtc")]
     [InlineData("customBaseURL")]
     public async Task FailedServerChangePreservesEndpointAndModels(string failingSetting)
     {
-        using var plugin = new Reson8Plugin(); var host = new TestPluginHostServices();
+        using var plugin = CreateOfflinePlugin(); var host = new TestPluginHostServices();
         host.Secrets["api-key"] = "fixture"; await plugin.ActivateAsync(host);
         plugin.SetFetchedCustomModels([new("custom", "Custom", null, null)]); plugin.SelectModel("custom");
         host.FailSettingName = failingSetting;
@@ -92,7 +111,7 @@ public partial class Reson8PluginTests
     [InlineData("")]
     public async Task FailedSecretWriteRestoresModelStateAcrossRestart(string replacement)
     {
-        using var plugin = new Reson8Plugin(); var host = new TestPluginHostServices();
+        using var plugin = CreateOfflinePlugin(); var host = new TestPluginHostServices();
         host.Secrets["api-key"] = "old-key"; await plugin.ActivateAsync(host);
         plugin.SetFetchedCustomModels([new("custom", "Custom", null, null)]); plugin.SelectModel("custom");
         host.FailSecretWrites = true;
@@ -133,7 +152,7 @@ public partial class Reson8PluginTests
     [InlineData("authHeader", "X-Äpi-Key")]
     public async Task InvalidConnectionSettingsLeaveSavedConfigurationUntouched(string id, string value)
     {
-        using var plugin = new Reson8Plugin(); var host = new TestPluginHostServices();
+        using var plugin = CreateOfflinePlugin(); var host = new TestPluginHostServices();
         await plugin.ActivateAsync(host);
         plugin.SetFetchedCustomModels([new("custom", "Custom", null, null)]); plugin.SelectModel("custom");
         await Assert.ThrowsAsync<ArgumentException>(() => plugin.SaveTextSettingAsync(id, value, default));
@@ -146,9 +165,10 @@ public partial class Reson8PluginTests
     [Theory]
     [InlineData("selectedModel")]
     [InlineData("fetchedCustomModels")]
+    [InlineData("modelListsFetchedAtUtc")]
     public async Task FailedDependentSettingsCannotCommitNewCredential(string failingSetting)
     {
-        using var plugin = new Reson8Plugin();
+        using var plugin = CreateOfflinePlugin();
         var host = new TestPluginHostServices(); host.Secrets["api-key"] = "old-key";
         await plugin.ActivateAsync(host);
         plugin.SetFetchedCustomModels([new("custom", "Custom", null, null)]); plugin.SelectModel("custom");
@@ -164,7 +184,7 @@ public partial class Reson8PluginTests
     [InlineData(" https://api.reson8.dev/ ", false)]
     public async Task ServerChangesInvalidateModelsOnlyForDifferentEndpoints(string endpoint, bool changed)
     {
-        using var plugin = new Reson8Plugin();
+        using var plugin = CreateOfflinePlugin();
         var host = new TestPluginHostServices(); host.Secrets["api-key"] = "first";
         await plugin.ActivateAsync(host);
         plugin.SetFetchedCustomModels([new("custom", "Custom", null, null)]); plugin.SelectModel("custom");
@@ -206,7 +226,7 @@ public partial class Reson8PluginTests
     [InlineData("")]
     public async Task CredentialChangesClearAccountModels(string replacement)
     {
-        using var plugin = new Reson8Plugin();
+        using var plugin = CreateOfflinePlugin();
         var host = new TestPluginHostServices(); host.Secrets["api-key"] = "first";
         await plugin.ActivateAsync(host);
         plugin.SetFetchedCustomModels([new("custom", "Custom", null, null)]); plugin.SelectModel("custom");

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.IO;
 using System.Net;
 using System.Net.Http;
@@ -58,7 +59,7 @@ public partial class Reson8PluginTests
             new Reson8CustomModel("domain-model", "Domain Model", "Support vocabulary", 42)
         });
 
-        var sut = new Reson8Plugin();
+        var sut = CreateOfflinePlugin();
         await sut.ActivateAsync(host);
 
         Assert.Equal("com.typewhisper.reson8", sut.PluginId);
@@ -93,7 +94,7 @@ public partial class Reson8PluginTests
     public async Task SetApiKeyAsync_NotifiesOnlyWhenConfigurationStateChanges()
     {
         var host = new TestPluginHostServices();
-        var sut = new Reson8Plugin();
+        var sut = CreateOfflinePlugin();
         await sut.ActivateAsync(host);
 
         await sut.SetApiKeyAsync(" reson-key ");
@@ -386,6 +387,12 @@ public partial class Reson8PluginTests
         return stream.ToArray();
     }
 
+    // The background refresh stays off unless a test asks for it, and every request fails the test.
+    private static Reson8Plugin CreateOfflinePlugin(bool refreshModels = false, TimeProvider? clock = null) =>
+        new(new HttpClient(new CapturingHandler((request, _) =>
+            throw new InvalidOperationException($"Unexpected request to {request.RequestUri}."))),
+            refreshModelsAutomatically: refreshModels, clock: clock);
+
     private static HttpResponseMessage JsonResponse(
         string json,
         HttpStatusCode statusCode = HttpStatusCode.OK) =>
@@ -434,37 +441,46 @@ public partial class Reson8PluginTests
         };
 
         private readonly Dictionary<string, JsonElement> _settings = [];
+        private readonly object _settingsLock = new();
+        private int _notifications;
         public Dictionary<string, string?> Secrets { get; } = [];
         public bool FailSecretWrites { get; set; }
+        /// <summary>Secret writes wait for it, so a test can act while a key change is saving.</summary>
+        public Task SecretWriteGate { get; set; } = Task.CompletedTask;
         public string? FailSettingName { get; set; }
-        public int NotifyCapabilitiesChangedCount { get; private set; }
+        public int NotifyCapabilitiesChangedCount => Volatile.Read(ref _notifications);
+        public ConcurrentQueue<string> Logs { get; } = new();
 
-        public Task StoreSecretAsync(string key, string value)
+        public async Task StoreSecretAsync(string key, string value)
         {
+            await SecretWriteGate;
             if (FailSecretWrites) throw new IOException("Cannot save secret");
             Secrets[key] = value;
-            return Task.CompletedTask;
         }
 
         public Task<string?> LoadSecretAsync(string key) =>
             Task.FromResult(Secrets.TryGetValue(key, out var value) ? value : null);
 
-        public Task DeleteSecretAsync(string key)
+        public async Task DeleteSecretAsync(string key)
         {
+            await SecretWriteGate;
             if (FailSecretWrites) throw new IOException("Cannot delete secret");
             Secrets.Remove(key);
-            return Task.CompletedTask;
         }
 
-        public T? GetSetting<T>(string key) =>
-            _settings.TryGetValue(key, out var value)
-                ? value.Deserialize<T>(JsonOptions)
-                : default;
+        public T? GetSetting<T>(string key)
+        {
+            lock (_settingsLock)
+                return _settings.TryGetValue(key, out var value)
+                    ? value.Deserialize<T>(JsonOptions)
+                    : default;
+        }
 
         public void SetSetting<T>(string key, T value)
         {
             if (key == FailSettingName) throw new IOException("Cannot save setting");
-            _settings[key] = JsonSerializer.SerializeToElement(value, JsonOptions);
+            lock (_settingsLock)
+                _settings[key] = JsonSerializer.SerializeToElement(value, JsonOptions);
         }
 
         public string PluginDataDirectory => Path.GetTempPath();
@@ -472,8 +488,8 @@ public partial class Reson8PluginTests
         public string? ActiveAppName => null;
         public IPluginEventBus EventBus { get; } = new TestPluginEventBus();
         public IReadOnlyList<string> AvailableProfileNames => [];
-        public void Log(PluginLogLevel level, string message) { }
-        public void NotifyCapabilitiesChanged() => NotifyCapabilitiesChangedCount++;
+        public void Log(PluginLogLevel level, string message) => Logs.Enqueue(message);
+        public void NotifyCapabilitiesChanged() => Interlocked.Increment(ref _notifications);
         public IPluginLocalization Localization { get; } = new TestPluginLocalization();
     }
 
