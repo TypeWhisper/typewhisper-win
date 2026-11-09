@@ -10,6 +10,8 @@ namespace TypeWhisper.Plugin.Shared;
 /// list is stale and runs at most one refresh at a time. To drop a result that arrives too late, the
 /// plugin calls <see cref="Cancel"/> on deactivation and on a key change, and its apply step checks the
 /// token under the same lock or gate that guards the key. A cancelled token then means "discard".
+/// While the plugin is active, <see cref="StartRechecks"/> checks the list again every
+/// <see cref="RecheckInterval"/>, because the app often runs for days without activating plugins again.
 /// The plugin's public constructor passes <see cref="AllowedInThisProcess"/>; the internal test constructor
 /// leaves the refresh off, so unit tests never reach a provider.
 /// </remarks>
@@ -17,6 +19,12 @@ internal sealed class ModelCatalogAutoRefresh(bool enabled, TimeProvider? clock 
 {
     /// <summary>How old a saved list may get before activation refreshes it.</summary>
     internal static readonly TimeSpan MaximumAge = TimeSpan.FromHours(24);
+
+    /// <summary>
+    /// How often an active plugin checks whether its list became stale. It also paces another attempt after a
+    /// failed refresh, for example while the PC is offline.
+    /// </summary>
+    internal static readonly TimeSpan RecheckInterval = TimeSpan.FromHours(1);
 
     /// <summary>
     /// AppContext switch that turns the refresh of every public plugin constructor off. Test projects set it
@@ -32,6 +40,7 @@ internal sealed class ModelCatalogAutoRefresh(bool enabled, TimeProvider? clock 
     private readonly object _gate = new();
     private CancellationTokenSource? _cancellation;
     private Task _current = Task.CompletedTask;
+    private ITimer? _recheck;
 
     internal bool Enabled { get; } = enabled;
     internal TimeProvider Clock { get; } = clock ?? TimeProvider.System;
@@ -95,7 +104,61 @@ internal sealed class ModelCatalogAutoRefresh(bool enabled, TimeProvider? clock 
         CancelSource(cancellation);
     }
 
-    public void Dispose() => Cancel();
+    /// <summary>
+    /// Calls <paramref name="startIfStale"/> every <see cref="RecheckInterval"/> until <see cref="StopRechecks"/>.
+    /// The plugin passes the same check it runs on activation, so a list that ages while the app keeps running
+    /// reloads, and a failed refresh is tried again. A check is skipped while a refresh runs, so it never
+    /// cancels one. Replaces earlier rechecks; does nothing when the refresh is disabled.
+    /// </summary>
+    internal void StartRechecks(Action startIfStale)
+    {
+        ArgumentNullException.ThrowIfNull(startIfStale);
+        if (!Enabled)
+            return;
+
+        ITimer? previous;
+        lock (_gate)
+        {
+            previous = _recheck;
+            _recheck = Clock.CreateTimer(_ => Recheck(startIfStale), null, RecheckInterval, RecheckInterval);
+        }
+
+        previous?.Dispose();
+    }
+
+    /// <summary>
+    /// Stops the rechecks. The plugin calls it on deactivation: a running timer would keep the plugin, and
+    /// with it its assembly, alive.
+    /// </summary>
+    internal void StopRechecks()
+    {
+        ITimer? recheck;
+        lock (_gate)
+        {
+            recheck = _recheck;
+            _recheck = null;
+        }
+
+        recheck?.Dispose();
+    }
+
+    public void Dispose()
+    {
+        StopRechecks();
+        Cancel();
+    }
+
+    private void Recheck(Action startIfStale)
+    {
+        if (!Current.IsCompleted)
+            return;
+
+        try { startIfStale(); }
+        catch (Exception)
+        {
+            // A timer callback must not throw; the next check tries again.
+        }
+    }
 
     private static async Task RunAsync(
         Func<CancellationToken, Task> refresh,
@@ -108,11 +171,15 @@ internal sealed class ModelCatalogAutoRefresh(bool enabled, TimeProvider? clock 
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
+            // Cancelled on purpose: the plugin no longer wants this result.
         }
         catch (Exception ex) when (!token.IsCancellationRequested)
         {
             try { onFailure(ex); }
-            catch (Exception) { }
+            catch (Exception)
+            {
+                // The failure was only to be logged; a background refresh must not end with an unobserved exception.
+            }
         }
         catch (Exception)
         {
@@ -128,6 +195,9 @@ internal sealed class ModelCatalogAutoRefresh(bool enabled, TimeProvider? clock 
             return;
 
         try { cancellation.Cancel(); }
-        catch (AggregateException) { }
+        catch (AggregateException)
+        {
+            // Thrown by a token registration; the refresh is cancelled either way.
+        }
     }
 }
