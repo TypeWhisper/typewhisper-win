@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Globalization;
 using System.Net;
 using System.Text.Json;
+using PortableMigration.Tests;
 using TypeWhisper.Plugin.Fireworks;
 
 public sealed partial class ProviderTests
@@ -211,6 +212,92 @@ public sealed partial class ProviderTests
         Assert.Equal(2, pages);
         Assert.Equal(before, JsonSerializer.Serialize(host.Settings));
         Assert.DoesNotContain(plugin.SupportedModels, m => m.Id == "accounts/fireworks/models/page-one");
+    }
+
+    [Fact]
+    public async Task RecheckReloadsACatalogThatAgedWhileThePluginStayedActive()
+    {
+        var requests = new ConcurrentQueue<string>();
+        using var http = new HttpClient(new Handler((request, _) =>
+        {
+            requests.Enqueue($"{request.Headers.Authorization} {request.RequestUri}");
+            return Json(NewCatalog);
+        }));
+        var clock = new RecheckTestClock(Now);
+        var host = Seeded("first-key", "accounts/fireworks/models/retired-chat", Now.AddHours(-1));
+        using var plugin = new FireworksPlugin(http, refreshCatalogAutomatically: true, clock);
+        await plugin.ActivateAsync(host);
+        await plugin.CatalogRefreshTask;
+        Assert.Empty(requests);
+
+        // The app keeps running for a day without activating the plugin again.
+        clock.Advance(TimeSpan.FromHours(24));
+        await plugin.CatalogRefreshTask;
+
+        var refreshedAt = Now.AddHours(24);
+        Assert.Equal("Bearer first-key https://api.fireworks.ai/inference/v1/models?page_size=200", Assert.Single(requests));
+        Assert.Equal(NewCatalogModels, plugin.SupportedModels.Select(m => m.Id));
+        Assert.Equal(refreshedAt, plugin.CatalogFetchedAt);
+        Assert.Equal(refreshedAt, SavedFetchedAt(host));
+        Assert.Equal(NewCatalogModels[1..], SavedValue(host, "catalog")!.Split('\n'));
+
+        // The next check finds the catalog fresh.
+        clock.Advance(ModelCatalogAutoRefresh.RecheckInterval);
+        await plugin.CatalogRefreshTask;
+        Assert.Single(requests);
+    }
+
+    [Fact]
+    public async Task RecheckTriesAFailedRefreshAgainAnHourLater()
+    {
+        var calls = 0;
+        using var http = new HttpClient(new Handler((_, _) => Interlocked.Increment(ref calls) == 1
+            ? new HttpResponseMessage(HttpStatusCode.ServiceUnavailable) { Content = new StringContent("{}") }
+            : Json(NewCatalog)));
+        var clock = new RecheckTestClock(Now);
+        var host = Seeded("first-key", "accounts/fireworks/models/older-chat", fetchedAt: null);
+        using var plugin = new FireworksPlugin(http, refreshCatalogAutomatically: true, clock);
+        await plugin.ActivateAsync(host);
+        await plugin.CatalogRefreshTask;
+        Assert.Equal(1, Volatile.Read(ref calls));
+        Assert.Null(plugin.CatalogFetchedAt);
+
+        clock.Advance(ModelCatalogAutoRefresh.RecheckInterval);
+        await plugin.CatalogRefreshTask;
+
+        Assert.Equal(2, Volatile.Read(ref calls));
+        Assert.Equal(NewCatalogModels, plugin.SupportedModels.Select(m => m.Id));
+        Assert.Equal(Now + ModelCatalogAutoRefresh.RecheckInterval, plugin.CatalogFetchedAt);
+    }
+
+    [Fact]
+    public async Task DeactivationStopsTheRechecks()
+    {
+        var clock = new RecheckTestClock(Now);
+        var host = Seeded("first-key", "accounts/fireworks/models/current-chat", Now.AddHours(-1));
+        using var plugin = Offline(clock, refresh: true);
+        await plugin.ActivateAsync(host);
+        Assert.Equal(1, clock.ActiveTimers);
+
+        await plugin.DeactivateAsync();
+        clock.Advance(TimeSpan.FromHours(24));
+        await plugin.CatalogRefreshTask;
+
+        Assert.Equal(0, clock.ActiveTimers);
+        Assert.Empty(host.Logs);
+    }
+
+    [Fact]
+    public async Task DisposeStopsTheRechecks()
+    {
+        var clock = new RecheckTestClock(Now);
+        var plugin = Offline(clock, refresh: true);
+        await plugin.ActivateAsync(Seeded("first-key", "accounts/fireworks/models/current-chat", Now.AddHours(-1)));
+        Assert.Equal(1, clock.ActiveTimers);
+
+        plugin.Dispose();
+
+        Assert.Equal(0, clock.ActiveTimers);
     }
 
     [Fact]

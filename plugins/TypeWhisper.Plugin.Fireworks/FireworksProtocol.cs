@@ -82,15 +82,22 @@ public sealed partial class FireworksPlugin : IPluginSettingsActions
 
     /// <summary>
     /// Fireworks retires serverless models, and a catalog that only reloads on request keeps suggesting them.
-    /// With a key, the catalog reloads in the background once the saved copy is a day old or has no date.
+    /// With a key, the catalog reloads in the background once the saved copy is a day old or has no date; an active
+    /// plugin checks that every hour.
     /// </summary>
     private void StartCatalogRefreshIfStale()
     {
-        if (!_catalogRefresh.Enabled || Connection.Host is not { } host || Connection.Key is not { } key
-            || !_catalogRefresh.IsStale(Connection.CatalogFetchedAt)) return;
-        host.Log(PluginLogLevel.Info, "Refreshing the Fireworks model catalog in the background.");
-        _catalogRefresh.Start(ct => RefreshCatalogInBackgroundAsync(key, ct),
-            ex => host.Log(PluginLogLevel.Warning, $"The Fireworks model catalog could not be refreshed ({Describe(ex)}). Keeping the current catalog."));
+        // Also runs every hour on a timer thread. The connection changes its host and key without this lock, but
+        // deactivation and key changes cancel the refresh under it: no refresh starts after deactivation, and one
+        // that started with a key replaced meanwhile is stopped.
+        lock (_refreshLock)
+        {
+            if (!_catalogRefresh.Enabled || Connection.Host is not { } host || Connection.Key is not { } key
+                || !_catalogRefresh.IsStale(Connection.CatalogFetchedAt)) return;
+            host.Log(PluginLogLevel.Info, "Refreshing the Fireworks model catalog in the background.");
+            _catalogRefresh.Start(ct => RefreshCatalogInBackgroundAsync(key, ct),
+                ex => host.Log(PluginLogLevel.Warning, $"The Fireworks model catalog could not be refreshed ({Describe(ex)}). Keeping the current catalog."));
+        }
     }
 
     private async Task RefreshCatalogInBackgroundAsync(string key, CancellationToken ct)
