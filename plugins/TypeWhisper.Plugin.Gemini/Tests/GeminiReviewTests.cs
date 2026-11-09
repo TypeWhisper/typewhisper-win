@@ -51,7 +51,7 @@ public sealed partial class GeminiPluginTests
             new("bad?id", null, null), new("gemini-3.5-transcribe", null, "bad live id")
         });
         host.SetSetting("selectedTranscriptionModel", "bad persisted id");
-        using var plugin = new GeminiPlugin(); await plugin.ActivateAsync(host);
+        using var plugin = CreateOfflinePlugin(); await plugin.ActivateAsync(host);
         Assert.Equal("gemini-flash-latest", Assert.Single(plugin.SupportedModels).Id);
         Assert.Equal("gemini-3.5-transcribe", Assert.Single(plugin.TranscriptionModels).Id);
         Assert.Equal("gemini-3.5-transcribe", plugin.SelectedModelId);
@@ -72,7 +72,7 @@ public sealed partial class GeminiPluginTests
         var host = new TestPluginHostServices(); host.Secrets["api-key"] = "fixture";
         host.SetSetting("fetchedTranscriptionModels.v1", new List<GeminiFetchedTranscriptionModel>
         { new("gemini-3.5-transcribe", null, liveModel) });
-        using var plugin = new GeminiPlugin(); await plugin.ActivateAsync(host);
+        using var plugin = CreateOfflinePlugin(); await plugin.ActivateAsync(host);
         Assert.Equal("gemini-3.5-transcribe", plugin.SelectedModelId);
         Assert.Equal(supported, plugin.SupportsStreaming);
         Assert.Equal(supported, plugin.SupportsStreamingCompletion);
@@ -143,19 +143,21 @@ public sealed partial class GeminiPluginTests
     {
         using var http = new HttpClient(new CapturingHandler((_, _) => JsonResponse("""{"models":[]}""")));
         var host = new TestPluginHostServices(); host.Secrets["api-key"] = "fixture";
-        using var plugin = new GeminiPlugin(http); await plugin.ActivateAsync(host);
-        await plugin.SetFetchedModelCatalogAsync(new([], [new("gemini-3.5-transcribe", null, null)], DateTimeOffset.UtcNow));
+        var clock = new TestClock(new DateTimeOffset(2026, 11, 9, 12, 0, 0, TimeSpan.Zero));
+        using var plugin = new GeminiPlugin(http, clock: clock); await plugin.ActivateAsync(host);
+        await plugin.SetFetchedModelCatalogAsync(new([], [new("gemini-3.5-transcribe", null, null)], clock.Now));
         Assert.True(plugin.IsConfigured);
         Assert.False(plugin.IsAvailable);
         Assert.Empty(plugin.SupportedModels);
         Assert.NotNull(plugin.TextSettings);
         await plugin.DeactivateAsync(); await plugin.ActivateAsync(host);
         Assert.Empty(plugin.SupportedModels);
-        await plugin.SetFetchedModelCatalogAsync(new([new("gemini-flash-latest", null)], [], DateTimeOffset.UtcNow));
+        await plugin.SetFetchedModelCatalogAsync(new([new("gemini-flash-latest", null)], [], clock.Now));
         Assert.True(plugin.IsAvailable);
         Assert.False(plugin.IsConfigured);
         Assert.True(((IApiKeyPlugin)plugin).IsConfigured);
-        Assert.True(plugin.ShouldRefreshModelCatalog(DateTimeOffset.UtcNow.AddDays(7)));
+        clock.Advance(TimeSpan.FromDays(7));
+        Assert.True(plugin.IsModelCatalogStale);
         await plugin.ValidateConfigurationAsync(default);
     }
 
@@ -163,7 +165,7 @@ public sealed partial class GeminiPluginTests
     public async Task QueuedCatalogRefreshKeepsSelectionCommittedWhileItWaited()
     {
         var host = new TestPluginHostServices();
-        using var plugin = new GeminiPlugin(); await plugin.ActivateAsync(host);
+        using var plugin = CreateOfflinePlugin(); await plugin.ActivateAsync(host);
         var catalog = new GeminiModelCatalog([], [new("gemini-3.5-transcribe", null, null), new("gemini-3.6-transcribe", null, null)], DateTimeOffset.UtcNow);
         await plugin.SetFetchedModelCatalogAsync(catalog);
         plugin.SelectModel("gemini-3.5-transcribe");
@@ -188,7 +190,7 @@ public sealed partial class GeminiPluginTests
     public async Task SelectModelAsyncWaitsForTheConfigurationGateWithoutBlocking()
     {
         var host = new TestPluginHostServices();
-        using var plugin = new GeminiPlugin(); await plugin.ActivateAsync(host);
+        using var plugin = CreateOfflinePlugin(); await plugin.ActivateAsync(host);
         var catalog = new GeminiModelCatalog([], [new("gemini-3.5-transcribe", null, null), new("gemini-3.6-transcribe", null, null)], DateTimeOffset.UtcNow);
         await plugin.SetFetchedModelCatalogAsync(catalog);
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

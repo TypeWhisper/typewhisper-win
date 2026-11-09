@@ -18,7 +18,7 @@ public sealed partial class GeminiPlugin
     public IReadOnlyList<PluginTextSetting> TextSettings =>
     [
         new("selectedTranscriptionModel", L("Transcription model", "Transkriptionsmodell"),
-            L("Use Refresh models to load the account's current catalog.", "Mit Modelle aktualisieren den aktuellen Katalog des Kontos laden."), _selectedTranscriptionModelId)
+            L("Use Refresh models to load the account's current catalog.", "Mit Modelle aktualisieren den aktuellen Katalog des Kontos laden."), SelectedModelId ?? "")
         { Section = PluginSettingsSection.Transcription, Choices = TranscriptionModels.Select(m => new PluginSettingChoice(m.Id, m.DisplayName)).ToArray() },
         new("transcriptionMode", L("Transcription mode", "Transkriptionsmodus"),
             L("Smart cleans up speech; Verbatim preserves the spoken wording.", "Smart bereinigt den Text; Wortgetreu erhält den gesprochenen Wortlaut."), FormatTranscriptionMode(_transcriptionMode))
@@ -105,7 +105,9 @@ public sealed partial class GeminiPlugin
         if (id != "refreshModels") throw new ArgumentException("Unknown Gemini action.");
         var key = _apiKey;
         if (key is null) throw new PluginRequestException("API key not configured", PluginRequestFailureKind.Configuration);
-        var catalog = await FetchModelCatalogAsync(cancellationToken);
+        // The button loads the same catalog; a background refresh would only repeat the request.
+        _modelRefresh.Cancel();
+        var catalog = await FetchModelCatalogAsync(key, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         if (catalog is null || catalog.LlmModels.Count + catalog.TranscriptionModels.Count == 0)
             throw new PluginRequestException("Gemini model discovery failed. The saved catalog is unchanged.", PluginRequestFailureKind.OutputIncomplete);

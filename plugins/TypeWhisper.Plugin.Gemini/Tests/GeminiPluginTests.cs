@@ -25,7 +25,7 @@ public sealed partial class GeminiPluginTests
             File.ReadAllText(manifestPath),
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
-        using var sut = new GeminiPlugin();
+        using var sut = CreateOfflinePlugin();
 
         Assert.NotNull(manifest);
         Assert.Equal(manifest.Version, sut.PluginVersion);
@@ -35,7 +35,7 @@ public sealed partial class GeminiPluginTests
     [Fact]
     public void SupportedModels_UsesCurrentAliasesWithExplicitDefault()
     {
-        using var sut = new GeminiPlugin();
+        using var sut = CreateOfflinePlugin();
 
         Assert.Equal(
             ["gemini-flash-lite-latest", "gemini-flash-latest", "gemini-pro-latest"],
@@ -46,7 +46,7 @@ public sealed partial class GeminiPluginTests
     [Fact]
     public void TranscriptionCapability_UsesGeminiTranscribeWithLiveAndDictionarySupport()
     {
-        using var sut = new GeminiPlugin();
+        using var sut = CreateOfflinePlugin();
 
         Assert.IsAssignableFrom<ITranscriptionEnginePlugin>(sut);
         Assert.Equal(
@@ -66,7 +66,7 @@ public sealed partial class GeminiPluginTests
     [Fact]
     public async Task FetchedTranscriptionCatalog_DoesNotInventUnavailableLiveSibling()
     {
-        using var sut = new GeminiPlugin();
+        using var sut = CreateOfflinePlugin();
 
         await sut.SetFetchedModelCatalogAsync(new GeminiModelCatalog(
             [],
@@ -118,7 +118,7 @@ public sealed partial class GeminiPluginTests
             new("models/gemini-flash-latest", "Gemini Flash Latest"),
             new("models/gemini-3.1-flash-image", "Nano Banana"),
         });
-        using var sut = new GeminiPlugin();
+        using var sut = CreateOfflinePlugin();
 
         await sut.ActivateAsync(host);
 
@@ -246,9 +246,10 @@ public sealed partial class GeminiPluginTests
     }
 
     [Fact]
-    public async Task ShouldRefreshModelCatalog_UsesTwentyFourHourTtlIncludingEmptyCapabilities()
+    public async Task ModelCatalog_IsStaleAfterTwentyFourHoursIncludingEmptyCapabilities()
     {
         var fetchedAt = new DateTimeOffset(2026, 8, 28, 10, 0, 0, TimeSpan.Zero);
+        var clock = new TestClock(fetchedAt.AddHours(23));
         var host = new TestPluginHostServices();
         host.Secrets["api-key"] = "gemini-key";
         host.SetSetting("fetchedLlmModels.v2", new List<GeminiFetchedModel>
@@ -260,16 +261,17 @@ public sealed partial class GeminiPluginTests
             new("gemini-3.5-transcribe", "Gemini 3.5 Transcribe", "gemini-3.5-transcribe-live"),
         });
         host.SetSetting("modelCatalogFetchedAtUtc", fetchedAt);
-        using var sut = new GeminiPlugin();
+        using var sut = CreateOfflinePlugin(clock);
         await sut.ActivateAsync(host);
 
-        Assert.False(sut.ShouldRefreshModelCatalog(fetchedAt.AddHours(23)));
-        Assert.True(sut.ShouldRefreshModelCatalog(fetchedAt.AddHours(24)));
+        Assert.False(sut.IsModelCatalogStale);
+        clock.Advance(TimeSpan.FromHours(1));
+        Assert.True(sut.IsModelCatalogStale);
 
         host.SetSetting("fetchedTranscriptionModels.v1", new List<GeminiFetchedTranscriptionModel>());
-        using var incompleteCatalog = new GeminiPlugin();
+        using var incompleteCatalog = CreateOfflinePlugin(new TestClock(fetchedAt.AddMinutes(1)));
         await incompleteCatalog.ActivateAsync(host);
-        Assert.False(incompleteCatalog.ShouldRefreshModelCatalog(fetchedAt.AddMinutes(1)));
+        Assert.False(incompleteCatalog.IsModelCatalogStale);
         Assert.Empty(incompleteCatalog.TranscriptionModels);
         Assert.Null(incompleteCatalog.SelectedModelId);
         Assert.False(incompleteCatalog.SupportsStreaming);
@@ -321,7 +323,7 @@ public sealed partial class GeminiPluginTests
     {
         var host = new TestPluginHostServices();
         host.Secrets["api-key"] = "gemini-key";
-        using var sut = new GeminiPlugin();
+        using var sut = CreateOfflinePlugin();
         await sut.ActivateAsync(host);
 
         await sut.SetFetchedLlmModelsAsync(
@@ -347,7 +349,7 @@ public sealed partial class GeminiPluginTests
     {
         var host = new TestPluginHostServices();
         host.Secrets["api-key"] = "gemini-key";
-        using var sut = new GeminiPlugin();
+        using var sut = CreateOfflinePlugin();
         await sut.ActivateAsync(host);
 
         await sut.SetFetchedLlmModelsAsync([new("gemini-3.7-flash", "Gemini 3.7 Flash")]);
@@ -369,7 +371,7 @@ public sealed partial class GeminiPluginTests
         {
             new("gemini-3.7-flash", "Gemini 3.7 Flash"),
         });
-        using var sut = new GeminiPlugin();
+        using var sut = CreateOfflinePlugin();
         await sut.ActivateAsync(host);
         host.ResetTracking();
 
@@ -393,7 +395,7 @@ public sealed partial class GeminiPluginTests
         {
             new("gemini-3.7-flash", "Gemini 3.7 Flash"),
         });
-        using var sut = new GeminiPlugin();
+        using var sut = CreateOfflinePlugin();
         await sut.ActivateAsync(host);
         host.ResetTracking();
         host.StoreSecretException = new InvalidOperationException("secret write failed");
@@ -415,7 +417,7 @@ public sealed partial class GeminiPluginTests
         {
             new("gemini-3.7-flash", "Gemini 3.7 Flash"),
         });
-        using var sut = new GeminiPlugin();
+        using var sut = CreateOfflinePlugin();
         await sut.ActivateAsync(host);
         host.ResetTracking();
         host.SetSettingExceptionAfterWrite = new InvalidOperationException("catalog write failed");
@@ -436,7 +438,7 @@ public sealed partial class GeminiPluginTests
     {
         var host = new TestPluginHostServices();
         host.Secrets["api-key"] = "gemini-key";
-        using var sut = new GeminiPlugin();
+        using var sut = CreateOfflinePlugin();
         await sut.ActivateAsync(host);
         host.SetSettingExceptionAfterWrite = new InvalidOperationException("catalog write failed");
 
@@ -851,7 +853,7 @@ public sealed partial class GeminiPluginTests
     [Fact]
     public async Task SupportedModels_OrdersFallbackFlashVersionsNumerically()
     {
-        using var sut = new GeminiPlugin();
+        using var sut = CreateOfflinePlugin();
 
         await sut.SetFetchedLlmModelsAsync(
         [
@@ -961,7 +963,7 @@ public sealed partial class GeminiPluginTests
     {
         var host = new TestPluginHostServices();
         host.Secrets["api-key"] = "first-key";
-        using var sut = new GeminiPlugin();
+        using var sut = CreateOfflinePlugin();
         await sut.ActivateAsync(host);
         await sut.SetApiKeyAsync("second-key");
 
@@ -980,7 +982,7 @@ public sealed partial class GeminiPluginTests
     public async Task SetApiKeyAsync_NotifiesOnlyWhenAvailabilityChanges()
     {
         var host = new TestPluginHostServices();
-        using var sut = new GeminiPlugin();
+        using var sut = CreateOfflinePlugin();
         await sut.ActivateAsync(host);
 
         await sut.SetApiKeyAsync(" first-key ");
@@ -1129,6 +1131,10 @@ public sealed partial class GeminiPluginTests
                 throw afterWriteException;
             }
         }
+
+        // Stores a value as raw JSON, e.g. a damaged one, without counting it as a plugin write.
+        public void SetRawSetting(string key, string json) =>
+            _settings[key] = JsonDocument.Parse(json).RootElement.Clone();
 
         public void ResetTracking()
         {
