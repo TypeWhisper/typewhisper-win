@@ -365,24 +365,24 @@
     {
       "id": "com.typewhisper.groq",
       "name": "Groq",
-      "version": "1.1.1",
+      "version": "1.2.0",
       "minHostVersion": "1.1.0",
       "author": "TypeWhisper",
       "description": "Cloud transcription with OpenAI Whisper and LLM text processing hosted by Groq.",
-      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-v2-categories-20260908/com.typewhisper.groq-1.1.1-win-x64.zip",
-      "sha256": "f8ea34876ffa247893010dc9d02ad625b14a921ef3ec770f1a714143e2d0bf97",
-      "size": 19407,
+      "categories": [
+        "transcription",
+        "llm"
+      ],
+      "locality": "cloud",
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-groq-v1.2.0/com.typewhisper.groq-1.2.0-win-x64.zip",
+      "sha256": "b8618fd0f515389a8c73955391e6c900e6cba8b164a5efaf0cbf9a8aa1c2542b",
+      "size": 23236,
       "platforms": [
         "windows"
       ],
       "supportedArchitectures": [
         "x64"
-      ],
-      "categories": [
-        "transcription",
-        "llm"
-      ],
-      "locality": "cloud"
+      ]
     },
     {
       "id": "com.typewhisper.granite-speech",
