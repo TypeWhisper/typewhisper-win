@@ -563,10 +563,12 @@ public partial class CerebrasTests
         var clock = new RecheckTestClock(Now);
         var requests = new RequestLog();
         var releaseRecheck = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var recheckSent = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var plugin = RefreshingPlugin(clock, async (_, _) =>
         {
             if (requests.Add() == 1)
                 return Json("""{"data":[{"id":"draft-model"}]}""");
+            recheckSent.SetResult();
             await releaseRecheck.Task;
             return Json("""{"data":[{"id":"automatic-model"}]}""");
         });
@@ -577,6 +579,8 @@ public partial class CerebrasTests
         Assert.True((await plugin.ExecuteProfileActionAsync("cerebras", "refreshModels", Empty, null, default)).HasPendingChanges);
         clock.Advance(TimeSpan.FromHours(24));
         var recheck = plugin.ModelRefreshTask;
+        // The recheck's request is on its way before the save, as when its answer is slow.
+        await recheckSent.Task.WaitAsync(TimeSpan.FromSeconds(10));
         await plugin.SaveProfileSettingsAsync("cerebras", Empty, null, default);
         releaseRecheck.SetResult();
         await recheck.WaitAsync(TimeSpan.FromSeconds(10));

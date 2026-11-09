@@ -410,10 +410,12 @@ public partial class ClaudeTests
         var clock = new RecheckTestClock(Now);
         var requests = new RequestLog();
         var releaseRecheck = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var recheckSent = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var plugin = RefreshingPlugin(clock, async (_, _) =>
         {
             if (requests.Add() == 1)
                 return Json("""{"has_more":false,"data":[{"id":"claude-draft"}]}""");
+            recheckSent.SetResult();
             await releaseRecheck.Task;
             return Json("""{"has_more":false,"data":[{"id":"claude-automatic"}]}""");
         });
@@ -424,6 +426,8 @@ public partial class ClaudeTests
         Assert.True((await plugin.ExecuteProfileActionAsync("claude", "refreshModels", Empty, null, default)).HasPendingChanges);
         clock.Advance(TimeSpan.FromHours(24));
         var recheck = plugin.ModelRefreshTask;
+        // The recheck's request is on its way before the save, as when its answer is slow.
+        await recheckSent.Task.WaitAsync(TimeSpan.FromSeconds(10));
         await plugin.SaveProfileSettingsAsync("claude", Empty, null, default);
         releaseRecheck.SetResult();
         await recheck.WaitAsync(TimeSpan.FromSeconds(10));
