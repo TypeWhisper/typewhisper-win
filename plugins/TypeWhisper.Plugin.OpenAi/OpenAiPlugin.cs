@@ -260,6 +260,8 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
         NormalizeSelectedLlmModel(preserveUnknownWhenCatalogUnavailable: true);
         host.Log(PluginLogLevel.Info, $"Activated (configured={IsConfigured})");
         StartApiCatalogRefreshIfStale();
+        // The app can run for days without activating the plugin again.
+        _apiCatalogRefresh.StartRechecks(StartApiCatalogRefreshIfStale);
     }
 
     /// <summary>
@@ -274,6 +276,7 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
             _apiKey = _oauthAccessToken = _oauthRefreshToken = _oauthIdToken = null;
         }
 
+        _apiCatalogRefresh.StopRechecks();
         _apiCatalogRefresh.Cancel();
         return Task.CompletedTask;
     }
@@ -771,7 +774,8 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
 
     /// <summary>
     /// A catalog that only refreshes on request keeps offering retired models. Reloading it once a day
-    /// drops them instead of failing every request with HTTP 404.
+    /// drops them instead of failing every request with HTTP 404. The hourly recheck calls this on a
+    /// timer thread, so it reads its state only under the lock. It never touches the ChatGPT login.
     /// </summary>
     private void StartApiCatalogRefreshIfStale()
     {
@@ -779,7 +783,8 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
         int version;
         lock (_catalogLock)
         {
-            if (_host is null || _apiKey is not { } key || !_apiCatalogRefresh.IsStale(_apiCatalogFetchedAt))
+            // While a key change writes the secret, the old key is still set. The key change refreshes afterwards.
+            if (_host is null || _keyChangePending || _apiKey is not { } key || !_apiCatalogRefresh.IsStale(_apiCatalogFetchedAt))
                 return;
             (apiKey, version) = (key, _catalogVersion);
         }

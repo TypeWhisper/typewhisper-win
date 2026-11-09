@@ -1,6 +1,8 @@
 using System.Net;
 using System.Text;
+using PortableMigration.Tests;
 using TypeWhisper.Plugin.OpenAi;
+using TypeWhisper.Plugin.Shared;
 
 namespace TypeWhisper.PluginSystem.Tests;
 
@@ -371,6 +373,148 @@ public partial class OpenAiPluginTests
 
         Assert.Equal(RefreshNow, sut.ApiCatalogFetchedAt);
         Assert.Equal(RefreshNow, host.GetSetting<OpenAiPlugin.ApiCatalogSnapshot>("apiModelCatalogSnapshot")!.FetchedAt);
+    }
+
+    [Fact]
+    public async Task Recheck_ReloadsACatalogThatAgesWhileThePluginStaysActive()
+    {
+        var clock = new RecheckTestClock(RefreshNow);
+        // A request beyond the queued answers finds the queue empty and fails.
+        var answers = new Queue<HttpResponseMessage>([CatalogResponse(RefreshedCatalog)]);
+        var handler = new CatalogHandler(_ => Task.FromResult(answers.Dequeue()));
+        var host = CatalogHost("sk-live", RefreshNow);
+        using var sut = new OpenAiPlugin(new HttpClient(handler), refreshApiModelsAutomatically: true, clock: clock);
+
+        await sut.ActivateAsync(host);
+        await sut.ApiCatalogRefreshTask;
+        Assert.Empty(handler.Requests);
+
+        clock.Advance(TimeSpan.FromHours(24));
+        await sut.ApiCatalogRefreshTask;
+
+        var dayLater = RefreshNow.AddHours(24);
+        Assert.Equal(["https://api.openai.com/v1/models"], handler.Requests);
+        Assert.Equal(["gpt-4o", "gpt-5.5"], sut.SupportedModels.Select(m => m.Id).ToArray());
+        Assert.Equal(["gpt-transcribe", "whisper-1"], sut.TranscriptionModels.Select(m => m.Id).ToArray());
+        var snapshot = host.GetSetting<OpenAiPlugin.ApiCatalogSnapshot>("apiModelCatalogSnapshot")!;
+        Assert.Equal(["gpt-4o", "gpt-5.5"], snapshot.LlmModels.Select(m => m.Id).ToArray());
+        Assert.Equal(dayLater, snapshot.FetchedAt);
+        Assert.Equal(dayLater, sut.ApiCatalogFetchedAt);
+    }
+
+    [Fact]
+    public async Task Recheck_StopsWhenThePluginDeactivates()
+    {
+        var clock = new RecheckTestClock(RefreshNow);
+        var handler = new CatalogHandler(_ => throw new InvalidOperationException("Unexpected model refresh."));
+        using var sut = new OpenAiPlugin(new HttpClient(handler), refreshApiModelsAutomatically: true, clock: clock);
+        await sut.ActivateAsync(CatalogHost("sk-live", RefreshNow));
+        Assert.Equal(1, clock.ActiveTimers);
+
+        await sut.DeactivateAsync();
+        clock.Advance(TimeSpan.FromHours(24));
+        await sut.ApiCatalogRefreshTask;
+
+        Assert.Equal(0, clock.ActiveTimers);
+        Assert.Empty(handler.Requests);
+    }
+
+    [Fact]
+    public async Task Recheck_RetriesAFailedRefreshAnHourLater()
+    {
+        var clock = new RecheckTestClock(RefreshNow);
+        var answers = new Queue<HttpResponseMessage>(
+            [CatalogResponse("{}", HttpStatusCode.ServiceUnavailable), CatalogResponse(RefreshedCatalog)]);
+        var handler = new CatalogHandler(_ => Task.FromResult(answers.Dequeue()));
+        var dayOld = RefreshNow.AddDays(-1);
+        var host = CatalogHost("sk-live", dayOld);
+        using var sut = new OpenAiPlugin(new HttpClient(handler), refreshApiModelsAutomatically: true, clock: clock);
+
+        await sut.ActivateAsync(host);
+        await sut.ApiCatalogRefreshTask;
+        Assert.Single(handler.Requests);
+        Assert.Equal(["gpt-saved"], sut.SupportedModels.Select(m => m.Id).ToArray());
+
+        clock.Advance(ModelCatalogAutoRefresh.RecheckInterval);
+        await sut.ApiCatalogRefreshTask;
+
+        var hourLater = RefreshNow.Add(ModelCatalogAutoRefresh.RecheckInterval);
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.Equal(["gpt-4o", "gpt-5.5"], sut.SupportedModels.Select(m => m.Id).ToArray());
+        Assert.Equal(hourLater, sut.ApiCatalogFetchedAt);
+        Assert.Equal(hourLater, host.GetSetting<OpenAiPlugin.ApiCatalogSnapshot>("apiModelCatalogSnapshot")!.FetchedAt);
+    }
+
+    // The ChatGPT catalog request can renew the login's tokens, so a recheck in ChatGPT mode reloads only the
+    // API catalog with the API key.
+    [Fact]
+    public async Task Recheck_InChatGptModeRefreshesOnlyTheApiCatalog()
+    {
+        var clock = new RecheckTestClock(RefreshNow);
+        var authorizations = new List<string?>();
+        var answers = new Queue<HttpResponseMessage>([CatalogResponse(RefreshedCatalog)]);
+        var handler = new CatalogHandler(request =>
+        {
+            lock (authorizations) authorizations.Add(request.Headers.Authorization?.ToString());
+            return Task.FromResult(answers.Dequeue());
+        });
+        var host = CatalogHost("sk-live", RefreshNow);
+        host.SetSetting("authMode", "chatgpt");
+        // An expired login would need a token refresh, which must never happen in the background.
+        host.SetSetting("oauthExpiresAt", RefreshNow.AddHours(-1));
+        host.Secrets["oauth-access-token"] = "expired-access-token";
+        host.Secrets["oauth-refresh-token"] = "refresh-token";
+        using var sut = new OpenAiPlugin(new HttpClient(handler), refreshApiModelsAutomatically: true, clock: clock);
+
+        await sut.ActivateAsync(host);
+        await sut.ApiCatalogRefreshTask;
+        Assert.Empty(handler.Requests);
+
+        clock.Advance(TimeSpan.FromHours(24));
+        await sut.ApiCatalogRefreshTask;
+
+        Assert.Equal(["https://api.openai.com/v1/models"], handler.Requests);
+        lock (authorizations) Assert.Equal(["Bearer sk-live"], authorizations);
+        Assert.Equal(OpenAiAuthMode.ChatGpt, sut.AuthMode);
+        Assert.Equal(["gpt-transcribe", "whisper-1"], sut.TranscriptionModels.Select(m => m.Id).ToArray());
+        Assert.Equal(RefreshNow.AddHours(24), sut.ApiCatalogFetchedAt);
+        Assert.Equal("expired-access-token", host.Secrets["oauth-access-token"]);
+        Assert.Equal("refresh-token", host.Secrets["oauth-refresh-token"]);
+        Assert.False(host.Secrets.ContainsKey("chatgpt-session"));
+        Assert.Null(host.GetSetting<OpenAiPlugin.ChatGptCatalogSnapshot>("chatGPTModelCatalogSnapshot"));
+    }
+
+    // The hourly recheck runs on a timer thread. While a key change waits in its secret write, the old key is still set,
+    // so a recheck must not start a refresh; the key change refreshes with the new key once it is in place.
+    [Fact]
+    public async Task Recheck_DuringAKeyChangeSendsNoRequestWithTheOldKey()
+    {
+        var clock = new RecheckTestClock(RefreshNow);
+        var keys = new List<string?>();
+        var handler = new CatalogHandler(request =>
+        {
+            lock (keys) keys.Add(request.Headers.Authorization?.Parameter);
+            return Task.FromResult(CatalogResponse(RefreshedCatalog));
+        });
+        var host = CatalogHost("sk-first", RefreshNow);
+        using var sut = new OpenAiPlugin(new HttpClient(handler), refreshApiModelsAutomatically: true, clock: clock);
+        await sut.ActivateAsync(host);
+        var storeStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseStore = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        host.BeforeStoreSecret = async () => { storeStarted.TrySetResult(); await releaseStore.Task; };
+
+        var keyChange = sut.SetApiKeyAsync("sk-second");
+        await storeStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        clock.Advance(TimeSpan.FromHours(24));
+        await sut.ApiCatalogRefreshTask.WaitAsync(TimeSpan.FromSeconds(10));
+        lock (keys) Assert.Empty(keys);
+
+        releaseStore.SetResult();
+        await keyChange.WaitAsync(TimeSpan.FromSeconds(10));
+        await sut.ApiCatalogRefreshTask.WaitAsync(TimeSpan.FromSeconds(10));
+
+        lock (keys) Assert.Equal(["sk-second"], keys);
+        Assert.Equal(["gpt-4o", "gpt-5.5"], sut.SupportedModels.Select(m => m.Id).ToArray());
     }
 
     private static OpenAiPlugin CreateRefreshingPlugin(HttpMessageHandler handler) =>
