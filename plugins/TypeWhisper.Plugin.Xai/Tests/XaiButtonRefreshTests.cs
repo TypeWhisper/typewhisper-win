@@ -40,6 +40,36 @@ public partial class XaiPluginTests
         Assert.Equal(RefreshNow, sut.FetchedVoicesAt);
     }
 
+    // A button pressed while a key change writes its secret still fetches with the old key. Its list must not stay in
+    // use once the new key is in place.
+    [Fact]
+    public async Task ARefreshButtonPressedDuringAKeyChangeLeavesNoOldAccountList()
+    {
+        var storeStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseStore = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseAnswer = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var handler = new CatalogHandler(async request =>
+        {
+            await releaseAnswer.Task;
+            return CatalogResponse(request, """{ "data": [ { "id": "grok-first-only" } ] }""", RefreshedVoices);
+        });
+        var host = CatalogHost("first-key", RefreshNow, RefreshNow);
+        using var sut = new XaiPlugin(new HttpClient(handler), clock: new TestClock(RefreshNow));
+        await sut.ActivateAsync(host);
+        host.BeforeStoreSecret = async () => { storeStarted.TrySetResult(); await releaseStore.Task; };
+
+        var keyChange = sut.SetApiKeyAsync("second-key");
+        await storeStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var press = sut.ExecuteSettingsActionAsync("models", CancellationToken.None);
+        await handler.Started.WaitAsync(TimeSpan.FromSeconds(10));
+        releaseStore.SetResult();
+        await keyChange.WaitAsync(TimeSpan.FromSeconds(10));
+        releaseAnswer.SetResult();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => press.WaitAsync(TimeSpan.FromSeconds(10)));
+        Assert.DoesNotContain(sut.SupportedModels, model => model.Id == "grok-first-only");
+    }
+
     private static HttpResponseMessage JsonAnswer(string body, HttpStatusCode status = HttpStatusCode.OK) =>
         new(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
 

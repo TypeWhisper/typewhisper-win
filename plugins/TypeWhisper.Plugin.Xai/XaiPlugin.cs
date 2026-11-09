@@ -454,6 +454,8 @@ public sealed partial class XaiPlugin : ITranscriptionEnginePlugin, ILlmProvider
                 _apiKey = normalized;
                 if (changed)
                 {
+                    // A refresh button pressed during the secret write captured the old key with the new version.
+                    _catalogVersion++;
                     _fetchedLlmModels = [];
                     _fetchedVoices = [];
                     _fetchedLlmModelsAt = _fetchedVoicesAt = null;
