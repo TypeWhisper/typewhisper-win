@@ -445,25 +445,27 @@ public partial class Reson8PluginTests
         private int _notifications;
         public Dictionary<string, string?> Secrets { get; } = [];
         public bool FailSecretWrites { get; set; }
+        /// <summary>Secret writes wait for it, so a test can act while a key change is saving.</summary>
+        public Task SecretWriteGate { get; set; } = Task.CompletedTask;
         public string? FailSettingName { get; set; }
         public int NotifyCapabilitiesChangedCount => Volatile.Read(ref _notifications);
         public ConcurrentQueue<string> Logs { get; } = new();
 
-        public Task StoreSecretAsync(string key, string value)
+        public async Task StoreSecretAsync(string key, string value)
         {
+            await SecretWriteGate;
             if (FailSecretWrites) throw new IOException("Cannot save secret");
             Secrets[key] = value;
-            return Task.CompletedTask;
         }
 
         public Task<string?> LoadSecretAsync(string key) =>
             Task.FromResult(Secrets.TryGetValue(key, out var value) ? value : null);
 
-        public Task DeleteSecretAsync(string key)
+        public async Task DeleteSecretAsync(string key)
         {
+            await SecretWriteGate;
             if (FailSecretWrites) throw new IOException("Cannot delete secret");
             Secrets.Remove(key);
-            return Task.CompletedTask;
         }
 
         public T? GetSetting<T>(string key)

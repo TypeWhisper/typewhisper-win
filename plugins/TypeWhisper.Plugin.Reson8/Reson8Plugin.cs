@@ -78,6 +78,9 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
     private readonly object _modelListLock = new();
     // Grows with every connection change, so a refresh that started before one is dropped.
     private long _connectionGeneration;
+    // Set from activation until deactivation starts. DeactivateAsync keeps _host while the dictionary syncs finish,
+    // so an hourly recheck that is already running checks this flag, not _host, before it starts a refresh.
+    private bool _active;
     private DateTimeOffset? _modelListsFetchedAt;
     // The saved selection. _selectedModelId is the one in use: the default model while the lists lack the saved one.
     private string _preferredModelId = DefaultModelId;
@@ -148,6 +151,7 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
             _dictionaryModelEnabled = ReadSetting<bool?>(host, DictionaryModelEnabledSettingName) ?? false;
             _patternSets = Reson8Catalog.SanitizePatternSets(ReadSetting<List<Reson8PatternSet>>(host, PatternSetsSettingName));
             ResolveSelectedModel();
+            _active = true;
         }
         var dictionaryState = ReadSetting<Reson8DictionaryModelState>(host, DictionaryModelSettingName);
         _dictionarySync?.Dispose();
@@ -158,6 +162,8 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
             SaveDictionaryModelState);
         host.Log(PluginLogLevel.Info, $"Activated (configured={IsConfigured}, model={_selectedModelId})");
         StartModelRefreshIfStale();
+        // Checks again every hour: the app often runs for days without activating plugins again.
+        _modelRefresh.StartRechecks(StartModelRefreshIfStale);
     }
 
     /// <summary>
@@ -166,7 +172,12 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
     public async Task DeactivateAsync()
     {
         // The model refresh is cancelled, not awaited: once cancelled it saves nothing, so its request can still finish.
-        BeginConnectionChange();
+        _modelRefresh.StopRechecks();
+        lock (_modelListLock)
+        {
+            _active = false;
+            BeginConnectionChange();
+        }
         _backgroundCancellation.Cancel();
         await BackgroundWork.ConfigureAwait(false);
         _host = null;
@@ -563,8 +574,10 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
                 _apiKey = normalized;
                 if (changed)
                 {
-                    // Also drops a refresh that read the previous key while the settings above changed.
+                    // Also drops and stops a refresh that read the previous key while the settings above changed, such
+                    // as one an hourly recheck started, so a removed key is not sent again.
                     _connectionGeneration++;
+                    _modelRefresh.Cancel();
                     _fetchedCustomModels = [];
                     _preferredModelId = _selectedModelId = DefaultModelId;
                     _modelListsFetchedAt = null;

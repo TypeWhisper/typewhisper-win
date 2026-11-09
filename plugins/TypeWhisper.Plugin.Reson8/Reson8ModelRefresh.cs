@@ -8,7 +8,8 @@ namespace TypeWhisper.Plugin.Reson8;
 
 /// <summary>
 /// Reson8 retires models, and custom models can be deleted in its console. Lists that only reload on request keep
-/// offering them, and requests to them fail. With a key, both lists reload in the background once they are a day old.
+/// offering them, and requests to them fail. With a key, both lists reload in the background once they are a day old;
+/// an active plugin checks that every hour.
 /// </summary>
 public sealed partial class Reson8Plugin
 {
@@ -35,11 +36,13 @@ public sealed partial class Reson8Plugin
         }
     }
 
+    // Also runs every hour on a timer thread. The lock makes the check and the start one step, and deactivation
+    // and connection changes cancel the refresh under the same lock.
     private void StartModelRefreshIfStale()
     {
         lock (_modelListLock)
         {
-            if (!_modelRefresh.Enabled || _host is not { } host || CurrentConnection() is not { } connection
+            if (!_modelRefresh.Enabled || !_active || _host is not { } host || CurrentConnection() is not { } connection
                 || !_modelRefresh.IsStale(_modelListsFetchedAt))
                 return;
             host.Log(PluginLogLevel.Info, "Refreshing the Reson8 model lists in the background.");

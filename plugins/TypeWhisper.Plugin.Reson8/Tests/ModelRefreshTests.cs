@@ -1,8 +1,10 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http;
+using PortableMigration.Tests;
 using TypeWhisper.Plugin.Reson8;
 using TypeWhisper.Plugin.Shared;
+using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.PluginSystem.Tests;
 
@@ -266,6 +268,167 @@ public partial class Reson8PluginTests
     }
 
     [Fact]
+    public async Task Recheck_ReloadsListsThatAgedWhileThePluginStayedActive()
+    {
+        var requests = new ConcurrentQueue<string>();
+        using var http = new HttpClient(new CapturingHandler((request, _) =>
+        {
+            requests.Enqueue(request.RequestUri!.AbsolutePath);
+            return Lists(request);
+        }));
+        var clock = new RecheckTestClock(Now);
+        var host = ListHost(fetchedAt: Now.AddHours(-1));
+        using var sut = new Reson8Plugin(http, refreshModelsAutomatically: true, clock: clock);
+        await sut.ActivateAsync(host);
+        await sut.ModelRefreshTask;
+        Assert.Empty(requests);
+
+        // The app keeps running for a day without activating the plugin again.
+        clock.Advance(TimeSpan.FromHours(24));
+        await sut.ModelRefreshTask;
+
+        var refreshedAt = Now.AddHours(24);
+        Assert.Equal(["/v1/model", "/v1/custom-model"], requests);
+        Assert.Equal(RefreshedModels, sut.TranscriptionModels.Select(model => model.Id));
+        Assert.Equal(refreshedAt, sut.ModelListsFetchedAt);
+        Assert.Equal(refreshedAt, host.GetSetting<DateTimeOffset?>(Reson8Plugin.ModelListsFetchedAtSettingName));
+        Assert.Equal(["resonant-1", "rumble-3-flash"], host.GetSetting<List<Reson8Model>>("fetchedModels")!.Select(model => model.Id));
+        Assert.Equal("custom-1", Assert.Single(host.GetSetting<List<Reson8CustomModel>>("fetchedCustomModels")!).Id);
+
+        // The next check finds the lists fresh.
+        clock.Advance(ModelCatalogAutoRefresh.RecheckInterval);
+        await sut.ModelRefreshTask;
+        Assert.Equal(2, requests.Count);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Recheck_TriesAFailedRefreshAgainAnHourLater(bool bothListsFail)
+    {
+        var failing = true;
+        var requests = new ConcurrentQueue<string>();
+        using var http = new HttpClient(new CapturingHandler((request, _) =>
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            requests.Enqueue(path);
+            return Volatile.Read(ref failing) && (bothListsFail || path == "/v1/custom-model")
+                ? JsonResponse("{}", HttpStatusCode.ServiceUnavailable)
+                : Lists(request);
+        }));
+        var clock = new RecheckTestClock(Now);
+        var host = ListHost();
+        using var sut = new Reson8Plugin(http, refreshModelsAutomatically: true, clock: clock);
+        await sut.ActivateAsync(host);
+        await sut.ModelRefreshTask;
+        // A refresh that failed, also for one list only, records no date.
+        Assert.Equal(["/v1/model", "/v1/custom-model"], requests);
+        Assert.Null(sut.ModelListsFetchedAt);
+
+        Volatile.Write(ref failing, false);
+        clock.Advance(ModelCatalogAutoRefresh.RecheckInterval);
+        await sut.ModelRefreshTask;
+
+        Assert.Equal(["/v1/model", "/v1/custom-model", "/v1/model", "/v1/custom-model"], requests);
+        Assert.Equal(RefreshedModels, sut.TranscriptionModels.Select(model => model.Id));
+        Assert.Equal(Now + ModelCatalogAutoRefresh.RecheckInterval, sut.ModelListsFetchedAt);
+    }
+
+    [Fact]
+    public async Task DeactivateAsync_StopsTheRechecks()
+    {
+        var clock = new RecheckTestClock(Now);
+        var host = ListHost(fetchedAt: Now.AddHours(-1));
+        using var sut = CreateOfflinePlugin(refreshModels: true, clock);
+        await sut.ActivateAsync(host);
+        Assert.Equal(1, clock.ActiveTimers);
+
+        await sut.DeactivateAsync();
+        clock.Advance(TimeSpan.FromHours(24));
+        await sut.ModelRefreshTask;
+
+        Assert.Equal(0, clock.ActiveTimers);
+        Assert.DoesNotContain(host.Logs, message => message.Contains("in the background", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Dispose_StopsTheRechecks()
+    {
+        var clock = new RecheckTestClock(Now);
+        var sut = CreateOfflinePlugin(refreshModels: true, clock);
+        await sut.ActivateAsync(ListHost(fetchedAt: Now.AddHours(-1)));
+        Assert.Equal(1, clock.ActiveTimers);
+
+        sut.Dispose();
+
+        Assert.Equal(0, clock.ActiveTimers);
+    }
+
+    [Fact]
+    public async Task ARecheckRunningDuringDeactivationStartsNoRefresh()
+    {
+        var clock = new LateRecheckClock(Now);
+        var syncRelease = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var requests = new ConcurrentQueue<string>();
+        using var http = new HttpClient(new CapturingHandler((request, _) =>
+        {
+            requests.Enqueue(request.RequestUri!.AbsolutePath);
+            return JsonResponse("""{"text":"ok"}""");
+        }));
+        using var sut = new Reson8Plugin(http, customModelApi: new FakeCustomModelApi { Gate = syncRelease.Task },
+            refreshModelsAutomatically: true, clock: clock) { DictionaryModelWait = TimeSpan.FromMilliseconds(50) };
+        var host = ListHost(fetchedAt: Now.AddHours(-1));
+        host.SetSetting("dictionaryModelEnabled", true);
+        await sut.ActivateAsync(host);
+        // The dictionary sync outlasts the request, so deactivation waits for it with the host still set.
+        await sut.TranscribeAsync(BuildPcm16Wav([0, 0]), null, false, PluginDictionaryTerms.CreateStructuredPrompt(["Reson8"]), default);
+        clock.UtcNow = Now.AddHours(24);
+
+        var deactivation = sut.DeactivateAsync();
+        Assert.False(deactivation.IsCompleted);
+        // A check the timer had queued before it stopped runs now, with the lists a day old.
+        clock.RunQueuedRecheck();
+        syncRelease.SetResult();
+        await deactivation;
+        await sut.ModelRefreshTask;
+
+        Assert.Equal(["/v1/speech-to-text/prerecorded"], requests);
+        Assert.DoesNotContain(host.Logs, message => message.Contains("in the background", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RemovingTheKeyStopsARefreshThatARecheckStartedMeanwhile()
+    {
+        var answer = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var requests = new ConcurrentQueue<string>();
+        var handler = new BlockingHandler(request =>
+        {
+            requests.Enqueue(request.RequestUri!.AbsolutePath);
+            return answer.Task;
+        }, request => Lists(request));
+        using var http = new HttpClient(handler);
+        var clock = new RecheckTestClock(Now);
+        var host = ListHost(fetchedAt: Now.AddHours(-1));
+        using var sut = new Reson8Plugin(http, refreshModelsAutomatically: true, clock: clock);
+        await sut.ActivateAsync(host);
+        var secretDeleted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        host.SecretWriteGate = secretDeleted.Task;
+
+        var removal = sut.SetApiKeyAsync("");
+        // The hourly check runs while the key is being removed, so it still reads the old key.
+        clock.Advance(TimeSpan.FromHours(24));
+        await handler.Started;
+        secretDeleted.SetResult();
+        await removal;
+        answer.SetResult();
+        await sut.ModelRefreshTask;
+
+        // The removal stopped that refresh before it asked for the custom models.
+        Assert.Equal(["/v1/model"], requests);
+        Assert.Null(sut.ApiKey);
+    }
+
+    [Fact]
     public async Task SavedModelSurvivesAListThatLacksItAndAppliesAgain()
     {
         var offerRumble = false;
@@ -386,6 +549,31 @@ public partial class Reson8PluginTests
         public override DateTimeOffset GetUtcNow() => now;
     }
 
+    // Runs the recheck's callback on request, also after its timer stopped, like a callback the thread pool had already queued.
+    private sealed class LateRecheckClock(DateTimeOffset now) : TimeProvider
+    {
+        private TimerCallback? _callback;
+
+        public DateTimeOffset UtcNow { get; set; } = now;
+
+        public override DateTimeOffset GetUtcNow() => UtcNow;
+
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+        {
+            _callback = callback;
+            return new IdleTimer();
+        }
+
+        public void RunQueuedRecheck() => _callback!(null);
+
+        private sealed class IdleTimer : ITimer
+        {
+            public bool Change(TimeSpan dueTime, TimeSpan period) => true;
+            public void Dispose() { }
+            public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+        }
+    }
+
     private sealed class BlockingHandler(Func<HttpRequestMessage, Task> wait, Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
     {
         private readonly TaskCompletionSource _started = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -396,6 +584,8 @@ public partial class Reson8PluginTests
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            // Like a real handler, sends nothing for a request that is already cancelled.
+            cancellationToken.ThrowIfCancellationRequested();
             _started.TrySetResult();
             // Ignores cancellation, so the answer can arrive after deactivation or a connection change, like a slow server.
             await wait(request);
