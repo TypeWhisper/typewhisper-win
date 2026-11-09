@@ -54,6 +54,37 @@ public sealed class PluginSettingsPersistenceTests : IDisposable
         Assert.False(new VocabularyHostServices(_root).GetSetting<bool>("Enabled"));
     }
 
+    // Any open handle on the file, even one that shares everything like a virus scanner's, makes Windows refuse to
+    // replace it. A scanner checking the last write holds the file for a few milliseconds.
+    [Fact]
+    public async Task SaveWaitsForAScannerThatBrieflyHoldsTheSettingsFile()
+    {
+        var host = new VocabularyHostServices(_root);
+        host.SetSetting("Model", "a");
+        var file = Path.Combine(_root, "settings.json");
+        var scanner = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        var scanned = Task.Run(async () => { await Task.Delay(100); await scanner.DisposeAsync(); });
+
+        host.SetSetting("Model", "b");
+
+        await scanned;
+        Assert.Contains("\"Model\":\"b\"", File.ReadAllText(file));
+    }
+
+    [Fact]
+    public void SaveStillFailsWhileTheSettingsFileStaysHeld()
+    {
+        var host = new VocabularyHostServices(_root);
+        host.SetSetting("Model", "a");
+        var file = Path.Combine(_root, "settings.json");
+
+        using (new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+            Assert.Throws<UnauthorizedAccessException>(() => host.SetSetting("Model", "b"));
+
+        Assert.Equal("a", host.GetSetting<string>("Model"));
+        Assert.Contains("\"Model\":\"a\"", File.ReadAllText(file));
+    }
+
     [Fact]
     public void RepeatedReadsUseTheParsedFileUntilItsTimeOrSizeChanges()
     {

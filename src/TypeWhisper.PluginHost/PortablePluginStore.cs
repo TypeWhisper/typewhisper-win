@@ -365,7 +365,7 @@ public sealed class PortablePluginStore
     {
         var path = Path.Combine(Root, "installed.json");
         File.WriteAllText(path + ".tmp", JsonSerializer.Serialize(next, PortablePluginCatalog.Json));
-        File.Move(path + ".tmp", path, true);
+        FileReplacement.Move(path + ".tmp", path);
         lock (_sync) { _installed = next; Interlocked.Increment(ref _revision); }
     }
     private static void CopyTree(string source, string target)
