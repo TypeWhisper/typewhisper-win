@@ -2,7 +2,7 @@
   "id": "com.typewhisper.reson8",
   "locality": "configurable",
   "name": "Reson8",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "author": "Y. Vos",
   "description": "Cloud transcription via Reson8 speech-to-text API with real-time WebSocket streaming. Requires API key.",
   "category": "transcription",

@@ -132,8 +132,12 @@ public sealed partial class Reson8Plugin : IApiKeyPlugin, IPluginTextSettings, I
     {
         var sanitized = Reson8Catalog.SanitizePatternSets(sets);
         _host?.SetSetting(PatternSetsSettingName, sanitized);
-        _patternSets = sanitized;
-        if (_selectedModelId.StartsWith(Reson8PatternSet.ModelIdPrefix, StringComparison.Ordinal) && PatternSetFor(_selectedModelId) is null)
+        lock (_modelListLock)
+        {
+            _patternSets = sanitized;
+            ResolveSelectedModel();
+        }
+        if (_preferredModelId.StartsWith(Reson8PatternSet.ModelIdPrefix, StringComparison.Ordinal) && PatternSetFor(_preferredModelId) is null)
             SelectModel(DefaultModelId);
         _host?.NotifyCapabilitiesChanged();
     }
@@ -171,27 +175,18 @@ public sealed partial class Reson8Plugin : IApiKeyPlugin, IPluginTextSettings, I
     }
 
     /// <summary>
-    /// Fetches both lists. A list that cannot be fetched keeps the one fetched before, and with it the selection;
-    /// a proxy without <c>/v1/model</c> still loads its custom models.
+    /// Fetches both lists and records their date. A list that cannot be fetched keeps the one fetched before;
+    /// a proxy without <c>/v1/model</c> still loads its custom models. The saved selection stays.
     /// </summary>
     internal async Task<(int Models, int CustomModels, string? Failure)> RefreshModelListsAsync(CancellationToken ct)
     {
-        IReadOnlyList<Reson8Model>? models = null;
-        IReadOnlyList<Reson8CustomModel>? customModels = null;
-        Exception? failure = null;
-        try { models = await FetchModelsAsync(ct); }
-        catch (Exception ex) when (ex is HttpRequestException or JsonException or TaskCanceledException && !ct.IsCancellationRequested)
-        { failure = ex; }
-        try { customModels = await FetchCustomModelsAsync(ct); }
-        catch (Exception ex) when (ex is HttpRequestException or JsonException or TaskCanceledException && !ct.IsCancellationRequested)
-        { failure ??= ex; }
-        if (models is null && customModels is null)
-            throw new InvalidOperationException($"Reson8 models could not be loaded: {failure?.Message}", failure);
-
-        if (customModels is not null)
-            SetFetchedCustomModels(customModels);
-        if (models is not null)
-            SetFetchedModels(models);
+        var connection = CurrentConnection() ?? throw new InvalidOperationException("Store an API key first.");
+        // The button loads the lists itself; a background refresh would only repeat the requests.
+        _modelRefresh.Cancel();
+        var (models, customModels, failure, complete) = await FetchModelListsAsync(connection, ct);
+        if (!TryApplyModelLists(models, customModels, complete, connection.Generation, CancellationToken.None))
+            throw new InvalidOperationException(L("The connection changed while the models were loading. Refresh models again.",
+                "Die Verbindung hat sich geändert, während die Modelle geladen wurden. Aktualisiere die Modelle noch einmal."));
         return (models?.Count ?? _fetchedModels.Count, CustomModels.Count(), failure?.Message);
     }
 

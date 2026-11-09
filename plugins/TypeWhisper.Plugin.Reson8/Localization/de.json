@@ -50,5 +50,6 @@
   "Reson8 did not answer in time.": "Reson8 hat nicht rechtzeitig geantwortet.",
   "Default model": "Standardmodell",
   "{0} (patterns)": "{0} (Muster)",
-  "One list could not be loaded and keeps its previous entries: {0}": "Eine Liste konnte nicht geladen werden und behält ihre bisherigen Einträge: {0}"
+  "One list could not be loaded and keeps its previous entries: {0}": "Eine Liste konnte nicht geladen werden und behält ihre bisherigen Einträge: {0}",
+  "The connection changed while the models were loading. Refresh models again.": "Die Verbindung hat sich geändert, während die Modelle geladen wurden. Aktualisiere die Modelle noch einmal."
 }

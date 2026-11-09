@@ -8,7 +8,7 @@ public partial class Reson8PluginTests
     public async Task FailedKeySaveKeepsTheStoredAndActiveKey()
     {
         var host = new TestPluginHostServices(); host.Secrets["api-key"] = "old-key";
-        using var plugin = new Reson8Plugin(); await plugin.ActivateAsync(host);
+        using var plugin = CreateOfflinePlugin(); await plugin.ActivateAsync(host);
         host.FailSecretWrites = true;
         await Assert.ThrowsAsync<System.IO.IOException>(() => ((IApiKeyPlugin)plugin).SetApiKeyAsync("new-key"));
         Assert.Equal("old-key", plugin.ApiKey); Assert.Equal("old-key", host.Secrets["api-key"]);
@@ -18,7 +18,7 @@ public partial class Reson8PluginTests
     [Fact]
     public async Task SharedSettingsPersistAcrossActivation()
     {
-        var host = new TestPluginHostServices(); using var plugin = new Reson8Plugin(); await plugin.ActivateAsync(host);
+        var host = new TestPluginHostServices(); using var plugin = CreateOfflinePlugin(); await plugin.ActivateAsync(host);
         Assert.All(plugin.TextSettings, setting => Assert.False(setting.SaveChoiceOnChange));
         await plugin.SaveTextSettingAsync("baseUrl", "https://proxy.example.test/", default);
         await plugin.SaveTextSettingAsync("authHeader", "X-Api-Key", default);

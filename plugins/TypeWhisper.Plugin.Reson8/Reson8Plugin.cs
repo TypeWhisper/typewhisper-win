@@ -25,6 +25,7 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
     private const string CustomAuthHeaderSettingName = "customAuthHeader";
     private const string FetchedCustomModelsSettingName = "fetchedCustomModels";
     internal const string FetchedModelsSettingName = "fetchedModels";
+    internal const string ModelListsFetchedAtSettingName = "modelListsFetchedAtUtc";
     internal const string FillerModeSettingName = "fillerMode";
     internal const string BiasStrengthSettingName = "biasStrength";
     internal const string DictionaryModelEnabledSettingName = "dictionaryModelEnabled";
@@ -72,24 +73,36 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
     private IReadOnlyList<Reson8PatternSet> _patternSets = [];
     private Reson8DictionaryModelSync? _dictionarySync;
     private readonly IReson8CustomModelApi? _customModelApiOverride;
+    private readonly ModelCatalogAutoRefresh _modelRefresh;
+    // Guards the connection, the model lists, their date and the selection against the background model refresh.
+    private readonly object _modelListLock = new();
+    // Grows with every connection change, so a refresh that started before one is dropped.
+    private long _connectionGeneration;
+    private DateTimeOffset? _modelListsFetchedAt;
+    // The saved selection. _selectedModelId is the one in use: the default model while the lists lack the saved one.
+    private string _preferredModelId = DefaultModelId;
     private int _disposed;
 
     /// <summary>
     /// Initializes a new instance of the Reson8Plugin class.
     /// </summary>
     public Reson8Plugin()
-        : this(CreateHttpClient())
+        : this(CreateHttpClient(), refreshModelsAutomatically: ModelCatalogAutoRefresh.AllowedInThisProcess)
     {
     }
 
+    // Tests leave the background refresh off, so they never reach Reson8.
     internal Reson8Plugin(
         HttpClient httpClient,
         Func<string?, CancellationToken, Task<IStreamingSession>>? streamingFactory = null,
-        IReson8CustomModelApi? customModelApi = null)
+        IReson8CustomModelApi? customModelApi = null,
+        bool refreshModelsAutomatically = false,
+        TimeProvider? clock = null)
     {
         _httpClient = httpClient;
         _streamingFactory = streamingFactory;
         _customModelApiOverride = customModelApi;
+        _modelRefresh = new(refreshModelsAutomatically, clock);
     }
 
     /// <summary>
@@ -103,7 +116,7 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.3.0";
+    public string PluginVersion => "1.4.0";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
@@ -116,17 +129,26 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
             _backgroundCancellation = new CancellationTokenSource();
         }
 
+        // A refresh of an earlier activation must not apply to this one.
+        BeginConnectionChange();
         _host = host;
-        _apiKey = NormalizeApiKey(await host.LoadSecretAsync(ApiKeySecretName));
-        _customBaseUrl = NormalizeBaseUrl(host.GetSetting<string>(CustomBaseUrlSettingName));
-        _customAuthHeader = NormalizeAuthHeader(host.GetSetting<string>(CustomAuthHeaderSettingName));
-        _fetchedCustomModels = host.GetSetting<List<Reson8CustomModel>>(FetchedCustomModelsSettingName) ?? [];
-        _fetchedModels = Reson8Catalog.Sanitize(ReadSetting<List<Reson8Model>>(host, FetchedModelsSettingName));
-        _selectedModelId = NormalizeModelId(host.GetSetting<string>(SelectedModelSettingName));
-        _fillerMode = Reson8FillerModes.Normalize(ReadSetting<string>(host, FillerModeSettingName));
-        _biasStrength = NormalizeBiasStrength(ReadSetting<double?>(host, BiasStrengthSettingName));
-        _dictionaryModelEnabled = ReadSetting<bool?>(host, DictionaryModelEnabledSettingName) ?? false;
-        _patternSets = Reson8Catalog.SanitizePatternSets(ReadSetting<List<Reson8PatternSet>>(host, PatternSetsSettingName));
+        var apiKey = NormalizeApiKey(await host.LoadSecretAsync(ApiKeySecretName));
+        lock (_modelListLock)
+        {
+            _apiKey = apiKey;
+            _customBaseUrl = NormalizeBaseUrl(host.GetSetting<string>(CustomBaseUrlSettingName));
+            _customAuthHeader = NormalizeAuthHeader(host.GetSetting<string>(CustomAuthHeaderSettingName));
+            _fetchedCustomModels = host.GetSetting<List<Reson8CustomModel>>(FetchedCustomModelsSettingName) ?? [];
+            _fetchedModels = Reson8Catalog.Sanitize(ReadSetting<List<Reson8Model>>(host, FetchedModelsSettingName));
+            // Lists saved before 1.4.0 have no date; they stay until a refresh replaces them.
+            _modelListsFetchedAt = ReadSetting<DateTimeOffset?>(host, ModelListsFetchedAtSettingName);
+            _preferredModelId = NormalizeModelId(host.GetSetting<string>(SelectedModelSettingName));
+            _fillerMode = Reson8FillerModes.Normalize(ReadSetting<string>(host, FillerModeSettingName));
+            _biasStrength = NormalizeBiasStrength(ReadSetting<double?>(host, BiasStrengthSettingName));
+            _dictionaryModelEnabled = ReadSetting<bool?>(host, DictionaryModelEnabledSettingName) ?? false;
+            _patternSets = Reson8Catalog.SanitizePatternSets(ReadSetting<List<Reson8PatternSet>>(host, PatternSetsSettingName));
+            ResolveSelectedModel();
+        }
         var dictionaryState = ReadSetting<Reson8DictionaryModelState>(host, DictionaryModelSettingName);
         _dictionarySync?.Dispose();
         _dictionarySync = new Reson8DictionaryModelSync(
@@ -135,6 +157,7 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
             _customModelApiOverride ?? new Reson8HttpCustomModelApi(_httpClient, CreateCustomModelRequest),
             SaveDictionaryModelState);
         host.Log(PluginLogLevel.Info, $"Activated (configured={IsConfigured}, model={_selectedModelId})");
+        StartModelRefreshIfStale();
     }
 
     /// <summary>
@@ -142,6 +165,8 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
     /// </summary>
     public async Task DeactivateAsync()
     {
+        // The model refresh is cancelled, not awaited: once cancelled it saves nothing, so its request can still finish.
+        BeginConnectionChange();
         _backgroundCancellation.Cancel();
         await BackgroundWork.ConfigureAwait(false);
         _host = null;
@@ -297,8 +322,12 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
     {
         var normalized = NormalizeModelId(modelId);
         var before = CapabilitySnapshot();
-        _host?.SetSetting(SelectedModelSettingName, normalized);
-        _selectedModelId = normalized;
+        lock (_modelListLock)
+        {
+            _host?.SetSetting(SelectedModelSettingName, normalized);
+            _preferredModelId = normalized;
+            ResolveSelectedModel();
+        }
         // Rumble-2-Flash neither streams nor takes dictionary terms, and its languages differ.
         if (CapabilitySnapshot() != before)
             _host?.NotifyCapabilitiesChanged();
@@ -479,18 +508,24 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
     {
         var normalized = NormalizeApiKey(apiKey);
         IPluginHostServices? hostToNotify = null;
+        var changed = false;
 
         await _apiKeyWriteLock.WaitAsync().ConfigureAwait(false);
         try
         {
-            var changed = !string.Equals(_apiKey, normalized, StringComparison.Ordinal);
+            changed = !string.Equals(_apiKey, normalized, StringComparison.Ordinal);
+            // Lists fetched with the previous key are dropped from here on.
+            if (changed)
+                BeginConnectionChange();
 
             if (_host is not null)
             {
                 var oldSelection = _host.GetSetting<string>(SelectedModelSettingName);
                 var oldModels = _host.GetSetting<List<Reson8CustomModel>>(FetchedCustomModelsSettingName);
+                var oldFetchedAt = ReadSetting<DateTimeOffset?>(_host, ModelListsFetchedAtSettingName);
                 var selectionWritten = false;
                 var modelsWritten = false;
+                var fetchedAtWritten = false;
                 try
                 {
                     if (changed)
@@ -501,6 +536,9 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
                         selectionWritten = true;
                         _host.SetSetting(FetchedCustomModelsSettingName, Array.Empty<Reson8CustomModel>());
                         modelsWritten = true;
+                        // The lists lack the new key's custom models until they load again.
+                        _host.SetSetting<DateTimeOffset?>(ModelListsFetchedAtSettingName, null);
+                        fetchedAtWritten = true;
                     }
                     if (normalized is null)
                         await _host.DeleteSecretAsync(ApiKeySecretName).ConfigureAwait(false);
@@ -510,6 +548,8 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
                 catch (Exception failure) when (failure is not OutOfMemoryException)
                 {
                     var errors = new List<Exception> { failure };
+                    try { if (fetchedAtWritten) _host.SetSetting(ModelListsFetchedAtSettingName, oldFetchedAt); }
+                    catch (Exception rollback) when (rollback is not OutOfMemoryException) { errors.Add(rollback); }
                     try { if (modelsWritten) _host.SetSetting(FetchedCustomModelsSettingName, oldModels); }
                     catch (Exception rollback) when (rollback is not OutOfMemoryException) { errors.Add(rollback); }
                     try { if (selectionWritten) _host.SetSetting(SelectedModelSettingName, oldSelection); }
@@ -518,11 +558,20 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
                     throw;
                 }
             }
-            _apiKey = normalized;
+            lock (_modelListLock)
+            {
+                _apiKey = normalized;
+                if (changed)
+                {
+                    // Also drops a refresh that read the previous key while the settings above changed.
+                    _connectionGeneration++;
+                    _fetchedCustomModels = [];
+                    _preferredModelId = _selectedModelId = DefaultModelId;
+                    _modelListsFetchedAt = null;
+                }
+            }
             if (changed)
             {
-                _fetchedCustomModels = [];
-                _selectedModelId = DefaultModelId;
                 // The next key may belong to another account, which does not have the dictionary's custom model.
                 ForgetDictionaryModel();
                 hostToNotify = _host;
@@ -531,6 +580,9 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
         finally
         {
             _apiKeyWriteLock.Release();
+            // Loads the new key's lists, or restarts a refresh that a failed key change stopped.
+            if (changed)
+                StartModelRefreshIfStale();
         }
 
         hostToNotify?.NotifyCapabilitiesChanged();
@@ -568,11 +620,15 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
 
     internal async Task<IReadOnlyList<Reson8CustomModel>> FetchCustomModelsAsync(CancellationToken ct = default)
     {
-        if (!IsConfigured)
+        if (CurrentConnection() is not { } connection)
             return [];
+        return await FetchCustomModelsAsync(connection, ct);
+    }
 
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"{_customBaseUrl}/v1/custom-model");
-        AddAuthHeader(request, _apiKey!, _customAuthHeader);
+    private async Task<IReadOnlyList<Reson8CustomModel>> FetchCustomModelsAsync(Reson8Connection connection, CancellationToken ct)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"{connection.BaseUrl}/v1/custom-model");
+        AddAuthHeader(request, connection.ApiKey, connection.AuthHeader);
 
         using var response = await _httpClient.SendAsync(request, ct);
         response.EnsureSuccessStatusCode();
@@ -588,53 +644,42 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
     /// <summary>The models Reson8 lists (<c>GET /v1/model</c>), such as Resonant-1 and Rumble-2-Flash.</summary>
     internal async Task<IReadOnlyList<Reson8Model>> FetchModelsAsync(CancellationToken ct = default)
     {
-        if (!IsConfigured)
+        if (CurrentConnection() is not { } connection)
             return [];
+        return await FetchModelsAsync(connection, ct);
+    }
 
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"{_customBaseUrl}/v1/model");
-        AddAuthHeader(request, _apiKey!, _customAuthHeader);
+    private async Task<IReadOnlyList<Reson8Model>> FetchModelsAsync(Reson8Connection connection, CancellationToken ct)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"{connection.BaseUrl}/v1/model");
+        AddAuthHeader(request, connection.ApiKey, connection.AuthHeader);
         using var response = await _httpClient.SendAsync(request, ct);
         response.EnsureSuccessStatusCode();
         var models = Reson8Catalog.ParseModels(await response.Content.ReadAsStringAsync(ct));
         return models.Count == 0 ? throw new JsonException("Reson8 listed no models.") : models;
     }
 
-    internal void SetFetchedModels(IReadOnlyList<Reson8Model> models)
-    {
-        var before = CapabilitySnapshot();
-        var sanitized = Reson8Catalog.Sanitize(models);
-        _host?.SetSetting(FetchedModelsSettingName, sanitized);
-        _fetchedModels = sanitized;
-        if (_selectedModelId != DefaultModelId && !IsKnownModel(_selectedModelId))
-            SelectModel(DefaultModelId);
-        if (CapabilitySnapshot() != before)
-            _host?.NotifyCapabilitiesChanged();
-    }
-
     private bool IsKnownModel(string modelId) =>
-        IsListedModel(modelId) || PatternSetFor(modelId) is not null || _fetchedCustomModels.Any(model => model.Id == modelId);
+        modelId == DefaultModelId || IsListedModel(modelId) || PatternSetFor(modelId) is not null
+        || _fetchedCustomModels.Any(model => model.Id == modelId);
+
+    /// <summary>
+    /// The saved selection applies while the lists offer it. Otherwise the default model runs and the saved value stays,
+    /// so a model that a later list offers again applies again. Callers hold <see cref="_modelListLock"/>.
+    /// </summary>
+    private void ResolveSelectedModel() =>
+        _selectedModelId = IsKnownModel(_preferredModelId) ? _preferredModelId : DefaultModelId;
 
     internal void SetFetchedCustomModels(IReadOnlyList<Reson8CustomModel> models)
     {
         var nextModels = models.ToArray();
-        var nextSelection = _selectedModelId != DefaultModelId && !IsListedModel(_selectedModelId)
-            && PatternSetFor(_selectedModelId) is null && nextModels.All(m => m.Id != _selectedModelId)
-            ? DefaultModelId : _selectedModelId;
-        if (_host is { } host)
+        lock (_modelListLock)
         {
-            var previousSelection = host.GetSetting<string>(SelectedModelSettingName);
-            host.SetSetting(SelectedModelSettingName, nextSelection);
-            try { host.SetSetting(FetchedCustomModelsSettingName, nextModels); }
-            catch (Exception failure) when (failure is not OutOfMemoryException)
-            {
-                try { host.SetSetting(SelectedModelSettingName, previousSelection); }
-                catch (Exception rollback) when (rollback is not OutOfMemoryException)
-                { throw new AggregateException("Model refresh failed and its selection could not be restored.", failure, rollback); }
-                throw;
-            }
+            // The saved selection is not written: a list without it does not replace the user's choice.
+            _host?.SetSetting(FetchedCustomModelsSettingName, nextModels);
+            _fetchedCustomModels = nextModels;
+            ResolveSelectedModel();
         }
-        _selectedModelId = nextSelection;
-        _fetchedCustomModels = nextModels;
         _host?.NotifyCapabilitiesChanged();
     }
 
@@ -646,12 +691,27 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
             !string.IsNullOrEmpty(endpoint.Query) || !string.IsNullOrEmpty(endpoint.Fragment) || !string.IsNullOrEmpty(endpoint.UserInfo))
             throw new ArgumentException("Enter an absolute HTTP(S) server URL without credentials, query or fragment.", nameof(url));
         if (string.Equals(normalized, _customBaseUrl, StringComparison.Ordinal)) return;
-        // Another server lists its own models, so it starts from the built-in ones until they are loaded.
-        PersistConnectionChange(CustomBaseUrlSettingName, normalized == DefaultBaseUrl ? null : normalized, otherServer: true);
-        _customBaseUrl = normalized;
-        _host?.NotifyCapabilitiesChanged();
+        try
+        {
+            lock (_modelListLock)
+            {
+                BeginConnectionChange();
+                // Another server lists its own models, so it starts from the built-in ones until they are loaded.
+                PersistConnectionChange(CustomBaseUrlSettingName, normalized == DefaultBaseUrl ? null : normalized, otherServer: true);
+                _customBaseUrl = normalized;
+            }
+            // Another server or account does not have the dictionary's custom model.
+            ForgetDictionaryModel();
+            _host?.NotifyCapabilitiesChanged();
+        }
+        finally
+        {
+            // Loads the new server's lists, or restarts a refresh that a failed change stopped.
+            StartModelRefreshIfStale();
+        }
     }
 
+    // Callers hold _modelListLock.
     private void PersistConnectionChange(string settingName, string? value, bool otherServer = false)
     {
         if (_host is { } host)
@@ -659,9 +719,11 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
             var oldSelection = host.GetSetting<string>(SelectedModelSettingName);
             var oldModels = host.GetSetting<List<Reson8CustomModel>>(FetchedCustomModelsSettingName);
             var oldListedModels = otherServer ? host.GetSetting<List<Reson8Model>>(FetchedModelsSettingName) : null;
+            var oldFetchedAt = ReadSetting<DateTimeOffset?>(host, ModelListsFetchedAtSettingName);
             var selectionWritten = false;
             var modelsWritten = false;
             var listedModelsWritten = false;
+            var fetchedAtWritten = false;
             try
             {
                 host.SetSetting(SelectedModelSettingName, DefaultModelId);
@@ -673,12 +735,17 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
                     host.SetSetting(FetchedModelsSettingName, Array.Empty<Reson8Model>());
                     listedModelsWritten = true;
                 }
+                // The lists are incomplete for the new connection until they load again.
+                host.SetSetting<DateTimeOffset?>(ModelListsFetchedAtSettingName, null);
+                fetchedAtWritten = true;
                 // Commit connection identity only after dependent settings succeed.
                 host.SetSetting(settingName, value);
             }
             catch (Exception failure) when (failure is not OutOfMemoryException)
             {
                 var errors = new List<Exception> { failure };
+                try { if (fetchedAtWritten) host.SetSetting(ModelListsFetchedAtSettingName, oldFetchedAt); }
+                catch (Exception rollback) when (rollback is not OutOfMemoryException) { errors.Add(rollback); }
                 try { if (listedModelsWritten) host.SetSetting(FetchedModelsSettingName, oldListedModels); }
                 catch (Exception rollback) when (rollback is not OutOfMemoryException) { errors.Add(rollback); }
                 try { if (modelsWritten) host.SetSetting(FetchedCustomModelsSettingName, oldModels); }
@@ -689,12 +756,11 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
                 throw;
             }
         }
-        _selectedModelId = DefaultModelId;
+        _preferredModelId = _selectedModelId = DefaultModelId;
         _fetchedCustomModels = [];
         if (otherServer)
             _fetchedModels = [];
-        // Another server or account does not have the dictionary's custom model.
-        ForgetDictionaryModel();
+        _modelListsFetchedAt = null;
     }
 
     internal void SetCustomAuthHeader(string? header)
@@ -703,9 +769,23 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
         if (normalized.Any(c => !char.IsAsciiLetterOrDigit(c) && !"!#$%&'*+-.^_`|~".Contains(c)))
             throw new ArgumentException("Enter a valid HTTP header name.", nameof(header));
         if (string.Equals(normalized, _customAuthHeader, StringComparison.OrdinalIgnoreCase)) return;
-        PersistConnectionChange(CustomAuthHeaderSettingName, normalized == DefaultAuthHeader ? null : normalized);
-        _customAuthHeader = normalized;
-        _host?.NotifyCapabilitiesChanged();
+        try
+        {
+            lock (_modelListLock)
+            {
+                BeginConnectionChange();
+                PersistConnectionChange(CustomAuthHeaderSettingName, normalized == DefaultAuthHeader ? null : normalized);
+                _customAuthHeader = normalized;
+            }
+            // Another account does not have the dictionary's custom model.
+            ForgetDictionaryModel();
+            _host?.NotifyCapabilitiesChanged();
+        }
+        finally
+        {
+            // Loads the lists with the new header, or restarts a refresh that a failed change stopped.
+            StartModelRefreshIfStale();
+        }
     }
 
     // Dictionary custom model
@@ -988,6 +1068,7 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        _modelRefresh.Dispose();
         _backgroundCancellation.Cancel();
         try { BackgroundWork.GetAwaiter().GetResult(); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { /* Syncs only update a custom model. */ }
