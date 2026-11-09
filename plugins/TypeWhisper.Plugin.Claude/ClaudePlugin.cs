@@ -2,6 +2,7 @@
 // and selection behavior compared with the macOS Claude plugin on 2026-09-15.
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Helpers;
 using TypeWhisper.PluginSDK.Models;
@@ -14,11 +15,16 @@ public sealed partial class ClaudePlugin : ILlmProviderPlugin, ILlmRequestHedgin
 {
     private const string BaseUrl = "https://api.anthropic.com";
     private readonly HttpClient _http;
+    private readonly ModelCatalogAutoRefresh _modelRefresh;
+    // The background model refresh writes the saved configuration from another thread. This lock orders that
+    // write with the settings commits and guards the host, key and configuration it checks.
+    private readonly object _configurationLock = new();
     private IPluginHostServices? _host;
     private string? _apiKey;
     private Configuration _configuration = new();
     private string[]? _draftModels;
     private string? _draftModelsKey;
+    private DateTimeOffset _draftModelsFetchedAt;
     private long _generation;
 
     private static readonly string[] FallbackModels =
@@ -31,12 +37,21 @@ public sealed partial class ClaudePlugin : ILlmProviderPlugin, ILlmRequestHedgin
         public string TemperatureMode { get; init; } = "providerDefault";
         public double Temperature { get; init; } = 0.3;
         public string[] Models { get; init; } = [];
+        /// <summary>When <see cref="Models"/> was fetched. Lists saved before 1.2.0 have none.</summary>
+        [JsonConverter(typeof(FetchDateConverter))]
+        public DateTimeOffset? ModelsFetchedAtUtc { get; init; }
     }
 
     /// <summary>Creates a transport that never forwards keys to redirect targets.</summary>
     public ClaudePlugin() : this(new HttpClient(new HttpClientHandler { AllowAutoRedirect = false })
-        { Timeout = TimeSpan.FromSeconds(120) }) { }
-    internal ClaudePlugin(HttpClient http) => _http = http;
+        { Timeout = TimeSpan.FromSeconds(120) }, refreshModelsAutomatically: ModelCatalogAutoRefresh.AllowedInThisProcess) { }
+
+    // Tests use this constructor. It leaves the background refresh off, so they never reach Anthropic.
+    internal ClaudePlugin(HttpClient http, bool refreshModelsAutomatically = false, TimeProvider? clock = null)
+    {
+        _http = http;
+        _modelRefresh = new ModelCatalogAutoRefresh(refreshModelsAutomatically, clock);
+    }
 
     /// <inheritdoc />
     public string PluginId => "com.typewhisper.claude";
@@ -45,7 +60,7 @@ public sealed partial class ClaudePlugin : ILlmProviderPlugin, ILlmRequestHedgin
     /// <inheritdoc />
     public string ProviderName => PluginName;
     /// <inheritdoc />
-    public string PluginVersion => "1.1.1";
+    public string PluginVersion => "1.2.0";
     /// <inheritdoc />
     public bool IsAvailable => _host is not null && _apiKey is not null;
     /// <inheritdoc />
@@ -53,11 +68,21 @@ public sealed partial class ClaudePlugin : ILlmProviderPlugin, ILlmRequestHedgin
     /// <inheritdoc />
     public bool SupportsRequestHedging => true;
     /// <inheritdoc />
-    public IReadOnlyList<PluginModelInfo> SupportedModels => Models(_configuration)
-        .Append(SelectedModel).Distinct(StringComparer.Ordinal)
-        .Select(id => new PluginModelInfo(id, DisplayName(id)) { IsRecommended = id == SelectedModel }).ToArray();
+    public IReadOnlyList<PluginModelInfo> SupportedModels
+    {
+        get
+        {
+            // One snapshot: the background refresh may replace the configuration meanwhile.
+            var configuration = _configuration;
+            var selected = SelectedModelOf(configuration);
+            return Models(configuration).Append(selected).Distinct(StringComparer.Ordinal)
+                .Select(id => new PluginModelInfo(id, DisplayName(id)) { IsRecommended = id == selected }).ToArray();
+        }
+    }
 
-    private string SelectedModel => _configuration.Model ?? Models(_configuration)[0];
+    private string SelectedModel => SelectedModelOf(_configuration);
+    // The saved model stays the default even when the account no longer lists it; a 404 then asks the user to choose.
+    private static string SelectedModelOf(Configuration configuration) => configuration.Model ?? Models(configuration)[0];
     private static string[] Models(Configuration configuration) => configuration.Models.Length > 0 ? configuration.Models : FallbackModels;
     private static string DisplayName(string id) => id switch
     {
@@ -71,29 +96,94 @@ public sealed partial class ClaudePlugin : ILlmProviderPlugin, ILlmRequestHedgin
     /// <inheritdoc />
     public async Task ActivateAsync(IPluginHostServices host)
     {
+        _modelRefresh.Cancel();
         var saved = host.GetSetting<Configuration>("configuration") ?? new();
+        var models = NormalizeModels(saved.Models ?? []);
         saved = saved with
         {
-            Models = NormalizeModels(saved.Models ?? []),
+            Models = models,
+            // The fallback list was never fetched, so a date without a list means nothing.
+            ModelsFetchedAtUtc = models.Length > 0 ? saved.ModelsFetchedAtUtc : null,
             Model = IsModelId(saved.Model) ? saved.Model : FallbackModels[0],
             TemperatureMode = saved.TemperatureMode == "custom" ? "custom" : "providerDefault",
             Temperature = double.IsFinite(saved.Temperature) ? Math.Clamp(saved.Temperature, 0, 1) : 0.3
         };
         var key = saved.SecretName is null ? null : NormalizeKey(await host.LoadSecretAsync(saved.SecretName));
-        _configuration = saved;
-        _apiKey = key;
-        _host = host;
+        lock (_configurationLock)
+        {
+            _configuration = saved;
+            _apiKey = key;
+            _host = host;
+        }
         ClearDraft();
+        // A list without a date, saved by an older version, stays in use until the refresh replaces it.
+        StartModelRefreshIfStale();
     }
 
     /// <inheritdoc />
     public Task DeactivateAsync()
     {
-        _host = null;
-        _apiKey = null;
-        _configuration = new();
+        _modelRefresh.Cancel();
+        lock (_configurationLock)
+        {
+            _host = null;
+            _apiKey = null;
+            _configuration = new();
+        }
         ClearDraft();
         return Task.CompletedTask;
+    }
+
+    internal Task ModelRefreshTask => _modelRefresh.Current;
+    internal bool RefreshesModelsAutomatically => _modelRefresh.Enabled;
+    internal DateTimeOffset? ModelsFetchedAt => _configuration.ModelsFetchedAtUtc;
+
+    /// <summary>
+    /// Anthropic retires models, and a list that only changes on Refresh models keeps offering them. Activation and a
+    /// key change reload a saved list that is a day old or has no date.
+    /// </summary>
+    private void StartModelRefreshIfStale()
+    {
+        IPluginHostServices? host;
+        string? key;
+        DateTimeOffset? fetchedAt;
+        lock (_configurationLock)
+        {
+            host = _host;
+            key = _apiKey;
+            fetchedAt = _configuration.ModelsFetchedAtUtc;
+        }
+        if (host is null || key is null || !_modelRefresh.IsStale(fetchedAt)) return;
+        _modelRefresh.Start(ct => RefreshSavedModelsAsync(host, key, ct), ex => LogRefreshFailure(host, ex));
+    }
+
+    // A failed or empty catalog throws in FetchModelsAsync, so the saved list stays.
+    private async Task RefreshSavedModelsAsync(IPluginHostServices host, string key, CancellationToken ct)
+    {
+        var models = await FetchModelsAsync(key, ct);
+        bool changed;
+        lock (_configurationLock)
+        {
+            // A result that arrives after deactivation or a key change belongs to another connection.
+            if (ct.IsCancellationRequested || !ReferenceEquals(_host, host) || !string.Equals(_apiKey, key, StringComparison.Ordinal))
+                return;
+            // Only the saved list and its date change; a pending draft and the other settings stay as they are.
+            var current = _configuration;
+            var next = current with { Models = models, ModelsFetchedAtUtc = _modelRefresh.UtcNow };
+            host.SetSetting("configuration", next);
+            _configuration = next;
+            changed = !current.Models.SequenceEqual(models, StringComparer.Ordinal);
+        }
+        if (changed) host.NotifyCapabilitiesChanged();
+    }
+
+    // Kind and status only: provider error messages can quote the response.
+    private static void LogRefreshFailure(IPluginHostServices host, Exception ex)
+    {
+        var reason = ex is PluginRequestException request
+            ? request.HttpStatusCode is { } status ? $"{request.FailureKind}, HTTP {status}" : request.FailureKind.ToString()
+            : ex.GetType().Name;
+        host.Log(PluginLogLevel.Warning, $"Automatic Claude model refresh failed ({reason}). The saved list is unchanged.");
     }
 
     /// <inheritdoc />
@@ -238,8 +328,37 @@ public sealed partial class ClaudePlugin : ILlmProviderPlugin, ILlmRequestHedgin
     }
     private string RequireKey(string? key) => _host is not null && key is not null ? key
         : throw new PluginRequestException("Claude API key not configured.", PluginRequestFailureKind.Configuration);
-    private void ClearDraft() { _draftModels = null; _draftModelsKey = null; Interlocked.Increment(ref _generation); }
+    private void ClearDraft()
+    {
+        _draftModels = null; _draftModelsKey = null; _draftModelsFetchedAt = default;
+        Interlocked.Increment(ref _generation);
+    }
 
     /// <inheritdoc />
-    public void Dispose() { _http.Dispose(); _apiKey = null; _host = null; ClearDraft(); }
+    public void Dispose()
+    {
+        // Cancel first, so a refresh in flight stops before its transport goes away.
+        _modelRefresh.Dispose();
+        _http.Dispose();
+        lock (_configurationLock) { _apiKey = null; _host = null; }
+        ClearDraft();
+    }
+
+    /// <summary>Reads a damaged fetch date as no date, so activation refreshes the list instead of failing to load.</summary>
+    private sealed class FetchDateConverter : JsonConverter<DateTimeOffset?>
+    {
+        public override DateTimeOffset? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            if (reader.TokenType == JsonTokenType.String && reader.TryGetDateTimeOffset(out var value) && value != default)
+                return value.ToUniversalTime();
+            reader.Skip();
+            return null;
+        }
+
+        public override void Write(Utf8JsonWriter writer, DateTimeOffset? value, JsonSerializerOptions options)
+        {
+            if (value is { } fetchedAt) writer.WriteStringValue(fetchedAt.ToUniversalTime());
+            else writer.WriteNullValue();
+        }
+    }
 }
