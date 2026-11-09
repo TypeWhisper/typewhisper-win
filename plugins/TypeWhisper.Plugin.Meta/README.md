@@ -2,7 +2,7 @@
 
 Meta transcription, realtime transcription, LLM completion, model refresh, language/dictionary/diarization and reasoning settings.
 
-Version `1.2.14`; plugin ID `com.typewhisper.meta`; minimum host `1.1.5`.
+Version `1.3.0`; plugin ID `com.typewhisper.meta`; minimum host `1.1.5`.
 
 ## Setup
 
@@ -27,7 +27,7 @@ Tests cover fake HTTP protocol, key storage failure, real local WebSocket finali
 
 ## Settings and streaming
 
-The settings page groups speaker labels under transcription and model/reasoning choices under text processing. Model choices come from the account API catalog; settings use the host’s shared save action. The host displays the Meta brand icon in navigation and provider selectors.
+The settings page groups speaker labels under transcription and model/reasoning choices under text processing. Model choices come from the account API catalog; settings use the host’s shared save action. With an API key, the catalog reloads in the background once it is a day old, and a key change reloads it for the new account. A failed or empty reload keeps the current catalog. When a reloaded list lacks the saved model, the default model is used until a later list offers the saved one again. The host displays the Meta brand icon in navigation and provider selectors.
 
 Diarization finalization drains all completed speaker turns and requires a clean WebSocket close after endStream. Loopback tests cover delayed final turns, abnormal closure, and missing turn completion.
 
