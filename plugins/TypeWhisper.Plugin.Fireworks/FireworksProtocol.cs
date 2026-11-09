@@ -27,8 +27,8 @@ public sealed partial class FireworksPlugin : IPluginSettingsActions
     public bool SupportsRequestHedging => true;
     private static readonly string[] Defaults = ["accounts/fireworks/models/gpt-oss-120b"];
     /// <inheritdoc />
-    public IReadOnlyList<PluginModelInfo> SupportedModels => (Connection.Get("catalog").Split('\n', StringSplitOptions.RemoveEmptyEntries)
-        .Concat(string.IsNullOrWhiteSpace(Connection.Get("catalog")) ? Defaults : [])
+    public IReadOnlyList<PluginModelInfo> SupportedModels => (Connection.Get(ProviderConnection.CatalogValue).Split('\n', StringSplitOptions.RemoveEmptyEntries)
+        .Concat(string.IsNullOrWhiteSpace(Connection.Get(ProviderConnection.CatalogValue)) ? Defaults : [])
         .Prepend(Connection.Get("llmModel", Defaults[0]))).Distinct().Select((m, index) => new PluginModelInfo(m,m) { IsRecommended = index == 0 }).ToArray();
     /// <inheritdoc />
     public IReadOnlyList<PluginTextSetting> TextSettings => [
@@ -66,7 +66,46 @@ public sealed partial class FireworksPlugin : IPluginSettingsActions
     public async Task<string?> ExecuteSettingsActionAsync(string id, CancellationToken cancellationToken)
     {
         if(id != "refreshModels") throw new ArgumentException("Unknown action.");
-        var key = Connection.RequireKey(); var models = new List<string>(); var tokens = new HashSet<string>(); string? token = null;
+        var key = Connection.RequireKey();
+        // The button loads the catalog itself; a background refresh would only repeat the requests.
+        _catalogRefresh.Cancel();
+        var models = await FetchCatalogAsync(key, cancellationToken);
+        if(models.Count == 0 || Connection.Key != key
+            || !await Connection.TrySaveCatalogAsync(Catalog(models), _catalogRefresh.UtcNow, key, cancellationToken))
+            throw ProviderConnection.InvalidResponse();
+        return Connection.L("Models updated.","Modelle aktualisiert.");
+    }
+
+    internal DateTimeOffset? CatalogFetchedAt => Connection.CatalogFetchedAt;
+    /// <summary>The running background refresh, or the last one. Tests await it.</summary>
+    internal Task CatalogRefreshTask => _catalogRefresh.Current;
+
+    /// <summary>
+    /// Fireworks retires serverless models, and a catalog that only reloads on request keeps suggesting them.
+    /// With a key, the catalog reloads in the background once the saved copy is a day old or has no date.
+    /// </summary>
+    private void StartCatalogRefreshIfStale()
+    {
+        if (!_catalogRefresh.Enabled || Connection.Host is not { } host || Connection.Key is not { } key
+            || !_catalogRefresh.IsStale(Connection.CatalogFetchedAt)) return;
+        host.Log(PluginLogLevel.Info, "Refreshing the Fireworks model catalog in the background.");
+        _catalogRefresh.Start(ct => RefreshCatalogInBackgroundAsync(key, ct),
+            ex => host.Log(PluginLogLevel.Warning, $"The Fireworks model catalog could not be refreshed ({Describe(ex)}). Keeping the current catalog."));
+    }
+
+    private async Task RefreshCatalogInBackgroundAsync(string key, CancellationToken ct)
+    {
+        var models = await FetchCatalogAsync(key, ct);
+        // An empty answer would leave only the default suggestion.
+        if (models.Count == 0) throw ProviderConnection.InvalidResponse();
+        // Saves nothing once the plugin was deactivated or the key changed since the fetch.
+        await Connection.TrySaveCatalogAsync(Catalog(models), _catalogRefresh.UtcNow, key, ct);
+    }
+
+    /// <summary>Reads every page of the catalog. A page that fails fails the whole fetch, so no partial catalog is saved.</summary>
+    private async Task<List<string>> FetchCatalogAsync(string key, CancellationToken cancellationToken)
+    {
+        var models = new List<string>(); var tokens = new HashSet<string>(); string? token = null;
         for (var page = 0; page < 100; page++)
         {
             var url = "https://api.fireworks.ai/inference/v1/models?page_size=200" + (token is null ? "" : "&page_token=" + Uri.EscapeDataString(token));
@@ -85,9 +124,13 @@ public sealed partial class FireworksPlugin : IPluginSettingsActions
             if(string.IsNullOrWhiteSpace(token)) break;
             if(!tokens.Add(token) || page == 99) throw ProviderConnection.InvalidResponse();
         }
-        if(models.Count == 0 || Connection.Key != key) throw ProviderConnection.InvalidResponse();
-        await Connection.SaveAsync("catalog",string.Join('\n',models.Distinct().Order()),cancellationToken);
-        return Connection.L("Models updated.","Modelle aktualisiert.");
+        return models;
     }
 
+    private static string Catalog(List<string> models) => string.Join('\n', models.Distinct().Order());
+
+    // The failure kind and status only: a provider's error message can repeat the response body.
+    private static string Describe(Exception ex) => ex is PluginRequestException request
+        ? request.FailureKind + (request.HttpStatusCode is { } status ? $", HTTP {status}" : "")
+        : ex.GetType().Name;
 }

@@ -1,10 +1,12 @@
 # Fireworks AI for the portable host
 
-Portable .NET 10 package `com.typewhisper.fireworks`, version `1.1.8`, requiring host `1.1.5`.
+Portable .NET 10 package `com.typewhisper.fireworks`, version `1.2.0`, requiring host `1.1.5`.
 
 ## Behavior
 
 Adds Whisper V3/V3 Turbo transcription with the model-specific audio endpoints, translation and dictionary prompts. Text processing uses the correct `/inference/v1/chat/completions` path, selected/custom model IDs, temperature and native/OpenAI model catalog discovery.
+
+With a key, the model catalog reloads in the background when the plugin starts and the saved copy is a day old or has no date, and after a key change, which drops the previous account's catalog. A failed, empty or incomplete reload keeps the current catalog. **Refresh models** reloads it at once and also resets the day. The text model ID stays as saved; the catalog only suggests IDs.
 
 Mac streaming is REST preview polling rather than the Windows WebSocket session contract; this package advertises recorded-audio transcription only. No live streaming is claimed.
 

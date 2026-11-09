@@ -11,8 +11,54 @@ namespace TypeWhisper.Plugin.Shared;
 // Fireworks part of the connection; the shared core is linked from plugins/shared/ProviderConnection.cs.
 internal sealed partial class ProviderConnection
 {
+    internal const string CatalogValue = "catalog";
+    internal const string CatalogFetchedAtValue = "catalogFetchedAtUtc";
+
     private static partial string NormalizeLanguage(string language) => language;
     private static partial IEnumerable<string> ParseTerms(string? prompt) => PluginDictionaryTerms.ParsePrompt(prompt);
+
+    // The catalog was fetched with the previous key; a new key may see a different set of models.
+    partial void OnKeyReplacing(ref Configuration next, string? key)
+    {
+        if (string.Equals(key, Key, StringComparison.Ordinal)) return;
+        var values = new Dictionary<string, string>(next.Values);
+        values.Remove(CatalogValue);
+        values.Remove(CatalogFetchedAtValue);
+        next = next with { Values = values };
+    }
+
+    /// <summary>When the saved catalog was fetched; null without a catalog, for one saved before 1.2.0, or for a damaged value.</summary>
+    internal DateTimeOffset? CatalogFetchedAt =>
+        Get(CatalogValue).Length > 0
+        && DateTimeOffset.TryParseExact(Get(CatalogFetchedAtValue), "O", CultureInfo.InvariantCulture, DateTimeStyles.None, out var fetchedAt)
+            ? fetchedAt : null;
+
+    /// <summary>
+    /// Saves the catalog and its fetch date in one write. Saves nothing and returns false when the plugin was deactivated
+    /// or the key changed since the fetch, so a late result cannot replace the current catalog.
+    /// </summary>
+    internal async Task<bool> TrySaveCatalogAsync(string catalog, DateTimeOffset fetchedAt, string expectedKey, CancellationToken ct)
+    {
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            ct.ThrowIfCancellationRequested();
+            // One read, before the checks: Deactivate resets the configuration without the gate, and a save built from the
+            // reset copy would drop the key reference. A copy read before the reset belongs to the checked host and key.
+            var current = Volatile.Read(ref _configuration);
+            if (Host is not { } host || !string.Equals(expectedKey, Key, StringComparison.Ordinal)) return false;
+            var values = new Dictionary<string, string>(current.Values)
+            {
+                [CatalogValue] = catalog,
+                [CatalogFetchedAtValue] = fetchedAt.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture),
+            };
+            var next = current with { Values = values };
+            host.SetSetting("configuration", next); _configuration = next; host.NotifyCapabilitiesChanged();
+            return true;
+        }
+        finally { _gate.Release(); }
+    }
+
     internal async Task<PluginTranscriptionResult> MultipartAsync(string url, string model, byte[] audio, string? language,
         string? prompt, CancellationToken ct, string? key = null, string fileField = "file", string? responseFormat = null)
     {
