@@ -56,7 +56,7 @@ public sealed class PluginSettingsPersistenceTests : IDisposable
 
     // Any open handle on the file, even one that shares everything like a virus scanner's, makes Windows refuse to
     // replace it. A scanner checking the last write holds the file for a few milliseconds.
-    [Fact]
+    [WindowsFact]
     public async Task SaveWaitsForAScannerThatBrieflyHoldsTheSettingsFile()
     {
         var host = new VocabularyHostServices(_root);
@@ -71,7 +71,7 @@ public sealed class PluginSettingsPersistenceTests : IDisposable
         Assert.Contains("\"Model\":\"b\"", File.ReadAllText(file));
     }
 
-    [Fact]
+    [WindowsFact]
     public void SaveStillFailsWhileTheSettingsFileStaysHeld()
     {
         var host = new VocabularyHostServices(_root);
