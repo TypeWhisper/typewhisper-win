@@ -130,10 +130,13 @@ public sealed partial class SmallestAiPlugin : ITtsProviderPlugin, IPluginTextSe
 
     /// <summary>
     /// Smallest AI adds and retires voices, and a list that only reloads on request keeps offering retired ones. With a
-    /// key, the catalogs reload in the background once the saved copy is a day old or has no date.
+    /// key, the catalogs reload in the background once the saved copy is a day old or has no date; an active plugin
+    /// checks that every hour.
     /// </summary>
     private void StartVoiceRefreshIfStale()
     {
+        // Also runs every hour on a timer thread. Deactivation and key changes replace the host and key and cancel the
+        // refresh under the same lock, so no refresh starts after deactivation, and one using a replaced key is stopped.
         lock (_voiceLock)
         {
             if (!_voiceRefresh.Enabled || _host is not { } host || _apiKey is not { Length: > 0 } key || !_voiceRefresh.IsStale(_voicesFetchedAt))

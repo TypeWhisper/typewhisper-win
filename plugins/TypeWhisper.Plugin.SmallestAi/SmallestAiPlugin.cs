@@ -84,6 +84,8 @@ public sealed partial class SmallestAiPlugin : ITranscriptionEnginePlugin
         }
         host.Log(PluginLogLevel.Info, $"Activated (configured={IsConfigured})");
         StartVoiceRefreshIfStale();
+        // Checks again every hour: the app often runs for days without activating plugins again.
+        _voiceRefresh.StartRechecks(StartVoiceRefreshIfStale);
     }
 
     /// <summary>
@@ -93,6 +95,7 @@ public sealed partial class SmallestAiPlugin : ITranscriptionEnginePlugin
     {
         lock (_voiceLock)
         {
+            _voiceRefresh.StopRechecks();
             _voiceRefresh.Cancel();
             _host = null;
             _apiKey = null;

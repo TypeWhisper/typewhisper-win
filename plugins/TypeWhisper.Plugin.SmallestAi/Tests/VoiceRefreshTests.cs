@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Net;
+using PortableMigration.Tests;
 using TypeWhisper.Plugin.Shared;
 using TypeWhisper.Plugin.SmallestAi;
 
@@ -205,6 +206,102 @@ public partial class SmallestAiPluginTests
         Assert.Contains(sut.AvailableVoices, voice => voice.Id == "lightning_v3.1_pro:ben");
         Assert.Equal(Now - ModelCatalogAutoRefresh.MaximumAge, sut.VoicesFetchedAt);
         Assert.Single(host.Logs, message => message.Contains("could not be refreshed", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Recheck_ReloadsVoicesThatAgedWhileThePluginStayedActive()
+    {
+        var requests = new ConcurrentQueue<string>();
+        using var http = new HttpClient(new CapturingHandler((request, _) =>
+        {
+            requests.Enqueue(request.RequestUri!.AbsolutePath);
+            return Voices(request);
+        }));
+        var clock = new RecheckTestClock(Now);
+        var host = VoiceHost("smallest-key", Now.AddHours(-1), Voice("retired", "Retired"));
+        using var sut = new SmallestAiPlugin(http, refreshVoicesAutomatically: true, clock);
+        await sut.ActivateAsync(host);
+        await sut.VoiceRefreshTask;
+        Assert.Empty(requests);
+
+        // The app keeps running for a day without activating the plugin again.
+        clock.Advance(TimeSpan.FromHours(24));
+        await sut.VoiceRefreshTask;
+
+        var refreshedAt = Now.AddHours(24);
+        Assert.Equal(["/waves/v1/lightning-v3.1/get_voices", "/waves/v1/lightning-v3.1-pro/get_voices"], requests);
+        Assert.Equal(RefreshedVoices, sut.AvailableVoices.Select(v => v.Id));
+        Assert.Equal(refreshedAt, sut.VoicesFetchedAt);
+        Assert.Equal(refreshedAt, host.GetSetting<DateTimeOffset?>(SmallestAiPlugin.VoicesFetchedAtSetting));
+        Assert.Equal(RefreshedVoices, host.GetSetting<SmallestAiPlugin.SpeechVoice[]>("speech-voices")!.Select(v => $"{v.Model}:{v.Id}"));
+
+        // The next check finds the voices fresh.
+        clock.Advance(ModelCatalogAutoRefresh.RecheckInterval);
+        await sut.VoiceRefreshTask;
+        Assert.Equal(2, requests.Count);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Recheck_TriesAFailedRefreshAgainAnHourLater(bool providerError)
+    {
+        var failing = true;
+        var requests = new ConcurrentQueue<string>();
+        using var http = new HttpClient(new CapturingHandler((request, _) =>
+        {
+            requests.Enqueue(request.RequestUri!.AbsolutePath);
+            if (!Volatile.Read(ref failing)) return Voices(request);
+            return providerError ? JsonResponse("{}", HttpStatusCode.ServiceUnavailable) : Voices(request, pro: """{"voices":[]}""");
+        }));
+        var clock = new RecheckTestClock(Now);
+        var host = VoiceHost("smallest-key", fetchedAt: null, Voice("magnus", "Magnus"), Voice("ben", "Ben", "lightning_v3.1_pro"));
+        using var sut = new SmallestAiPlugin(http, refreshVoicesAutomatically: true, clock);
+        await sut.ActivateAsync(host);
+        await sut.VoiceRefreshTask;
+        // A provider error stops at the first pool; a Pro pool without voices is rejected after both.
+        var failedRequests = providerError ? 1 : 2;
+        Assert.Equal(failedRequests, requests.Count);
+        Assert.Equal(["lightning_v3.1:magnus", "lightning_v3.1_pro:ben"], sut.AvailableVoices.Select(v => v.Id));
+        Assert.Null(sut.VoicesFetchedAt);
+
+        Volatile.Write(ref failing, false);
+        clock.Advance(ModelCatalogAutoRefresh.RecheckInterval);
+        await sut.VoiceRefreshTask;
+
+        Assert.Equal(failedRequests + 2, requests.Count);
+        Assert.Equal(RefreshedVoices, sut.AvailableVoices.Select(v => v.Id));
+        Assert.Equal(Now + ModelCatalogAutoRefresh.RecheckInterval, sut.VoicesFetchedAt);
+    }
+
+    [Fact]
+    public async Task DeactivateAsync_StopsTheRechecks()
+    {
+        var clock = new RecheckTestClock(Now);
+        var host = VoiceHost("smallest-key", Now.AddHours(-1), Voice("magnus", "Magnus"));
+        using var sut = CreateOfflinePlugin(refreshVoices: true, clock);
+        await sut.ActivateAsync(host);
+        Assert.Equal(1, clock.ActiveTimers);
+
+        await sut.DeactivateAsync();
+        clock.Advance(TimeSpan.FromHours(24));
+        await sut.VoiceRefreshTask;
+
+        Assert.Equal(0, clock.ActiveTimers);
+        Assert.DoesNotContain(host.Logs, message => message.Contains("in the background", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Dispose_StopsTheRechecks()
+    {
+        var clock = new RecheckTestClock(Now);
+        var sut = CreateOfflinePlugin(refreshVoices: true, clock);
+        await sut.ActivateAsync(VoiceHost("smallest-key", Now.AddHours(-1), Voice("magnus", "Magnus")));
+        Assert.Equal(1, clock.ActiveTimers);
+
+        sut.Dispose();
+
+        Assert.Equal(0, clock.ActiveTimers);
     }
 
     [Fact]
