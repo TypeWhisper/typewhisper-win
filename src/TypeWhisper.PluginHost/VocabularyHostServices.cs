@@ -66,7 +66,7 @@ public sealed class VocabularyHostServices(string dataDirectory, Action<string>?
             // Moving the file keeps its time and size, so the stamp is read from the temporary file before it replaces the old one.
             var written = new FileInfo(SettingsPath + ".tmp");
             var stamp = (written.LastWriteTimeUtc, written.Length);
-            File.Move(SettingsPath + ".tmp", SettingsPath, true);
+            FileReplacement.Move(SettingsPath + ".tmp", SettingsPath);
             // Published only once the file holds the new values.
             (_settings.Values, _settings.Stamp) = (settings, stamp);
         }
