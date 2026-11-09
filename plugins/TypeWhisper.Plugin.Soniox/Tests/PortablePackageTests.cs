@@ -12,7 +12,7 @@ public sealed class PortablePackageTests
     public async Task ActualHostServices_CanActivateAndReadAllSettingsWithoutWpf()
     {
         using var fixture = new PortableFixture();
-        using ITypeWhisperPlugin plugin = new SonioxPlugin();
+        using ITypeWhisperPlugin plugin = OfflineSoniox.Plugin();
         await plugin.ActivateAsync(fixture.Host);
         try
         {

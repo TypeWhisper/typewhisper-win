@@ -10,14 +10,19 @@ public sealed partial class SonioxPlugin
 {
     // After a failed background refresh, wait before trying again so an offline PC does not retry on every dictation.
     private static readonly TimeSpan CatalogRetryDelay = TimeSpan.FromMinutes(10);
-    private int _catalogRefreshQueued;
     private long _catalogRetryAfterTicks;
+
+    /// <summary>The running or last background model list refresh. Tests await it.</summary>
+    internal Task CatalogRefreshTask => _catalogRefresh.Current;
+    internal bool RefreshesModelsAutomatically => _catalogRefresh.Enabled;
 
     /// <summary>
     /// Loads the current speech-to-text and text-to-speech model lists for the selected region and caches them.
     /// A failed voice list keeps the voices cached for that region, because transcription does not depend on it.
     /// </summary>
-    internal async Task<SonioxCatalog> RefreshCatalogAsync(CancellationToken ct)
+    internal Task<SonioxCatalog> RefreshCatalogAsync(CancellationToken ct) => RefreshCatalogAsync(automatic: false, ct);
+
+    private async Task<SonioxCatalog> RefreshCatalogAsync(bool automatic, CancellationToken ct)
     {
         var host = _host ?? throw new InvalidOperationException("Activate the plugin first.");
         var key = _apiKey ?? throw new InvalidOperationException("Soniox API key required.");
@@ -31,6 +36,7 @@ public sealed partial class SonioxPlugin
             if (stt.Count == 0)
                 throw new InvalidDataException("Soniox returned no transcription models.");
 
+            var cachedVoices = Volatile.Read(ref _catalog) is { } previous && previous.Region == region.Id ? previous.TtsModels : [];
             IReadOnlyList<SonioxTtsModel> tts;
             try
             {
@@ -40,18 +46,37 @@ public sealed partial class SonioxPlugin
             catch (Exception ex) when (!ct.IsCancellationRequested
                 && ex is HttpRequestException or InvalidDataException or JsonException or TimeoutException)
             {
-                host.Log(PluginLogLevel.Warning, $"Soniox voice list unavailable; keeping the cached voices: {ex.Message}");
-                tts = Volatile.Read(ref _catalog) is { } previous && previous.Region == region.Id ? previous.TtsModels : [];
+                host.Log(PluginLogLevel.Warning, $"Soniox voice list unavailable ({Describe(ex)}); keeping the cached voices.");
+                tts = cachedVoices;
             }
 
-            ct.ThrowIfCancellationRequested();
-            if (!ReferenceEquals(host, _host) || key != _apiKey || region.Id != _region)
-                throw new InvalidOperationException("The Soniox connection changed. Refresh the models again.");
+            // In the background an empty voice list counts as unavailable, so spoken feedback keeps the voices it had.
+            if (automatic && tts.Count == 0 && cachedVoices.Count > 0)
+            {
+                host.Log(PluginLogLevel.Warning, "Soniox listed no voices; keeping the cached voices.");
+                tts = cachedVoices;
+            }
 
-            var catalog = new SonioxCatalog(region.Id, _time.GetUtcNow(), stt, tts);
-            host.SetSetting(CatalogSettingKey, catalog);
-            Volatile.Write(ref _catalog, catalog);
-            Interlocked.Exchange(ref _catalogRetryAfterTicks, 0);
+            SonioxCatalog catalog;
+            // Checked under the lock that guards the key. A key change, a region change and deactivation cancel the
+            // background refresh before they change anything, so a cancelled result arrived too late.
+            await _apiKeyWriteLock.WaitAsync(ct).ConfigureAwait(false);
+            try
+            {
+                ct.ThrowIfCancellationRequested();
+                if (!ReferenceEquals(host, _host) || key != _apiKey || region.Id != _region)
+                    throw new InvalidOperationException("The Soniox connection changed. Refresh the models again.");
+
+                catalog = new SonioxCatalog(region.Id, _catalogRefresh.UtcNow, stt, tts);
+                host.SetSetting(CatalogSettingKey, catalog);
+                Volatile.Write(ref _catalog, catalog);
+                Interlocked.Exchange(ref _catalogRetryAfterTicks, 0);
+            }
+            finally
+            {
+                _apiKeyWriteLock.Release();
+            }
+
             host.NotifyCapabilitiesChanged();
             return catalog;
         }
@@ -78,45 +103,43 @@ public sealed partial class SonioxPlugin
     }
 
     /// <summary>
-    /// Starts a background refresh when no list is cached for this region or the cached one is a day old.
-    /// The current request keeps using the cached list or the built-in v6 fallback.
+    /// Starts a background refresh when no list is cached for this region, the cached one is a day old or its date
+    /// lies in the future. Runs on activation and whenever Soniox is used; the current request keeps using the cached
+    /// list or the built-in v6 fallback.
     /// </summary>
     internal void RefreshCatalogInBackgroundIfStale()
     {
         var host = _host;
-        if (!_backgroundCatalogRefresh || host is null || _apiKey is null || Volatile.Read(ref _disposed) != 0)
+        if (host is null || _apiKey is null || Volatile.Read(ref _disposed) != 0
+            || !_catalogRefresh.IsStale(CurrentCatalog?.FetchedAt))
+            return;
+        // One refresh at a time, and after a failure a pause, so a dictation never waits for or repeats one.
+        if (!_catalogRefresh.Current.IsCompleted
+            || _catalogRefresh.UtcNow.UtcTicks < Interlocked.Read(ref _catalogRetryAfterTicks))
             return;
 
-        var now = _time.GetUtcNow();
-        if (CurrentCatalog is { } catalog && catalog.FetchedAt <= now && now - catalog.FetchedAt < CatalogMaximumAge)
-            return;
-        if (now.UtcTicks < Interlocked.Read(ref _catalogRetryAfterTicks)
-            || Interlocked.CompareExchange(ref _catalogRefreshQueued, 1, 0) != 0)
-            return;
-
-        var token = _backgroundCancellation.Token;
-        lock (_cleanupLock)
-        {
-            _cleanupTasks.RemoveAll(task => task.IsCompleted);
-            _cleanupTasks.Add(Task.Run(async () =>
-            {
-                try
-                {
-                    await RefreshCatalogAsync(token).ConfigureAwait(false);
-                }
-                catch (Exception ex) when (ex is not OutOfMemoryException)
-                {
-                    Interlocked.Exchange(ref _catalogRetryAfterTicks, (_time.GetUtcNow() + CatalogRetryDelay).UtcTicks);
-                    if (!token.IsCancellationRequested)
-                        host.Log(PluginLogLevel.Warning, $"Soniox model list refresh failed: {ex.Message}");
-                }
-                finally
-                {
-                    Volatile.Write(ref _catalogRefreshQueued, 0);
-                }
-            }, CancellationToken.None));
-        }
+        _catalogRefresh.Start(ct => RefreshCatalogAsync(automatic: true, ct), ex => OnCatalogRefreshFailed(host, ex));
     }
+
+    /// <summary>Starts a refresh right away and replaces a running one. Used after a key or region change.</summary>
+    private void StartCatalogRefresh()
+    {
+        var host = _host;
+        if (host is null || _apiKey is null || Volatile.Read(ref _disposed) != 0)
+            return;
+
+        _catalogRefresh.Start(ct => RefreshCatalogAsync(automatic: true, ct), ex => OnCatalogRefreshFailed(host, ex));
+    }
+
+    private void OnCatalogRefreshFailed(IPluginHostServices host, Exception ex)
+    {
+        Interlocked.Exchange(ref _catalogRetryAfterTicks, (_catalogRefresh.UtcNow + CatalogRetryDelay).UtcTicks);
+        host.Log(PluginLogLevel.Warning, $"Soniox model list refresh failed ({Describe(ex)}); keeping the current list.");
+    }
+
+    // Logs name the failure without the response body, which can echo request details.
+    private static string Describe(Exception ex) =>
+        ex is HttpRequestException { StatusCode: { } status } ? $"HTTP {(int)status}" : ex.GetType().Name;
 
     internal static string NormalizeModelSelection(string? selection)
     {
