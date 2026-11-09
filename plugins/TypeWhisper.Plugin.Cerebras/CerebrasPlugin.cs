@@ -143,18 +143,23 @@ public sealed partial class CerebrasPlugin : ILlmProviderPlugin, ILlmRequestHedg
         ClearDraft();
         // A list without a date, saved by an older version, stays in use until the refresh replaces it.
         StartModelRefreshIfStale();
+        // The app often runs for days without activating plugins again. The hourly check reloads a list that ages
+        // meanwhile and retries a failed refresh.
+        _modelRefresh.StartRechecks(StartModelRefreshIfStale);
     }
 
     /// <inheritdoc />
     public Task DeactivateAsync()
     {
-        _modelRefresh.Cancel();
         lock (_configurationLock)
         {
             _host = null;
             _apiKey = null;
             _configuration = new();
         }
+        // Only after the key is gone: a check still running then starts nothing, and a refresh it started is cancelled.
+        _modelRefresh.StopRechecks();
+        _modelRefresh.Cancel();
         ClearDraft();
         return Task.CompletedTask;
     }
@@ -164,22 +169,20 @@ public sealed partial class CerebrasPlugin : ILlmProviderPlugin, ILlmRequestHedg
     internal DateTimeOffset? ModelsFetchedAt => _configuration.ModelsFetchedAtUtc;
 
     /// <summary>
-    /// Cerebras retires models, and a list that only changes on Refresh models keeps offering them. Activation and a
-    /// key change reload a saved list that is a day old or has no date.
+    /// Cerebras retires models, and a list that only changes on Refresh models keeps offering them. Activation, a key
+    /// change and the hourly recheck reload a saved list that is a day old or has no date.
     /// </summary>
     private void StartModelRefreshIfStale()
     {
-        IPluginHostServices? host;
-        string? key;
-        DateTimeOffset? fetchedAt;
+        // The hourly recheck runs this on a timer thread. Checking and starting under the lock means a deactivation or
+        // key change either comes first, so nothing starts with the old key, or cancels the refresh started here.
         lock (_configurationLock)
         {
-            host = _host;
-            key = _apiKey;
-            fetchedAt = _configuration.ModelsFetchedAtUtc;
+            var host = _host;
+            var key = _apiKey;
+            if (host is null || key is null || !_modelRefresh.IsStale(_configuration.ModelsFetchedAtUtc)) return;
+            _modelRefresh.Start(ct => RefreshSavedModelsAsync(host, key, ct), ex => LogRefreshFailure(host, ex));
         }
-        if (host is null || key is null || !_modelRefresh.IsStale(fetchedAt)) return;
-        _modelRefresh.Start(ct => RefreshSavedModelsAsync(host, key, ct), ex => LogRefreshFailure(host, ex));
     }
 
     // A failed or empty catalog throws in FetchModelsAsync, so the saved list stays.
@@ -322,10 +325,11 @@ public sealed partial class CerebrasPlugin : ILlmProviderPlugin, ILlmRequestHedg
     /// <inheritdoc />
     public void Dispose()
     {
-        // Cancel first, so a refresh in flight stops before its transport goes away.
+        // The key goes first, so a recheck still running starts nothing. Then the rechecks stop and a refresh in
+        // flight is cancelled before its transport goes away.
+        lock (_configurationLock) { _apiKey = null; _host = null; }
         _modelRefresh.Dispose();
         _http.Dispose();
-        lock (_configurationLock) { _apiKey = null; _host = null; }
         ClearDraft();
     }
 
