@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http;
+using PortableMigration.Tests;
+using TypeWhisper.Plugin.Shared;
 using TypeWhisper.Plugin.Soniox;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
@@ -352,6 +354,152 @@ public sealed partial class SonioxFeatureTests
         Assert.Equal("stt-rt-v7", host.GetSetting<SonioxCatalog>("catalog")!.SttModels[0].Id);
         Assert.Equal(RefreshNow, host.GetSetting<SonioxCatalog>("catalog")!.FetchedAt);
     }
+
+    [Fact]
+    public async Task HourlyRecheck_ReloadsAListThatAgesWhileThePluginStaysActive()
+    {
+        var clock = new RecheckTestClock(RefreshNow);
+        var requests = new ConcurrentQueue<string>();
+        var host = HostWithList(RefreshNow);
+
+        using var sut = new SonioxPlugin(
+            new HttpClient(ListHandler(requests, failing: () => false)), time: clock, backgroundCatalogRefresh: true);
+        await sut.ActivateAsync(host);
+        await sut.LastCleanupTask;
+        Assert.Empty(requests);
+
+        clock.Advance(TimeSpan.FromHours(24));
+        await sut.LastCleanupTask;
+
+        Assert.Equal(["/v1/models", "/v1/tts-models"], requests);
+        Assert.Equal("stt-rt-v7", sut.EffectiveRealtimeModelId);
+        Assert.Equal(RefreshNow.AddHours(24), host.GetSetting<SonioxCatalog>("catalog")!.FetchedAt);
+        Assert.Equal(1, host.NotifyCount);
+
+        // The reloaded list is fresh, so the next check makes no request.
+        clock.Advance(ModelCatalogAutoRefresh.RecheckInterval);
+        await sut.LastCleanupTask;
+        Assert.Equal(2, requests.Count);
+    }
+
+    [Fact]
+    public async Task HourlyRecheck_StopsWhenThePluginIsDeactivated()
+    {
+        var clock = new RecheckTestClock(RefreshNow);
+        var requests = 0;
+        var handler = new RoutingHandler(_ =>
+        {
+            Interlocked.Increment(ref requests);
+            throw new InvalidOperationException("Unexpected model refresh.");
+        });
+
+        using var sut = new SonioxPlugin(new HttpClient(handler), time: clock, backgroundCatalogRefresh: true);
+        await sut.ActivateAsync(HostWithList(RefreshNow));
+        Assert.Equal(1, clock.ActiveTimers);
+        var lastRefresh = sut.CatalogRefreshTask;
+
+        await sut.DeactivateAsync();
+        clock.Advance(TimeSpan.FromHours(24));
+
+        Assert.Equal(0, clock.ActiveTimers);
+        Assert.Same(lastRefresh, sut.CatalogRefreshTask);
+        Assert.Equal(0, requests);
+    }
+
+    [Fact]
+    public async Task Dispose_StopsTheHourlyRecheck()
+    {
+        var clock = new RecheckTestClock(RefreshNow);
+        using var sut = new SonioxPlugin(new HttpClient(new FailingHandler()), time: clock, backgroundCatalogRefresh: true);
+        await sut.ActivateAsync(HostWithList(RefreshNow));
+        Assert.Equal(1, clock.ActiveTimers);
+
+        sut.Dispose();
+
+        Assert.Equal(0, clock.ActiveTimers);
+    }
+
+    [Fact]
+    public async Task HourlyRecheck_RetriesAFailedRefresh()
+    {
+        var clock = new RecheckTestClock(RefreshNow);
+        var fail = true;
+        var requests = new ConcurrentQueue<string>();
+        var host = HostWithList(RefreshNow.AddDays(-2));
+
+        using var sut = new SonioxPlugin(
+            new HttpClient(ListHandler(requests, failing: () => Volatile.Read(ref fail))), time: clock,
+            backgroundCatalogRefresh: true);
+        await sut.ActivateAsync(host);
+        await sut.LastCleanupTask;
+        Assert.Equal(["/v1/models"], requests);
+
+        // One interval is longer than the ten-minute wait after a failure, so the next check tries again.
+        Volatile.Write(ref fail, false);
+        clock.Advance(ModelCatalogAutoRefresh.RecheckInterval);
+        await sut.LastCleanupTask;
+
+        Assert.Equal(["/v1/models", "/v1/models", "/v1/tts-models"], requests);
+        Assert.Equal("stt-rt-v7", sut.EffectiveRealtimeModelId);
+        Assert.Equal(
+            RefreshNow + ModelCatalogAutoRefresh.RecheckInterval,
+            host.GetSetting<SonioxCatalog>("catalog")!.FetchedAt);
+    }
+
+    [Fact]
+    public async Task HourlyRecheck_KeepsTheTenMinuteWaitAfterAFailure()
+    {
+        var clock = new RecheckTestClock(RefreshNow);
+        var fail = true;
+        var requests = new ConcurrentQueue<string>();
+        var host = HostWithList(RefreshNow.AddDays(-2));
+
+        using var sut = new SonioxPlugin(
+            new HttpClient(ListHandler(requests, failing: () => Volatile.Read(ref fail))), time: clock,
+            backgroundCatalogRefresh: true);
+        await sut.ActivateAsync(host);
+        await sut.LastCleanupTask;
+
+        // A dictation five minutes before the first check fails as well, so that check falls into the wait.
+        clock.Advance(TimeSpan.FromMinutes(55));
+        sut.RefreshCatalogInBackgroundIfStale();
+        await sut.LastCleanupTask;
+        clock.Advance(TimeSpan.FromMinutes(5));
+        await sut.LastCleanupTask;
+        Assert.Equal(["/v1/models", "/v1/models"], requests);
+
+        // The check an hour later comes after the wait and loads the list.
+        Volatile.Write(ref fail, false);
+        clock.Advance(ModelCatalogAutoRefresh.RecheckInterval);
+        await sut.LastCleanupTask;
+
+        Assert.Equal(["/v1/models", "/v1/models", "/v1/models", "/v1/tts-models"], requests);
+        Assert.Equal(RefreshNow.AddHours(2), host.GetSetting<SonioxCatalog>("catalog")!.FetchedAt);
+    }
+
+    private static FeatureHost HostWithList(DateTimeOffset fetchedAt)
+    {
+        var host = new FeatureHost();
+        host.Secrets["api-key"] = "key";
+        host.SetSetting("catalog", Catalog("us") with { FetchedAt = fetchedAt });
+        return host;
+    }
+
+    /// <summary>Answers the model and voice lists, or fails with HTTP 502 while <paramref name="failing"/> returns true.</summary>
+    private static RoutingHandler ListHandler(ConcurrentQueue<string> requests, Func<bool> failing) => new(request =>
+    {
+        var path = request.RequestUri!.AbsolutePath;
+        requests.Enqueue(path);
+        if (failing())
+            return Json("""{ "error_message": "upstream down" }""", HttpStatusCode.BadGateway);
+
+        return path switch
+        {
+            "/v1/models" => Json(V7ModelsJson),
+            "/v1/tts-models" => Json(TtsModelsJson),
+            _ => throw new InvalidOperationException($"Unexpected request: {request.RequestUri}")
+        };
+    });
 
     /// <summary>
     /// Holds requests until released and ignores cancellation, like a slow server. With <c>blockFirstRequestOnly</c>,

@@ -104,8 +104,8 @@ public sealed partial class SonioxPlugin
 
     /// <summary>
     /// Starts a background refresh when no list is cached for this region, the cached one is a day old or its date
-    /// lies in the future. Runs on activation and whenever Soniox is used; the current request keeps using the cached
-    /// list or the built-in v6 fallback.
+    /// lies in the future. Runs on activation, every hour while the plugin is active (<see cref="RecheckCatalog"/>) and
+    /// whenever Soniox is used; the current request keeps using the cached list or the built-in v6 fallback.
     /// </summary>
     internal void RefreshCatalogInBackgroundIfStale()
     {
@@ -119,6 +119,37 @@ public sealed partial class SonioxPlugin
             return;
 
         _catalogRefresh.Start(ct => RefreshCatalogAsync(automatic: true, ct), ex => OnCatalogRefreshFailed(host, ex));
+    }
+
+    /// <summary>
+    /// The hourly check. It runs on a timer thread, under the lock that deactivation and <see cref="Dispose"/> take to
+    /// stop it: it either starts its refresh before they cancel and await it, or starts none. The key needs no lock here,
+    /// as for the check a dictation runs: the refresh reads the key only when it runs and checks it again before it
+    /// saves, and a key change cancels or replaces it.
+    /// </summary>
+    private void RecheckCatalog()
+    {
+        lock (_cleanupLock)
+        {
+            if (_catalogRechecksActive)
+                RefreshCatalogInBackgroundIfStale();
+        }
+    }
+
+    /// <summary>
+    /// Stops the hourly checks and cancels a running refresh. <see cref="LastCleanupTask"/>, read afterwards, also covers
+    /// a refresh that a check started just before.
+    /// </summary>
+    private void StopCatalogRechecks()
+    {
+        lock (_cleanupLock)
+        {
+            _catalogRechecksActive = false;
+            _catalogRefresh.StopRechecks();
+        }
+
+        // After the lock no check starts a refresh, and one that got in first has already started it, so this cancels it.
+        _catalogRefresh.Cancel();
     }
 
     /// <summary>Starts a refresh right away and replaces a running one. Used after a key or region change.</summary>

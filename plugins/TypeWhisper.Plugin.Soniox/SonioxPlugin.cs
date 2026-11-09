@@ -92,6 +92,8 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
     private SonioxCatalog? _catalog;
     private readonly object _cleanupLock = new();
     private readonly List<Task> _cleanupTasks = [];
+    // True while the hourly model list check may start a refresh. Guarded by _cleanupLock; see RecheckCatalog.
+    private bool _catalogRechecksActive;
     private int _disposed;
 
     /// <summary>
@@ -157,6 +159,10 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
         host.Log(PluginLogLevel.Info, $"Activated (configured={IsConfigured}, region={_region}, model={_modelSelection})");
         // Loading the list at start drops a retired model before the first dictation needs it.
         RefreshCatalogInBackgroundIfStale();
+        // Dictations refresh a stale list too, but the app may run for days without one, so an active plugin also
+        // checks every hour.
+        lock (_cleanupLock) _catalogRechecksActive = true;
+        _catalogRefresh.StartRechecks(RecheckCatalog);
     }
 
     /// <summary>
@@ -164,7 +170,7 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
     /// </summary>
     public async Task DeactivateAsync()
     {
-        _catalogRefresh.Cancel();
+        StopCatalogRechecks();
         await LastCleanupTask.ConfigureAwait(false);
         _host = null;
     }
@@ -1236,7 +1242,7 @@ public sealed partial class SonioxPlugin : ITranscriptionEnginePlugin
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
-        _catalogRefresh.Cancel();
+        StopCatalogRechecks();
         try { LastCleanupTask.GetAwaiter().GetResult(); }
         finally
         {
