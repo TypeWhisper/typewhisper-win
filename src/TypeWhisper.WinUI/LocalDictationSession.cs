@@ -1219,7 +1219,10 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                             !_disposed && !_operationCancellation.Token.IsCancellationRequested &&
                             _outputAtStart.RestrictedBy(OutputPreferences.Current).AutoPaste &&
                             (targetApp is not null || !_outputAtStart.RestrictedBy(OutputPreferences.Current).LockPasteToFocusedField || _originalField?.RecentlyVerified == true),
-                            async () => targetApp is not null || !_outputAtStart.RestrictedBy(OutputPreferences.Current).LockPasteToFocusedField ||
+                            // The target app is not the window the user looks at, so its password fields are refused whatever
+                            // the paste lock says; the text then stays on the clipboard and in review.
+                            async () => sent is { } target ? !await FocusedPasswordFieldAsync(target.Window)
+                                : !_outputAtStart.RestrictedBy(OutputPreferences.Current).LockPasteToFocusedField ||
                                 (_originalField is not null && await _originalField.IsCurrentAsync(_operationCancellation.Token)), submit,
                             () => _outputAtStart.RestrictedBy(OutputPreferences.Current).PreserveClipboard,
                             // A chat app moves a paste on a button into its message field; Enter may follow it there.

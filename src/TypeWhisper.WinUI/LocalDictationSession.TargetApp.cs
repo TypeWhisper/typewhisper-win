@@ -151,6 +151,34 @@ internal sealed partial class LocalDictationSession
         if (field is not null) await field.DisposeAsync();
     }
 
+    // Whether the focused element of the target window is a password field. UI Automation runs outside the UI thread, and
+    // a read that does not answer within its timeout counts as no password field, like the regular paste path.
+    private static async Task<bool> FocusedPasswordFieldAsync(IntPtr window)
+    {
+        var read = Task.Run(() =>
+        {
+            Interop.UIAutomationClient.IUIAutomation2? automation = null;
+            Interop.UIAutomationClient.IUIAutomationElement? element = null;
+            try
+            {
+                if (NativeMethods.GetForegroundWindow() != window) return false;
+                automation = (Interop.UIAutomationClient.IUIAutomation2)new Interop.UIAutomationClient.CUIAutomation8();
+                automation.ConnectionTimeout = 200; automation.TransactionTimeout = 200;
+                element = automation.GetFocusedElement();
+                return element is not null && element.CurrentIsPassword != 0;
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { return false; }
+            finally
+            {
+                if (element is not null) System.Runtime.InteropServices.Marshal.ReleaseComObject(element);
+                if (automation is not null) System.Runtime.InteropServices.Marshal.ReleaseComObject(automation);
+            }
+        });
+        var password = await Task.WhenAny(read, Task.Delay(300)) == read && await read;
+        if (password) AppDiagnostics.Write("delivery.target-app.password");
+        return password;
+    }
+
     // Waits until the app had the time the paste gets to take the text, and Enter followed, then returns to the window
     // that was in front. A user who switched elsewhere meanwhile keeps that window. A window that was in the notification
     // area goes back there once the user is back in the window they came from.
