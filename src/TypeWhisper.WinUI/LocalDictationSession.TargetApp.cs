@@ -47,7 +47,7 @@ internal sealed partial class LocalDictationSession
         // Showing a hidden window from outside leaves the app's focus wherever it was, often on a button. Started again,
         // an app that runs once opens its window itself, with the focus in its text field, as after a click on its
         // Start menu entry.
-        if ((hidden ? await ReopenTargetAppAsync(app, candidate?.ProcessId) : candidate) is not { } found)
+        if ((hidden ? await ReopenTargetAppAsync(app, candidate?.ProcessId, front) : candidate) is not { } found)
         {
             _targetAppMissing = app;
             AppDiagnostics.Write("delivery.target-app.missing");
@@ -55,21 +55,40 @@ internal sealed partial class LocalDictationSession
         }
         // An app started again may already have taken the front; it still goes back to the notification area afterwards.
         if (!hidden && front == found.Window) return new(found.Window, IntPtr.Zero, false);
-        if (!await WindowActivation.ActivateAsync(found.Window, found.ProcessId, "delivery.target-app", _operationCancellation.Token))
+        var delivery = new TargetAppDelivery(found.Window, front, hidden);
+        try
         {
-            AppDiagnostics.Write("delivery.target-app.activation-failed");
-            if (hidden) TargetAppWindow.Hide(found.Window);
-            return null;
+            if (!await WindowActivation.ActivateAsync(found.Window, found.ProcessId, "delivery.target-app", _operationCancellation.Token))
+            {
+                AppDiagnostics.Write("delivery.target-app.activation-failed");
+                if (hidden) TargetAppWindow.Hide(found.Window);
+                return null;
+            }
+            AppDiagnostics.Write("delivery.target-app.activated");
+            await WaitForTextFieldAsync(found);
+            return delivery;
         }
-        AppDiagnostics.Write("delivery.target-app.activated");
-        await WaitForTextFieldAsync(found);
-        return new(found.Window, front, hidden);
+        catch (OperationCanceledException)
+        {
+            // Canceled once the app may be in front: leave the screen as after a delivery.
+            await UndoTargetAppAsync(delivery);
+            throw;
+        }
+    }
+
+    // Returns to the window the user came from and puts an app from the notification area back there, after a
+    // cancel that came before the text was inserted.
+    private async Task UndoTargetAppAsync(TargetAppDelivery delivery)
+    {
+        await ReturnFromTargetAppCoreAsync(delivery);
+        if (delivery.WasHidden && NativeMethods.GetForegroundWindow() != delivery.Window) TargetAppWindow.Hide(delivery.Window);
+        AppDiagnostics.Write("delivery.target-app.canceled");
     }
 
     // Starts the running app's program again and waits until it shows a window. Only an app that is running is started,
     // so a workflow never launches an app the user closed. Programs that the shell cannot start, such as packaged
     // Store apps, report the app as not open.
-    private async Task<TopLevelWindow?> ReopenTargetAppAsync(string app, uint? processId)
+    private async Task<TopLevelWindow?> ReopenTargetAppAsync(string app, uint? processId, IntPtr front)
     {
         var running = processId ?? FirstProcessId(app);
         if (running is not { } process || ProcessImagePath(process) is not { } path)
@@ -92,7 +111,13 @@ internal sealed partial class LocalDictationSession
         var clock = System.Diagnostics.Stopwatch.StartNew();
         while (clock.Elapsed < ReopenTimeout)
         {
-            await Task.Delay(100, _operationCancellation.Token);
+            try { await Task.Delay(100, _operationCancellation.Token); }
+            catch (OperationCanceledException)
+            {
+                // The app may have opened its window by now; it goes back to the notification area.
+                if (TargetAppWindow.Find(app) is { Visible: true } opened) await UndoTargetAppAsync(new(opened.Window, front, true));
+                throw;
+            }
             if (TargetAppWindow.Find(app) is { Visible: true } window)
             {
                 AppDiagnostics.Write($"delivery.target-app.reopened delayMs={clock.ElapsedMilliseconds}");

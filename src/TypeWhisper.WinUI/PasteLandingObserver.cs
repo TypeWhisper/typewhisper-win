@@ -162,14 +162,22 @@ internal sealed class PasteLandingObserver : IDisposable
         var clock = System.Diagnostics.Stopwatch.StartNew();
         while (true)
         {
-            var read = Task.Run(ReadRedirect);
-            _pending = read;
-            var state = await Task.WhenAny(read, Task.Delay(ReadLimit)) == read ? await read : default;
+            var state = await ReadRedirectAsync();
             if (state.SameField) { AppDiagnostics.Write("submit.landing.unreadable decision=same-field"); return true; }
             if (state.Redirected) { AppDiagnostics.Write("submit.landing.redirected"); return true; }
             if (clock.Elapsed >= LandingLimit) { AppDiagnostics.Write("submit.landing.unreadable decision=field-changed"); return false; }
             await Task.Delay(PollInterval);
         }
+    }
+
+    // Like ReadAsync, one read at a time: a stalled read is waited for, never joined by another, so Dispose releases the
+    // COM objects only after the last one ended.
+    private async Task<(bool SameField, bool Redirected)> ReadRedirectAsync()
+    {
+        if (_pending is { IsCompleted: false } stalled && await Task.WhenAny(stalled, Task.Delay(ReadLimit)) != stalled) return default;
+        var read = Task.Run(ReadRedirect);
+        _pending = read;
+        return await Task.WhenAny(read, Task.Delay(ReadLimit)) == read ? await read : default;
     }
 
     private (bool SameField, bool Redirected) ReadRedirect()
