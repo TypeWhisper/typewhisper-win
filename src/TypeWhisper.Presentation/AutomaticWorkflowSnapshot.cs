@@ -42,6 +42,8 @@ public sealed class AutomaticWorkflowSnapshot
     /// <summary>When Enter follows insertion. A plugin action receives the text instead, so it never submits.</summary>
     public WorkflowAutoEnterMode AutoEnterMode => _workflow is { } workflow && Error is null && string.IsNullOrWhiteSpace(workflow.Output.TargetActionPluginId)
         ? workflow.Output.AutoEnterMode : WorkflowAutoEnterMode.Never;
+    /// <summary>The app that receives the text instead of the window the dictation started in; null inserts there.</summary>
+    public string? TargetApp => _workflow is { } workflow && Error is null ? WorkflowTargetApp.Of(workflow) : null;
     /// <summary>Whether the workflow translates, so its output can be in another language than the dictation.</summary>
     public bool Translates => _workflow?.Template == WorkflowTemplate.Translation;
     /// <summary>A recoverable configuration error that prevents automatic insertion.</summary>
@@ -97,7 +99,9 @@ public sealed class AutomaticWorkflowSnapshot
             || behavior.InputLanguageHints.Count != 0 || !WorkflowTranscriptionTask.IsSupported(behavior.SelectedTask)
             || behavior.WhisperModeOverride is not null || !SupportsTranscriptionModel(workflow)
             || !string.IsNullOrWhiteSpace(output.Format) || !WorkflowAutoEnterModes.IsKnown(output.AutoEnterModeRaw)
-            || !string.IsNullOrWhiteSpace(output.NumberNormalizationModeRaw))
+            || !string.IsNullOrWhiteSpace(output.NumberNormalizationModeRaw)
+            || (output.TargetAppProcessName is not null && (!WorkflowTargetApp.IsValid(output.TargetAppProcessName)
+                || !string.IsNullOrWhiteSpace(output.TargetActionPluginId))))
             return Loc.T("The selected workflow has unsupported trigger, recording or output settings. Review your transcript; nothing was pasted.");
         if (workflow.Template == WorkflowTemplate.Custom && string.IsNullOrWhiteSpace(behavior.FineTuning))
             return Loc.T("The selected custom workflow requires instructions. Review your transcript; nothing was pasted.");

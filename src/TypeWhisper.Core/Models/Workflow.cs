@@ -370,6 +370,13 @@ public sealed record WorkflowOutput
     /// Gets or sets the target action plugin id value.
     /// </summary>
     public string? TargetActionPluginId { get; init; }
+    /// <summary>
+    /// The Windows process name, without ".exe", of the app that receives the dictated text instead of the window the
+    /// dictation started in, for example a chat app next to a game. Null inserts where the dictation started. Left out of
+    /// the JSON when unset, so older versions, which reject unknown fields, still read workflows that do not use it.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? TargetAppProcessName { get; init; }
 
     /// <summary>
     /// Gets or sets the raw number normalization mode value stored in workflow JSON.
@@ -395,6 +402,24 @@ public sealed record WorkflowOutput
     /// </summary>
     public WorkflowOutput WithAutoEnterMode(WorkflowAutoEnterMode mode) =>
         this with { AutoEnterModeRaw = mode == WorkflowAutoEnterMode.Never ? null : mode.ToRawValue(), AutoEnter = mode == WorkflowAutoEnterMode.Always };
+}
+
+/// <summary>
+/// The rule for <see cref="WorkflowOutput.TargetAppProcessName"/>, shared by dictation, the editor and backup restore.
+/// </summary>
+public static class WorkflowTargetAppName
+{
+    /// <summary>The longest process name a workflow can name.</summary>
+    public const int MaxLength = 256;
+
+    /// <summary>Whether a value is a process name such as discord, without a path or ".exe".</summary>
+    public static bool IsValid(string? value)
+    {
+        var name = value?.Trim();
+        return !string.IsNullOrEmpty(name) && name.Length <= MaxLength
+            && name.IndexOfAny(['/', '\\', ':', '*', '?', '"', '<', '>', '|', ',']) < 0
+            && !name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase);
+    }
 }
 
 /// <summary>

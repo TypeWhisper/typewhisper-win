@@ -432,7 +432,10 @@ public sealed partial class MainWindow : Window
     private DisplayArea ResolveOverlayDisplayArea()
     {
         if (OverlayPreferences.Screen == OverlayScreen.PrimaryScreen) return DisplayArea.Primary;
-        return ForegroundDisplayArea() ?? CursorDisplayArea(DisplayAreaFallback.Primary) ?? DisplayArea.Primary;
+        // While a workflow sends the text to another app, that app is briefly in front; the overlay stays with the
+        // window the user dictated in.
+        return WindowDisplayArea(_dictation.TargetAppReturnWindow) ?? ForegroundDisplayArea()
+            ?? CursorDisplayArea(DisplayAreaFallback.Primary) ?? DisplayArea.Primary;
     }
 
     // Settings and History open on the display of the app in front, or under the pointer.
@@ -440,12 +443,10 @@ public sealed partial class MainWindow : Window
         ForegroundDisplayArea() ?? CursorDisplayArea(DisplayAreaFallback.None) ?? DisplayArea.Primary;
 
     // The display of the window in front, or null when there is none or it is on no display.
-    private static DisplayArea? ForegroundDisplayArea()
-    {
-        var foreground = NativeMethods.GetForegroundWindow();
-        return foreground == IntPtr.Zero ? null
-            : DisplayArea.GetFromWindowId(Microsoft.UI.Win32Interop.GetWindowIdFromWindow(foreground), DisplayAreaFallback.None);
-    }
+    private static DisplayArea? ForegroundDisplayArea() => WindowDisplayArea(NativeMethods.GetForegroundWindow());
+
+    private static DisplayArea? WindowDisplayArea(IntPtr window) => window == IntPtr.Zero || !NativeMethods.IsWindow(window) ? null
+        : DisplayArea.GetFromWindowId(Microsoft.UI.Win32Interop.GetWindowIdFromWindow(window), DisplayAreaFallback.None);
 
     // The display under the pointer, or null when the pointer position is unavailable.
     private static DisplayArea? CursorDisplayArea(DisplayAreaFallback fallback) =>

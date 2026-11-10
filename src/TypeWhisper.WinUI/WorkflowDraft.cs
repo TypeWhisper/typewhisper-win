@@ -12,6 +12,8 @@ public sealed record WorkflowDraft(string Id, string Title, string Description, 
     public string ModelId { get; init; } = "";
     /// <summary>Optional action destination for the processed text.</summary>
     public string? TargetActionPluginId { get; init; }
+    /// <summary>The process name of the app that receives dictated text instead of the window in front; null inserts there.</summary>
+    public string? TargetApp { get; init; }
     /// <summary>When Enter follows the inserted text.</summary>
     public WorkflowAutoEnterMode AutoEnterMode { get; init; }
     /// <summary>Optional memory context source.</summary>
@@ -83,6 +85,8 @@ public sealed record WorkflowDraft(string Id, string Title, string Description, 
     private WorkflowOutput StoredOutput(WorkflowOutput output)
     {
         if (output.TargetActionPluginId != TargetActionPluginId) output = output with { TargetActionPluginId = TargetActionPluginId };
+        var targetApp = string.IsNullOrWhiteSpace(TargetApp) ? null : TargetApp.Trim();
+        if (output.TargetAppProcessName != targetApp) output = output with { TargetAppProcessName = targetApp };
         return output.AutoEnterMode == AutoEnterMode ? output : output.WithAutoEnterMode(AutoEnterMode);
     }
 
@@ -99,7 +103,7 @@ public sealed record WorkflowDraft(string Id, string Title, string Description, 
         Hotkeys = string.Join(",", workflow.Trigger.Hotkeys),
         HotkeyBehavior = workflow.Trigger.HotkeyBehavior,
         WebsiteDomains = string.Join(", ", workflow.Trigger.WebsitePatterns), ContextMatchMode = workflow.Trigger.ContextMatchMode,
-        TargetActionPluginId = workflow.Output.TargetActionPluginId, AutoEnterMode = workflow.Output.AutoEnterMode, MemoryPluginId = workflow.Behavior.MemoryPluginId,
+        TargetActionPluginId = workflow.Output.TargetActionPluginId, TargetApp = workflow.Output.TargetAppProcessName, AutoEnterMode = workflow.Output.AutoEnterMode, MemoryPluginId = workflow.Behavior.MemoryPluginId,
         Template = workflow.Template, TranslationTarget = workflow.Behavior.TranslationTarget, SelectedTask = workflow.Behavior.SelectedTask,
         InputLanguage = TypeWhisper.Presentation.WorkflowSpokenLanguage.Inherits(workflow.Behavior.InputLanguage) ? null : workflow.Behavior.InputLanguage,
         TranscriptionModel = string.IsNullOrWhiteSpace(workflow.Behavior.TranscriptionModelOverride) ? null : workflow.Behavior.TranscriptionModelOverride, Stored = workflow

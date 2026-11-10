@@ -20,18 +20,23 @@ internal sealed class PasteLandingObserver : IDisposable
     private readonly IUIAutomation2 _automation;
     private readonly IUIAutomationElement _field;
     private readonly string? _before;
+    private readonly IntPtr _target;
+    private readonly bool _followRedirect;
     private Task? _pending;
     private int _disposed;
 
-    private PasteLandingObserver(IUIAutomation2 automation, IUIAutomationElement field, string? before)
+    private PasteLandingObserver(IUIAutomation2 automation, IUIAutomationElement field, string? before, IntPtr target, bool followRedirect)
     {
-        _automation = automation; _field = field; _before = before;
+        _automation = automation; _field = field; _before = before; _target = target; _followRedirect = followRedirect;
     }
 
-    /// <summary>Records the focused field of the target window, or returns null when it cannot be identified.</summary>
-    internal static async Task<PasteLandingObserver?> CaptureAsync(IntPtr target)
+    /// <summary>Records the focused field of the target window, or returns null when it cannot be identified. With
+    /// <paramref name="followRedirect"/>, a paste on an element without text, such as a button, also counts as landed
+    /// when the app then moves the focus into a text field of the same window that shows text. Chat apps do that with
+    /// text pasted while their message field was not focused.</summary>
+    internal static async Task<PasteLandingObserver?> CaptureAsync(IntPtr target, bool followRedirect = false)
     {
-        var capture = Task.Run(() => Capture(target));
+        var capture = Task.Run(() => Capture(target, followRedirect));
         if (await Task.WhenAny(capture, Task.Delay(ReadLimit)) == capture) return await capture;
         AppDiagnostics.Write("submit.landing.capture-timeout");
         _ = capture.ContinueWith(done => done.Result?.Dispose(), TaskScheduler.Default);
@@ -41,6 +46,7 @@ internal sealed class PasteLandingObserver : IDisposable
     /// <summary>Returns true once the paste appeared in the recorded field; false when focus moved or nothing appeared.</summary>
     internal async Task<bool> WaitAsync()
     {
+        if (_before is null && _followRedirect) return await WaitForRedirectAsync();
         if (_before is null)
         {
             await Task.Delay(UnreadableDelay);
@@ -82,7 +88,7 @@ internal sealed class PasteLandingObserver : IDisposable
         finally { Release(focused); }
     }
 
-    private static PasteLandingObserver? Capture(IntPtr target)
+    private static PasteLandingObserver? Capture(IntPtr target, bool followRedirect)
     {
         IUIAutomation2? automation = null;
         IUIAutomationElement? element = null;
@@ -93,7 +99,7 @@ internal sealed class PasteLandingObserver : IDisposable
             automation.ConnectionTimeout = 200; automation.TransactionTimeout = 200;
             element = automation.GetFocusedElement();
             if (element is null || element.CurrentIsPassword != 0 || !BelongsTo(automation, element, target)) return null;
-            var observer = new PasteLandingObserver(automation, element, BeforeCaret(element));
+            var observer = new PasteLandingObserver(automation, element, BeforeCaret(element), target, followRedirect);
             automation = null; element = null;
             return observer;
         }
@@ -146,6 +152,48 @@ internal sealed class PasteLandingObserver : IDisposable
             return false;
         }
         finally { Release(parent); Release(walker); }
+    }
+
+    // The recorded element shows no text, so the paste is confirmed when the focus stays on it, as before, or when the
+    // app moved it into a text field of the same window that shows text by now.
+    private async Task<bool> WaitForRedirectAsync()
+    {
+        await Task.Delay(UnreadableDelay);
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (true)
+        {
+            var state = await ReadRedirectAsync();
+            if (state.SameField) { AppDiagnostics.Write("submit.landing.unreadable decision=same-field"); return true; }
+            if (state.Redirected) { AppDiagnostics.Write("submit.landing.redirected"); return true; }
+            if (clock.Elapsed >= LandingLimit) { AppDiagnostics.Write("submit.landing.unreadable decision=field-changed"); return false; }
+            await Task.Delay(PollInterval);
+        }
+    }
+
+    // Like ReadAsync, one read at a time: a stalled read is waited for, never joined by another, so Dispose releases the
+    // COM objects only after the last one ended.
+    private async Task<(bool SameField, bool Redirected)> ReadRedirectAsync()
+    {
+        if (_pending is { IsCompleted: false } stalled && await Task.WhenAny(stalled, Task.Delay(ReadLimit)) != stalled) return default;
+        var read = Task.Run(ReadRedirect);
+        _pending = read;
+        return await Task.WhenAny(read, Task.Delay(ReadLimit)) == read ? await read : default;
+    }
+
+    private (bool SameField, bool Redirected) ReadRedirect()
+    {
+        if (Volatile.Read(ref _disposed) != 0) return default;
+        IUIAutomationElement? focused = null;
+        try
+        {
+            focused = _automation.GetFocusedElement();
+            if (focused is null) return default;
+            if (_automation.CompareElements(_field, focused) != 0) return (true, false);
+            return (false, focused.CurrentIsPassword == 0 && BelongsTo(_automation, focused, _target)
+                && BeforeCaret(focused) is { Length: > 0 });
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return default; }
+        finally { Release(focused); }
     }
 
     // A read still running keeps the COM objects until it ends.

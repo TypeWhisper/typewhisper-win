@@ -973,7 +973,9 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 AppDiagnostics.Write("dictation.start");
                 // A plugin that delivers the dictation itself has no field to lock: a game's chat field only exists once
                 // the chat is open, and UI Automation queries against games only fail slowly.
+                // Neither does a workflow known by now that sends the text to another app.
                 if (OutputPreferences.Current is { AutoPaste: true, LockPasteToFocusedField: true } && _setupOutputAtStart is null
+                    && (workflow ?? (ruleMatched ? _workflowAtStart : null))?.TargetApp is null
                     && await DictationTargetPlanAsync() is null)
                     _originalField = await OriginalDictationField.CaptureAsync(_target, processId, _operationCancellation.Token);
                 if (_setupOutputAtStart is not null) { _targetHostAtStart = null; _workflowAtStart = null; }
@@ -1164,6 +1166,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             };
             var submitSkipped = false;
             var delivery = new DictationOutputDelivery(_history);
+            _targetAppMissing = null;
             AppDiagnostics.Write("delivery.begin");
             var outcome = await delivery.DeliverAsync(record, processed.WorkflowError is null && !_reviewAfterTargetChange ? _outputAtStart : _outputAtStart with { AutoPaste = false },
                 () => OutputPreferences.Current, async () =>
@@ -1173,8 +1176,11 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     _operationCancellation.Token.ThrowIfCancellationRequested();
                     if (_disposed || !_outputAtStart.RestrictedBy(OutputPreferences.Current).AutoPaste ||
                         ModifiersHeld()) { AppDiagnostics.Write("delivery.blocked-settings-modifiers-or-disposed"); return false; }
-                    var targetDelivers = await DictationTargetPlanAsync() is not null && _targetPlugin is not null;
-                    var lockField = !targetDelivers && _outputAtStart.RestrictedBy(OutputPreferences.Current).LockPasteToFocusedField;
+                    // A workflow can send the text to another app; the window the dictation started in and its field
+                    // lock then play no part, and neither does a plugin that handles that window.
+                    var targetApp = TargetAppAtStart;
+                    var targetDelivers = targetApp is null && await DictationTargetPlanAsync() is not null && _targetPlugin is not null;
+                    var lockField = targetApp is null && !targetDelivers && _outputAtStart.RestrictedBy(OutputPreferences.Current).LockPasteToFocusedField;
                     if (lockField)
                     {
                         if (_originalField is null) { AppDiagnostics.Write("delivery.no-captured-field"); return false; }
@@ -1182,35 +1188,53 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                             !await _originalField.RestoreAsync(_operationCancellation.Token)) { AppDiagnostics.Write("delivery.restore-failed"); return false; }
                         if (!await _originalField.IsCurrentAsync(_operationCancellation.Token)) { AppDiagnostics.Write("delivery.field-not-current"); return false; }
                     }
-                    if (NativeMethods.GetForegroundWindow() != _target) { AppDiagnostics.Write("delivery.target-not-foreground"); return false; }
-                    // The plugin delivers into its app itself, such as a game's chat with its own Enter per message.
-                    if (targetDelivers) return await DeliverToTargetAsync(text);
-                    // Spacing and casing for the cursor position only reach the target field; history, API and
-                    // actions keep the final text. A field without readable context gets the text unchanged.
-                    var context = _textAtStart.AppAwareFormattingEnabled ? await InsertionContextReader.ReadAsync(_target) : null;
-                    _operationCancellation.Token.ThrowIfCancellationRequested();
-                    AppDiagnostics.Write($"delivery.context available={context is not null}");
-                    // Casing follows the language of the pasted text: English after native translation, unknown
-                    // after a translation workflow, otherwise the dictated language.
-                    var outputLanguage = _workflowAtStart?.Translates == true ? null
-                        : _taskAtStart == TranscriptionTask.Translate ? "en" : record.Language;
-                    var pasted = DictationInsertionText.ForPaste(text, context, _textAtStart.StripFinalPeriodFromStandaloneValues, outputLanguage);
-                    // A dictation of only a spoken line break must still insert it.
-                    if (pasted.Length == 0) pasted = text;
-                    var submit = WorkflowAutoEnterResolver.ShouldPressEnterAfterInsertion(autoEnterMode, autoEnter, pasted,
-                        record.Status != TranscriptionRecordStatus.Succeeded);
-                    var insertion = await _inserter.InsertAsync(pasted, _target, () =>
-                        !_disposed && !_operationCancellation.Token.IsCancellationRequested &&
-                        _outputAtStart.RestrictedBy(OutputPreferences.Current).AutoPaste &&
-                        (!_outputAtStart.RestrictedBy(OutputPreferences.Current).LockPasteToFocusedField || _originalField?.RecentlyVerified == true),
-                        async () => !_outputAtStart.RestrictedBy(OutputPreferences.Current).LockPasteToFocusedField ||
-                            (_originalField is not null && await _originalField.IsCurrentAsync(_operationCancellation.Token)), submit,
-                        () => _outputAtStart.RestrictedBy(OutputPreferences.Current).PreserveClipboard);
-                    var inserted = insertion.Inserted;
-                    submitSkipped = inserted && submit && !insertion.Submitted;
-                    if (inserted && !_disposed && !_operationCancellation.Token.IsCancellationRequested && record.Status == TranscriptionRecordStatus.Succeeded)
-                        _ = ObserveCorrectionsAfterPasteAsync(pasted, _target, _operationCancellation.Token);
-                    return inserted;
+                    TargetAppDelivery? sent = null;
+                    if (targetApp is not null)
+                    {
+                        if (await ActivateTargetAppAsync(targetApp) is not { } activated) return false;
+                        sent = activated;
+                    }
+                    else if (NativeMethods.GetForegroundWindow() != _target) { AppDiagnostics.Write("delivery.target-not-foreground"); return false; }
+                    var window = sent?.Window ?? _target;
+                    // A canceled or failed paste still returns to the window the user came from.
+                    try
+                    {
+                        // The plugin delivers into its app itself, such as a game's chat with its own Enter per message.
+                        if (targetDelivers) return await DeliverToTargetAsync(text);
+                        // Spacing and casing for the cursor position only reach the target field; history, API and
+                        // actions keep the final text. A field without readable context gets the text unchanged.
+                        var context = _textAtStart.AppAwareFormattingEnabled ? await InsertionContextReader.ReadAsync(window) : null;
+                        _operationCancellation.Token.ThrowIfCancellationRequested();
+                        AppDiagnostics.Write($"delivery.context available={context is not null}");
+                        // Casing follows the language of the pasted text: English after native translation, unknown
+                        // after a translation workflow, otherwise the dictated language.
+                        var outputLanguage = _workflowAtStart?.Translates == true ? null
+                            : _taskAtStart == TranscriptionTask.Translate ? "en" : record.Language;
+                        var pasted = DictationInsertionText.ForPaste(text, context, _textAtStart.StripFinalPeriodFromStandaloneValues, outputLanguage);
+                        // A dictation of only a spoken line break must still insert it.
+                        if (pasted.Length == 0) pasted = text;
+                        var submit = WorkflowAutoEnterResolver.ShouldPressEnterAfterInsertion(autoEnterMode, autoEnter, pasted,
+                            record.Status != TranscriptionRecordStatus.Succeeded);
+                        var insertion = await _inserter.InsertAsync(pasted, window, () =>
+                            !_disposed && !_operationCancellation.Token.IsCancellationRequested &&
+                            _outputAtStart.RestrictedBy(OutputPreferences.Current).AutoPaste &&
+                            (targetApp is not null || !_outputAtStart.RestrictedBy(OutputPreferences.Current).LockPasteToFocusedField || _originalField?.RecentlyVerified == true),
+                            // The target app is not the window the user looks at, so its password fields are refused whatever
+                            // the paste lock says; the text then stays on the clipboard and in review.
+                            async () => sent is { } target ? !await FocusedPasswordFieldAsync(target.Window)
+                                : !_outputAtStart.RestrictedBy(OutputPreferences.Current).LockPasteToFocusedField ||
+                                (_originalField is not null && await _originalField.IsCurrentAsync(_operationCancellation.Token)), submit,
+                            () => _outputAtStart.RestrictedBy(OutputPreferences.Current).PreserveClipboard,
+                            // A chat app moves a paste on a button into its message field; Enter may follow it there.
+                            followPasteRedirect: sent is not null);
+                        var inserted = insertion.Inserted;
+                        submitSkipped = inserted && submit && !insertion.Submitted;
+                        // Corrections are learned in the field the user keeps working in, which the target app is not.
+                        if (sent is null && inserted && !_disposed && !_operationCancellation.Token.IsCancellationRequested && record.Status == TranscriptionRecordStatus.Succeeded)
+                            _ = ObserveCorrectionsAfterPasteAsync(pasted, _target, _operationCancellation.Token);
+                        return inserted;
+                    }
+                    finally { if (sent is { } delivered) await ReturnFromTargetAppAsync(delivered); }
                 }, _operationCancellation.Token, samples, 16000,
                 _reviewAfterTargetChange || string.IsNullOrWhiteSpace(_workflowAtStart?.TargetActionPluginId) ? null : ct => ExecuteWorkflowActionAsync(
                     _workflowActionAtStart, text, new TypeWhisper.PluginSDK.Models.ActionContext(record.AppName, record.AppProcessName,
@@ -1229,7 +1253,14 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             // user looks while dictating. The overlay only claims a copy that succeeded.
             var pasteFailed = outcome.ReviewReason == DictationReviewReason.PasteFailed;
             if (pasteFailed) outcome = outcome with { CopiedToClipboard = ClipboardText.TrySet(outcome.Record.FinalText) };
-            var message = !pasteFailed ? outcome.Message : outcome.CopiedToClipboard
+            // The review names the workflow's target app that was not open, instead of a field to check.
+            if (pasteFailed && _targetAppMissing is { } closedApp)
+                outcome = outcome with { Message = Loc.T("{0} is not open, so nothing was inserted. Open {0}, then paste the text there.", closedApp) };
+            var message = !pasteFailed ? outcome.Message
+                : _targetAppMissing is { } missingApp ? outcome.CopiedToClipboard
+                    ? Loc.T("{0} is not open, so nothing was inserted. The text is on the clipboard.", missingApp)
+                    : Loc.T("{0} is not open, so nothing was inserted. Copy the text from the review window.", missingApp)
+                : outcome.CopiedToClipboard
                 ? Loc.T("Not inserted. The text is on the clipboard.") : Loc.T("Not inserted. Copy the text from the review window.");
             if (submitSkipped) message += " · " + Loc.T("Enter was not pressed.");
             _copyChosen = !pasteFailed && !outcome.NeedsReview && outcome.CopiedToClipboard;

@@ -3253,5 +3253,12 @@
   "{0:0.0} s": "{0:0.0}秒",
   "{0} min {1} s": "{0}分{1}秒",
   "Translation for {0}": "{0} の翻訳",
-  "Could not install the keyboard hook for this shortcut (Windows error {0}). Restart TypeWhisper and try again.": "このショートカットのキーボードフックをインストールできませんでした（Windows エラー {0}）。TypeWhisper を再起動してもう一度お試しください。"
+  "Could not install the keyboard hook for this shortcut (Windows error {0}). Restart TypeWhisper and try again.": "このショートカットのキーボードフックをインストールできませんでした（Windows エラー {0}）。TypeWhisper を再起動してもう一度お試しください。",
+  "{0} is not open, so nothing was inserted. The text is on the clipboard.": "{0}が開いていないため、挿入されませんでした。テキストはクリップボードにあります。",
+  "{0} is not open, so nothing was inserted. Copy the text from the review window.": "{0}が開いていないため、挿入されませんでした。確認ウインドウからテキストをコピーしてください。",
+  "Where you dictate (default)": "音声入力した場所（既定）",
+  "Send to app": "アプリに送信",
+  "Leave empty to insert where you dictate. Otherwise TypeWhisper brings this app’s window to the front, inserts the text there, presses Enter if chosen below and returns to the window you were in, for example to send chat messages to Discord while a game is in front. Enter the process name without .exe.": "空欄のままにすると、音声入力した場所に挿入します。アプリを指定すると、TypeWhisperはそのアプリのウインドウを前面に表示してテキストを挿入し、下で選択した場合はEnterを押してから、元のウインドウに戻ります。たとえば、ゲームを前面に表示したままDiscordにチャットメッセージを送信できます。プロセス名を.exeなしで入力してください。",
+  "Enter the app’s process name, such as discord, without a path or .exe.": "discordのように、アプリのプロセス名をパスや.exeなしで入力してください。",
+  "{0} is not open, so nothing was inserted. Open {0}, then paste the text there.": "{0}が開いていないため、挿入されませんでした。{0}を開いてから、テキストを貼り付けてください。"
 }

@@ -3253,5 +3253,12 @@
   "{0:0.0} s": "{0:0.0} 秒",
   "{0} min {1} s": "{0} 分钟 {1} 秒",
   "Translation for {0}": "{0} 的翻译",
-  "Could not install the keyboard hook for this shortcut (Windows error {0}). Restart TypeWhisper and try again.": "无法为此快捷键安装键盘钩子（Windows 错误 {0}）。请重新启动 TypeWhisper 后重试。"
+  "Could not install the keyboard hook for this shortcut (Windows error {0}). Restart TypeWhisper and try again.": "无法为此快捷键安装键盘钩子（Windows 错误 {0}）。请重新启动 TypeWhisper 后重试。",
+  "{0} is not open, so nothing was inserted. The text is on the clipboard.": "{0} 未打开，因此未插入任何内容。文本已在剪贴板中。",
+  "{0} is not open, so nothing was inserted. Copy the text from the review window.": "{0} 未打开，因此未插入任何内容。请从审阅窗口复制文本。",
+  "Where you dictate (default)": "听写所在位置（默认）",
+  "Send to app": "发送到应用",
+  "Leave empty to insert where you dictate. Otherwise TypeWhisper brings this app’s window to the front, inserts the text there, presses Enter if chosen below and returns to the window you were in, for example to send chat messages to Discord while a game is in front. Enter the process name without .exe.": "留空则插入到你听写的位置。否则 TypeWhisper 会将此应用的窗口切换到前台，在其中插入文本，如果下方已选择则按 Enter，然后返回你之前所在的窗口，例如在游戏处于前台时向 Discord 发送聊天消息。请输入不含 .exe 的进程名称。",
+  "Enter the app’s process name, such as discord, without a path or .exe.": "请输入应用的进程名称，例如 discord，不含路径或 .exe。",
+  "{0} is not open, so nothing was inserted. Open {0}, then paste the text there.": "{0} 未打开，因此未插入任何内容。请打开 {0}，然后在其中粘贴文本。"
 }

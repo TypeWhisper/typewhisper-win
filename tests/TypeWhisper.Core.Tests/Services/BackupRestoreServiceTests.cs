@@ -35,6 +35,31 @@ public sealed class BackupRestoreServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task BackupAcceptsOnlyTargetAppNamesThatDictationCanUse()
+    {
+        var source = CreateProfile("target-app-source");
+        source.Workflows.AddWorkflow(new Workflow
+        {
+            Id = "chat", Name = "Chat", Template = WorkflowTemplate.Dictation, Trigger = WorkflowTrigger.App("bg3"),
+            Output = new WorkflowOutput { TargetAppProcessName = "discord" }
+        });
+        var json = JsonNode.Parse(await source.Backup.ExportAsync(new BackupExportOptions { Categories = BackupCategory.Workflows }))!;
+        var output = json["data"]!["workflows"]![0]!.AsObject()
+            .First(property => property.Key.Equals("output", StringComparison.OrdinalIgnoreCase)).Value!.AsObject();
+        var key = output.First(property => property.Key.Equals(nameof(WorkflowOutput.TargetAppProcessName), StringComparison.OrdinalIgnoreCase)).Key;
+        var destination = CreateProfile("target-app-target");
+        foreach (var invalid in new[] { "discord.exe", @"C:\Apps\discord", "discord, slack", new string('a', WorkflowTargetAppName.MaxLength + 1) })
+        {
+            output[key] = invalid;
+            Assert.False(destination.Backup.PreviewImport(json.ToJsonString()).IsValid, invalid);
+        }
+        output[key] = "discord";
+        var imported = await destination.Backup.ImportAsync(json.ToJsonString());
+        Assert.True(imported.Success, imported.Error);
+        Assert.Equal("discord", Assert.Single(destination.Workflows.Workflows).Output.TargetAppProcessName);
+    }
+
+    [Fact]
     public async Task RegexPatternCaseSurvivesBackupMerge()
     {
         var source = CreateProfile("regex-source");
