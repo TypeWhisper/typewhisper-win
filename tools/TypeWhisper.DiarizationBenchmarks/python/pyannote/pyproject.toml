@@ -1,0 +1,25 @@
+[project]
+name = "typewhisper-diarization-pyannote-worker"
+version = "0.1.0"
+description = "pyannote Community-1 worker for the TypeWhisper diarization benchmark"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "torch==2.11.0",
+  "torchaudio==2.11.0",
+  "pyannote.audio==4.0.7",
+  "soundfile",
+  "numpy",
+  "psutil",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu130" }
+torchaudio = { index = "pytorch-cu130" }
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true

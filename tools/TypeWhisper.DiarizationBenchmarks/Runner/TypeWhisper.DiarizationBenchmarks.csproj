@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Runs the diarization benchmark set through the engine workers and writes one hypothesis
+       file per engine. See ../README.md. The workers are separate processes, so the runner loads
+       no model runtime itself. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <AssemblyName>TypeWhisper.DiarizationBenchmarks</AssemblyName>
+    <RootNamespace>TypeWhisper.DiarizationBenchmarks</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="System.Diagnostics.PerformanceCounter" />
+  </ItemGroup>
+</Project>

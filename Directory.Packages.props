@@ -40,6 +40,13 @@
     <PackageVersion Include="Whisper.net.Runtime.Vulkan" Version="1.9.0" />
   </ItemGroup>
 
+  <ItemGroup Label="Benchmark tools">
+    <!-- tools/TypeWhisper.DiarizationBenchmarks only: the DirectML build of ONNX Runtime and
+         per-process GPU memory counters. The app does not reference either. -->
+    <PackageVersion Include="Microsoft.ML.OnnxRuntime.DirectML" Version="1.24.4" />
+    <PackageVersion Include="System.Diagnostics.PerformanceCounter" Version="10.0.0" />
+  </ItemGroup>
+
   <ItemGroup Label="Tests">
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
     <PackageVersion Include="Moq" Version="4.21.0" />
