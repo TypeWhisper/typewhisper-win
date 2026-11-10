@@ -15,16 +15,20 @@ internal static class TargetAppWindow
 
     /// <summary>
     /// The front-most window the user can switch to in one of the app's processes: visible or minimized, not owned by
-    /// another window, not a tool window, not hidden by the shell (for example on another virtual desktop) and titled.
+    /// another window, not a tool window and titled; one on the current virtual desktop first, then one on another.
     /// Without one, an app closed to the notification area offers its hidden main window: titled, with a title bar and
     /// of a normal size, which leaves out the hidden helper windows such apps keep. The result is hidden then.
     /// </summary>
     internal static TopLevelWindow? Choose(IEnumerable<TopLevelWindow> frontToBack, IReadOnlySet<uint> processIds)
     {
         var candidates = frontToBack.Where(item => processIds.Contains(item.ProcessId) && !item.Owned && !item.ToolWindow
-            && !item.Cloaked && item.TitleLength > 0).ToArray();
-        return candidates.Cast<TopLevelWindow?>().FirstOrDefault(item => item!.Value.Visible)
-            ?? candidates.Cast<TopLevelWindow?>().FirstOrDefault(item => item!.Value is { Caption: true, Width: >= MinimumHiddenSize, Height: >= MinimumHiddenSize });
+            && item.TitleLength > 0).ToArray();
+        return candidates.Cast<TopLevelWindow?>().FirstOrDefault(item => item!.Value is { Visible: true, Cloaked: false })
+            // A window on another virtual desktop is open too: it is brought to the front rather than the app started
+            // a second time.
+            ?? candidates.Cast<TopLevelWindow?>().FirstOrDefault(item => item!.Value is { Visible: true, Cloaked: true })
+            ?? candidates.Cast<TopLevelWindow?>().FirstOrDefault(item => item!.Value is
+                { Visible: false, Cloaked: false, Caption: true, Width: >= MinimumHiddenSize, Height: >= MinimumHiddenSize });
     }
 
     /// <summary>The app's window to insert into, or null when none of its processes has one.</summary>

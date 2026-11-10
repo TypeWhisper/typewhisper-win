@@ -149,6 +149,19 @@ public sealed class WorkflowTargetAppTests : IDisposable
         Assert.Null(TargetAppWindow.Choose([Hidden(1, caption: false), Hidden(2, width: 1, height: 1)], discord));
     }
 
+    [Fact]
+    public void WindowOnAnotherDesktopCountsAsOpenSoTheAppIsNotStartedAgain()
+    {
+        var discord = new HashSet<uint> { 10 };
+        TopLevelWindow OtherDesktop = new(8, 10, true, false, false, true, 30);
+        TopLevelWindow Hidden = new(5, 10, false, false, false, false, 30, true, 1289, 1397);
+        TopLevelWindow Current = new(9, 10, true, false, false, false, 30);
+
+        Assert.Equal((IntPtr)8, TargetAppWindow.Choose([Hidden, OtherDesktop], discord)?.Window);
+        Assert.True(TargetAppWindow.Choose([Hidden, OtherDesktop], discord)?.Visible);
+        Assert.Equal((IntPtr)9, TargetAppWindow.Choose([OtherDesktop, Current], discord)?.Window);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_directory)) Directory.Delete(_directory, true);

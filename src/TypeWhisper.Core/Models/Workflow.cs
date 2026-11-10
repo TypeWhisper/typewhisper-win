@@ -405,6 +405,24 @@ public sealed record WorkflowOutput
 }
 
 /// <summary>
+/// The rule for <see cref="WorkflowOutput.TargetAppProcessName"/>, shared by dictation, the editor and backup restore.
+/// </summary>
+public static class WorkflowTargetAppName
+{
+    /// <summary>The longest process name a workflow can name.</summary>
+    public const int MaxLength = 256;
+
+    /// <summary>Whether a value is a process name such as discord, without a path or ".exe".</summary>
+    public static bool IsValid(string? value)
+    {
+        var name = value?.Trim();
+        return !string.IsNullOrEmpty(name) && name.Length <= MaxLength
+            && name.IndexOfAny(['/', '\\', ':', '*', '?', '"', '<', '>', '|', ',']) < 0
+            && !name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase);
+    }
+}
+
+/// <summary>
 /// Represents workflow-level number normalization behavior.
 /// </summary>
 [JsonConverter(typeof(JsonStringEnumConverter<WorkflowNumberNormalizationMode>))]

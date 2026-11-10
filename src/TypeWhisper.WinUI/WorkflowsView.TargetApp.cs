@@ -52,7 +52,9 @@ public sealed partial class WorkflowsView
     {
         if (_runningAppsLoading) return;
         _runningAppsLoading = true;
+        // Called without being awaited, so a failure is logged here; the field then just offers no suggestions.
         try { _runningApps = await Task.Run(RunningApps); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("workflow.target-app.list-failed", ex); }
         finally { _runningAppsLoading = false; }
         if (_closing || _page != Page.Configuration) return;
         SuggestRunningApps();
