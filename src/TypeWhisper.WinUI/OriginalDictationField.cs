@@ -265,36 +265,10 @@ internal sealed class OriginalDictationField : IAsyncDisposable
         catch (Exception ex) when (ex is not OutOfMemoryException && ex is not OperationCanceledException) { AppDiagnostics.Write("field.restore.exception", ex); return false; }
     }
 
-    private void ActivateWithInputThread(Func<bool> expired)
-    {
-        // Input attachment must remain synchronous and be undone on the same thread.
-        // No synthetic keystrokes and no replacement of the captured UIA element.
-        var currentThread = GetCurrentThreadId();
-        var foregroundThread = NativeMethods.GetWindowThreadProcessId(NativeMethods.GetForegroundWindow(), out _);
-        var targetThread = NativeMethods.GetWindowThreadProcessId(_window, out var process);
-        if (process != _process || targetThread == 0) return;
-        var foregroundAttached = foregroundThread != 0 && foregroundThread != currentThread &&
-            AttachThreadInput(currentThread, foregroundThread, true);
-        var targetAttached = false;
-        try
-        {
-            // Activation and focus belong to the target's input queue too. Connecting
-            // only to the window being left does not activate the original queue.
-            targetAttached = targetThread != currentThread && targetThread != foregroundThread &&
-                AttachThreadInput(currentThread, targetThread, true);
-            AppDiagnostics.Write($"field.restore.queues foreground={foregroundAttached} target={targetAttached}");
-            if (expired()) return;
-            var requested = NativeMethods.SetForegroundWindow(_window);
-            if (!expired() && (targetAttached || targetThread == currentThread || (targetThread == foregroundThread && foregroundAttached)))
-                SetActiveWindow(_window);
-            AppDiagnostics.Write($"field.restore.activation accepted={requested} current={NativeMethods.GetForegroundWindow() == _window}");
-        }
-        finally
-        {
-            if (targetAttached) AttachThreadInput(currentThread, targetThread, false);
-            if (foregroundAttached) AttachThreadInput(currentThread, foregroundThread, false);
-        }
-    }
+    // Input attachment must remain synchronous and be undone on the same thread.
+    // No synthetic keystrokes and no replacement of the captured UIA element.
+    private void ActivateWithInputThread(Func<bool> expired) =>
+        WindowActivation.ActivateWithInputThread(_window, _process, expired, "field.restore");
 
     private void DiagnoseFocus()
     {
@@ -306,10 +280,6 @@ internal sealed class OriginalDictationField : IAsyncDisposable
         try { AppDiagnostics.Write($"field.restore.observed originalElement={_automation.CompareElements(_element, focused) != 0}"); }
         finally { Release(focused); }
     }
-
-    [DllImport("user32.dll")] private static extern IntPtr SetActiveWindow(IntPtr window);
-    [DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
-    [DllImport("user32.dll", SetLastError = true)] private static extern bool AttachThreadInput(uint source, uint target, bool attach);
 
     public async ValueTask DisposeAsync()
     {

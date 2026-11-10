@@ -370,6 +370,13 @@ public sealed record WorkflowOutput
     /// Gets or sets the target action plugin id value.
     /// </summary>
     public string? TargetActionPluginId { get; init; }
+    /// <summary>
+    /// The Windows process name, without ".exe", of the app that receives the dictated text instead of the window the
+    /// dictation started in, for example a chat app next to a game. Null inserts where the dictation started. Left out of
+    /// the JSON when unset, so older versions, which reject unknown fields, still read workflows that do not use it.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? TargetAppProcessName { get; init; }
 
     /// <summary>
     /// Gets or sets the raw number normalization mode value stored in workflow JSON.

@@ -308,6 +308,7 @@ public sealed partial class WorkflowsView : UserControl
         var behavior = new SettingsCard(Loc.T("Behavior"));
         // Its description says where the result goes.
         behavior.Children.Add(ConfigActionSection.Set(Loc.T("Action Target"), control: ConfigActionTarget));
+        BuildTargetApp(behavior);
         // Its description explains the chosen option.
         behavior.Children.Add(ConfigAutoEnterSection.Set(Loc.T("Press Enter after inserting"), control: ConfigAutoEnter));
         behavior.Children.Add(ConfigMemorySection.Set(Loc.T("Memory context"),
@@ -390,6 +391,7 @@ public sealed partial class WorkflowsView : UserControl
         if (_page != Page.Configuration) { ExitRequested?.Invoke(this, EventArgs.Empty); return; }
         foreach (var picker in new[] { ConfigTrigger, ConfigContextMode, ConfigProvider, ConfigModel, ConfigActionTarget, ConfigAutoEnter, ConfigMemory, ConfigTask, ConfigLanguage, ConfigTranscriptionModel })
             if (picker.IsPopupOpen) { picker.ClosePopup(); return; }
+        if (ConfigTargetApp.IsSuggestionListOpen) { ConfigTargetApp.IsSuggestionListOpen = false; return; }
         if (ConfigurationDiscardPrompt.Visibility == Visibility.Visible) { DismissDiscard(); return; }
         if (!ConfigurationDirty) { LeaveConfiguration(); return; }
         ConfigurationDiscardPrompt.Visibility = Visibility.Visible;
@@ -499,6 +501,7 @@ public sealed partial class WorkflowsView : UserControl
             : session.LanguageChoices.Count > 0 && !session.LanguageChoices.Contains(language, StringComparer.OrdinalIgnoreCase));
     private bool ConfigurationDirty => _opened is not null && (ConfigName.Text != _opened.Title || ConfigInstruction.Text.ReplaceLineEndings("\n") != _opened.Instruction.ReplaceLineEndings("\n")
         || ConfigActionTarget.SelectedId != (_opened.TargetActionPluginId ?? "")
+        || ConfigSelectedTargetApp != _opened.TargetApp
         || ConfigAutoEnter.SelectedId != _opened.AutoEnterMode.ToRawValue()
         || ConfigMemory.SelectedId != (_opened.MemoryPluginId ?? "")
         || _draftIcon != _opened.IconKind
@@ -519,6 +522,7 @@ public sealed partial class WorkflowsView : UserControl
         : ConfigTrigger.SelectedId == "Website" && string.IsNullOrWhiteSpace(ConfigWebsiteDomains.Text) ? Loc.T("Enter at least one website domain.")
         : ConfigTrigger.SelectedId is "App" or "Website" && !string.IsNullOrWhiteSpace(ConfigWebsiteDomains.Text)
             && ConfigWebsiteDomains.Text.Split(',').Any(value => BrowserWorkflowContext.NormalizePattern(value) is null) ? Loc.T("Enter comma-separated domains without paths, query strings or credentials.")
+        : TargetAppError is { } targetAppError ? targetAppError
         : !int.TryParse(ConfigPriority.Text, out _) ? Loc.T("Enter a whole-number priority. Lower numbers win.")
         : !Enum.TryParse<WorkflowTemplate>(ConfigTemplate.SelectedId, out var template) || !Enum.IsDefined(template) ? Loc.T("Choose a workflow template.")
         : template == WorkflowTemplate.Custom && string.IsNullOrWhiteSpace(ConfigInstruction.Text) ? Loc.T("Add instructions for this custom workflow.")
@@ -573,6 +577,7 @@ public sealed partial class WorkflowsView : UserControl
         _loadingConfiguration = true;
         ConfigEnabled.IsOn = _opened.IsEnabled;
         ConfigureActionTargets(_opened.TargetActionPluginId ?? "");
+        LoadTargetApp(_opened.TargetApp);
         ConfigAutoEnter.SetOptions([
             new(WorkflowAutoEnterMode.Never.ToRawValue(), Loc.T("Never"), Loc.T("Only insert the text")),
             new(WorkflowAutoEnterMode.SpokenCommand.ToRawValue(), Loc.T("When I say “press enter”"), Loc.T("Submit when the dictation ends with these words")),
@@ -706,8 +711,8 @@ public sealed partial class WorkflowsView : UserControl
                 ? Loc.T("The finished text is sent to this action instead of being pasted. Running this workflow can create an item in the selected service.")
                 : Loc.T("This action is unavailable. Its saved selection is preserved; enable the plugin or choose another target.");
         // Enter follows text that dictation inserts, never a plugin action, a selected-text result or a manual run.
-        ConfigAutoEnterSection.Visibility = ConfigTrigger.SelectedId is "DictationHotkey" or "App" or "Website" or "Global"
-            && string.IsNullOrEmpty(ConfigActionTarget.SelectedId) ? Visibility.Visible : Visibility.Collapsed;
+        ConfigAutoEnterSection.Visibility = ConfigSendsText ? Visibility.Visible : Visibility.Collapsed;
+        UpdateTargetAppState();
         ConfigAutoEnterSection.Description = ConfigAutoEnter.SelectedId switch
         {
             "spokenCommand" => Loc.T("Presses Enter when the dictation ends with “press enter” or “press return”. These words are removed from the text."),
@@ -750,6 +755,7 @@ public sealed partial class WorkflowsView : UserControl
             TranslationTarget = string.IsNullOrWhiteSpace(ConfigTranslationTarget.Text) ? null : ConfigTranslationTarget.Text.Trim(),
             SelectedTask = ConfigSelectedTask, InputLanguage = ConfigSelectedLanguage, TranscriptionModel = ConfigSelectedTranscriptionModel,
             TargetActionPluginId = string.IsNullOrEmpty(ConfigActionTarget.SelectedId) ? null : ConfigActionTarget.SelectedId,
+            TargetApp = ConfigSelectedTargetApp,
             AutoEnterMode = WorkflowAutoEnterModes.Parse(ConfigAutoEnter.SelectedId, false),
             MemoryPluginId = string.IsNullOrEmpty(ConfigMemory.SelectedId) ? null : ConfigMemory.SelectedId,
             ProviderId = ConfigProvider.SelectedId, ModelId = ConfigModel.SelectedId,

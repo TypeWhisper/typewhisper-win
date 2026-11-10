@@ -80,7 +80,7 @@ public sealed record SupportDiagnosticsReport(
     public sealed record WorkflowMetadata(string Trigger, string Template, string? ProviderId, string? ModelId,
         string? TranscriptionModelId, int AppBindingCount, int WebsiteBindingCount, int HotkeyCount,
         bool HasCustomInstructions, string AutoEnterMode, string? ActionPluginId, string NumberNormalizationMode,
-        bool UsesDefaultLlm);
+        bool UsesDefaultLlm, bool SendsToApp = false);
 
     /// <summary>Data quantities without any stored text.</summary>
     public sealed record CountsInfo(int? HistoryRecords, int? DictionaryTerms, int? DictionaryCorrections,
@@ -133,7 +133,8 @@ public sealed record SupportDiagnosticsReport(
                 workflow.Trigger.WebsitePatterns.Count, workflow.Trigger.Hotkeys.Count,
                 !string.IsNullOrWhiteSpace(workflow.Behavior.FineTuning), workflow.Output.AutoEnterMode.ToRawValue(),
                 Identifier(workflow.Output.TargetActionPluginId), workflow.Output.NumberNormalizationMode.ToString(),
-                workflow.Template != WorkflowTemplate.Dictation && workflow.Behavior.ProviderOverride == WorkflowLlmDefaults.Inherit);
+                workflow.Template != WorkflowTemplate.Dictation && workflow.Behavior.ProviderOverride == WorkflowLlmDefaults.Inherit,
+                WorkflowTargetApp.Of(workflow) is not null);
         }).ToArray(), Identifier(defaults?.Provider), Identifier(defaults?.Model));
 
     /// <summary>Projects a policy snapshot without exposing sensitive values.</summary>
