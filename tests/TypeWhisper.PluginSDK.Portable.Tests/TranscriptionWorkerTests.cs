@@ -410,6 +410,12 @@ public sealed class TranscriptionWorkerTests : IAsyncLifetime
         Assert.Equal("small", await Model());
         Assert.Equal("small", host.GetSetting<string>("selectedModel"));
         Assert.Equal(0, host.GetSetting<int>("asyncSelectCalls"));
+
+        // A user selection during an override ends it, and the model saved before is no longer held back.
+        await registry.OverrideModelAsync(large);
+        await registry.SelectModelAsync(large);
+        Assert.Equal("large", host.GetSetting<string>("selectedModel"));
+        Assert.DoesNotContain("is selected", await RemovalBlock("small") ?? "");
     }
 
     [Fact]

@@ -241,6 +241,8 @@ public sealed partial class PortablePluginRuntimeRegistry
             // never call it under _sync. UseAsync drains and rejects results superseded by concurrent disable.
             // Engines that persist the selection asynchronously no longer block a thread here.
             await engine.SelectModelAsync(expected.ModelId, token).ConfigureAwait(false);
+            // A selection ends any request override, so the model saved before it needs no protection any longer.
+            if (_modelEngineIdentities.TryGetValue(engine, out var identity)) identity.SavedDuringOverride = null;
             return true;
         }, cancellationToken);
     }
