@@ -8,6 +8,10 @@ namespace TypeWhisper.PluginSDK;
 /// A plugin that implements this interface needs a <c>minHostVersion</c> of at least 1.1.8. Without it, the host
 /// selects the request's model with <see cref="ITranscriptionEnginePlugin.SelectModelAsync"/> and selects the
 /// previous model again afterwards, and the plugin saves both changes as the user's choice.
+/// A local engine that the host runs in a worker process gets each request's model through
+/// <see cref="ITranscriptionEnginePlugin.SelectModelAsync"/> in the worker, whose host settings stay in memory. Such an
+/// engine must therefore save its selection only through <see cref="IPluginHostServices.SetSetting{T}"/>, never in its
+/// own files.
 /// </remarks>
 public interface ITranscriptionModelOverride
 {
