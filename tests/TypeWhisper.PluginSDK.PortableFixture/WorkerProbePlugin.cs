@@ -3,10 +3,11 @@ using TypeWhisper.PluginSDK.Models;
 namespace TypeWhisper.PluginSDK.PortableFixture;
 
 /// <summary>A local engine for transcription worker tests. The requested language selects a failure to simulate.</summary>
-public sealed class WorkerProbePlugin : IPcmTranscriptionEnginePlugin
+public sealed class WorkerProbePlugin : IPcmTranscriptionEnginePlugin, ITranscriptionModelOverride
 {
     private IPluginHostServices? _host;
     private string? _loaded;
+    private string? _override;
     private TranscriptionAccelerationPreference _acceleration = TranscriptionAccelerationPreference.Auto;
     /// <inheritdoc />
     public string PluginId => "test.typewhisper.worker";
@@ -23,11 +24,15 @@ public sealed class WorkerProbePlugin : IPcmTranscriptionEnginePlugin
     /// <inheritdoc />
     public IReadOnlyList<PluginModelInfo> TranscriptionModels => [new("small", "Small"), new("large", "Large")];
     /// <inheritdoc />
-    public string? SelectedModelId => _host?.GetSetting<string>("selectedModel");
+    public string? SelectedModelId => _override ?? _host?.GetSetting<string>("selectedModel");
     /// <inheritdoc />
     public bool SupportsTranslation => false;
     /// <inheritdoc />
     public bool SupportsModelDownload => true;
+    /// <inheritdoc />
+    public bool SupportsModelRemoval => true;
+    /// <inheritdoc />
+    public Task RemoveModelAsync(string modelId, CancellationToken ct) => Task.CompletedTask;
     /// <inheritdoc />
     public bool SupportsLocalLivePreview => true;
     /// <inheritdoc />
@@ -58,7 +63,9 @@ public sealed class WorkerProbePlugin : IPcmTranscriptionEnginePlugin
     /// <inheritdoc />
     public void Dispose() { }
     /// <inheritdoc />
-    public void SelectModel(string modelId) => _host!.SetSetting("selectedModel", modelId);
+    public void SelectModel(string modelId) { _override = null; _host!.SetSetting("selectedModel", modelId); }
+    /// <inheritdoc />
+    public Task SetModelOverrideAsync(string? modelId, CancellationToken ct) { _override = modelId; return Task.CompletedTask; }
     /// <inheritdoc />
     public Task SelectModelAsync(string modelId, CancellationToken ct)
     {

@@ -15,7 +15,7 @@ public sealed class TranscriptionWorkerFaultedException(string message, Exceptio
 /// With an idle policy, an unused worker ends after the idle delay; the next request starts a new one,
 /// which loads the selected model again.
 /// </summary>
-public sealed class IsolatedTranscriptionEngine : IPcmTranscriptionEnginePlugin, ITranscriptionEngineSelectionIdentity, IAsyncDisposable
+public sealed class IsolatedTranscriptionEngine : IPcmTranscriptionEnginePlugin, ITranscriptionEngineSelectionIdentity, ITranscriptionModelOverride, IAsyncDisposable
 {
     internal const int CrashesBeforeCpuFallback = 2;
     internal const int CrashesBeforePause = 3;
@@ -88,6 +88,12 @@ public sealed class IsolatedTranscriptionEngine : IPcmTranscriptionEnginePlugin,
     public async Task DeactivateAsync() => await StopWorkerAsync().ConfigureAwait(false);
     public void SelectModel(string modelId) => _inner.SelectModel(modelId);
     public Task SelectModelAsync(string modelId, CancellationToken ct) => _inner.SelectModelAsync(modelId, ct);
+    /// <summary>Whether the plugin's own engine can use a model for one request without saving it.</summary>
+    public bool SupportsModelOverride => _inner is ITranscriptionModelOverride;
+    // Each worker request names the in-process instance's model, so the override reaches the worker unchanged.
+    public Task SetModelOverrideAsync(string? modelId, CancellationToken ct) => _inner is ITranscriptionModelOverride inner
+        ? inner.SetModelOverrideAsync(modelId, ct)
+        : throw new NotSupportedException("This transcription engine cannot use a model without saving it.");
     public void SetAccelerationPreference(TranscriptionAccelerationPreference preference) => _inner.SetAccelerationPreference(preference);
     public bool IsModelDownloaded(string modelId) => _inner.IsModelDownloaded(modelId);
     public Task DownloadModelAsync(string modelId, IProgress<double>? progress, CancellationToken ct) => _inner.DownloadModelAsync(modelId, progress, ct);

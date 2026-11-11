@@ -7,7 +7,8 @@ internal sealed class LocalCtcVocabulary : IAsyncDisposable
 {
     internal const string PluginId = "com.typewhisper.parakeet-ctc";
     // The plugin API this host offers. 1.1.7: dictation target plugins and the default LLM status.
-    internal static readonly Version HostVersion = new(1, 1, 7);
+    // 1.1.8: request models that the plugin does not save (ITranscriptionModelOverride).
+    internal static readonly Version HostVersion = new(1, 1, 8);
     internal event Action? Changed;
     internal bool Busy { get; private set; }
     internal string? Status { get; private set; }

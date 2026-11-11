@@ -90,6 +90,46 @@ public sealed class CloudRegistryAdapterTests : IDisposable
     }
 
     [Fact]
+    public async Task ModelOverrideTranscribesWithTheRequestModelWithoutSavingIt()
+    {
+        var store = await Store();
+        await using var registry = Registry(store);
+        await using var cloud = new CloudTranscriptionPlugin(_host, registry);
+        await registry.InitializeAsync(); await cloud.InitializeAsync();
+        await cloud.SaveKeyAsync("fixture-key");
+        await cloud.SelectModelAsync("first");
+        Assert.True(registry.SupportsModelOverride(Id));
+        var second = (await registry.GetModelStatesAsync(Id)).Single(model => model.ModelId == "second");
+
+        await registry.OverrideModelAsync(second);
+        await registry.RefreshCapabilitiesAsync();
+        Assert.Equal("second", Assert.Single(registry.TranscriptionProviders).SelectedModelId);
+        await cloud.DecodeAsync([0, .25f]);
+        Assert.Equal("second", _host.GetSetting<string>("lastModel"));
+        Assert.Equal("first", _host.GetSetting<string>("selectedModel"));
+
+        await registry.ClearModelOverrideAsync(second);
+        await registry.RefreshCapabilitiesAsync();
+        Assert.Equal("first", Assert.Single(registry.TranscriptionProviders).SelectedModelId);
+        Assert.Equal("first", _host.GetSetting<string>("selectedModel"));
+        Assert.Equal(1, _host.GetSetting<int>("asyncSelectCalls"));
+
+        // A reloaded package starts with the saved model, and clearing an override of the old activation is harmless.
+        await registry.OverrideModelAsync(second);
+        await cloud.SetEnabledAsync(false); await cloud.SetEnabledAsync(true);
+        await registry.ClearModelOverrideAsync(second);
+        Assert.Equal("first", Assert.Single(registry.TranscriptionProviders).SelectedModelId);
+        Assert.Equal("first", _host.GetSetting<string>("selectedModel"));
+
+        // A plugin that applies the override and then fails is cleared again.
+        _host.SetSetting("FailAfterOverride", true);
+        var current = (await registry.GetModelStatesAsync(Id)).Single(model => model.ModelId == "second");
+        await Assert.ThrowsAsync<IOException>(() => registry.OverrideModelAsync(current));
+        await registry.RefreshCapabilitiesAsync();
+        Assert.Equal("first", Assert.Single(registry.TranscriptionProviders).SelectedModelId);
+    }
+
+    [Fact]
     public async Task EnabledWithoutKeyIsNotReadyAndFailedEnableSaveDoesNotPublishFalseReadiness()
     {
         var store = await Store();

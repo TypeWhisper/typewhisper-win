@@ -3,11 +3,12 @@ using TypeWhisper.PluginSDK.Models;
 namespace TypeWhisper.PluginSDK.PortableFixture;
 
 /// <summary>A network-free Groq-identity fixture for the WinUI adapter's registry path.</summary>
-public sealed class CloudRegistryProbePlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin, IApiKeyPlugin
+public sealed class CloudRegistryProbePlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin, IApiKeyPlugin, ITranscriptionModelOverride
 {
     private IPluginHostServices? _host;
     private string? _key;
     private string _model = "first";
+    private string? _override;
     private bool _active;
     /// <inheritdoc />
     public string PluginId => "com.typewhisper.groq";
@@ -30,9 +31,9 @@ public sealed class CloudRegistryProbePlugin : ITranscriptionEnginePlugin, ILlmP
     /// <inheritdoc />
     public IReadOnlyList<PluginModelInfo> SupportedModels => [new("llm", "Text model")];
     /// <inheritdoc />
-    public string? SelectedModelId => _model;
+    public string? SelectedModelId => _override ?? _model;
     /// <inheritdoc />
-    public bool SupportsTranslation => _model == "second";
+    public bool SupportsTranslation => SelectedModelId == "second";
     /// <inheritdoc />
     public IReadOnlyList<string> SupportedLanguages => ["en", "de"];
     /// <inheritdoc />
@@ -41,6 +42,7 @@ public sealed class CloudRegistryProbePlugin : ITranscriptionEnginePlugin, ILlmP
         _host = host;
         _key = await host.LoadSecretAsync("api-key");
         _model = host.GetSetting<string>("selectedModel") ?? "first";
+        _override = null;
         _active = true;
         host.SetSetting("activations", host.GetSetting<int>("activations") + 1);
         host.NotifyCapabilitiesChanged();
@@ -77,6 +79,7 @@ public sealed class CloudRegistryProbePlugin : ITranscriptionEnginePlugin, ILlmP
         if (!TranscriptionModels.Any(model => model.Id == modelId)) throw new ArgumentException("Unknown fixture model.");
         _host!.SetSetting("selectedModel", modelId);
         _model = modelId;
+        _override = null;
         _host.NotifyCapabilitiesChanged();
     }
     /// <inheritdoc />
@@ -87,11 +90,22 @@ public sealed class CloudRegistryProbePlugin : ITranscriptionEnginePlugin, ILlmP
         return Task.CompletedTask;
     }
     /// <inheritdoc />
+    public Task SetModelOverrideAsync(string? modelId, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        if (modelId is not null && !TranscriptionModels.Any(model => model.Id == modelId)) throw new ArgumentException("Unknown fixture model.");
+        _host!.SetSetting("overrideCalls", _host.GetSetting<int>("overrideCalls") + 1);
+        _override = modelId;
+        _host.NotifyCapabilitiesChanged();
+        if (modelId is not null && _host.GetSetting<bool>("FailAfterOverride")) throw new IOException("Fixture override failure.");
+        return Task.CompletedTask;
+    }
+    /// <inheritdoc />
     public async Task<PluginTranscriptionResult> TranscribeAsync(byte[] wavAudio, string? language, bool translate, string? prompt, CancellationToken ct)
     {
         if (!IsConfigured) throw new InvalidOperationException("No fixture key.");
         _host!.SetSetting("lastLanguage", language);
-        _host.SetSetting("lastModel", _model);
+        _host.SetSetting("lastModel", SelectedModelId);
         _host.SetSetting("lastTranslate", translate);
         _host.SetSetting("wavLength", wavAudio.Length);
         _host.Log(PluginLogLevel.Info, "decode-start");

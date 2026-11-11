@@ -109,7 +109,8 @@ internal sealed partial class LocalDictationSession
     }
 
     // Runs with the gate held. Never writes the dictation provider store or the local engine's selection; the registry
-    // provider's own selection is changed and retained because the SDK has no transient selection.
+    // provider's own selection is changed and retained. A request model override (ITranscriptionModelOverride) would not
+    // do here: it ends when the package reloads, and nothing applies the enforced pair again then.
     private async Task ApplySelectionPolicyCoreAsync()
     {
         var policy = ProviderPolicy;
