@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "NeMo reference worker for the TypeWhisper diarization benchmark"
 requires-python = ">=3.12,<3.13"
 dependencies = [
-  "torch==2.11.0",
+  "torch==2.13.0",
   # NeMo 3.0.0 on PyPI lacks the RoPE Transformer encoder that Nemotron 3 Diarization needs.
   "nemo-toolkit[asr] @ https://github.com/NVIDIA-NeMo/Speech/archive/ac40fded627bc04bf318d2e4e7eb60bdfe5e4c40.tar.gz",
   "Cython",
