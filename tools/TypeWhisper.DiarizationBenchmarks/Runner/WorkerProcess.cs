@@ -178,6 +178,8 @@ internal sealed class WorkerProcess : IDisposable
                 if (!_process.WaitForExit(15000))
                 {
                     _process.Kill(entireProcessTree: true);
+                    // Kill returns before the process is gone; a replacement must not share the GPU with it.
+                    _process.WaitForExit();
                 }
             }
         }
@@ -188,6 +190,20 @@ internal sealed class WorkerProcess : IDisposable
 
         if (_measured != _process)
         {
+            // The interpreter behind a venv launcher.
+            try
+            {
+                if (!_measured.HasExited)
+                {
+                    _measured.Kill(entireProcessTree: true);
+                    _measured.WaitForExit();
+                }
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+            {
+                // Already gone.
+            }
+
             _measured.Dispose();
         }
 

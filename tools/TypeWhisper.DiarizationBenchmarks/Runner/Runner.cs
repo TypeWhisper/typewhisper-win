@@ -26,9 +26,10 @@ internal static class Runner
             if (resume && File.Exists(path))
             {
                 earlier = JsonNode.Parse(File.ReadAllText(path))!.AsObject();
-                if (earlier["machine"]?["chip"]?.GetValue<string>() != machine["chip"]!.GetValue<string>())
+                if (earlier["setId"]?.GetValue<string>() != set.Id || earlier["model"]?.GetValue<string>() != engine.Model
+                    || !JsonNode.DeepEquals(earlier["machine"], machine))
                 {
-                    throw new InvalidOperationException($"{path} was measured on another machine; resume only on the same one");
+                    throw new InvalidOperationException($"{path} was measured with another set, model or machine; run without --resume");
                 }
 
                 foreach (var item in earlier["items"]!.AsArray().Select(i => i!.AsObject()).Where(i => i["error"] is null))
@@ -68,6 +69,17 @@ internal static class Runner
                 settings["modelLoadMs"] = Round(info["modelLoadMs"]?.GetValue<double>() ?? 0, 1);
                 settings["prepareIncludes"] = "worker process start, runtime import, model load; no download, no warm-up";
                 Console.WriteLine($"  {runtime}, prepare {prepareMs / 1000:F1} s");
+                // Earlier results only join a run with the same runtime and effective settings (threads,
+                // profile, provider); the measured values in settings may differ.
+                if (earlier is not null
+                    && (earlier["runtime"]?.GetValue<string>() != runtime
+                        // Through JSON text, so numbers compare the way the file stores them.
+                        || !JsonNode.DeepEquals(
+                            Configuration(earlier["settings"]?.AsObject()),
+                            Configuration(JsonNode.Parse(ToJson(settings).ToJsonString())!.AsObject()))))
+                {
+                    throw new InvalidOperationException($"{path} was measured with another runtime or other settings; run without --resume");
+                }
 
                 foreach (var item in todo)
                 {
@@ -154,7 +166,10 @@ internal static class Runner
                         // Set order, so a resumed file reads the same as one from a single run.
                         ["items"] = new JsonArray(set.Items.Where(i => results.ContainsKey(i.Id)).Select(i => (JsonNode)results[i.Id].DeepClone()).ToArray()),
                     };
-                    await File.WriteAllTextAsync(path, file.ToJsonString() + "\n");
+                    // Replaced in one step, so an interrupted write never leaves a broken checkpoint behind.
+                    var partial = path + ".partial";
+                    await File.WriteAllTextAsync(partial, file.ToJsonString() + "\n");
+                    File.Move(partial, path, overwrite: true);
                 }
 
                 written.Add(path);
@@ -224,6 +239,24 @@ internal static class Runner
         }
 
         return json;
+    }
+
+    private static readonly string[] MeasuredSettings =
+        ["modelLoadMs", "peakGpuDedicatedMb", "torchPeakAllocatedMb", "torchPeakReservedMb"];
+
+    /// <summary>The settings that describe how a run was configured, without the values it measured.</summary>
+    private static JsonObject Configuration(JsonObject? settings)
+    {
+        var configuration = new JsonObject();
+        foreach (var (key, value) in settings ?? [])
+        {
+            if (!MeasuredSettings.Contains(key))
+            {
+                configuration[key] = value?.DeepClone();
+            }
+        }
+
+        return configuration;
     }
 
     private static double ToDouble(JsonNode? node) => node is JsonValue v && v.TryGetValue<double>(out var d) ? d : 0;

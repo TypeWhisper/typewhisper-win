@@ -23,7 +23,8 @@ internal static class Setup
             await DownloadAsync(http, url, Path.Combine(paths.Models, relative), sha);
         }
 
-        if (!File.Exists(paths.SherpaSegmentation))
+        // A broken extraction leaves a file behind; its checksum decides, not its existence.
+        if (!File.Exists(paths.SherpaSegmentation) || Hash(paths.SherpaSegmentation) != Pins.SherpaSegmentationSha256)
         {
             var archive = Path.Combine(paths.Models, "sherpa", "segmentation.tar.bz2");
             await DownloadAsync(http, Pins.SherpaSegmentationArchive, archive, null);
@@ -47,7 +48,10 @@ internal static class Setup
             Run(paths.Python("nemo"), ["-I", Path.Combine(paths.ToolRoot, "scripts", "dml_gelu.py"), Path.GetDirectoryName(paths.OnnxModel)!]);
         }
 
-        if (!File.Exists(Path.Combine(paths.PyannoteModel, "config.yaml")))
+        // Every file the pipeline loads, so an interrupted snapshot download is resumed.
+        string[] pyannoteFiles =
+            ["config.yaml", "segmentation/pytorch_model.bin", "embedding/pytorch_model.bin", "plda/plda.npz", "plda/xvec_transform.npz"];
+        if (pyannoteFiles.Any(f => !File.Exists(Path.Combine(paths.PyannoteModel, f)) || new FileInfo(Path.Combine(paths.PyannoteModel, f)).Length == 0))
         {
             // Gated on Hugging Face: accept the conditions on the model page and set HF_TOKEN.
             Console.WriteLine("pyannote/speaker-diarization-community-1 (gated, needs HF_TOKEN)");

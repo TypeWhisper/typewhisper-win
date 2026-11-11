@@ -19,6 +19,12 @@ internal sealed record BenchmarkSet(string Id, IReadOnlyList<SetItem> Items)
             i.GetProperty("bytes").GetInt64(),
             i.GetProperty("seconds").GetDouble(),
             i.GetProperty("speakers").GetInt32())).ToList();
+        // The manifest is downloaded; its audio paths must stay inside the audio directory.
+        if (items.FirstOrDefault(i => Path.IsPathRooted(i.Audio) || i.Audio.Split('/', '\\').Contains("..")) is { } outside)
+        {
+            throw new InvalidDataException($"{manifest}: audio path {outside.Audio} leaves the audio directory");
+        }
+
         return new BenchmarkSet(root.GetProperty("id").GetString()!, items);
     }
 
