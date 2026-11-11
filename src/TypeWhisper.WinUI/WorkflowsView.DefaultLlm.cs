@@ -1,5 +1,6 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using TypeWhisper.PluginHost;
 using TypeWhisper.Presentation;
 
 namespace TypeWhisper.WinUI;
@@ -69,25 +70,40 @@ public sealed partial class WorkflowsView
         model.Configure(Loc.T("Model"), "chip", Loc.T("Default workflow LLM model"));
         var saved = ReadDefaults();
         provider.SetOptions(ProvidersFor(saved?.Provider).Where(p => p.Id != WorkflowLlmDefaults.Inherit).ToArray(), saved?.Provider ?? "none");
-        void RefreshModels(string selected) => model.SetOptions(
-            _session.LlmProviders.FirstOrDefault(p => p.SelectionId == provider.SelectedId)?.Models
-                .Select(m => new Choice(m.Id, m.DisplayName, m.Id)).ToArray() ?? [], selected, Loc.T("Choose a model"));
+        PortableLlmProvider? SelectedProvider() => _session.LlmProviders.FirstOrDefault(p => p.SelectionId == provider.SelectedId);
+        // A downloaded local model that is not loaded yet is listed too and loads when chosen.
+        var load = new LocalLlmModelLoadPanel(() => _session, SelectedProvider, () => model.SelectedId);
+        void RefreshModels(string selected)
+        {
+            model.SetOptions(LocalLlmModelLoadPanel.Choices(SelectedProvider()), selected, Loc.T("Choose a model"));
+            load.Update();
+        }
         RefreshModels(saved?.Model ?? "");
         provider.SelectionChanged += _ => RefreshModels("");
+        model.SelectionChanged += async _ => await load.SelectionChangedAsync();
         // Under an enforced pair the dialog only shows what every workflow uses.
         var enforced = _session.WorkflowDefaults.Enforced;
-        if (enforced is not null || _session.WorkflowDefaults.Managed) { provider.IsEnabled = false; model.IsEnabled = false; }
+        var editable = enforced is null && !_session.WorkflowDefaults.Managed;
+        if (!editable) { provider.IsEnabled = false; model.IsEnabled = false; }
         var help = SettingsHelp.Label(Loc.T("Default workflow LLM"), enforced is not null
             ? Loc.T("Managed by your organization") + ": " + (Providers.FirstOrDefault(p => p.Id == enforced.Provider)?.Label ?? enforced.Provider) + " · " + enforced.Model
             : Loc.T("Used by workflows set to Use default. Existing custom selections stay unchanged."));
         var message = new TextBlock { TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetLiveSetting(message, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
         var content = new StackPanel { Spacing = 16, MinWidth = 300 };
-        content.Children.Add(help); content.Children.Add(provider); content.Children.Add(model); content.Children.Add(message);
+        load.Margin = new Thickness(0, -6, 0, 0);
+        content.Children.Add(help); content.Children.Add(provider); content.Children.Add(model); content.Children.Add(load); content.Children.Add(message);
         var dialog = _defaultsDialog = new ContentDialog
         {
             Title = Loc.T("Default workflow LLM"), Content = content, IsPrimaryButtonEnabled = enforced is null,
             PrimaryButtonText = Loc.T("Save"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Primary
+        };
+        // Save waits for a running load; the pickers stay put meanwhile, and the loaded model then counts as available.
+        load.Changed += () =>
+        {
+            provider.IsEnabled = model.IsEnabled = editable && !load.IsLoading;
+            dialog.IsPrimaryButtonEnabled = enforced is null && !load.IsLoading;
+            if (!load.IsLoading) RefreshModels(model.SelectedId);
         };
         dialog.PrimaryButtonClick += (_, args) =>
         {
@@ -104,6 +120,8 @@ public sealed partial class WorkflowsView
         catch (Exception ex) when (ex is not OutOfMemoryException) { WorkflowSummary.Text = Loc.T("Default LLM settings could not open: {0}", ex.Message); }
         finally
         {
+            // Closing the dialog stops a load it started; a loaded model stays loaded.
+            load.Cancel();
             _defaultsDialog = null;
             if (!_closing)
             {

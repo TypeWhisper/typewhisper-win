@@ -36,12 +36,15 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
         {
             _lifetime = new();
             _session.LocalLlmDownload.Changed += DownloadChanged;
+            _session.LocalLlmLoadChanged += LoadChanged;
             _session.PluginRuntime.Changed += ModelStateChanged;
+            if (AutomaticLoadStatus() is { } status) _status.Text = status;
             await RefreshAsync();
         };
         Unloaded += (_, _) =>
         {
             _session.LocalLlmDownload.Changed -= DownloadChanged;
+            _session.LocalLlmLoadChanged -= LoadChanged;
             _session.PluginRuntime.Changed -= ModelStateChanged;
             _lifetime?.Cancel(); _lifetime?.Dispose(); _lifetime = null;
         };
@@ -70,7 +73,7 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
             var list = new StackPanel();
             var heading = Label(Loc.T("Models")); heading.FontSize = 13; heading.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
             list.Children.Add(heading);
-            var intro = Label(Loc.T("Local text processing · CPU\nDownload a model, then load it to use it in a workflow. Your text stays on this device. An idle model is released as set under Unload idle models in Advanced settings and loads again when needed."), true);
+            var intro = Label(Loc.T("Local text processing · CPU\nA model loads right after its download, so you can choose it in a workflow or as the default LLM. Choosing a downloaded model there also loads it. Your text stays on this device. An idle model is released as set under Unload idle models in Advanced settings and loads again when needed."), true);
             intro.Margin = new Thickness(0, 4, 0, 14);
             list.Children.Add(intro);
             _content.Children.Add(new Border { Child = list, Padding = new Thickness(18, 16, 18, 2), CornerRadius = new CornerRadius(12), BorderThickness = new Thickness(1),
@@ -84,8 +87,13 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
                 row.Load.Click += async (_, _) => await RunAsync(row, "load");
                 row.Unload.Click += async (_, _) => await RunAsync(row, "unload");
                 row.Remove.Click += async (_, _) => await RunAsync(row, "remove");
-                row.Cancel.Click += (_, _) => { row.Cancel.IsEnabled = false; row.State.Text = Loc.T("Stopping…"); _operation?.Cancel(); };
+                row.Cancel.Click += (_, _) =>
+                {
+                    row.Cancel.IsEnabled = false; row.State.Text = Loc.T("Stopping…");
+                    if (_operation is { } own) own.Cancel(); else _session.CancelLocalLlmLoad();
+                };
             }
+            ShowRunningLoad();
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -110,10 +118,33 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
         if (!ShowActiveDownload())
         {
             if (_session.LocalLlmDownloadPluginId == _pluginId)
-                _status.Text = _session.LocalLlmDownload.State.Message ?? "";
+                _status.Text = AutomaticLoadStatus() ?? _session.LocalLlmDownload.State.Message ?? "";
             await RefreshAsync();
         }
     });
+
+    private void LoadChanged() => DispatcherQueue.TryEnqueue(() =>
+    {
+        if (!IsLoaded) return;
+        if (AutomaticLoadStatus() is { } status) _status.Text = status;
+        ModelStateChanged();
+    });
+
+    // The load that follows a download on this page reports here; the page's own loads report from RunAsync.
+    private string? AutomaticLoadStatus() => _session.LocalLlmLoad is { Automatic: true } load && load.PluginId == _pluginId
+        ? load.Loading ? Loc.T("Loading {0} into memory…", load.ModelName) : load.Message
+        : null;
+
+    // A load that runs elsewhere, after a download or from an LLM picker, shows on its row and holds the other actions.
+    private void ShowRunningLoad()
+    {
+        if (_operation is not null || _session.LocalLlmLoad is not { Loading: true } load || load.PluginId != _pluginId) return;
+        foreach (var item in _rows) foreach (var button in item.Actions.Children.OfType<Control>()) button.IsEnabled = false;
+        if (_rows.FirstOrDefault(item => item.Model.Model.Id == load.ModelId) is not { } row) return;
+        row.Progress.Visibility = Visibility.Visible; row.Progress.IsIndeterminate = true;
+        row.State.Text = Loc.T("Loading model into memory…");
+        row.Cancel.Visibility = Visibility.Visible; row.Cancel.IsEnabled = true;
+    }
 
     private bool ShowActiveDownload()
     {
@@ -133,7 +164,7 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
 
     private async Task RunAsync(Row row, string action)
     {
-        if (_busy || _lifetime is not { } lifetime || !_session.CanStartPluginSettingsAction) return;
+        if (_busy || _lifetime is not { } lifetime || !_session.CanStartPluginSettingsAction || _session.LocalLlmLoad is { Loading: true }) return;
         if (action == "download")
         {
             try { await _session.DownloadLocalLlmModelAsync(_pluginId, row.Model.Model.Id, row.Model.Model.DisplayName); }
@@ -145,7 +176,8 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
         using var operation = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
         _operation = operation;
         void CancelForRecording() => operation.Cancel();
-        if (action is "remove" or "load") _session.RecordingStarting += CancelForRecording;
+        // The session cancels a load itself when a recording starts.
+        if (action == "remove") _session.RecordingStarting += CancelForRecording;
         _busy = true;
         foreach (var item in _rows) foreach (var button in item.Actions.Children.OfType<Control>()) button.IsEnabled = false;
         try
@@ -165,11 +197,12 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
                 var runtime = _session.PluginRuntime;
                 await (action switch
                 {
-                    "load" => runtime.LoadLocalLlmModelAsync(_pluginId, row.Model.Model.Id, operation.Token),
+                    "load" => _session.LoadLocalLlmModelAsync(_pluginId, row.Model.Model.Id, row.Model.Model.DisplayName, operation.Token),
                     "unload" => runtime.UnloadLocalLlmModelAsync(_pluginId, row.Model.Model.Id, operation.Token),
                     _ => runtime.RemoveLocalLlmModelAsync(_pluginId, row.Model.Model.Id, operation.Token)
                 });
-                if (Current(lifetime)) _status.Text = action == "load" ? Loc.T("Model loaded. Select it in a text-processing workflow.") : Loc.T("Completed.");
+                if (Current(lifetime)) _status.Text = action == "load"
+                    ? Loc.T("{0} is loaded. Choose it in a workflow or as the default LLM.", row.Model.Model.DisplayName) : Loc.T("Completed.");
             }
             finally { row.Cancel.IsEnabled = false; }
         }
@@ -178,7 +211,7 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
         { if (Current(lifetime)) _status.Text = Loc.T("Model operation failed: {0}", ex.Message); }
         finally
         {
-            if (action is "remove" or "load") _session.RecordingStarting -= CancelForRecording;
+            if (action == "remove") _session.RecordingStarting -= CancelForRecording;
             _operation = null;
             _busy = false;
             if (IsLoaded) await RefreshAsync();
@@ -193,7 +226,7 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
         internal readonly StackPanel Actions = new() { Spacing = 8, Orientation = Orientation.Horizontal };
         internal readonly TextBlock State;
         internal readonly ProgressBar Progress = new() { Minimum = 0, Maximum = 100, Height = 6, Margin = new(0, 4, 0, 0), Visibility = Visibility.Collapsed };
-        internal readonly HandCursorButton Download = Button(Loc.T("Download model"));
+        internal readonly HandCursorButton Download = Button(Loc.T("Download and load"));
         internal readonly HandCursorButton Load = Button(Loc.T("Load model"));
         internal readonly HandCursorButton Unload = Button(Loc.T("Unload model"));
         internal readonly HandCursorButton Remove = Button(Loc.T("Remove"));
@@ -259,7 +292,7 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
             }
             Panel.ActualThemeChanged += (_, _) => Theme(); Theme();
             AutomationProperties.SetName(Progress, Loc.T("{0} download progress", model.Model.DisplayName));
-            AutomationProperties.SetName(Download, Loc.T("Download {0}", model.Model.DisplayName));
+            AutomationProperties.SetName(Download, Loc.T("Download and load {0}", model.Model.DisplayName));
             AutomationProperties.SetName(Load, Loc.T("Load {0}", model.Model.DisplayName));
             AutomationProperties.SetName(Remove, Loc.T("Remove {0}", model.Model.DisplayName));
         }

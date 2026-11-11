@@ -100,6 +100,18 @@ public sealed partial class PortablePluginRuntimeRegistry
         return local.LocalModels.FirstOrDefault(model => model.Model.Id == id && model.Downloaded && !model.Loaded)?.Model;
     }
 
+    // Callers hold _gate. Downloaded models an LLM picker offers for loading, besides the ones the provider offers already.
+    private static IReadOnlyList<PluginModelInfo> LoadableLocalLlmModels(ILocalLlmModelManagement local, IReadOnlyCollection<PluginModelInfo> offered)
+    {
+        try
+        {
+            return Array.AsReadOnly(local.LocalModels.Where(model => model.Downloaded && !model.Loaded && offered.All(item => item.Id != model.Model.Id))
+                .Select(model => model.Model).ToArray());
+        }
+        // A model list that cannot be read only hides the loadable models, never the provider.
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return []; }
+    }
+
     private static string? ReadRestorableModel(Slot slot)
     {
         try { return slot.Services.GetSetting<string>(RestorableLocalLlmModelSetting); }
