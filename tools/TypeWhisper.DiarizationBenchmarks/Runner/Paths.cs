@@ -47,6 +47,9 @@ internal sealed record Paths(string Data, string ToolRoot)
 
     public string NemoCheckpoint => Path.Combine(Models, "nvidia-nemotron3", "Nemotron-3-Diarization.nemo");
     public string OnnxModel => Path.Combine(Models, "onnx-community-nemotron3", "onnx", "model.onnx");
+
+    /// <summary>The same graph with com.microsoft Gelu, written by scripts/dml_gelu.py; shares model.onnx_data.</summary>
+    public string OnnxDmlModel => Path.Combine(Models, "onnx-community-nemotron3", "onnx", "model.dml.onnx");
     public string PyannoteModel => Path.Combine(Models, "pyannote-community-1");
     public string SherpaSegmentation => Path.Combine(Models, "sherpa", "sherpa-onnx-pyannote-segmentation-3-0", "model.int8.onnx");
     public string SherpaEmbedding => Path.Combine(Models, "sherpa", "3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx");

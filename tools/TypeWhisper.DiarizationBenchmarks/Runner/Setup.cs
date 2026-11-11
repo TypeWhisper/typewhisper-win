@@ -41,6 +41,12 @@ internal static class Setup
             Run("python", ["-m", "uv", "sync", "--frozen", "--python", "3.12"], paths.PythonProject(project), env);
         }
 
+        if (!File.Exists(paths.OnnxDmlModel))
+        {
+            Console.WriteLine("DirectML graph variant (com.microsoft Gelu)");
+            Run(paths.Python("nemo"), ["-I", Path.Combine(paths.ToolRoot, "scripts", "dml_gelu.py"), Path.GetDirectoryName(paths.OnnxModel)!]);
+        }
+
         if (!File.Exists(Path.Combine(paths.PyannoteModel, "config.yaml")))
         {
             // Gated on Hugging Face: accept the conditions on the model page and set HF_TOKEN.

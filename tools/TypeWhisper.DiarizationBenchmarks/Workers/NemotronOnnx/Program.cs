@@ -38,10 +38,17 @@ return WorkerHost.Run(
             // DirectML needs sequential execution without memory pattern optimization.
             options.EnableMemoryPattern = false;
             options.ExecutionMode = ExecutionMode.ORT_SEQUENTIAL;
+            // With fixed shapes DirectML fuses the whole graph, and the fused graph of this export returns
+            // probabilities as if there were no speaker cache (nearly every frame goes to the first speaker).
+            // Unfused, the results match the CPU provider and the fixed shapes still save most of the
+            // per-step overhead.
+            options.AddSessionConfigEntry("ep.dml.disable_graph_fusion", "1");
+            info["graphFusion"] = false;
+
             options.AppendExecutionProvider_DML(adapter.Index);
             info["device"] = $"{adapter.Name} (DXGI adapter {adapter.Index}, {adapter.DedicatedMb} MB)";
 #else
-            throw new InvalidOperationException("this build has no DirectML provider; build with -p:OrtFlavor=DirectML");
+            throw new InvalidOperationException("this build has no DirectML provider; use the NemotronOnnx.DirectML worker");
 #endif
         }
         else
@@ -54,12 +61,33 @@ return WorkerHost.Run(
             info["device"] = "cpu";
         }
 
+        // Fixed input shapes let DirectML compile the whole graph once; with free dimensions it runs every
+        // operator on its own.
+        var fixedShapes = config["fixedShapes"]?.GetValue<bool>() ?? false;
+        if (fixedShapes)
+        {
+            var cachedFrames = profile.SpeakerCacheLength + profile.FifoLength;
+            var stepFrames = profile.ChunkLength + profile.RightContext;
+            options.AddFreeDimensionOverrideByName("batch_size", 1);
+            options.AddFreeDimensionOverrideByName("num_mel_frames", stepFrames * 8);
+            options.AddFreeDimensionOverrideByName("num_cached_frames", cachedFrames);
+            options.AddFreeDimensionOverrideByName("num_frames", cachedFrames + stepFrames);
+        }
+
+        if (Environment.GetEnvironmentVariable("TYPEWHISPER_ORT_VERBOSE") == "1")
+        {
+            options.LogSeverityLevel = OrtLoggingLevel.ORT_LOGGING_LEVEL_VERBOSE;
+        }
+
+        var model = config["model"]!.GetValue<string>();
         var started = Stopwatch.GetTimestamp();
-        session = new InferenceSession(config["model"]!.GetValue<string>(), options);
-        diarizer = new NemotronStreamingDiarizer(session, profile);
+        session = new InferenceSession(model, options);
+        diarizer = new NemotronStreamingDiarizer(session, profile, fixedShapes);
         info["modelLoadMs"] = WorkerHost.ElapsedMs(started);
         info["runtime"] = $"ONNX Runtime {OrtEnv.Instance().GetVersionString()} ({(provider == "dml" ? "DirectML" : "CPU")})";
         info["intraOpThreads"] = options.IntraOpNumThreads;
+        info["fixedShapes"] = fixedShapes;
+        info["modelFile"] = Path.GetFileName(model);
         info["profile"] = new JsonObject
         {
             ["chunk_len"] = profile.ChunkLength,

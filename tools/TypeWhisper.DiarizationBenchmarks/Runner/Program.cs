@@ -88,10 +88,23 @@ if (!options.ContainsKey("skip-checksums"))
     }
 }
 
-if (!options.ContainsKey("allow-busy-gpu") && GpuBusyPercent() is > 10 and var busy)
+if (!options.ContainsKey("allow-busy-gpu"))
 {
-    Console.Error.WriteLine($"The GPU is {busy:F0} % busy with something else. Close games and other GPU work, or pass --allow-busy-gpu.");
-    return 1;
+    // A game or another model keeps the GPU busy; desktop activity comes in short bursts, so a busy
+    // reading only counts when it lasts for a minute.
+    var busy = GpuBusyPercent();
+    for (var attempt = 1; busy > 10 && attempt < 6; attempt++)
+    {
+        Console.WriteLine($"GPU {busy:F0} % busy, checking again");
+        Thread.Sleep(TimeSpan.FromSeconds(8));
+        busy = GpuBusyPercent();
+    }
+
+    if (busy > 10)
+    {
+        Console.Error.WriteLine($"The GPU is {busy:F0} % busy with something else. Close games and other GPU work, or pass --allow-busy-gpu.");
+        return 1;
+    }
 }
 
 Setup.BuildWorkers(paths);
@@ -147,13 +160,14 @@ static Dictionary<string, string?> ParseOptions(string[] args)
     return options;
 }
 
-// Average utilization over two seconds; anything but a near-idle GPU skews the timings.
+// Median utilization over four seconds; anything but a near-idle GPU skews the timings. The median
+// ignores single spikes, which read high while an idle GPU sits at its lowest clock.
 static double GpuBusyPercent()
 {
     try
     {
         var samples = new List<double>();
-        for (var i = 0; i < 5; i++)
+        for (var i = 0; i < 10; i++)
         {
             var info = new ProcessStartInfo("nvidia-smi", "--query-gpu=utilization.gpu --format=csv,noheader,nounits")
             {
@@ -171,7 +185,7 @@ static double GpuBusyPercent()
             Thread.Sleep(400);
         }
 
-        return samples.Count == 0 ? 0 : samples.Average();
+        return samples.Count == 0 ? 0 : samples.Order().ElementAt(samples.Count / 2);
     }
     catch (System.ComponentModel.Win32Exception)
     {

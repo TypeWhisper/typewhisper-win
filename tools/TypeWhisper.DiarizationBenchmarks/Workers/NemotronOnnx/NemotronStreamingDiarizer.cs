@@ -20,8 +20,14 @@ internal sealed record NemotronProfile(int ChunkLength, int RightContext, int Fi
 /// here. This is a port of Transformers' Nemotron3DiarizationSpeakerCache and of the offline chunk loop of
 /// Nemotron3DiarizationForAudioFrameClassification.forward, for batch size 1 and no left context.
 /// </summary>
-internal sealed class NemotronStreamingDiarizer(InferenceSession session, NemotronProfile profile)
+internal sealed class NemotronStreamingDiarizer(InferenceSession session, NemotronProfile profile, bool fixedShapes = false)
 {
+    /// <summary>Largest speaker cache plus FIFO, in encoder frames: the cached input with fixed shapes.</summary>
+    public int CachedCapacity => profile.SpeakerCacheLength + profile.FifoLength;
+
+    /// <summary>Chunk plus look-ahead, in encoder frames: the chunk input with fixed shapes.</summary>
+    public int StepCapacity => profile.ChunkLength + profile.RightContext;
+
     private const int Hidden = 512;
     private const int Speakers = 8;
     private const int Subsampling = 8;
@@ -51,6 +57,9 @@ internal sealed class NemotronStreamingDiarizer(InferenceSession session, Nemotr
             embedMask[i] = i * Subsampling < validFrames ? 1 : 0;
         }
 
+        // Held for the whole run: a RunOptions created inline in the Run call can be finalized while
+        // the native call still uses it, which crashed long files with an access violation.
+        using var runOptions = new RunOptions();
         var state = new State(profile);
         float[]? silence = null;
         var output = new float[embedCount * Subsampling * Speakers];
@@ -65,23 +74,39 @@ internal sealed class NemotronStreamingDiarizer(InferenceSession session, Nemotr
             var stepFrames = contextEnd - start;
 
             var cachedLength = state.CacheCount + state.FifoCount;
-            var cached = new float[cachedLength * Hidden];
-            Array.Copy(state.CacheEmbeds, 0, cached, 0, state.CacheCount * Hidden);
-            Array.Copy(state.FifoEmbeds, 0, cached, state.CacheCount * Hidden, state.FifoCount * Hidden);
-
             var mask = new long[cachedLength + stepFrames];
             Array.Fill(mask, 1L, 0, cachedLength);
             Array.Copy(embedMask, start, mask, cachedLength, stepFrames);
 
-            var chunkFeatures = new float[(melEnd - melStart) * MelFrontend.Mels];
-            Array.Copy(features, melStart * MelFrontend.Mels, chunkFeatures, 0, chunkFeatures.Length);
+            // With fixed shapes the cached frames are padded on the left and the chunk on the right, both
+            // masked out. Attention is masked and RoPE only sees relative positions, so the valid frames
+            // get the same result; the zero mel frames after the end match the encoder's own padding.
+            var padCached = fixedShapes ? CachedCapacity - cachedLength : 0;
+            var padStep = fixedShapes ? StepCapacity - stepFrames : 0;
+            var inputCached = cachedLength + padCached;
+            var inputStep = stepFrames + padStep;
 
-            using var inputFeatures = OrtValue.CreateTensorValueFromMemory(chunkFeatures, [1, melEnd - melStart, MelFrontend.Mels]);
-            using var cachedEmbeds = OrtValue.CreateTensorValueFromMemory(cached, [1, cachedLength, Hidden]);
-            using var attentionMask = OrtValue.CreateTensorValueFromMemory(mask, [1, mask.Length]);
+            var cached = new float[inputCached * Hidden];
+            Array.Copy(state.CacheEmbeds, 0, cached, padCached * Hidden, state.CacheCount * Hidden);
+            Array.Copy(state.FifoEmbeds, 0, cached, (padCached + state.CacheCount) * Hidden, state.FifoCount * Hidden);
+
+            var inputMask = mask;
+            if (fixedShapes)
+            {
+                inputMask = new long[inputCached + inputStep];
+                Array.Copy(mask, 0, inputMask, padCached, mask.Length);
+            }
+
+            var melFrames = fixedShapes ? inputStep * Subsampling : melEnd - melStart;
+            var chunkFeatures = new float[melFrames * MelFrontend.Mels];
+            Array.Copy(features, melStart * MelFrontend.Mels, chunkFeatures, 0, (melEnd - melStart) * MelFrontend.Mels);
+
+            using var inputFeatures = OrtValue.CreateTensorValueFromMemory(chunkFeatures, [1, melFrames, MelFrontend.Mels]);
+            using var cachedEmbeds = OrtValue.CreateTensorValueFromMemory(cached, [1, inputCached, Hidden]);
+            using var attentionMask = OrtValue.CreateTensorValueFromMemory(inputMask, [1, inputMask.Length]);
             var stepStarted = System.Diagnostics.Stopwatch.GetTimestamp();
             using var results = session.Run(
-                new RunOptions(),
+                runOptions,
                 ["input_features", "cached_embeds", "attention_mask"],
                 [inputFeatures, cachedEmbeds, attentionMask],
                 ["logits", "chunk_embeds", "silence_embeds"]);
@@ -91,13 +116,17 @@ internal sealed class NemotronStreamingDiarizer(InferenceSession session, Nemotr
                 Console.Error.WriteLine($"step {start / profile.ChunkLength}: {cachedLength} cached + {stepFrames} frames, {System.Diagnostics.Stopwatch.GetElapsedTime(stepStarted).TotalMilliseconds:F1} ms");
             }
 
-            var logits = results[0].GetTensorDataAsSpan<float>();
-            var chunkEmbeds = results[1].GetTensorDataAsSpan<float>();
+            var allLogits = results[0].GetTensorDataAsSpan<float>();
+            var allChunkEmbeds = results[1].GetTensorDataAsSpan<float>();
             silence ??= results[2].GetTensorDataAsSpan<float>().ToArray();
-            if (logits.Length != (cachedLength + stepFrames) * Subsampling * Speakers || chunkEmbeds.Length != stepFrames * Hidden)
+            if (allLogits.Length != (inputCached + inputStep) * Subsampling * Speakers || allChunkEmbeds.Length != inputStep * Hidden)
             {
-                throw new InvalidOperationException($"unexpected output sizes {logits.Length} and {chunkEmbeds.Length} for {cachedLength} cached + {stepFrames} chunk frames");
+                throw new InvalidOperationException($"unexpected output sizes {allLogits.Length} and {allChunkEmbeds.Length} for {inputCached} cached + {inputStep} chunk frames");
             }
+
+            // Without the padding: the cached frames, then the chunk with its look-ahead.
+            var logits = allLogits.Slice(padCached * Subsampling * Speakers, (cachedLength + stepFrames) * Subsampling * Speakers);
+            var chunkEmbeds = allChunkEmbeds[..(stepFrames * Hidden)];
 
             // The chunk's frames, without the cached ones before and the look-ahead after.
             var from = cachedLength * Subsampling * Speakers;

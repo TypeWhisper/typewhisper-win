@@ -54,20 +54,31 @@ internal static class Engines
         $"nemotron3-onnx-{provider}-{profile}",
         $"Nemotron 3 Diarization, ONNX Runtime {(provider == "dml" ? "DirectML" : "CPU")} ({profile})",
         provider == "dml" ? WorkerKind.NemotronOnnxDirectML : WorkerKind.NemotronOnnxCpu,
-        $"onnx-community/Nemotron-3-Diarization-ONNX@{Pins.OnnxRevision[..8]} onnx/model.onnx, fp32",
+        $"onnx-community/Nemotron-3-Diarization-ONNX@{Pins.OnnxRevision[..8]} onnx/model.onnx, fp32"
+            + (provider == "dml" ? " (Gelu nodes as com.microsoft Gelu)" : ""),
         UsesGpu: provider == "dml",
         paths => new JsonObject
         {
-            ["model"] = paths.OnnxModel,
+            ["model"] = provider == "dml" ? paths.OnnxDmlModel : paths.OnnxModel,
             ["provider"] = provider,
             ["profile"] = profile,
             ["threads"] = CpuThreads,
+            ["fixedShapes"] = provider == "dml",
         },
-        new(NemotronSettings(profile, note))
-        {
-            ["executionProvider"] = provider == "dml" ? "directml" : "cpu",
-            ["streamingState"] = "C# port of Transformers' Nemotron3DiarizationSpeakerCache; mel front end in C#",
-        });
+        provider == "dml"
+            ? new(NemotronSettings(profile, note))
+            {
+                ["executionProvider"] = "directml",
+                ["streamingState"] = "C# port of Transformers' Nemotron3DiarizationSpeakerCache; mel front end in C#",
+                ["directml"] = "ONNX Gelu (opset 20) replaced by com.microsoft Gelu, which DirectML implements; fixed input shapes "
+                    + "(cache left-padded to speaker cache + FIFO, chunk to chunk + right context, padding masked); DirectML graph fusion off, "
+                    + "because the fused graph returns wrong probabilities for this export",
+            }
+            : new(NemotronSettings(profile, note))
+            {
+                ["executionProvider"] = "cpu",
+                ["streamingState"] = "C# port of Transformers' Nemotron3DiarizationSpeakerCache; mel front end in C#",
+            });
 
     public static readonly Engine[] All =
     [

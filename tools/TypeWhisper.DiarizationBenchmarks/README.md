@@ -13,7 +13,7 @@ This is a measurement tool. It does not change the app and is not part of the so
 |---|---|---|---|
 | `nemotron3-nemo-offline` | NVIDIA NeMo (main), PyTorch CUDA | `nvidia/Nemotron-3-Diarization` `.nemo` | CUDA |
 | `nemotron3-nemo-fast32` | same | same | CUDA |
-| `nemotron3-onnx-dml-fast32` | ONNX Runtime DirectML, C# | `onnx-community/Nemotron-3-Diarization-ONNX` fp32 | DirectML |
+| `nemotron3-onnx-dml-fast32` | ONNX Runtime DirectML, C# | `onnx-community/Nemotron-3-Diarization-ONNX` fp32, Gelu as `com.microsoft` Gelu | DirectML |
 | `nemotron3-onnx-cpu-fast32` | ONNX Runtime CPU (the version the app pins), C# | same | CPU |
 | `pyannote-community1-cuda` | pyannote.audio 4, PyTorch CUDA | `pyannote/speaker-diarization-community-1` | CUDA |
 | `sherpa-onnx-eres2net-cpu` | sherpa-onnx (the version the app pins), C# | pyannote segmentation 3.0 int8 + 3D-Speaker ERes2Net base | CPU |
@@ -42,6 +42,21 @@ run with their default pipeline settings; no engine gets the reference speaker c
   `Workers/NemotronOnnx/NemotronStreamingDiarizer.cs` ports them from Transformers'
   `Nemotron3DiarizationSpeakerCache`, and `MelFrontend.cs` ports the log-mel front end. `compare` checks the
   port against NeMo frame by frame. DirectML runs on the DXGI adapter whose name contains `NVIDIA`.
+- **DirectML**: three changes make it usable; without them a step is slower than on the CPU.
+  - The export uses ONNX `Gelu` (opset 20), which the DirectML provider does not implement, so all 31 Gelu
+    nodes ran on the CPU with copies in both directions. `scripts/dml_gelu.py` writes `model.dml.onnx`, the
+    same graph with `com.microsoft` Gelu (the same exact erf Gelu), next to the original; the weights stay
+    in `model.onnx_data`.
+  - With free dimensions DirectML runs every operator on its own. The DirectML engine fixes the input shapes:
+    the cached frames are padded on the left to speaker cache + FIFO, the chunk on the right to chunk + right
+    context, and the padding is masked. On the CPU provider this padding gives the same probabilities as
+    unpadded input.
+  - With fixed shapes DirectML fuses the graph, and the fused graph returns wrong probabilities (as if there
+    were no speaker cache). The worker turns graph fusion off (`ep.dml.disable_graph_fusion`).
+
+  One fast32 step (2.56 s of audio) on an RTX 4060 Ti: about 420 ms as exported, 210 ms with the Gelu change,
+  80 ms with fixed shapes, 25 ms with both. ONNX Runtime on the CPU (8 threads, Ryzen 7 7800X3D) needs about
+  140 ms.
 - **pyannote**: the pipeline gets the waveform from `soundfile`, because its own decoding needs FFmpeg DLLs on
   Windows. Community-1 is gated on Hugging Face.
 
