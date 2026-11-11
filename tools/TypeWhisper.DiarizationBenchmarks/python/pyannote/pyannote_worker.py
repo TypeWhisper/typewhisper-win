@@ -46,6 +46,8 @@ def load(config: dict) -> dict:
     return {
         "ok": True,
         "modelLoadMs": (time.perf_counter() - started) * 1000,
+        # A venv's python.exe is a launcher; the runner samples this interpreter's memory instead.
+        "pid": os.getpid(),
         "runtime": f"pyannote.audio {pyannote.audio.__version__} + PyTorch {torch.__version__}",
         "device": torch.cuda.get_device_name(0) if device == "cuda" else "cpu",
         "params": json.loads(json.dumps(params, default=str)),

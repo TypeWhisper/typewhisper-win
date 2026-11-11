@@ -16,9 +16,14 @@ internal sealed class WorkerProcess : IDisposable
     private readonly Process _process;
     private readonly string _label;
 
+    // The process whose memory is sampled: the worker itself, or the interpreter it reports in its load
+    // response (a venv's python.exe only launches the real interpreter as a child process).
+    private Process _measured;
+
     private WorkerProcess(Process process, string label)
     {
         _process = process;
+        _measured = process;
         _label = label;
         _process.ErrorDataReceived += (_, e) =>
         {
@@ -104,7 +109,13 @@ internal sealed class WorkerProcess : IDisposable
                 var wallMs = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
                 await sampling.CancelAsync();
                 await sampler;
-                return new Result(JsonNode.Parse(line)!.AsObject(), wallMs, peaks.WorkingSetMb, peaks.GpuMb);
+                var response = JsonNode.Parse(line)!.AsObject();
+                if (response["pid"] is JsonValue pidValue && pidValue.TryGetValue<int>(out var pid) && pid != _measured.Id)
+                {
+                    _measured = Process.GetProcessById(pid);
+                }
+
+                return new Result(response, wallMs, peaks.WorkingSetMb, peaks.GpuMb);
             }
         }
         finally
@@ -126,16 +137,16 @@ internal sealed class WorkerProcess : IDisposable
         {
             try
             {
-                _process.Refresh();
-                if (_process.HasExited)
+                _measured.Refresh();
+                if (_measured.HasExited)
                 {
                     return;
                 }
 
-                peaks.WorkingSetMb = Math.Max(peaks.WorkingSetMb, _process.WorkingSet64 / 1048576.0);
+                peaks.WorkingSetMb = Math.Max(peaks.WorkingSetMb, _measured.WorkingSet64 / 1048576.0);
                 if (tick++ % 5 == 0)
                 {
-                    peaks.GpuMb = Math.Max(peaks.GpuMb, GpuMemory.DedicatedMb(_process.Id));
+                    peaks.GpuMb = Math.Max(peaks.GpuMb, GpuMemory.DedicatedMb(_measured.Id));
                 }
             }
             catch (InvalidOperationException)
@@ -150,7 +161,7 @@ internal sealed class WorkerProcess : IDisposable
             catch (OperationCanceledException)
             {
                 // One last GPU sample, so short files still get one.
-                peaks.GpuMb = Math.Max(peaks.GpuMb, GpuMemory.DedicatedMb(_process.Id));
+                peaks.GpuMb = Math.Max(peaks.GpuMb, GpuMemory.DedicatedMb(_measured.Id));
                 return;
             }
         }
@@ -173,6 +184,11 @@ internal sealed class WorkerProcess : IDisposable
         catch (Exception ex) when (ex is InvalidOperationException or IOException)
         {
             // Already gone.
+        }
+
+        if (_measured != _process)
+        {
+            _measured.Dispose();
         }
 
         _process.Dispose();

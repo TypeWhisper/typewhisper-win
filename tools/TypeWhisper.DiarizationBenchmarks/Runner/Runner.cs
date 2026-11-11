@@ -64,7 +64,7 @@ internal static class Runner
                 var prepareMs = Stopwatch.GetElapsedTime(processStarted).TotalMilliseconds;
                 var info = load.Response;
                 var runtime = info["runtime"]?.GetValue<string>() ?? "unknown";
-                FlattenInto(settings, info, ["ok", "runtime", "modelLoadMs"]);
+                FlattenInto(settings, info, ["ok", "runtime", "modelLoadMs", "pid"]);
                 settings["modelLoadMs"] = Round(info["modelLoadMs"]?.GetValue<double>() ?? 0, 1);
                 settings["prepareIncludes"] = "worker process start, runtime import, model load; no download, no warm-up";
                 Console.WriteLine($"  {runtime}, prepare {prepareMs / 1000:F1} s");
