@@ -120,6 +120,13 @@ public sealed class CloudRegistryAdapterTests : IDisposable
         await registry.ClearModelOverrideAsync(second);
         Assert.Equal("first", Assert.Single(registry.TranscriptionProviders).SelectedModelId);
         Assert.Equal("first", _host.GetSetting<string>("selectedModel"));
+
+        // A plugin that applies the override and then fails is cleared again.
+        _host.SetSetting("FailAfterOverride", true);
+        var current = (await registry.GetModelStatesAsync(Id)).Single(model => model.ModelId == "second");
+        await Assert.ThrowsAsync<IOException>(() => registry.OverrideModelAsync(current));
+        await registry.RefreshCapabilitiesAsync();
+        Assert.Equal("first", Assert.Single(registry.TranscriptionProviders).SelectedModelId);
     }
 
     [Fact]

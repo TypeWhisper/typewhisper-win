@@ -97,6 +97,7 @@ public sealed class CloudRegistryProbePlugin : ITranscriptionEnginePlugin, ILlmP
         _host!.SetSetting("overrideCalls", _host.GetSetting<int>("overrideCalls") + 1);
         _override = modelId;
         _host.NotifyCapabilitiesChanged();
+        if (modelId is not null && _host.GetSetting<bool>("FailAfterOverride")) throw new IOException("Fixture override failure.");
         return Task.CompletedTask;
     }
     /// <inheritdoc />

@@ -30,6 +30,10 @@ public sealed class WorkerProbePlugin : IPcmTranscriptionEnginePlugin, ITranscri
     /// <inheritdoc />
     public bool SupportsModelDownload => true;
     /// <inheritdoc />
+    public bool SupportsModelRemoval => true;
+    /// <inheritdoc />
+    public Task RemoveModelAsync(string modelId, CancellationToken ct) => Task.CompletedTask;
+    /// <inheritdoc />
     public bool SupportsLocalLivePreview => true;
     /// <inheritdoc />
     public bool SupportsDictionaryTerms => true;

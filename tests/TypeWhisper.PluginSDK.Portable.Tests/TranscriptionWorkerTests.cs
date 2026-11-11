@@ -382,31 +382,34 @@ public sealed class TranscriptionWorkerTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ARequestModelReachesTheWorkerWithoutBeingSaved()
+    public async Task ARequestModelReachesTheWorkerWithoutBeingSavedAndTheSavedModelStaysProtected()
     {
-        var bundles = Path.Combine(_root, "bundles");
-        WritePackage(Path.Combine(bundles, PluginId), typeof(WorkerProbePlugin));
+        var bundles = Path.Join(_root, "bundles");
+        WritePackage(Path.Join(bundles, PluginId), typeof(WorkerProbePlugin));
         using var http = new HttpClient();
-        var store = new PortablePluginStore(Path.Combine(_root, "store"), new Version(1, 1, 5), http);
+        var store = new PortablePluginStore(Path.Join(_root, "store"), new Version(1, 1, 5), http);
         await store.InitializeAsync(bundles);
-        var host = new LoggingHost(Path.Combine(_root, "registry-data"), _logs);
+        var host = new LoggingHost(Path.Join(_root, "registry-data"), _logs);
+        // Saved before the activation, so the saved model is selected but not loaded by this engine.
+        host.SetSetting("selectedModel", "small");
         await using var registry = new PortablePluginRuntimeRegistry(store, new Version(1, 1, 5), _ => host) { TranscriptionIsolation = Isolation() };
         Assert.Null(await registry.SetEnabledAsync(PluginId, true));
         var selectionId = Assert.Single(registry.TranscriptionProviders).SelectionId;
-        var states = await registry.GetModelStatesAsync(selectionId);
-        await registry.SelectModelAsync(states.Single(state => state.ModelId == "small"));
         Assert.True(registry.SupportsModelOverride(selectionId));
         Task<string> Model() => registry.UseTranscriptionAsync(selectionId, async (engine, ct) =>
             Fields(await ((IPcmTranscriptionEnginePlugin)engine).TranscribePcmAsync(new float[] { 0 }, null, false, ct))["model"]);
+        async Task<string?> RemovalBlock(string model) =>
+            (await registry.GetModelStatesAsync(selectionId)).Single(state => state.ModelId == model).RemovalBlockedReason;
 
-        var large = states.Single(state => state.ModelId == "large");
+        var large = (await registry.GetModelStatesAsync(selectionId)).Single(state => state.ModelId == "large");
         await registry.OverrideModelAsync(large);
         Assert.Equal("large", await Model());
         Assert.Equal("small", host.GetSetting<string>("selectedModel"));
+        Assert.Contains("is selected", await RemovalBlock("small"));
         await registry.ClearModelOverrideAsync(large);
         Assert.Equal("small", await Model());
         Assert.Equal("small", host.GetSetting<string>("selectedModel"));
-        Assert.Equal(1, host.GetSetting<int>("asyncSelectCalls"));
+        Assert.Equal(0, host.GetSetting<int>("asyncSelectCalls"));
     }
 
     [Fact]
