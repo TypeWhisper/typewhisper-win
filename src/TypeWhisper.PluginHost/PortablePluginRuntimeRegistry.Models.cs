@@ -241,6 +241,112 @@ public sealed partial class PortablePluginRuntimeRegistry
         }, cancellationToken);
     }
 
+    /// <summary>Whether the provider can use a model for one request without saving it (<see cref="ITranscriptionModelOverride"/>).</summary>
+    public bool SupportsModelOverride(string selectionId)
+    {
+        lock (_sync) return _index.Transcription.TryGetValue(selectionId, out var role) && role.Owner.Accepting && ModelOverrideOf(role.Engine) is not null;
+    }
+
+    /// <summary>
+    /// Uses the captured model for the provider's transcriptions without saving it, under the checks of
+    /// <see cref="SelectModelAsync"/>; local assets must already exist. A failed or canceled load clears the
+    /// override again. <see cref="ClearModelOverrideAsync"/> returns to the user's saved model.
+    /// </summary>
+    public Task OverrideModelAsync(PortableDownloadableModel expected, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(expected);
+        Slot owner;
+        lock (_sync)
+        {
+            if (!_index.Transcription.TryGetValue(expected.SelectionId, out var role)
+                || !MatchesModelOwner(role, expected))
+                throw new InvalidOperationException("The captured model provider is no longer available.");
+            owner = role.Owner;
+        }
+        DenyTranscriptionIfRefused(expected.SelectionId, owner, expected.ModelId);
+        return UseAsync(owner, async token =>
+        {
+            if (!_index.Transcription.TryGetValue(expected.SelectionId, out var role)
+                || role.Owner != owner || !MatchesModelOwner(role, expected))
+                throw new InvalidOperationException("The captured model provider changed.");
+            DenyTranscriptionIfRefused(expected.SelectionId, owner, expected.ModelId);
+            var engine = role.Engine;
+            var overriding = ModelOverrideOf(engine) ?? throw new NotSupportedException("This provider cannot use a model without saving it.");
+            if (engine.PluginVersion != expected.Version)
+                throw new InvalidOperationException("The captured model provider version changed.");
+            if (!engine.TranscriptionModels.Any(model => model.Id == expected.ModelId))
+                throw new InvalidOperationException("The selected model is no longer available.");
+            if (engine.SupportsModelDownload && !engine.IsModelDownloaded(expected.ModelId))
+                throw new InvalidOperationException("Download this model before selecting it.");
+            if (!engine.SupportsModelDownload && !engine.IsConfigured)
+                throw new InvalidOperationException("Complete the provider configuration before selecting this model.");
+            token.ThrowIfCancellationRequested();
+            // The override comes before the load: an isolated engine copies a model its worker loaded into the
+            // plugin's selection, which would save it, unless the plugin already reports that model.
+            await overriding.SetModelOverrideAsync(expected.ModelId, token).ConfigureAwait(false);
+            try
+            {
+                if (engine.SupportsModelDownload)
+                {
+                    _modelEngineIdentities.GetValue(engine, static _ => new()).PossiblyLoaded.TryAdd(expected.ModelId, 0);
+                    await engine.LoadModelAsync(expected.ModelId, token).ConfigureAwait(false);
+                }
+                token.ThrowIfCancellationRequested();
+                if (!_index.Transcription.TryGetValue(expected.SelectionId, out var current)
+                    || current.Owner != owner || !MatchesModelOwner(current, expected))
+                    throw new OperationCanceledException("The selected model provider changed during loading.", token);
+                DenyTranscriptionIfRefused(expected.SelectionId, owner, expected.ModelId);
+            }
+            catch
+            {
+                await overriding.SetModelOverrideAsync(null, CancellationToken.None).ConfigureAwait(false);
+                throw;
+            }
+            return true;
+        }, cancellationToken);
+    }
+
+    /// <summary>
+    /// Ends an override from <see cref="OverrideModelAsync"/>, so the provider uses the user's saved model again.
+    /// A package that was disabled, reloaded or updated meanwhile has no override left, and nothing happens.
+    /// </summary>
+    public async Task ClearModelOverrideAsync(PortableDownloadableModel expected, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(expected);
+        Slot owner;
+        lock (_sync)
+        {
+            if (!_index.Transcription.TryGetValue(expected.SelectionId, out var role) || !MatchesModelOwner(role, expected)) return;
+            owner = role.Owner;
+        }
+        try
+        {
+            await UseAsync(owner, async token =>
+            {
+                if (_index.Transcription.TryGetValue(expected.SelectionId, out var role) && role.Owner == owner
+                    && MatchesModelOwner(role, expected) && ModelOverrideOf(role.Engine) is { } overriding)
+                    await overriding.SetModelOverrideAsync(null, token).ConfigureAwait(false);
+                return true;
+            }, cancellationToken).ConfigureAwait(false);
+        }
+        // The activation ended while the clear waited for its lease, and the override ended with it.
+        catch (Exception ex) when (ex is OperationCanceledException or InvalidOperationException && !cancellationToken.IsCancellationRequested
+            && !IsActivation(owner, expected)) { }
+    }
+
+    private bool IsActivation(Slot owner, PortableDownloadableModel expected)
+    {
+        lock (_sync) return _index.Transcription.TryGetValue(expected.SelectionId, out var role) && role.Owner == owner && MatchesModelOwner(role, expected);
+    }
+
+    // An isolated engine forwards the interface only when the plugin's own engine implements it.
+    private static ITranscriptionModelOverride? ModelOverrideOf(ITranscriptionEnginePlugin engine) => engine switch
+    {
+        IsolatedTranscriptionEngine isolated => isolated.SupportsModelOverride ? isolated : null,
+        ITranscriptionModelOverride overriding => overriding,
+        _ => null
+    };
+
     private sealed class ModelDownloadProgress(IProgress<double>? target, CancellationToken token) : IProgress<double>, IDisposable
     {
         private readonly object _sync = new();

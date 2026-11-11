@@ -13,12 +13,12 @@ namespace TypeWhisper.WinUI
         internal LocalTranscriptionPlugin Models => models;
         internal string _providerId = "local";
         internal TestModelRegistry PluginRuntime { get; } = new();
-        internal string? ActiveModelId => _providerId == "local" ? Models.ActiveModelId : PluginRuntime.Selected;
-        internal bool IsReady => _providerId == "local" ? Models.Ready : PluginRuntime.Selected is not null;
+        internal string? ActiveModelId => _providerId == "local" ? Models.ActiveModelId : PluginRuntime.Effective;
+        internal bool IsReady => _providerId == "local" ? Models.Ready : PluginRuntime.Effective is not null;
         internal IReadOnlyList<DictationProviderOption> DictationProviders =>
         [new("local", LocalTranscriptionPlugin.PluginId, "Local", Models.Enabled, true, false, Models.ActiveModelId,
             Models.Models.Select(model => new DictationModelOption(model.Model.Id, model.Model.DisplayName, model.Downloaded)).ToArray()),
-         new("cloud", "cloud-plugin", "Cloud", true, true, true, PluginRuntime.Selected,
+         new("cloud", "cloud-plugin", "Cloud", true, true, true, PluginRuntime.Effective,
             [new("cloud-a", "Cloud A", true), new("cloud-b", "Cloud B", true)])];
         internal DictationProviderOption? ApiModelProvider(string engine) => DictationProviders.FirstOrDefault(
             provider => provider.Id == engine || provider.PluginId == engine || (provider.Id == "local" && engine == "sherpa-onnx"));
@@ -29,12 +29,28 @@ namespace TypeWhisper.WinUI
     }
     internal sealed class TestModelRegistry
     {
+        // The plugin's saved model; an override is used instead while it is set and is never saved.
         internal string? Selected = "cloud-a";
+        internal string? Override;
+        internal string? Effective => Override ?? Selected;
+        internal bool Overridable;
+        internal bool FailOverride;
+        internal int Selections;
+        internal int Clears;
         internal Task<IReadOnlyList<PortableDownloadableModel>> GetModelStatesAsync(string id, CancellationToken ct) =>
             Task.FromResult<IReadOnlyList<PortableDownloadableModel>>([Model("cloud-a"), Model("cloud-b")]);
         private static PortableDownloadableModel Model(string id) => new("cloud-plugin", "cloud", "1", 1, Guid.Empty, id, id, "", false, true, []);
         internal Task SelectModelAsync(PortableDownloadableModel model, CancellationToken ct)
-        { ct.ThrowIfCancellationRequested(); Selected = model.ModelId; return Task.CompletedTask; }
+        { ct.ThrowIfCancellationRequested(); Selections++; Selected = model.ModelId; Override = null; return Task.CompletedTask; }
+        internal bool SupportsModelOverride(string selectionId) => Overridable;
+        internal Task OverrideModelAsync(PortableDownloadableModel model, CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (FailOverride) throw new IOException("Model load failed");
+            Override = model.ModelId;
+            return Task.CompletedTask;
+        }
+        internal Task ClearModelOverrideAsync(PortableDownloadableModel model, CancellationToken ct) { Clears++; Override = null; return Task.CompletedTask; }
         internal Task DownloadModelAsync(PortableDownloadableModel model, IProgress<double>? progress, CancellationToken ct) => throw new NotSupportedException();
         internal Task RefreshCapabilitiesAsync() => Task.CompletedTask;
         internal string? SelectionPackageRefusal(string selectionId) => null;
@@ -136,6 +152,43 @@ public sealed class ApiModelOverrideTests : IAsyncLifetime
         Assert.Equal("local", _session._providerId);
         Assert.Equal("cloud-a", _session.PluginRuntime.Selected);
         Assert.Equal("original", _models.ActiveModelId);
+    }
+    [Fact]
+    public async Task OverridableRegistryProviderNeverSelectsTheRequestModel()
+    {
+        _session.PluginRuntime.Overridable = true;
+        await using (await _session.BeginApiModelOverrideAsync(Request("cloud-b", "cloud"), default))
+        {
+            Assert.Equal("cloud", _session._providerId);
+            Assert.Equal("cloud-b", _session.ActiveModelId);
+            Assert.Equal("cloud-a", _session.PluginRuntime.Selected);
+        }
+        Assert.Equal("local", _session._providerId);
+        Assert.Null(_session.PluginRuntime.Override);
+        Assert.Equal("cloud-a", _session.PluginRuntime.Selected);
+        Assert.Equal(0, _session.PluginRuntime.Selections);
+        Assert.Equal(1, _session.PluginRuntime.Clears);
+    }
+    [Fact]
+    public async Task OverridableRegistryProviderNeedsNoInitialSelection()
+    {
+        _session.PluginRuntime.Overridable = true;
+        _session.PluginRuntime.Selected = null;
+        await using (await _session.BeginApiModelOverrideAsync(Request("cloud-b", "cloud"), default))
+            Assert.Equal("cloud-b", _session.ActiveModelId);
+        Assert.Null(_session.PluginRuntime.Effective);
+        Assert.Equal(0, _session.PluginRuntime.Selections);
+    }
+    [Fact]
+    public async Task FailedOverrideIsClearedAndKeepsTheProvider()
+    {
+        _session.PluginRuntime.Overridable = true;
+        _session.PluginRuntime.FailOverride = true;
+        await Assert.ThrowsAsync<IOException>(() => _session.BeginApiModelOverrideAsync(Request("cloud-b", "cloud"), default));
+        Assert.Equal("local", _session._providerId);
+        Assert.Equal(1, _session.PluginRuntime.Clears);
+        Assert.Equal("cloud-a", _session.PluginRuntime.Selected);
+        Assert.Equal(0, _session.PluginRuntime.Selections);
     }
     [Fact]
     public async Task UnselectedRegistryProviderIsRejectedWithoutSideEffects()

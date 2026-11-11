@@ -1,3 +1,4 @@
+using TypeWhisper.PluginHost;
 using TypeWhisper.PluginSDK.Helpers;
 using TypeWhisper.Presentation;
 
@@ -64,11 +65,16 @@ internal sealed partial class LocalDictationSession
         var previousProvider = _providerId;
         var previousModel = provider.Id == "local" ? Models.ActiveModelId : provider.SelectedModelId;
         var previousLocalSelection = Models.SelectedModelId;
+        // A provider that can use a model without saving it keeps the user's saved model untouched, also when the app
+        // stops during the request. Other providers select the request's model and then the previous one, and the
+        // plugin saves both.
+        var transient = provider.Id != "local" && PluginRuntime.SupportsModelOverride(RegistrySelectionId(provider.Id));
         // The portable SDK cannot restore a null selection. Do not make a
         // persistent first-time selection as a side effect of one request.
-        if (provider.Id != "local" && previousModel is null)
+        if (provider.Id != "local" && !transient && previousModel is null)
             throw new LocalApiRequestException(409, "Select an initial model for this provider before using a request-specific override.");
         var changedModel = false;
+        PortableDownloadableModel? overridden = null;
         var scope = new ApiModelOverrideScope(async () =>
         {
             try
@@ -77,6 +83,11 @@ internal sealed partial class LocalDictationSession
                 if (provider.Id == "local")
                 {
                     await Models.RestoreRequestModelAsync(previousModel, previousLocalSelection);
+                }
+                else if (overridden is not null)
+                {
+                    await PluginRuntime.ClearModelOverrideAsync(overridden, CancellationToken.None);
+                    await PluginRuntime.RefreshCapabilitiesAsync();
                 }
                 else
                 {
@@ -108,7 +119,13 @@ internal sealed partial class LocalDictationSession
                     await PluginRuntime.DownloadModelAsync(target, null, ct);
                 }
                 changedModel = true;
-                await PluginRuntime.SelectModelAsync(target, ct);
+                if (transient)
+                {
+                    // Set before the call: the restore clears an override that failed halfway, and a second clear is harmless.
+                    overridden = target;
+                    await PluginRuntime.OverrideModelAsync(target, ct);
+                }
+                else await PluginRuntime.SelectModelAsync(target, ct);
                 await PluginRuntime.RefreshCapabilitiesAsync();
             }
             ct.ThrowIfCancellationRequested();

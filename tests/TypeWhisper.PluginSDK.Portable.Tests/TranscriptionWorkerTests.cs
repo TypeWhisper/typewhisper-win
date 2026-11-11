@@ -382,6 +382,34 @@ public sealed class TranscriptionWorkerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ARequestModelReachesTheWorkerWithoutBeingSaved()
+    {
+        var bundles = Path.Combine(_root, "bundles");
+        WritePackage(Path.Combine(bundles, PluginId), typeof(WorkerProbePlugin));
+        using var http = new HttpClient();
+        var store = new PortablePluginStore(Path.Combine(_root, "store"), new Version(1, 1, 5), http);
+        await store.InitializeAsync(bundles);
+        var host = new LoggingHost(Path.Combine(_root, "registry-data"), _logs);
+        await using var registry = new PortablePluginRuntimeRegistry(store, new Version(1, 1, 5), _ => host) { TranscriptionIsolation = Isolation() };
+        Assert.Null(await registry.SetEnabledAsync(PluginId, true));
+        var selectionId = Assert.Single(registry.TranscriptionProviders).SelectionId;
+        var states = await registry.GetModelStatesAsync(selectionId);
+        await registry.SelectModelAsync(states.Single(state => state.ModelId == "small"));
+        Assert.True(registry.SupportsModelOverride(selectionId));
+        Task<string> Model() => registry.UseTranscriptionAsync(selectionId, async (engine, ct) =>
+            Fields(await ((IPcmTranscriptionEnginePlugin)engine).TranscribePcmAsync(new float[] { 0 }, null, false, ct))["model"]);
+
+        var large = states.Single(state => state.ModelId == "large");
+        await registry.OverrideModelAsync(large);
+        Assert.Equal("large", await Model());
+        Assert.Equal("small", host.GetSetting<string>("selectedModel"));
+        await registry.ClearModelOverrideAsync(large);
+        Assert.Equal("small", await Model());
+        Assert.Equal("small", host.GetSetting<string>("selectedModel"));
+        Assert.Equal(1, host.GetSetting<int>("asyncSelectCalls"));
+    }
+
+    [Fact]
     public async Task TheRegistryPresentsIsolatedEnginesAndEndsTheirWorkersOnRequestAndDisable()
     {
         var bundles = Path.Combine(_root, "bundles");
