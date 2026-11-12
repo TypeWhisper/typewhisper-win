@@ -77,7 +77,7 @@ internal sealed partial class LocalDictationSession
             float[] samples;
             if (apiRequest?.LocalFileUnreadable == true) throw new LocalApiRequestException(422, LocalApiTranscription.UnreadableAudio);
             try { samples = await MediaFoundationFileDecoder.LoadAsync(path, ct); }
-            catch (Exception ex) when (apiRequest is not null && ex is InvalidOperationException or System.Runtime.InteropServices.COMException)
+            catch (Exception ex) when (apiRequest is not null && ex is InvalidOperationException or System.Runtime.InteropServices.COMException or IOException or UnauthorizedAccessException)
             { throw new LocalApiRequestException(422, LocalApiTranscription.UnreadableAudio); }
             ct.ThrowIfCancellationRequested();
             Report(Loc.T("Transcribing with {0}…", modelName));

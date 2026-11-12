@@ -94,8 +94,9 @@ internal sealed partial class WinUIHttpApi(LocalDictationSession session, Dispat
         try
         {
             if (_closed) return;
-            if (_host is not null) { await _host.StopAsync(); _host = null; }
+            // Withdraw the endpoint first: while the listener drains, its port may already be taken by another process.
             RemoveDiscovery();
+            if (_host is not null) { await _host.StopAsync(); _host = null; }
             _preferences = new(enabled, port, requireAuthentication, PreferencesVersion);
             Directory.CreateDirectory(WinUIProfile.Root);
             AtomicFileWriter.WriteAllText(SettingsPath, JsonSerializer.Serialize(_preferences));
@@ -129,8 +130,9 @@ internal sealed partial class WinUIHttpApi(LocalDictationSession session, Dispat
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            if (_host is not null) { await _host.StopAsync(); _host = null; }
+            // Withdraw the endpoint first: while the listener drains, its port may already be taken by another process.
             RemoveDiscovery();
+            if (_host is not null) { await _host.StopAsync(); _host = null; }
             Status = Loc.T("HTTP API could not start or save its settings. Check the port and profile access, then retry.");
             AppDiagnostics.Write("api.configure.failed", ex);
         }
@@ -163,6 +165,7 @@ internal sealed partial class WinUIHttpApi(LocalDictationSession session, Dispat
         _closed = true;
         session.Changed -= RefreshApiDictation;
         // Stop admission and request cancellation before waiting for any concurrent configuration.
+        RemoveDiscovery();
         var stop = _host?.StopAsync() ?? Task.CompletedTask;
         return FinishShutdownAsync(stop);
     }
@@ -173,8 +176,9 @@ internal sealed partial class WinUIHttpApi(LocalDictationSession session, Dispat
         await _changes.WaitAsync();
         try
         {
-            if (_host is not null) { await _host.StopAsync(); _host = null; }
+            // Withdraw the endpoint first: while the listener drains, its port may already be taken by another process.
             RemoveDiscovery();
+            if (_host is not null) { await _host.StopAsync(); _host = null; }
         }
         finally { _changes.Release(); }
     }
