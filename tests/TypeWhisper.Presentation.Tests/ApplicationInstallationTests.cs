@@ -24,6 +24,18 @@ public sealed class ApplicationInstallationTests
     }
 
     [Fact]
+    public void ReleaseCandidateAlsoReadsTheStableFeed()
+    {
+        var original = ApplicationInstallation.Resolve("TypeWhisper")!;
+        var separate = ApplicationInstallation.Resolve("TypeWhisperDaily")!;
+        Assert.Equal(["win-x64"], original.AdditionalFeeds(AppUpdateChannel.ReleaseCandidate));
+        Assert.Empty(original.AdditionalFeeds(AppUpdateChannel.Stable));
+        Assert.Empty(original.AdditionalFeeds(AppUpdateChannel.Daily));
+        Assert.Empty(separate.AdditionalFeeds(AppUpdateChannel.Daily));
+        Assert.Throws<ArgumentOutOfRangeException>(() => separate.AdditionalFeeds(AppUpdateChannel.ReleaseCandidate));
+    }
+
+    [Fact]
     public void SeparateDailyInstallationOnlyReceivesDailyBuilds()
     {
         var original = ApplicationInstallation.Resolve("TypeWhisper")!;

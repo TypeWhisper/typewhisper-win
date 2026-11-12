@@ -38,6 +38,16 @@ public sealed record ApplicationInstallation(string PackageId, string Executable
         };
     }
 
+    /// <summary>
+    /// Further feeds whose packages a track also accepts. Release Candidate also reads the Stable feed, so a final release
+    /// that follows its candidates reaches Release Candidate installations as well.
+    /// </summary>
+    public IReadOnlyList<string> AdditionalFeeds(AppUpdateChannel channel)
+    {
+        _ = Feed(channel); // Rejects a track this installation does not support.
+        return channel == AppUpdateChannel.ReleaseCandidate ? [Feed(AppUpdateChannel.Stable)] : [];
+    }
+
     /// <summary>Rejects cross-installation updates and packages from the previous application generation.</summary>
     public bool Accepts(string packageId, int majorVersion, int minorVersion) =>
         packageId == PackageId && (majorVersion > 1 || majorVersion == 1 && minorVersion >= 1);

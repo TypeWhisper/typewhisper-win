@@ -256,6 +256,98 @@ public sealed class AppReleaseGithubSourceTests
         }
     }
 
+    [Fact]
+    public async Task GetReleaseFeed_MaintenanceReleaseOfAnOlderLineDoesNotHideTheNewerLine()
+    {
+        var releases = new[]
+        {
+            CreateRelease("v1.2.4", new DateTime(2026, 12, 2, 10, 0, 0, DateTimeKind.Utc), false, ["releases.win-x64.json"]),
+            CreateRelease("v1.3.1", new DateTime(2026, 12, 1, 10, 0, 0, DateTimeKind.Utc), false, ["releases.win-x64.json"]),
+            CreateRelease("v1.3.0", new DateTime(2026, 11, 20, 10, 0, 0, DateTimeKind.Utc), false, ["releases.win-x64.json"]),
+            CreateRelease("v1.2.3", new DateTime(2026, 11, 10, 10, 0, 0, DateTimeKind.Utc), false, ["releases.win-x64.json"])
+        };
+        var downloader = new FakeDownloader(_ => SerializeReleases(releases)) { BytesResponder = VersionFeed };
+        var source = new AppReleaseGithubSource(RepositoryUrl, "win-x64", prerelease: false, downloader);
+
+        var feed = await source.GetReleaseFeed(new TestLogger(), "TypeWhisper", "win-x64");
+
+        // The newest releases are read together; Velopack then picks the highest version among them.
+        Assert.Equal(["1.2.4", "1.3.1", "1.3.0"], feed.Assets.Select(asset => asset.Version.ToString()));
+        Assert.Equal("1.3.1", feed.Assets.MaxBy(asset => asset.Version)!.Version.ToString());
+        Assert.Equal(AppReleaseGithubSource.ReleasesPerFeed, downloader.BytesRequests.Count);
+        Assert.True(source.HasMatchingRelease);
+    }
+
+    [Fact]
+    public async Task GetReleaseFeed_ReleaseCandidateAlsoReadsTheStableFeed()
+    {
+        var releases = new[]
+        {
+            CreateRelease("v1.3.0", new DateTime(2026, 12, 1, 10, 0, 0, DateTimeKind.Utc), false, ["releases.win-x64.json"]),
+            CreateRelease("v1.4.0-daily.20261130.160", new DateTime(2026, 11, 30, 10, 0, 0, DateTimeKind.Utc), true, ["releases.win-x64-daily.json"]),
+            CreateRelease("v1.3.0-rc.2", new DateTime(2026, 11, 28, 10, 0, 0, DateTimeKind.Utc), true, ["releases.win-x64-rc.json"])
+        };
+        var downloader = new FakeDownloader(_ => SerializeReleases(releases)) { BytesResponder = VersionFeed };
+        var source = new AppReleaseGithubSource(RepositoryUrl, "win-x64-rc", prerelease: true, downloader, ["win-x64"]);
+
+        var feed = await source.GetReleaseFeed(new TestLogger(), "TypeWhisper", "win-x64-rc");
+
+        Assert.Equal(["1.3.0", "1.3.0-rc.2"], feed.Assets.Select(asset => asset.Version.ToString()));
+        Assert.DoesNotContain(downloader.BytesRequests, url => url.Contains("daily", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task GetReleaseFeed_StopsPagingOnceEveryFeedHasEnoughReleases()
+    {
+        var firstPage = Enumerable.Range(1, 100)
+            .Select(index => CreateRelease($"v1.3.{100 - index}", new DateTime(2026, 12, 1, 0, 0, 0, DateTimeKind.Utc).AddHours(-index), false,
+                index % 10 == 0 ? ["releases.win-x64.json"] : [$"plugin-{index}.zip"]))
+            .ToArray();
+        var downloader = new FakeDownloader(url => url.Contains("&page=1", StringComparison.Ordinal)
+            ? SerializeReleases(firstPage) : throw new InvalidOperationException($"Unexpected string request: {url}"))
+        { BytesResponder = VersionFeed };
+        var source = new AppReleaseGithubSource(RepositoryUrl, "win-x64", prerelease: false, downloader);
+
+        var feed = await source.GetReleaseFeed(new TestLogger(), "TypeWhisper", "win-x64");
+
+        Assert.Single(downloader.StringRequests);
+        Assert.Equal(["1.3.90", "1.3.80", "1.3.70"], feed.Assets.Select(asset => asset.Version.ToString()));
+    }
+
+    [Fact]
+    public async Task GetReleaseFeed_ReturnsFoundReleasesWhenTheSearchBoundIsReached()
+    {
+        var page = Enumerable.Range(1, 100)
+            .Select(index => CreateRelease($"Plugin {index}", new DateTime(2026, 7, 29, 12, 0, 0, DateTimeKind.Utc).AddMinutes(-index), false,
+                [$"plugin-{index}.zip"]))
+            .ToArray();
+        var firstPage = page.ToArray();
+        firstPage[0] = CreateRelease("v1.3.0", new DateTime(2026, 7, 29, 13, 0, 0, DateTimeKind.Utc), false, ["releases.win-x64.json"]);
+        var downloader = new FakeDownloader(url => SerializeReleases(url.EndsWith("&page=1", StringComparison.Ordinal) ? firstPage : page))
+        { BytesResponder = VersionFeed };
+        var source = new AppReleaseGithubSource(RepositoryUrl, "win-x64", prerelease: false, downloader);
+
+        var feed = await source.GetReleaseFeed(new TestLogger(), "TypeWhisper", "win-x64");
+
+        Assert.Equal(10, downloader.StringRequests.Count);
+        Assert.Equal("1.3.0", Assert.Single(feed.Assets).Version.ToString());
+        Assert.True(source.HasMatchingRelease);
+    }
+
+    // A feed holding one full package whose version is the release name without its leading "v".
+    private static byte[] VersionFeed(string url)
+    {
+        var version = Uri.UnescapeDataString(url.Split('/')[^2]).TrimStart('v');
+        return Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
+        {
+            Assets = new[]
+            {
+                new { PackageId = "TypeWhisper", Version = version, Type = "Full", FileName = $"TypeWhisper-{version}-full.nupkg",
+                    SHA1 = new string('A', 40), SHA256 = new string('B', 64), Size = 1 }
+            }
+        }));
+    }
+
     private static GithubRelease CreateRelease(
         string name,
         DateTime publishedAt,
