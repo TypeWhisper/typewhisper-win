@@ -53,7 +53,7 @@ public sealed class PluginLocalityTests
     {
         PortableCatalogEntry Entry(string? locality) => new()
         {
-            Id = "com.typewhisper.x", Name = "X", Version = "1.0.0", DownloadUrl = "https://packages.test/x.zip",
+            Id = "com.typewhisper.x", Name = "X", Version = "1.0.0", DownloadUrl = "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-fixture-v1.0.0/x.zip",
             Sha256 = new string('a', 64), Size = 10, Categories = ["llm"], Locality = locality
         };
 

@@ -336,7 +336,7 @@ public sealed partial class PortablePluginRuntimeRegistryTests
         await store.InitializeAsync();
         var entry = new PortableCatalogEntry
         {
-            Id = "com.typewhisper.example", Name = "Example", Version = "1.0.0", DownloadUrl = "https://packages.test/example.zip",
+            Id = "com.typewhisper.example", Name = "Example", Version = "1.0.0", DownloadUrl = "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-fixture-v1.0.0/example.zip",
             Sha256 = Convert.ToHexString(SHA256.HashData([1, 2, 3])), Size = 3, SupportedArchitectures = [PortablePluginCatalog.Architecture]
         };
 
@@ -373,7 +373,7 @@ public sealed partial class PortablePluginRuntimeRegistryTests
         var updates = new PortablePluginUpdates(store, new PortablePluginCatalog(_http), Version, PortablePluginCatalog.Architecture);
         var entry = new PortableCatalogEntry
         {
-            Id = Id, Name = "Runtime fixture", Version = "1.1.0", DownloadUrl = "https://packages.test/fixture.zip",
+            Id = Id, Name = "Runtime fixture", Version = "1.1.0", DownloadUrl = "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-fixture-v1.0.0/fixture.zip",
             Sha256 = new string('a', 64), Size = 10, SupportedArchitectures = [PortablePluginCatalog.Architecture]
         };
         updates.AcceptCatalog([entry]);

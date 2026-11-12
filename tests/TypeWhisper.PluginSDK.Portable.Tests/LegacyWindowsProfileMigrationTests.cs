@@ -40,7 +40,7 @@ public sealed class LegacyWindowsProfileMigrationTests : IDisposable
         plugins is null ? null : new HashSet<string>(plugins, StringComparer.OrdinalIgnoreCase), pluginDownloads, null, new HashSet<string>(StringComparer.Ordinal));
     private string Catalog => JsonSerializer.Serialize(new
     {
-        plugins = new[] { new { id = Plugin, name = "Groq", version = "1.0.0", minHostVersion = "1.1.0", downloadUrl = "https://example.invalid/groq.zip",
+        plugins = new[] { new { id = Plugin, name = "Groq", version = "1.0.0", minHostVersion = "1.1.0", downloadUrl = "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-fixture-v1.0.0/groq.zip",
             sha256 = new string('0', 64), size = 10, platforms = new[] { "windows" }, supportedArchitectures = new[] { TypeWhisper.PluginHost.PortablePluginCatalog.Architecture } } }
     });
     private string Report => File.ReadAllText(Path.Combine(Destination, LegacyWindowsProfileMigration.ReportName));
@@ -167,7 +167,7 @@ public sealed class LegacyWindowsProfileMigrationTests : IDisposable
         Seed();
         var catalog = JsonSerializer.Serialize(new
         {
-            plugins = new[] { new { id = Plugin, name = "Groq", version = "1.0.0", minHostVersion = "1.1.0", downloadUrl = "https://example.invalid/groq.zip",
+            plugins = new[] { new { id = Plugin, name = "Groq", version = "1.0.0", minHostVersion = "1.1.0", downloadUrl = "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-fixture-v1.0.0/groq.zip",
                 sha256 = new string('0', 64), size = 10, platforms = new[] { "windows" }, supportedArchitectures = new[] { TypeWhisper.PluginHost.PortablePluginCatalog.Architecture } } }
         });
         Assert.True(await ImportFromCatalog(request => request.RequestUri!.AbsolutePath.EndsWith(".zip", StringComparison.Ordinal)

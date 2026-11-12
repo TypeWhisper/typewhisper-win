@@ -35,9 +35,27 @@ public sealed record PortableCatalogEntry
             throw new InvalidDataException("The catalog declares an unknown locality for " + Id + ".");
         if (string.IsNullOrWhiteSpace(Name) || !System.Version.TryParse(Version, out _) ||
             !System.Version.TryParse(MinHostVersion, out _) || !Regex.IsMatch(Sha256 ?? "", "^[a-fA-F0-9]{64}$") ||
-            Size <= 0 || Size > PortablePluginStore.MaximumPackageBytes ||
-            !Uri.TryCreate(DownloadUrl, UriKind.Absolute, out var uri) || uri.Scheme != "https")
+            Size <= 0 || Size > PortablePluginStore.MaximumPackageBytes)
             throw new InvalidDataException("The catalog contains invalid package metadata for " + Id + ".");
+        if (!IsReleaseDownload(DownloadUrl))
+            throw new InvalidDataException("The catalog points " + Id + " to a download outside the TypeWhisper releases.");
+    }
+
+    /// <summary>Where every catalog package is published: an asset of a release in this repository.</summary>
+    public const string ReleaseDownloadPrefix = "https://github.com/TypeWhisper/typewhisper-win/releases/download/";
+
+    // A catalog entry may only name a release asset of this repository, as <prefix><tag>/<file>. GitHub answers such a
+    // request with a redirect to its own asset storage; that redirect is followed as usual and only has to stay on HTTPS.
+    internal static bool IsReleaseDownload(string? url)
+    {
+        if (string.IsNullOrEmpty(url) || !url.StartsWith(ReleaseDownloadPrefix, StringComparison.Ordinal) ||
+            !Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps || !uri.IsDefaultPort ||
+            uri.UserInfo.Length > 0 || !string.Equals(uri.Host, "github.com", StringComparison.OrdinalIgnoreCase) ||
+            uri.Query.Length > 0 || uri.Fragment.Length > 0 ||
+            !uri.AbsoluteUri.StartsWith(ReleaseDownloadPrefix, StringComparison.Ordinal))
+            return false;
+        var rest = url[ReleaseDownloadPrefix.Length..].Split('/');
+        return rest.Length == 2 && rest.All(segment => Regex.IsMatch(segment, "^[A-Za-z0-9_+-][A-Za-z0-9._+-]*$") && !segment.Contains(".."));
     }
 
     public bool Supports(Version host, string architecture) => System.Version.Parse(MinHostVersion) <= host &&

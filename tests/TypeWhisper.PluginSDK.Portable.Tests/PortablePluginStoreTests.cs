@@ -132,7 +132,7 @@ public sealed class PortablePluginStoreTests : IDisposable
             if (unsafePath is not null) { using var output = new StreamWriter(zip.CreateEntry(unsafePath).Open()); output.Write("unsafe"); }
         }
         _download = stream.ToArray();
-        return new() { Id = id, Name = "Fixture", Version = version, DownloadUrl = "https://packages.test/fixture.zip", Sha256 = Convert.ToHexString(SHA256.HashData(_download)), Size = _download.Length, SupportedArchitectures = [PortablePluginCatalog.Architecture] };
+        return new() { Id = id, Name = "Fixture", Version = version, DownloadUrl = "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-fixture-v1.0.0/fixture.zip", Sha256 = Convert.ToHexString(SHA256.HashData(_download)), Size = _download.Length, SupportedArchitectures = [PortablePluginCatalog.Architecture] };
     }
 
     [Fact]

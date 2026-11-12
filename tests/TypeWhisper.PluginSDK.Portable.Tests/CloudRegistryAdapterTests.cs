@@ -49,7 +49,7 @@ public sealed class CloudRegistryAdapterTests : IDisposable
             foreach (var file in Directory.GetFiles(directory)) archive.CreateEntryFromFile(file, Path.GetFileName(file));
         _archive = stream.ToArray();
         return new PortableCatalogEntry { Id = Id, Name = "Registry adapter fixture", Version = "1.0.0",
-            DownloadUrl = "https://fixture.invalid/package.zip", Size = _archive.Length,
+            DownloadUrl = "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-fixture-v1.0.0/package.zip", Size = _archive.Length,
             Sha256 = Convert.ToHexString(SHA256.HashData(_archive)), SupportedArchitectures = [PortablePluginCatalog.Architecture] };
     }
 

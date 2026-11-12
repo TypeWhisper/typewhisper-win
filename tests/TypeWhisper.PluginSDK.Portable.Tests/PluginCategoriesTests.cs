@@ -14,7 +14,7 @@ public sealed class PluginCategoriesTests
     {
         const string metadata = """
             {"id":"com.example.provider","name":"Provider","version":"1.1.0",
-             "categories":["transcription","llm"],"downloadUrl":"https://example.com/plugin.zip",
+             "categories":["transcription","llm"],"downloadUrl":"https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-fixture-v1.0.0/plugin.zip",
              "sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","size":100,
              "assemblyName":"plugin.dll","pluginClass":"Provider"}
             """;
@@ -46,7 +46,7 @@ public sealed class PluginCategoriesTests
         var entry = new PortableCatalogEntry
         {
             Id = "com.example.provider", Name = "Provider", Version = "1.1.0",
-            DownloadUrl = "https://example.com/plugin.zip", Sha256 = new string('a', 64),
+            DownloadUrl = "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-fixture-v1.0.0/plugin.zip", Sha256 = new string('a', 64),
             Size = 100, Categories = [id]
         };
         Assert.Throws<InvalidDataException>(entry.Validate);
