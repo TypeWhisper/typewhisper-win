@@ -12,6 +12,8 @@ Batch requests expose HTTP status, retry delay and failure kind to the host. Hos
 request resilience can retry transient failures and split uploads rejected with HTTP 413;
 authentication failures and caller cancellation are not retried.
 
+A custom server URL must use HTTPS, or HTTP only on this computer (`localhost`, `127.0.0.1`, `::1`), because the API key goes with every request. HTTP to another computer is rejected when saving; a URL saved by an earlier version stays shown, but requests to it stop with a configuration error before the key is sent.
+
 ## Models
 
 The model list shows Reson8's models from `GET /v1/model` next to the custom models from `GET /v1/custom-model` and the pattern sets. The default model keeps the ID `__default__`, so saved selections keep working; it is named after Reson8's default model (Resonant-1). A listed model is sent as `model`, a custom model as `custom_model_id`; custom models and pattern sets run on the default model. **Refresh models** loads both lists; a list that cannot be loaded keeps its previous entries and the selection. Another server URL drops both lists of the previous server, so the new one starts with the built-in model until its lists are loaded.

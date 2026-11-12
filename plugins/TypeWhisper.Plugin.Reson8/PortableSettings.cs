@@ -32,7 +32,7 @@ public sealed partial class Reson8Plugin : IApiKeyPlugin, IPluginTextSettings, I
     /// <inheritdoc />
     public IReadOnlyList<PluginTextSetting> TextSettings =>
     [
-        new("baseUrl", L("Server URL", "Server-URL"), L("Keep the default unless using a compatible server.", "Behalte den Standard bei, sofern du keinen kompatiblen Server verwendest."), _customBaseUrl) { Section = PluginSettingsSection.Connection },
+        new("baseUrl", L("Server URL", "Server-URL"), L("Keep the default unless using a compatible server. Use HTTPS, or HTTP only on this computer, because the API key goes with every request.", "Behalte den Standard bei, sofern du keinen kompatiblen Server verwendest. Verwende HTTPS oder HTTP nur auf diesem Computer, denn der API-Schlüssel wird mit jeder Anfrage gesendet."), _customBaseUrl) { Section = PluginSettingsSection.Connection },
         new("authHeader", L("Authentication header", "Authentifizierungsheader"), L("Use Authorization for Reson8.", "Verwende Authorization für Reson8."), _customAuthHeader) { Section = PluginSettingsSection.Connection },
         new(FillerModeSettingName, L("Filler words", "Füllwörter"),
             L("Natural: the model gets no instruction, so filler words such as “um” may appear in some places and be left out in others. Clean leaves them out, which suits dictation and notes. Verbatim transcribes them as spoken, which suits interviews. Rumble-2-Flash ignores this setting.",
