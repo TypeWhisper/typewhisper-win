@@ -146,7 +146,7 @@ internal sealed partial class WinUIHttpApi(LocalDictationSession session, Dispat
         {
             foreach (var component in fullPath[root.Length..].Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries))
             {
-                current = Path.Combine(current, component);
+                current = Path.Join(current, component);
                 if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0) return false;
             }
         }

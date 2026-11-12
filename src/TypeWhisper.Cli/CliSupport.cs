@@ -80,7 +80,7 @@ public static class CliConnectionResolver
             : new[] { Path.Join(root, "TypeWhisper-WinUI"), Path.Join(root, "TypeWhisper-WinUI-DevUserData") };
         var isServer = options.IsServerProcess ?? CliServerProcess.IsTypeWhisperOfCurrentUser;
         var live = directories.Select(directory => ReadDiscovery(Path.Join(directory, "api-discovery.json")))
-            .Where(discovery => discovery is { Pid: > 0 } && isServer(discovery.Pid.Value, discovery.WrittenUtc)).ToArray();
+            .Where(discovery => discovery?.Pid is int pid && pid > 0 && isServer(pid, discovery.WrittenUtc)).ToArray();
         var requestedPort = ValidatePort(options.PortOverride);
         var selected = requestedPort is { } selectedPort
             ? live.FirstOrDefault(discovery => discovery!.Port == selectedPort)

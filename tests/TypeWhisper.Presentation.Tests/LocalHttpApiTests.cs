@@ -192,10 +192,12 @@ public sealed class LocalHttpApiTests
             client.DefaultRequestHeaders.Authorization = null;
             var extension = requireAuthentication ? HttpStatusCode.OK : HttpStatusCode.Forbidden;
             Assert.Equal(extension, (await client.GetAsync("v1/status")).StatusCode);
-            Assert.Equal(requireAuthentication ? HttpStatusCode.Unauthorized : HttpStatusCode.Forbidden,
-                (await client.PutAsync("v1/browser/context", new StringContent("{}"))).StatusCode);
+            using (var body = new StringContent("{}"))
+                Assert.Equal(requireAuthentication ? HttpStatusCode.Unauthorized : HttpStatusCode.Forbidden,
+                    (await client.PutAsync("v1/browser/context", body)).StatusCode);
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Token);
-            Assert.Equal(extension, (await client.PutAsync("v1/browser/context", new StringContent("{}"))).StatusCode);
+            using (var body = new StringContent("{}"))
+                Assert.Equal(extension, (await client.PutAsync("v1/browser/context", body)).StatusCode);
         }
         Assert.Equal(authenticatedCalls + (requireAuthentication ? 4 : 0), calls);
         // Web pages that imitate the extension prefix stay blocked.

@@ -10,7 +10,7 @@ public sealed class DiscoveryTests : IDisposable
     private string Profile(string name) { var path = Path.Combine(_root, name); Directory.CreateDirectory(path); return path; }
     // Process 4242 stands for the running app; the resolver asks the injected check whether it is still alive.
     private const int LivePid = 4242;
-    private void Discovery(string name, int port, bool? requires = null, int pid = LivePid) => File.WriteAllText(Path.Combine(Profile(name), "api-discovery.json"),
+    private void Discovery(string name, int port, bool? requires = null, int pid = LivePid) => File.WriteAllText(Path.Join(Profile(name), "api-discovery.json"),
         JsonSerializer.Serialize(new { version = 1, port, token = "synthetic-discovery-token", requires_authentication = requires, pid }));
     private CliConnection Resolve(CliConnectionOptions options) =>
         CliConnectionResolver.Resolve(options with { ApplicationDataRoot = _root, IsServerProcess = (pid, _) => pid == LivePid });
@@ -103,7 +103,7 @@ public sealed class DiscoveryTests : IDisposable
     public void LiveCheckReceivesTheFileWriteTime()
     {
         Discovery("TypeWhisper-WinUI", 18979, true);
-        var written = File.GetLastWriteTimeUtc(Path.Combine(_root, "TypeWhisper-WinUI", "api-discovery.json"));
+        var written = File.GetLastWriteTimeUtc(Path.Join(_root, "TypeWhisper-WinUI", "api-discovery.json"));
         DateTime? seen = null;
         CliConnectionResolver.Resolve(new(ApplicationDataRoot: _root, IsServerProcess: (_, time) => { seen = time; return true; }));
         Assert.Equal(written, seen);
