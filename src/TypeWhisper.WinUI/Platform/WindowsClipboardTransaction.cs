@@ -528,6 +528,15 @@ internal sealed class WindowsClipboardTransaction : IDisposable
                 // A fresh set of transfer handles is used for every retry. Handles already
                 // accepted by SetClipboardData remain owned by Windows.
             }
+            catch
+            {
+                // The restore is all or nothing. Some formats without the others could leave text
+                // without the marker that keeps it out of clipboard history, or without the
+                // enterprise metadata that restricts where it may be pasted; an empty clipboard
+                // is the safer state.
+                NativeMethods.EmptyClipboard();
+                throw;
+            }
         }
     }
 

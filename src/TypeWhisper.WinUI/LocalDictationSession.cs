@@ -1254,7 +1254,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             // A blocked or failed paste leaves the text on the clipboard, as on macOS, and says so where the
             // user looks while dictating. The overlay only claims a copy that succeeded.
             var pasteFailed = outcome.ReviewReason == DictationReviewReason.PasteFailed;
-            if (pasteFailed) outcome = outcome with { CopiedToClipboard = ClipboardText.TrySet(outcome.Record.FinalText) };
+            if (pasteFailed) outcome = outcome with { CopiedToClipboard = ClipboardText.TrySet(outcome.Record.FinalText, excludeFromHistory: true) };
             // The review names the workflow's target app that was not open, instead of a field to check.
             if (pasteFailed && _targetAppMissing is { } closedApp)
                 outcome = outcome with { Message = Loc.T("{0} is not open, so nothing was inserted. Open {0}, then paste the text there.", closedApp) };
