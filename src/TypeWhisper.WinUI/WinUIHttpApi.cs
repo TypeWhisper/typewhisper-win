@@ -13,7 +13,15 @@ namespace TypeWhisper.WinUI;
 internal sealed partial class WinUIHttpApi(LocalDictationSession session, DispatcherQueue dispatcher)
 {
     private const string ApiVersion = "1.2";
-    private sealed record Preferences(bool Enabled = false, int Port = 8978, bool RequireAuthentication = false);
+    private const int PreferencesVersion = LocalApiAuthenticationDefault.Version;
+    private sealed record Preferences(bool Enabled = false, int Port = 8978, bool RequireAuthentication = false, int Version = 0)
+    {
+        internal Preferences Current() => this with
+        {
+            RequireAuthentication = LocalApiAuthenticationDefault.RequiresToken(Enabled, RequireAuthentication, Version),
+            Version = Math.Max(Version, PreferencesVersion)
+        };
+    }
     private readonly WindowsPluginSecretStore _secrets = new(WinUIProfile.DataPath("HttpApi"));
     private readonly WindowsLocalPeerVerifier _peerVerifier = new();
     private readonly SemaphoreSlim _changes = new(1, 1);
@@ -34,6 +42,7 @@ internal sealed partial class WinUIHttpApi(LocalDictationSession session, Dispat
     internal async Task InitializeAsync()
     {
         session.Changed += RefreshApiDictation;
+        RemoveLeftoverUploads();
         // Settings can change the API while the app starts. Reading the saved values and applying them under the
         // change lock keeps that change: it is either saved before the file is read here or applied after this.
         await _changes.WaitAsync();
@@ -45,7 +54,7 @@ internal sealed partial class WinUIHttpApi(LocalDictationSession session, Dispat
             if (File.Exists(SettingsPath))
             {
                 if (new FileInfo(SettingsPath).Length > 4096) throw new IOException();
-                _preferences = JsonSerializer.Deserialize<Preferences>(File.ReadAllText(SettingsPath)) ?? new();
+                _preferences = (JsonSerializer.Deserialize<Preferences>(File.ReadAllText(SettingsPath)) ?? new()).Current();
                 if (_preferences.Port is < 1024 or > 65535) throw new IOException();
             }
             if (!_preferences.Enabled) RemoveDiscovery();
@@ -64,10 +73,10 @@ internal sealed partial class WinUIHttpApi(LocalDictationSession session, Dispat
         {
             if (File.Exists(SettingsPath) && new FileInfo(SettingsPath).Length <= 4096
                 && JsonSerializer.Deserialize<Preferences>(File.ReadAllText(SettingsPath)) is { Port: >= 1024 and <= 65535 } saved)
-                return saved;
+                return saved.Current();
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { /* InitializeAsync reports it. */ }
-        return new();
+        return new Preferences().Current();
     }
 
     internal async Task ConfigureAsync(bool enabled, int port, bool requireAuthentication)
@@ -87,7 +96,7 @@ internal sealed partial class WinUIHttpApi(LocalDictationSession session, Dispat
             if (_closed) return;
             if (_host is not null) { await _host.StopAsync(); _host = null; }
             RemoveDiscovery();
-            _preferences = new(enabled, port, requireAuthentication);
+            _preferences = new(enabled, port, requireAuthentication, PreferencesVersion);
             Directory.CreateDirectory(WinUIProfile.Root);
             AtomicFileWriter.WriteAllText(SettingsPath, JsonSerializer.Serialize(_preferences));
             if (!enabled) { Status = Loc.Mark("HTTP API is off."); return; }
@@ -153,6 +162,19 @@ internal sealed partial class WinUIHttpApi(LocalDictationSession session, Dispat
         }
         finally { _changes.Release(); }
     }
+    // Uploads are deleted after each request; a crash or a killed app leaves them behind until the next start.
+    private static void RemoveLeftoverUploads()
+    {
+        try
+        {
+            var directory = WinUIProfile.DataPath("HttpApi", "Uploads");
+            if (!Directory.Exists(directory) || (File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0) return;
+            foreach (var file in Directory.EnumerateFiles(directory)) File.Delete(file);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        { AppDiagnostics.Write("api.upload.cleanup-failed", ex); }
+    }
+
     private static void RemoveDiscovery()
     {
         try { File.Delete(DiscoveryPath); File.Delete(PortPath); File.Delete(DiscoveryPath + ".tmp"); File.Delete(PortPath + ".tmp"); }
@@ -222,20 +244,24 @@ internal sealed partial class WinUIHttpApi(LocalDictationSession session, Dispat
                     return Error(400, "Use an absolute local file path.");
                 // Inspect from the root before accessing a descendant of any junction.
                 var fullPath = Path.GetFullPath(path);
+                // Forward-slash UNC and device paths normalize to a leading backslash pair.
+                if (fullPath.StartsWith(@"\\", StringComparison.Ordinal)) return Error(400, "Use a local drive.");
                 var current = Path.GetPathRoot(fullPath)!;
                 if (new DriveInfo(current).DriveType == DriveType.Network) return Error(400, "Use a local drive.");
+                // A missing, linked, unreadable or undecodable file gets the same answer, so callers cannot probe
+                // which files exist on this PC. The command line checks existence itself before it calls.
                 try
                 {
                     foreach (var component in fullPath[current.Length..].Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries))
                     {
                         current = Path.Combine(current, component);
                         if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
-                            return Error(400, "Linked file paths are not supported.");
+                            return Error(422, LocalApiTranscription.UnreadableAudio);
                     }
                 }
-                catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
-                { return Error(404, "The audio file does not exist."); }
-                if (!File.Exists(path)) return Error(404, "The audio file does not exist.");
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                { return Error(422, LocalApiTranscription.UnreadableAudio); }
+                if (!File.Exists(path)) return Error(422, LocalApiTranscription.UnreadableAudio);
             }
             else
             {

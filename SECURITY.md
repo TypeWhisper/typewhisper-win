@@ -41,10 +41,14 @@ Issues in these areas are especially relevant.
   Settings. It is intended for local tools and scripts, accepts loopback
   connections only, allows only literal local Host authorities (`127.0.0.1`,
   `[::1]`, or `localhost`, with the configured port), and rejects browser
-  `Origin` headers. The Host allowlist also covers same-origin browser GETs
-  without an Origin header after DNS rebinding.
-- The API issues a token, but requests need it only when **Require API token**
-  is enabled in Settings; see the [API reference](docs/WINUI-HTTP-API.md).
+  `Origin` headers of web pages and requests whose `Sec-Fetch-Site` header
+  shows they were triggered by another page. The Host allowlist also covers
+  same-origin browser GETs without an Origin header after DNS rebinding.
+- The API requires its token by default. A server that was already running
+  without a token before this default keeps doing so until **Require API
+  token** is turned on in Settings, which then shows a warning; see the
+  [API reference](docs/WINUI-HTTP-API.md). Browser extensions are admitted
+  only while the token is required.
 - The API accepts requests only from processes running as the same Windows user
   as TypeWhisper, so other user accounts on a shared machine cannot use it.
 - API keys and plugin secrets are stored with Windows DPAPI, scoped to the

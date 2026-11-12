@@ -77,7 +77,7 @@ internal sealed partial class LocalDictationSession
             float[] samples;
             try { samples = await MediaFoundationFileDecoder.LoadAsync(path, ct); }
             catch (Exception ex) when (apiRequest is not null && ex is InvalidOperationException or System.Runtime.InteropServices.COMException)
-            { throw new LocalApiRequestException(422, "The audio could not be decoded. Use supported media up to 60 minutes."); }
+            { throw new LocalApiRequestException(422, LocalApiTranscription.UnreadableAudio); }
             ct.ThrowIfCancellationRequested();
             Report(Loc.T("Transcribing with {0}…", modelName));
             if (!registryProvider) DenyLocalTranscriptionIfRefused();

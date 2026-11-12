@@ -2,7 +2,7 @@
 
 Enable the server under **Settings > Advanced > HTTP API**, choose a port (default 8978), and select **Apply**. The server is off by default. Settings persist across restarts. A port collision leaves it stopped with a visible error. Select **Open documentation** to read the built-in reference at `/docs` in your browser while the server is running. Use **Copy address** and **Copy API token** for clients.
 
-The Windows host exposes all 31 method/path pairs registered by the Mac API, plus `/docs` and `/v1/capabilities`. The existing Raycast extension works without an update when **Require API token** is off (the application default). Use port 8978, or set Raycast's API Port Override; its existing discovery implementation reads only Mac paths.
+The Windows host exposes all 31 method/path pairs registered by the Mac API, plus `/docs` and `/v1/capabilities`. The Raycast extension reads port and token from the Windows discovery file, so it works with **Require API token** on.
 
 Advanced also offers the Raycast extension link: an installed `raycast:` handler opens `raycast://extensions/SeoFood/typewhisper`; otherwise it opens the extension's Store page.
 
@@ -13,11 +13,15 @@ The active profile publishes both Mac-compatible files:
 - api-port: decimal listening port.
 - api-discovery.json: version (1), port and token, plus host, base_url, pid, api_version and requires_authentication.
 
-The normal development profile is %LOCALAPPDATA%/TypeWhisper-WinUI-DevUserData. Named Debug test profiles are under %TEMP%/TypeWhisper-WinUI-TestProfiles/<name>. Discovery files are replaced atomically and removed on disable, clean shutdown and invalid configuration at startup. After a forced termination, clients should confirm liveness at /v1/status; the next startup replaces/removes stale discovery.
+The normal development profile is %LOCALAPPDATA%/TypeWhisper-WinUI-DevUserData. Named Debug test profiles are under %TEMP%/TypeWhisper-WinUI-TestProfiles/<name>. Discovery files are replaced atomically and removed on disable, clean shutdown and invalid configuration at startup. After a forced termination the file stays until the next startup replaces or removes it. Clients should check that the pid in the file is still the TypeWhisper app of the current user before they send the token; the CLI does this and refuses to connect otherwise.
 
 The discovery token is plaintext for local client compatibility, protected by a Windows ACL allowing only the current user. Its persistent backing secret is protected by DPAPI. The token survives restart. Never put it in a URL or log it.
 
-Send Authorization: Bearer <token> or X-TypeWhisper-API-Token: <token>. When Require API token is enabled, authentication is mandatory except for GET /v1/status and the static documentation at GET /docs (also /docs/). The discovery requires_authentication field reports the active mode. Documentation contains no credentials and makes no API calls. Only loopback connections are accepted. Browser Origin headers are rejected; no CORS access is enabled.
+Send Authorization: Bearer <token> or X-TypeWhisper-API-Token: <token>. **Require API token** is on by default: authentication is mandatory except for GET /v1/status and the static documentation at GET /docs (also /docs/). The discovery requires_authentication field reports the active mode. Documentation contains no credentials and makes no API calls.
+
+If the server was turned on without a token before this default, it keeps running without one until **Require API token** is turned on, and Settings shows a warning. A server that was off asks for the token once it is turned on.
+
+Only loopback connections are accepted. Independent of the token, requests that browsers send on behalf of web pages get 403: an Origin header from a web page (including `null`), and a Sec-Fetch-Site header other than `none` or `same-origin`, which images, links and form navigations from other pages carry even without an Origin. Browser extensions send their own Origin scheme and are admitted only while the token is required, and then only with it; paste the token into the extension's settings. No CORS access is enabled. Requests from scripts and tools that send neither header are not affected.
 
 Loopback alone does not identify the caller, so every request, including GET /v1/status and /docs and regardless of the token mode, is also checked against the process that owns the client socket: the server looks it up in the Windows TCP connection table and admits it only when that process runs under the same Windows user as TypeWhisper. The Windows session is not compared, because another session of the same account can already read the discovery token. Requests from another user's session on a shared PC or RDP host, from WSL2 in mirrored networking mode, from host-network containers, and from any peer whose process cannot be resolved get 403 with a generic error. The CLI and the Raycast extension are unaffected because they run as the signed-in user.
 
@@ -120,7 +124,7 @@ File-transcription endpoints do not paste into another application, read clipboa
 
 ## Limits and lifecycle
 
-Uploads are bounded to 32 MiB, including multipart framing. Decoding retains the application's 60-minute audio limit. Network/UNC/device paths and reparse-point paths are rejected for local-file requests. Temporary uploads are removed after success, cancellation and failure.
+Uploads are bounded to 32 MiB, including multipart framing. Decoding retains the application's 60-minute audio limit. Network/UNC/device paths are rejected with 400. A local file that is missing, linked through a reparse point, unreadable or not decodable gets the same 422 answer, so callers cannot tell which files exist. Temporary uploads are removed after success, cancellation and failure.
 
 Up to four HTTP requests are admitted; excess traffic returns 429. The shared transcription gate allows one decode at a time and returns 409 when dictation, recording, training, file processing or another API request owns the engine. Without a usable current model or loadable request override, transcription returns a readiness/configuration error (409 or 503). Undecodable audio returns 422. A request must arrive within five minutes and other requests must also finish within five minutes; once a transcription body has arrived, processing may take up to two hours, so long recordings fit the 60-minute audio limit. Timeouts return 408 and cancel processing; native work is still drained before the engine is released. Shutdown/profile restore closes admission, cancels requests and awaits active work.
 

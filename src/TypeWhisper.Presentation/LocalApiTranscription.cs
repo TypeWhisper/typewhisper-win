@@ -41,6 +41,8 @@ public sealed class LocalApiRequestException(int statusCode, string message) : E
 /// <summary>Strict, platform-independent parsing of the supported file transcription contract.</summary>
 public static class LocalApiTranscription
 {
+    /// <summary>The single answer for a local file that is missing, linked, unreadable or cannot be decoded.</summary>
+    public const string UnreadableAudio = "The audio file could not be read or decoded. Use an existing local media file up to 60 minutes; linked paths are not supported.";
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
     private static readonly HashSet<string> OptionNames = new(StringComparer.Ordinal)
         { "language", "task", "response_format", "model", "engine", "language_hint", "language_hints", "target_language", "await_download", "apply_corrections" };
