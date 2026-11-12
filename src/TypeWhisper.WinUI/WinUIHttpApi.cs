@@ -136,6 +136,22 @@ internal sealed partial class WinUIHttpApi(LocalDictationSession session, Dispat
         }
     }
 
+    // Inspects every component from the root, so no descendant of a junction or symbolic link is ever accessed.
+    private static bool IsPlainLocalFile(string fullPath, string root)
+    {
+        var current = root;
+        try
+        {
+            foreach (var component in fullPath[root.Length..].Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries))
+            {
+                current = Path.Combine(current, component);
+                if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0) return false;
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
+        return File.Exists(fullPath);
+    }
+
     // Audio may run 60 minutes and CPU models can be slower than real time, so the
     // default five-minute request limit would cut off long recordings.
     internal static TimeSpan? TranscriptionTimeout(string method, string path) =>
@@ -248,20 +264,10 @@ internal sealed partial class WinUIHttpApi(LocalDictationSession session, Dispat
                 if (fullPath.StartsWith(@"\\", StringComparison.Ordinal)) return Error(400, "Use a local drive.");
                 var current = Path.GetPathRoot(fullPath)!;
                 if (new DriveInfo(current).DriveType == DriveType.Network) return Error(400, "Use a local drive.");
-                // A missing, linked, unreadable or undecodable file gets the same answer, so callers cannot probe
-                // which files exist on this PC. The command line checks existence itself before it calls.
-                try
-                {
-                    foreach (var component in fullPath[current.Length..].Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries))
-                    {
-                        current = Path.Combine(current, component);
-                        if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
-                            return Error(422, LocalApiTranscription.UnreadableAudio);
-                    }
-                }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-                { return Error(422, LocalApiTranscription.UnreadableAudio); }
-                if (!File.Exists(path)) return Error(422, LocalApiTranscription.UnreadableAudio);
+                // A missing, linked, unreadable or undecodable file gets the same answer, after the same model and
+                // option checks, so callers cannot probe which files exist on this PC. The file is then never opened.
+                // The command line checks existence itself before it calls.
+                if (!IsPlainLocalFile(fullPath, current)) parsed = parsed with { LocalFileUnreadable = true };
             }
             else
             {

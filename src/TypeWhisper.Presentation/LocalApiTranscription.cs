@@ -21,7 +21,13 @@ public sealed record ParsedApiTranscription(
     ReadOnlyMemory<byte> Audio, string? FileName, string? LocalPath, string? Language,
     string? Task, string ResponseFormat, string? Model, string? Engine,
     IReadOnlyList<string>? LanguageHints = null, string? TargetLanguage = null,
-    bool AwaitDownload = false, bool ApplyCorrections = true);
+    bool AwaitDownload = false, bool ApplyCorrections = true)
+{
+    /// <summary>Set when the local file is missing, linked or unreadable. The backend still runs every check that
+    /// comes before reading audio and only then refuses the file, so all such files get the same answer as a file
+    /// that exists but cannot be decoded.</summary>
+    public bool LocalFileUnreadable { get; init; }
+}
 
 /// <summary>A transcript segment with actual provider timestamps in seconds.</summary>
 /// <param name="Text">Recognized segment text.</param>
