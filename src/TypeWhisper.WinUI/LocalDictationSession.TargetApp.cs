@@ -42,12 +42,13 @@ internal sealed partial class LocalDictationSession
 
     private async Task<TargetAppDelivery?> ActivateTargetAppCoreAsync(string app, IntPtr front)
     {
-        var candidate = TargetAppWindow.Find(app);
+        var candidate = TargetAppWindow.Find(app, out var skipped);
+        if (skipped) AppDiagnostics.Write("delivery.target-app.process-skipped");
         var hidden = candidate is not { Visible: true };
         // Showing a hidden window from outside leaves the app's focus wherever it was, often on a button. Started again,
         // an app that runs once opens its window itself, with the focus in its text field, as after a click on its
         // Start menu entry.
-        if ((hidden ? await ReopenTargetAppAsync(app, candidate?.ProcessId, front) : candidate) is not { } found)
+        if ((hidden ? await ReopenTargetAppAsync(app, candidate, front) : candidate) is not { } found)
         {
             _targetAppMissing = app;
             AppDiagnostics.Write("delivery.target-app.missing");
@@ -85,13 +86,14 @@ internal sealed partial class LocalDictationSession
         AppDiagnostics.Write("delivery.target-app.canceled");
     }
 
-    // Starts the running app's program again and waits until it shows a window. Only an app that is running is started,
-    // so a workflow never launches an app the user closed. Programs that the shell cannot start, such as packaged
+    // Starts the running app's program again and waits until it shows a window. Only the program of the process that
+    // owns the app's hidden main window is started, so a workflow never launches an app the user closed, and never a
+    // program only because a process carries the app's name. Programs that the shell cannot start, such as packaged
     // Store apps, report the app as not open.
-    private async Task<TopLevelWindow?> ReopenTargetAppAsync(string app, uint? processId, IntPtr front)
+    private async Task<TopLevelWindow?> ReopenTargetAppAsync(string app, TopLevelWindow? hidden, IntPtr front)
     {
-        var running = processId ?? FirstProcessId(app);
-        if (running is not { } process || ProcessImagePath(process) is not { } path)
+        if (hidden is not { } owner || !TargetAppWindow.IsOwnedBy(owner.Window, owner.ProcessId)
+            || !TargetAppProcessTrust.IsTrusted(owner.ProcessId) || ProcessImagePath(owner.ProcessId) is not { } path)
         {
             AppDiagnostics.Write("delivery.target-app.not-running");
             return null;
@@ -126,13 +128,6 @@ internal sealed partial class LocalDictationSession
         }
         AppDiagnostics.Write("delivery.target-app.reopen-timeout");
         return null;
-    }
-
-    private static uint? FirstProcessId(string app)
-    {
-        var processes = System.Diagnostics.Process.GetProcessesByName(app);
-        try { return processes.Where(item => item.Id != Environment.ProcessId).Select(item => (uint?)item.Id).FirstOrDefault(); }
-        finally { foreach (var item in processes) item.Dispose(); }
     }
 
     // An app moves the focus into its text field a moment after it comes to the front, and one shown from the
