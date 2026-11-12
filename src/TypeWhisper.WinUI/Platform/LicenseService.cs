@@ -27,6 +27,11 @@ public sealed class LicenseService
     private static readonly byte[] Entropy = "TypeWhisper.License.v2"u8.ToArray();
     private static readonly TimeSpan CommercialValidationInterval = TimeSpan.FromDays(7);
     private static readonly TimeSpan SupporterValidationInterval = TimeSpan.FromDays(30);
+    // A check time this far ahead of the clock is not trusted and counts as never checked.
+    internal static readonly TimeSpan ValidationClockSkew = TimeSpan.FromMinutes(5);
+    // How long after its check became due a license stays active while the licensing service cannot be reached:
+    // up to 37 days without a successful check for a commercial license and 60 days for a supporter license.
+    internal static readonly TimeSpan OfflineAllowance = TimeSpan.FromDays(30);
     private static readonly Regex IndividualDeviceCountPattern = new(
         @"(?<!\d)3 devices?\b",
         RegexOptions.CultureInvariant,
@@ -436,8 +441,7 @@ public sealed class LicenseService
         }
 
         if (CommercialStatus != LicenseStatus.Active ||
-            !_commercialLastValidated.HasValue ||
-            DateTime.UtcNow - _commercialLastValidated.Value > CommercialValidationInterval)
+            IsValidationDue(_commercialLastValidated, CommercialValidationInterval, DateTime.UtcNow))
         {
             await ValidateCommercialLicenseAsync(ct);
         }
@@ -567,8 +571,7 @@ public sealed class LicenseService
         }
 
         if (SupporterStatus != LicenseStatus.Active ||
-            !_supporterLastValidated.HasValue ||
-            DateTime.UtcNow - _supporterLastValidated.Value > SupporterValidationInterval)
+            IsValidationDue(_supporterLastValidated, SupporterValidationInterval, DateTime.UtcNow))
         {
             await ValidateSupporterAsync(ct);
         }
@@ -793,6 +796,18 @@ public sealed class LicenseService
             }
 
             _reportFailure?.Invoke("license.commercial.validate-failed", ex);
+            if (CommercialStatus != LicenseStatus.Unlicensed &&
+                HasOfflineAllowanceLapsed(_commercialLastValidated, CommercialValidationInterval, DateTime.UtcNow))
+            {
+                // Key, activation and tier stay: the next successful check makes the license active again.
+                CommercialStatus = LicenseStatus.Expired;
+                CommercialRefreshError = OfflineLapsedMessage();
+                PersistStore();
+                NotifyStateChanged();
+                if (reportErrors)
+                    throw new InvalidOperationException(CommercialRefreshError, ex);
+                return;
+            }
             if (reportErrors)
                 throw;
         }
@@ -831,6 +846,18 @@ public sealed class LicenseService
             }
 
             _reportFailure?.Invoke("license.supporter.validate-failed", ex);
+            if (SupporterStatus != LicenseStatus.Unlicensed &&
+                HasOfflineAllowanceLapsed(_supporterLastValidated, SupporterValidationInterval, DateTime.UtcNow))
+            {
+                // Key, activation and tier stay: the next successful check makes the license active again.
+                SupporterStatus = LicenseStatus.Expired;
+                SupporterRefreshError = OfflineLapsedMessage();
+                PersistStore();
+                NotifyStateChanged();
+                if (reportErrors)
+                    throw new InvalidOperationException(SupporterRefreshError, ex);
+                return;
+            }
             if (reportErrors)
                 throw;
         }
@@ -1119,6 +1146,30 @@ public sealed class LicenseService
             or NotSupportedException
             or OperationCanceledException;
 
+    // The last successful check, unless it lies ahead of the clock: such a time was not written by a check.
+    internal static DateTime? TrustedValidationTime(DateTime? lastValidated, DateTime utcNow) =>
+        lastValidated is { } last && ToUtc(last) <= utcNow + ValidationClockSkew ? ToUtc(last) : null;
+
+    internal static bool IsValidationDue(DateTime? lastValidated, TimeSpan interval, DateTime utcNow) =>
+        TrustedValidationTime(lastValidated, utcNow) is not { } last || utcNow - last > interval;
+
+    internal static bool HasOfflineAllowanceLapsed(DateTime? lastValidated, TimeSpan interval, DateTime utcNow) =>
+        TrustedValidationTime(lastValidated, utcNow) is not { } last || utcNow - last > interval + OfflineAllowance;
+
+    private static DateTime ToUtc(DateTime value) => value.Kind == DateTimeKind.Local ? value.ToUniversalTime()
+        : DateTime.SpecifyKind(value, DateTimeKind.Utc);
+
+    private static string OfflineLapsedMessage() =>
+        global::TypeWhisper.Core.Loc.T("TypeWhisper could not check this license with the licensing service for too long. Connect to the internet and select Refresh status to use it again.");
+
+    // Check times are written in UTC with an offset ("o"); reading them back keeps them in UTC, so comparisons
+    // with DateTime.UtcNow do not shift by the local time zone.
+    internal static DateTime? ParseValidationTime(string? value) =>
+        DateTime.TryParse(value, System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal, out var parsed)
+            ? parsed
+            : null;
+
     private static string ResolveDataFilePath(string dataPath, string fileName)
     {
         var root = Path.GetFullPath(dataPath);
@@ -1207,6 +1258,12 @@ public sealed class LicenseService
         if (_suppressPersistence)
             return;
 
+        WriteStore();
+    }
+
+    // Returns whether the encrypted store now holds the current state.
+    private bool WriteStore()
+    {
         try
         {
             var data = new LicenseStoreData
@@ -1233,11 +1290,13 @@ public sealed class LicenseService
             Directory.CreateDirectory(Path.GetDirectoryName(_credentialPath)!);
             File.WriteAllText(_credentialPath, protectedPayload, Encoding.UTF8);
             StorageError = null;
+            return true;
         }
         catch (Exception ex)
         {
             StorageError = global::TypeWhisper.Core.Loc.T("License changes could not be saved on this device. Keep your key and retry before closing the app.");
             _reportFailure?.Invoke("license.store.save-failed", ex);
+            return false;
         }
     }
 
@@ -1270,7 +1329,11 @@ public sealed class LicenseService
         try
         {
             if (TryLoadEncryptedStore())
+            {
+                // An earlier migration wrote the encrypted store but left the plain-text file behind.
+                DeleteLegacyStore();
                 return;
+            }
 
             TryMigrateLegacyStore();
         }
@@ -1323,15 +1386,31 @@ public sealed class LicenseService
             SupporterTier = Enum.TryParse<SupporterTier>(legacy.Tier, out var tier)
                 ? NormalizePersistedSupporterTier(tier, SupporterStatus)
                 : null;
-            _supporterLastValidated = DateTime.TryParse(legacy.LastValidated, out var lastValidated)
-                ? lastValidated
-                : null;
+            _supporterLastValidated = ParseValidationTime(legacy.LastValidated);
 
-            PersistStore();
+            // Loading suppresses ordinary saves, so the migration writes the store itself. The plain-text file
+            // holds the key unencrypted and goes once the encrypted copy is written.
+            if (WriteStore())
+                DeleteLegacyStore();
         }
         catch (Exception ex)
         {
             _reportFailure?.Invoke("license.store.migrate-failed", ex);
+        }
+    }
+
+    // Deleted rather than moved to the recycle bin: the file holds the license key in plain text, and the
+    // encrypted store keeps everything it contained.
+    private void DeleteLegacyStore()
+    {
+        try
+        {
+            if (File.Exists(_legacyCredentialPath))
+                File.Delete(_legacyCredentialPath);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _reportFailure?.Invoke("license.store.legacy-delete-failed", ex);
         }
     }
 
@@ -1352,9 +1431,7 @@ public sealed class LicenseService
                 ? commercialTier
                 : null;
             CommercialIsLifetime = commercial.IsLifetime;
-            _commercialLastValidated = DateTime.TryParse(commercial.LastValidated, out var commercialLastValidated)
-                ? commercialLastValidated
-                : null;
+            _commercialLastValidated = ParseValidationTime(commercial.LastValidated);
         }
 
         if (data.Supporter is { } supporter)
@@ -1367,9 +1444,7 @@ public sealed class LicenseService
             SupporterTier = Enum.TryParse<SupporterTier>(supporter.Tier, out var supporterTier)
                 ? NormalizePersistedSupporterTier(supporterTier, SupporterStatus)
                 : null;
-            _supporterLastValidated = DateTime.TryParse(supporter.LastValidated, out var supporterLastValidated)
-                ? supporterLastValidated
-                : null;
+            _supporterLastValidated = ParseValidationTime(supporter.LastValidated);
         }
     }
 

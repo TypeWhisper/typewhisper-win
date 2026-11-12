@@ -703,6 +703,10 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
             endpoint.Scheme is not ("http" or "https") || string.IsNullOrEmpty(endpoint.Host) ||
             !string.IsNullOrEmpty(endpoint.Query) || !string.IsNullOrEmpty(endpoint.Fragment) || !string.IsNullOrEmpty(endpoint.UserInfo))
             throw new ArgumentException("Enter an absolute HTTP(S) server URL without credentials, query or fragment.", nameof(url));
+        if (!IsSecureServer(endpoint))
+            throw new ArgumentException(L(
+                "Use an HTTPS server URL, or HTTP only on this computer (localhost): the API key goes with every request.",
+                "Verwende eine HTTPS-Server-URL oder HTTP nur auf diesem Computer (localhost): Der API-Schlüssel wird mit jeder Anfrage gesendet."), nameof(url));
         if (string.Equals(normalized, _customBaseUrl, StringComparison.Ordinal)) return;
         try
         {
@@ -1001,8 +1005,21 @@ public sealed partial class Reson8Plugin : ITranscriptionEnginePlugin
             ? null
             : language.Trim();
 
+    // The key is a bearer secret, so it travels only over TLS or to this computer.
+    internal static bool IsSecureServer(Uri uri) =>
+        uri.Scheme is "https" or "wss" || uri.Scheme is "http" or "ws" && uri.IsLoopback;
+
+    internal static void EnsureSecureServer(Uri? uri)
+    {
+        if (uri is null || !IsSecureServer(uri))
+            throw new PluginRequestException(
+                "The Reson8 server URL uses HTTP to another computer. Enter an HTTPS server URL, or HTTP on this computer, so the API key is not sent unencrypted.",
+                PluginRequestFailureKind.Configuration);
+    }
+
     internal static void AddAuthHeader(HttpRequestMessage request, string apiKey, string authHeader)
     {
+        EnsureSecureServer(request.RequestUri);
         var normalizedHeader = NormalizeAuthHeader(authHeader);
         if (string.Equals(normalizedHeader, DefaultAuthHeader, StringComparison.OrdinalIgnoreCase))
         {

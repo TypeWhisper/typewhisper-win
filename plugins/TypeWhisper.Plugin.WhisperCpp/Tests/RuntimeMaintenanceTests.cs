@@ -273,7 +273,7 @@ public partial class WhisperCppPluginTests
     {
         using var temp = new TempDirectory(); using var plugin = new WhisperCppPlugin();
         await plugin.ActivateAsync(new FakePluginHostServices(temp.Path));
-        plugin.OpenModelDownloadAsync = (_, _, _) => Task.FromResult<Stream>(new NonSeekableWeights([]));
+        plugin.OpenModelDownloadAsync = (_, _) => Task.FromResult<Stream>(new NonSeekableWeights([]));
         var progress = new CapturedProgress();
         await Assert.ThrowsAsync<InvalidDataException>(() => plugin.DownloadModelAsync("tiny", progress, default));
         Assert.False(plugin.IsModelDownloaded("tiny")); Assert.DoesNotContain(1.0, progress.Values);

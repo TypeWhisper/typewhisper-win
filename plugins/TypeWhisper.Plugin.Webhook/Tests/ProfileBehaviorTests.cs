@@ -68,9 +68,9 @@ public sealed class ProfileBehaviorTests
     {
         using var f=new PortableFixture();using var p=new WebhookPlugin();await p.ActivateAsync(f.Host);await p.ExecuteSettingsActionAsync("add",default);var id=p.ConnectionIdentity;
         await p.SaveProfileSettingsAsync(id,new Dictionary<string,string>{{id+":url","https://fixture.invalid/"},{id+":enabled","true"},{id+":headers","{\"X-Test\":\"value\"}"}},null,default);
-        await p.SaveTextSettingAsync(id+":headers","",default);Assert.Contains("value",Assert.Single(f.Secrets.Values).Value);
+        await p.SaveTextSettingAsync(id+":headers","",default);Assert.Contains("value",Assert.Single(f.Secrets.Values,s=>s.Key.StartsWith("headers-")).Value);
         await p.DeactivateAsync();await p.ActivateAsync(f.Host);Assert.Equal(id,p.ConnectionIdentity);Assert.Equal("true",p.TextSettings.Single(x=>x.Id==id+":enabled").Value);
-        await p.SaveTextSettingAsync(id+":headers","{}",default);Assert.Equal("{}",Assert.Single(f.Secrets.Values).Value);
+        await p.SaveTextSettingAsync(id+":headers","{}",default);Assert.Equal("{}",Assert.Single(f.Secrets.Values,s=>s.Key.StartsWith("headers-")).Value);
     }
     private sealed class Handler(Func<HttpRequestMessage,Task<HttpResponseMessage>> send):HttpMessageHandler
     {

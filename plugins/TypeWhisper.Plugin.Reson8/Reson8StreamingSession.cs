@@ -44,6 +44,7 @@ internal sealed class Reson8StreamingSession : IStreamingSession
         string? requestedLanguage,
         CancellationToken ct, TimeSpan? connectionTimeout = null, TimeSpan? finalizationTimeout = null)
     {
+        Reson8Plugin.EnsureSecureServer(endpoint);
         var ws = new ClientWebSocket();
         foreach (var header in CreateStreamingHeaders(apiKey, authHeader))
             ws.Options.SetRequestHeader(header.Key, header.Value);

@@ -2,13 +2,15 @@
 
 Local Granite Speech transcription with the Windows Python/PyTorch sidecar, model management and packaged scripts.
 
-Version `1.2.7`; plugin ID `com.typewhisper.granite-speech`; minimum host `1.1.2`.
+Version `1.2.8`; plugin ID `com.typewhisper.granite-speech`; minimum host `1.1.2`.
 
 ## Setup
 
 Download the model and managed runtime through the engine controls. The runtime requires Windows x64. Choose CPU, NVIDIA CUDA or automatic device selection and save settings together. Transcription uses only local cached model files, including the pinned chat template; the selected model loads automatically after restart. Audio and explicit language are passed through both final transcription and local PCM previews.
 
 The managed runtime pins patched PyTorch 2.13.0 and TorchAudio 2.11.0. Older runtime markers require setup again; cached model files are retained. Switching a CPU-only runtime to CUDA also requires setup again. The explicit Remove model and runtime action can remove this provider's only model even while selected, preserving settings. CUDA devices without bfloat16 support use float32. Generation budgets scale with audio duration and detect output-limit termination instead of silently accepting truncated text.
+
+Python packages install from a fully resolved lock file per device flavor (`Scripts/requirements-cpu.lock.txt`, `Scripts/requirements-cu130.lock.txt`) with `pip --require-hashes --no-deps --only-binary :all:`. pip accepts only wheels whose SHA-256 is listed, whichever of the PyTorch and PyPI indexes serves them, and resolves no further packages. `requirements.txt` keeps the direct pins; regenerate both lock files after changing it, with the `uv pip compile` command noted at the top of each lock file.
 
 Python is launched through Windows extended-length paths so pip can install deeply nested wheel contents inside the profile directory without changing Windows settings or relying on short-name aliases.
 

@@ -49,6 +49,8 @@ internal sealed record TranscriptionWorkerLaunch(string ExecutablePath, IReadOnl
     internal static readonly TimeSpan DefaultHeartbeatInterval = TimeSpan.FromSeconds(5);
     internal static readonly TimeSpan DefaultRequestInactivityTimeout = TimeSpan.FromSeconds(90);
 
+    /// <summary>The plugin the worker must find in the package; it refuses a package with another manifest ID.</summary>
+    internal string PluginId { get; init; } = "";
     internal TimeSpan StartupTimeout { get; init; } = TimeSpan.FromSeconds(60);
     internal TimeSpan CancellationGrace { get; init; } = TimeSpan.FromSeconds(3);
     /// <summary>How often the worker reports that a request is still running.</summary>
@@ -113,7 +115,7 @@ internal sealed class TranscriptionWorkerProcess : ITranscriptionWorkerConnectio
             throw new ArgumentException("The inactivity window must be at least twice the heartbeat interval.", nameof(launch));
         var arguments = new TranscriptionWorkerArguments("TypeWhisper.Transcription." + Guid.NewGuid().ToString("N"), Environment.ProcessId,
             launch.PackageDirectory, launch.DataDirectory, launch.AssetDirectory, launch.SelectionId, acceleration, launch.HostVersion,
-            launch.WatchesInactivity ? launch.HeartbeatInterval : null);
+            launch.WatchesInactivity ? launch.HeartbeatInterval : null) { PluginId = launch.PluginId };
         var pipe = new NamedPipeServerStream(arguments.PipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte,
             PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
         var info = new ProcessStartInfo(launch.ExecutablePath)

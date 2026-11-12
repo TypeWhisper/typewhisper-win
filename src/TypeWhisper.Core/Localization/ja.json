@@ -2718,6 +2718,7 @@
   "TypeWhisper Setup": "TypeWhisper セットアップ",
   "TypeWhisper backup": "TypeWhisperのバックアップ",
   "TypeWhisper cannot receive files while its profile is unavailable or the app is shutting down. Please try again after reopening it.": "プロファイルを利用できない間、またはアプリの終了中は、TypeWhisperでファイルを受け取れません。アプリを開き直してから、もう一度お試しください。",
+  "TypeWhisper could not check this license with the licensing service for too long. Connect to the internet and select Refresh status to use it again.": "TypeWhisper は長期間、ライセンスサービスでこのライセンスを確認できませんでした。インターネットに接続し、[状態を更新] を選択すると再び使用できます。",
   "TypeWhisper could not complete automatic insertion. Copy the text, check the intended field, and paste any missing text there.": "TypeWhisperは自動挿入を完了できませんでした。テキストをコピーし、挿入先のフィールドを確認して、不足しているテキストを貼り付けてください。",
   "TypeWhisper could not finish deleting your data because a data folder is a link or cannot be read. Nothing behind the link was touched.": "データフォルダがリンクであるか読み取れないため、データの削除を完了できませんでした。リンク先には一切変更を加えていません。",
   "TypeWhisper could not finish starting. Close and reopen the app before trying again.": "TypeWhisper の起動を完了できませんでした。アプリを閉じて開き直してから、もう一度お試しください。",

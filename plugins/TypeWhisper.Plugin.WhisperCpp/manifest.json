@@ -2,7 +2,7 @@
   "id": "com.typewhisper.whisper-cpp",
   "locality": "local",
   "name": "Whisper (Local)",
-  "version": "1.2.24",
+  "version": "1.2.25",
   "minHostVersion": "1.1.6",
   "author": "TypeWhisper",
   "description": "Local transcription with whisper.cpp",

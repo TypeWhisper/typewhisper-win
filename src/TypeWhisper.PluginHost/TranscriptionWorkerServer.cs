@@ -24,10 +24,13 @@ public static class TranscriptionWorkerServer
     /// <summary>Whether the process was started as a transcription worker.</summary>
     public static bool IsWorkerInvocation(IReadOnlyList<string> args) => args.Count > 0 && args[0] == Argument;
 
-    /// <summary>Serves requests until the host disconnects, asks it to stop or exits; returns the process exit code.</summary>
-    public static int Run(string[] args) => RunAsync(args).GetAwaiter().GetResult();
+    /// <summary>
+    /// Serves requests until the host disconnects, asks it to stop or exits; returns the process exit code.
+    /// The worker loads only a package that <paramref name="packagePolicy"/> accepts.
+    /// </summary>
+    public static int Run(string[] args, TranscriptionWorkerPackagePolicy packagePolicy) => RunAsync(args, packagePolicy).GetAwaiter().GetResult();
 
-    private static async Task<int> RunAsync(string[] args)
+    private static async Task<int> RunAsync(string[] args, TranscriptionWorkerPackagePolicy packagePolicy)
     {
         SuppressCrashDialogs();
         if (!TranscriptionWorkerArguments.TryParse(args, out var options)) return ExitInvalidArguments;
@@ -45,7 +48,11 @@ public static class TranscriptionWorkerServer
         {
             // The package stays loaded until the process ends. Exiting releases native memory
             // more reliably than disposing a context that native code may still reference.
-            package = await PortablePluginPackage.LoadAsync(options.PackageDirectory, services, options.HostVersion).ConfigureAwait(false);
+            if (packagePolicy.Refusal(options.PackageDirectory, options.PluginId) is { } refusal) throw new InvalidDataException(refusal);
+            var directory = Path.GetFullPath(options.PackageDirectory);
+            var manifest = PortablePluginPackage.ReadManifest(directory);
+            if (manifest.Id != options.PluginId) throw new InvalidDataException("The plugin package does not contain the expected plugin.");
+            package = await PortablePluginPackage.LoadAsync(directory, manifest, services, options.HostVersion).ConfigureAwait(false);
             engine = FindEngine(package.Plugin, options.SelectionId)
                 ?? throw new NotSupportedException("The plugin does not provide this local transcription engine.");
             if (engine.AccelerationPreference != options.Acceleration) engine.SetAccelerationPreference(options.Acceleration);
@@ -273,13 +280,15 @@ internal sealed record TranscriptionWorkerArguments(string PipeName, int ParentP
     string DataDirectory, string AssetDirectory, string SelectionId, TranscriptionAccelerationPreference Acceleration, Version HostVersion,
     TimeSpan? HeartbeatInterval = null)
 {
+    internal string PluginId { get; init; } = "";
+
     internal IEnumerable<string> ToArguments()
     {
         string[] arguments =
         [
             "--pipe", PipeName, "--parent-pid", ParentProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture),
             "--package", PackageDirectory, "--data", DataDirectory, "--assets", AssetDirectory, "--selection", SelectionId,
-            "--acceleration", Acceleration.ToString(), "--host-version", HostVersion.ToString()
+            "--acceleration", Acceleration.ToString(), "--host-version", HostVersion.ToString(), "--plugin-id", PluginId
         ];
         return HeartbeatInterval is { } interval
             ? arguments.Concat(["--heartbeat", interval.ToString("c", System.Globalization.CultureInfo.InvariantCulture)])
@@ -299,7 +308,8 @@ internal sealed record TranscriptionWorkerArguments(string PipeName, int ParentP
             options = new(Value("--pipe"), int.Parse(Value("--parent-pid"), System.Globalization.CultureInfo.InvariantCulture),
                 Value("--package"), Value("--data"), Value("--assets"), Value("--selection"),
                 Enum.Parse<TranscriptionAccelerationPreference>(Value("--acceleration")), Version.Parse(Value("--host-version")),
-                values.ContainsKey("--heartbeat") ? TimeSpan.ParseExact(Value("--heartbeat"), "c", System.Globalization.CultureInfo.InvariantCulture) : null);
+                values.ContainsKey("--heartbeat") ? TimeSpan.ParseExact(Value("--heartbeat"), "c", System.Globalization.CultureInfo.InvariantCulture) : null)
+                { PluginId = Value("--plugin-id") };
             return true;
         }
         catch (Exception ex) when (ex is FormatException or ArgumentException or OverflowException) { return false; }

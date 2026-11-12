@@ -49,7 +49,7 @@ public sealed partial class OpenAiCompatiblePlugin
                     Choices = _profiles.Select(p => new PluginSettingChoice(p.Id, p.DisplayName)).ToArray()
                 },
                 new(Id("name"), L("Profile name", "Profilname"), L("Shown in model and workflow selections.", "Wird bei der Modell- und Workflow-Auswahl angezeigt."), profile.Name, 100) { Section = PluginSettingsSection.Connection },
-                new(Id("url"), L("Server URL", "Server-URL"), L("For example http://localhost:11434. A trailing /v1 is optional. You can test the connection before saving.", "Zum Beispiel http://localhost:11434. Ein abschließendes /v1 ist optional. Du kannst die Verbindung vor dem Speichern testen."), profile.BaseUrl, 2048) { Section = PluginSettingsSection.Connection },
+                new(Id("url"), L("Server URL", "Server-URL"), L("For example http://localhost:11434. A trailing /v1 is optional. You can test the connection before saving. The API key is sent only over HTTPS or to this computer; a server on another computer over HTTP receives requests without it.", "Zum Beispiel http://localhost:11434. Ein abschließendes /v1 ist optional. Du kannst die Verbindung vor dem Speichern testen. Der API-Schlüssel wird nur über HTTPS oder an diesen Computer gesendet; ein Server auf einem anderen Computer erhält Anfragen über HTTP ohne Schlüssel."), profile.BaseUrl, 2048) { Section = PluginSettingsSection.Connection },
                 new(Id("api-version"), L("API version (optional)", "API-Version (optional)"), L("Leave empty unless your server requires a version. Deployment-scoped batch endpoints need a dated version, such as 2025-03-01-preview.", "Leer lassen, wenn der Server keine Version benötigt. Bereitstellungsbezogene Batch-Endpunkte benötigen eine datierte Version, etwa 2025-03-01-preview."), profile.ApiVersion, 100) { Section = PluginSettingsSection.Connection },
                 new(Id("transcription"), L("Transcription model ID", "Transkriptionsmodell-ID"), L("Enter the model ID accepted by your server. Leave empty if this server only processes text.", "Gib die Modell-ID deines Servers ein. Für reine Textverarbeitung leer lassen."), profile.SelectedModelId ?? "", 256) { Section = PluginSettingsSection.Transcription, Suggestions = models },
                 new(Id("transport"), L("Transcription mode", "Transkriptionsmodus"), L("Auto uses realtime for gpt-live-transcribe, gpt-realtime-whisper and their snapshots; other models use batch. Choose Realtime for custom deployment aliases.", "Automatisch verwendet Echtzeit für gpt-live-transcribe, gpt-realtime-whisper und ihre Snapshots, sonst Batch. Für eigene Echtzeit-Bereitstellungsnamen Echtzeit wählen."), profile.TranscriptionTransport)
@@ -267,9 +267,23 @@ public sealed partial class OpenAiCompatiblePlugin
         }
         using var timeout = CreateRequestTimeoutSource(cancellationToken, TimeSpan.FromSeconds(15));
         using var request = new HttpRequestMessage(HttpMethod.Get, RequestUri(profile, "/v1/models"));
-        Authenticate(request, string.IsNullOrWhiteSpace(apiKey) ? GetApiKey(profileId) : apiKey);
-        using var response = await TypeWhisper.PluginSDK.Helpers.OpenAiApiHelper.SendWithErrorHandlingAsync(_httpClient, request, timeout.Token);
-        if (actionId.EndsWith("/check", StringComparison.Ordinal)) return new(L("Connection verified.", "Verbindung bestätigt."));
+        var key = string.IsNullOrWhiteSpace(apiKey) ? GetApiKey(profileId) : apiKey;
+        var keyWithheld = WithholdsApiKey(request.RequestUri!, key);
+        Authenticate(request, key);
+        HttpResponseMessage response;
+        try
+        {
+            response = await TypeWhisper.PluginSDK.Helpers.OpenAiApiHelper.SendWithErrorHandlingAsync(_httpClient, request, timeout.Token);
+        }
+        catch (PluginRequestException ex) when (keyWithheld && ex.FailureKind == PluginRequestFailureKind.Authentication)
+        {
+            throw new PluginRequestException(KeyWithheldMessage(), PluginRequestFailureKind.Configuration, ex.HttpStatusCode, innerException: ex);
+        }
+        using var responseScope = response;
+        if (actionId.EndsWith("/check", StringComparison.Ordinal))
+            return new(keyWithheld
+                ? L("Connection verified without the API key: it is sent only over HTTPS or to this computer.", "Verbindung ohne API-Schlüssel bestätigt: Er wird nur über HTTPS oder an diesen Computer gesendet.")
+                : L("Connection verified.", "Verbindung bestätigt."));
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(timeout.Token));
         var models = ParseModelCatalog(document.RootElement);
         if (models.Count == 0) return new(L("No models returned. You can enter model IDs manually.", "Keine Modelle erhalten. Du kannst Modell-IDs manuell eingeben."));
@@ -298,6 +312,10 @@ public sealed partial class OpenAiCompatiblePlugin
         _profiles = profiles;
         if (notify) _host?.NotifyCapabilitiesChanged();
     }
+
+    private string KeyWithheldMessage() => L(
+        "The server requires the API key, but it is sent only over HTTPS or to this computer. Use an HTTPS server URL.",
+        "Der Server verlangt den API-Schlüssel, er wird aber nur über HTTPS oder an diesen Computer gesendet. Verwende eine HTTPS-Server-URL.");
 
     private string L(string english, string german) => PluginLocalization.Get(_host, english, german);
 }

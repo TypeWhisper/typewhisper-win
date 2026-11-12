@@ -39,7 +39,7 @@ public sealed class TranscriptionIsolation(string executablePath, IReadOnlyList<
         if (!pluginIds.Contains(engine.PluginId) || engine is not IPcmTranscriptionEnginePlugin || engine.SupportsStreaming) return null;
         var launch = new TranscriptionWorkerLaunch(executablePath, prefixArguments, Path.GetFullPath(packageDirectory),
             services.PluginDataDirectory, services.PluginAssetDirectory, engine.GetTranscriptionSelectionId(), hostVersion)
-            { HeartbeatInterval = HeartbeatInterval, RequestInactivityTimeout = RequestInactivityTimeout, RequestTimeout = RequestTimeout };
+            { PluginId = engine.PluginId, HeartbeatInterval = HeartbeatInterval, RequestInactivityTimeout = RequestInactivityTimeout, RequestTimeout = RequestTimeout };
         var logPath = Path.Combine(services.PluginDataDirectory, "transcription-worker.log");
         void Log(PluginLogLevel level, string message)
         {

@@ -144,6 +144,22 @@ public sealed class UserDataExportTests : IDisposable
     }
 
     [Fact]
+    public async Task ReadMeSaysThatPluginSettingsAreIncluded()
+    {
+        Write("history.json", "[]");
+        Write("PluginData/com.typewhisper.webhook/settings.json", "{}");
+
+        await UserDataExport.ExportAsync(Root, Destination);
+
+        Assert.Contains("profile/PluginData/com.typewhisper.webhook/settings.json", Entries());
+        using var archive = ZipFile.OpenRead(Destination);
+        using var readMe = new StreamReader(archive.GetEntry(UserDataExport.ReadMeEntryName)!.Open());
+        var text = await readMe.ReadToEndAsync();
+        Assert.Contains("Plugin settings are copied as each plugin saved them", text);
+        Assert.Contains("keep this archive private", text);
+    }
+
+    [Fact]
     public async Task FolderThatCannotBeListedIsReportedAsMissing()
     {
         Write("history.json", "[]");

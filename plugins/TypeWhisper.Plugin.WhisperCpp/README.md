@@ -2,7 +2,7 @@
 
 Local whisper.cpp transcription with Whisper.net CPU/CUDA/Vulkan native runtimes and model management.
 
-Version `1.2.24`; plugin ID `com.typewhisper.whisper-cpp`; minimum host `1.1.6`.
+Version `1.2.25`; plugin ID `com.typewhisper.whisper-cpp`; minimum host `1.1.6`.
 
 ## Setup
 
@@ -13,6 +13,8 @@ Native translation outputs English. The provider rejects translation with Englis
 The provider passes active dictionary terms to Whisper as its initial prompt, for microphone dictation and file transcription. Terms arrive with exact boundaries and stay whole and in dictionary order: the prompt is limited to 224 UTF-8 bytes. Whisper reads at most 224 prompt tokens and each token covers at least one byte, so even identifiers or non-Latin terms never push the first terms out of the window. Without speech, Whisper tends to repeat its prompt; when every word of a transcript resembles a dictionary term, the plugin decodes the audio once more without the prompt and keeps the prompted text only if that pass still finds words. Hosts older than this change still send no terms to local PCM engines; transcription is then unchanged.
 
 Before a model download starts, the plugin removes abandoned partial files of the same model and checks that its drive has room for the model plus a 256 MB reserve. If it does not, the download stops immediately and names the required and available space.
+
+Models download from a fixed revision of the `sandrohanea/whisper.net` repository on Hugging Face. The plugin checks each download against the exact size and SHA-256 recorded for that revision and keeps it only when both match; otherwise the partial file is removed and the download can be retried.
 
 ## Platform scope
 

@@ -45,10 +45,17 @@ public sealed partial class OpenAiCompatiblePlugin
             : "/v1/audio/transcriptions");
     }
 
+    // Local servers on another computer are often plain HTTP and need no key. A key is a bearer secret,
+    // so it travels only over TLS or to this computer; such servers receive the request without it.
+    internal static bool SendsApiKeyTo(Uri uri) =>
+        uri.Scheme is "https" or "wss" || uri.Scheme is "http" or "ws" && uri.IsLoopback;
+
+    internal static bool WithholdsApiKey(Uri uri, string? key) => !string.IsNullOrWhiteSpace(key) && !SendsApiKeyTo(uri);
+
     internal static IReadOnlyDictionary<string, string> AuthenticationHeaders(Uri uri, string? key)
     {
         var headers = new Dictionary<string, string>();
-        if (string.IsNullOrWhiteSpace(key)) return headers;
+        if (string.IsNullOrWhiteSpace(key) || !SendsApiKeyTo(uri)) return headers;
         key = key.Trim();
         headers["Authorization"] = "Bearer " + key;
         if (new[] { ".openai.azure.com", ".openai.azure.us", ".services.ai.azure.com" }
