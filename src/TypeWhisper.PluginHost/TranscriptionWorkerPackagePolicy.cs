@@ -32,7 +32,7 @@ public sealed class TranscriptionWorkerPackagePolicy(IReadOnlySet<string> plugin
         try
         {
             // A junction or symbolic link could point the expected folder name at another directory.
-            if (!Directory.Exists(directory) || IsReparsePoint(directory) || IsReparsePoint(parent))
+            if (!Directory.Exists(directory) || IsLink(directory) || IsLink(parent))
                 return "The transcription worker loads plugins only from the installed plugin folders.";
             var manifest = PortablePluginPackage.ReadManifest(directory);
             if (!string.Equals(manifest.Id, pluginId, StringComparison.Ordinal))
@@ -52,5 +52,6 @@ public sealed class TranscriptionWorkerPackagePolicy(IReadOnlySet<string> plugin
     private static string Normalize(string path) =>
         Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
 
-    private static bool IsReparsePoint(string path) => (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0;
+    // Junctions and symbolic links only: other reparse points, such as cloud placeholders, do not redirect the path.
+    private static bool IsLink(string path) => new DirectoryInfo(path).LinkTarget is not null;
 }
