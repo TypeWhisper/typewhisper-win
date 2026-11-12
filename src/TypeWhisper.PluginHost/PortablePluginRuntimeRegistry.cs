@@ -29,6 +29,10 @@ public sealed record PortableLlmProvider(string PluginId, string SelectionId, st
     public bool IsLocal { get; init; }
     /// <summary>Where the owning package processes text, as declared by its manifest.</summary>
     public ContentLocality Locality { get; init; }
+    /// <summary>Whether the package downloads and loads its own local text models.</summary>
+    public bool ManagesLocalModels { get; init; }
+    /// <summary>Downloaded local text models that are not in <see cref="Models"/> yet because they are not loaded.</summary>
+    public IReadOnlyList<PluginModelInfo> LoadableModels { get; init; } = [];
 }
 
 /// <summary>An enabled text processor bound to one exact package activation.</summary>
@@ -899,9 +903,11 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
                 lock (_sync) _selectionOwners[id] = slot.Id;
                 // A remembered local model loads on the next request, so its provider stays selectable while released.
                 var restorable = RestorableModel(slot, provider);
-                llmSnapshots.Add(new(slot.Id, id, provider.ProviderName, provider.IsAvailable || restorable is not null,
-                    Array.AsReadOnly(restorable is null ? provider.SupportedModels.ToArray() : [restorable]))
-                    { IsLocal = slot.IsLocal, Locality = slot.Locality });
+                var offered = restorable is null ? provider.SupportedModels.ToArray() : [restorable];
+                var managed = plugin is ILocalLlmModelManagement local && ReferenceEquals(local, provider);
+                llmSnapshots.Add(new(slot.Id, id, provider.ProviderName, provider.IsAvailable || restorable is not null, Array.AsReadOnly(offered))
+                    { IsLocal = slot.IsLocal, Locality = slot.Locality, ManagesLocalModels = managed,
+                      LoadableModels = managed ? LoadableLocalLlmModels((ILocalLlmModelManagement)plugin, offered) : [] });
             }
         }
         return new(transcription, llm, transcriptionSnapshots.ToArray(), llmSnapshots.ToArray())

@@ -35,6 +35,7 @@ public sealed partial class WorkflowsView : UserControl
         _closing = true;
         IsEnabled = false;
         _run?.Cancel();
+        _configModelLoad?.Cancel();
         try { _deleteDialog?.Hide(); _defaultsDialog?.Hide(); _testDialog?.Hide(); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("workflow.dialog.close-failed", ex); }
         return Task.WhenAll(_defaultsCompletion?.Task ?? Task.CompletedTask, _runCompletion?.Task ?? Task.CompletedTask, _deleteCompletion?.Task ?? Task.CompletedTask);
@@ -94,7 +95,7 @@ public sealed partial class WorkflowsView : UserControl
         foreach (var p in session.LlmProviders)
         {
             var refusal = session.PluginRuntime.LlmRefusal(p.SelectionId);
-            yield return new Choice(p.SelectionId, p.Name, refusal ?? (p.Ready ? Loc.T("Ready") : Loc.T("Requires configuration")), refusal is null) { PluginId = p.PluginId };
+            yield return new Choice(p.SelectionId, p.Name, refusal ?? LocalLlmModelLoadPanel.ProviderDescription(p), refusal is null) { PluginId = p.PluginId };
         }
     }
 
@@ -244,7 +245,18 @@ public sealed partial class WorkflowsView : UserControl
             ConfigureModels(string.Empty);
             UpdateConfigurationState();
         };
-        ConfigModel.SelectionChanged += _ => UpdateConfigurationState();
+        ConfigModel.SelectionChanged += async _ =>
+        {
+            UpdateConfigurationState();
+            await ConfigModelLoad.SelectionChangedAsync();
+        };
+        // While a chosen model loads, the provider and model stay put and saving waits.
+        ConfigModelLoad.Changed += () =>
+        {
+            if (_page != Page.Configuration) return;
+            ConfigureModels(ConfigModel.SelectedId);
+            UpdateConfigurationState();
+        };
         Unloaded += (_, _) => _run?.Cancel();
         Filter(string.Empty);
     }
@@ -318,7 +330,7 @@ public sealed partial class WorkflowsView : UserControl
         var advanced = new SettingsCard(Loc.T("Advanced"));
         advanced.Children.Add(ConfigProviderSection.Set(Loc.T("Provider"),
             Loc.T("Manual workflows run when you choose Run. Selected-text shortcuts send your selection and instructions to the configured provider and open the result for review. App, Website and Global workflows run on matching dictations and use dictation output settings; failures open review without pasting."), ConfigProvider));
-        advanced.Children.Add(ConfigModelSection.Set(Loc.T("Model"), control: ConfigModel));
+        advanced.Children.Add(ConfigModelSection.Set(Loc.T("Model"), control: ConfigModel).Below(ConfigModelLoad));
         advanced.Children.Add(ConfigInstructionSection.Set(Loc.T("Instructions (required)")).Below(ConfigInstruction));
         advanced.Children.Add(new SettingsRow().Set(Loc.T("Priority"), Loc.T("Lower numbers win."), "", ConfigPriority));
         ConfigurationFields.Children.Add(advanced);
@@ -480,8 +492,11 @@ public sealed partial class WorkflowsView : UserControl
     private void CancelConfiguration_Click(object sender, RoutedEventArgs e) => GoBack();
     private void TestWorkflow_Click(object sender, RoutedEventArgs e) { if (_opened is { } workflow && !_creating && !ConfigurationDirty) TestWorkflow(workflow); }
 
-    private IReadOnlyList<Choice> Models => _session?.LlmProviders.FirstOrDefault(p => p.SelectionId == ConfigProvider.SelectedId)?.Models
-        .Select(m => new Choice(m.Id, m.DisplayName, m.Id)).ToArray() ?? [];
+    // Downloaded local models that are not loaded yet are listed too; choosing one loads it.
+    private IReadOnlyList<Choice> Models => LocalLlmModelLoadPanel.Choices(ConfigLlmProvider);
+    private TypeWhisper.PluginHost.PortableLlmProvider? ConfigLlmProvider => _session?.LlmProviders.FirstOrDefault(p => p.SelectionId == ConfigProvider.SelectedId);
+    private LocalLlmModelLoadPanel? _configModelLoad;
+    private LocalLlmModelLoadPanel ConfigModelLoad => _configModelLoad ??= new(() => _session, () => ConfigLlmProvider, () => ConfigModel.SelectedId);
     private bool ConfigUsesRecordingTask => ConfigTrigger.SelectedId is "DictationHotkey" or "App" or "Website" or "Global";
     private string? ConfigSelectedTask => ConfigUsesRecordingTask
         ? (string.IsNullOrEmpty(ConfigTask.SelectedId) ? null : ConfigTask.SelectedId)
@@ -620,6 +635,7 @@ public sealed partial class WorkflowsView : UserControl
         ConfigTranslationTarget.Text = _opened.TranslationTarget ?? "";
         ConfigInstruction.Text = _opened.Instruction.ReplaceLineEndings("\r");
         ConfigProvider.SetOptions(ProvidersFor(_opened.ProviderId), _opened.ProviderId, Loc.T("{0} (unavailable)", _opened.ProviderId));
+        ConfigModelLoad.Reset();
         ConfigureModels(_opened.ModelId);
         _loadingConfiguration = false;
         ShowPage(Page.Configuration);
@@ -666,10 +682,14 @@ public sealed partial class WorkflowsView : UserControl
             var defaults = ReadDefaults();
             ConfigModel.SetOptions([new("", defaults?.Model ?? Loc.T("No default configured"), Loc.T("Inherited from Default LLM"))], "");
             ConfigModel.IsEnabled = false;
+            ConfigModelLoad.Update();
             return;
         }
-        ConfigModel.IsEnabled = ConfigProvider.SelectedId != "none" && !enforced;
+        var loading = ConfigModelLoad.IsLoading;
+        ConfigProvider.IsEnabled = !enforced && !loading;
+        ConfigModel.IsEnabled = ConfigProvider.SelectedId != "none" && !enforced && !loading;
         ConfigModel.SetOptions(Models, modelId, ConfigProvider.SelectedId != "none" ? (modelId.Length > 0 ? Loc.T("{0} (unavailable)", modelId) : Loc.T("Choose a model")) : Loc.T("No model selected"));
+        ConfigModelLoad.Update();
     }
 
     private void Configuration_Changed(object sender, TextChangedEventArgs e)
@@ -724,7 +744,8 @@ public sealed partial class WorkflowsView : UserControl
         ConfigurationValidation.Text = error ?? (!ConfigEnabled.IsOn ? Loc.T("Save as disabled. Enable this workflow before running it.")
             : !string.IsNullOrEmpty(ConfigActionTarget.SelectedId) ? Loc.T("Runs the selected plugin action after processing. The result is sent there instead of being pasted.")
             : template == WorkflowTemplate.Dictation ? Loc.T("No LLM processing. Dictation uses your selected transcription model.")
-            : EffectiveConfigurationError(ConfigProvider.SelectedId, ConfigModel.SelectedId) is { } providerError
+            // The model note below the picker reports a running load.
+            : !ConfigModelLoad.IsLoading && EffectiveConfigurationError(ConfigProvider.SelectedId, ConfigModel.SelectedId) is { } providerError
                 ? providerError + " " + Loc.T("You can save now and complete the setup later.")
                 : _session?.WorkflowDefaults.Enforced is { } required
                 ? Loc.T("Managed by your organization") + ": " + (Providers.FirstOrDefault(p => p.Id == required.Provider)?.Label ?? required.Provider) + " · " + required.Model
@@ -736,15 +757,16 @@ public sealed partial class WorkflowsView : UserControl
         var dirty = ConfigurationDirty;
         var prompting = ConfigurationDiscardPrompt.Visibility == Visibility.Visible;
         WorkflowSummary.Text = dirty ? Loc.T("Unsaved changes") : "";
-        WorkflowPrimaryButton.IsEnabled = error is null && (_creating || dirty) && !prompting;
+        // Saving waits for a model that loads for this workflow.
+        WorkflowPrimaryButton.IsEnabled = error is null && (_creating || dirty) && !prompting && !ConfigModelLoad.IsLoading;
         CancelConfigurationButton.IsEnabled = !prompting;
         // A test runs the saved workflow, so it waits until the changes are saved.
-        TestWorkflowButton.IsEnabled = !dirty && !prompting && _apiConfigurationConflict is null;
+        TestWorkflowButton.IsEnabled = !dirty && !prompting && _apiConfigurationConflict is null && !ConfigModelLoad.IsLoading;
     }
 
     private void SaveConfiguration()
     {
-        if (_closing || _opened is null || ConfigurationError is not null || (!_creating && !ConfigurationDirty) || ConfigurationDiscardPrompt.Visibility == Visibility.Visible) return;
+        if (_closing || _opened is null || ConfigurationError is not null || (!_creating && !ConfigurationDirty) || ConfigurationDiscardPrompt.Visibility == Visibility.Visible || ConfigModelLoad.IsLoading) return;
         var updated = _opened with { IconKind = _draftIcon, Title = ConfigName.Text.Trim(), Instruction = ConfigInstruction.Text.Trim().ReplaceLineEndings("\n"),
             TriggerKind = ConfigTrigger.SelectedId == "DictationHotkey" ? WorkflowTriggerKind.Hotkey : Enum.Parse<WorkflowTriggerKind>(ConfigTrigger.SelectedId),
             HotkeyBehavior = ConfigTrigger.SelectedId == "DictationHotkey" ? WorkflowHotkeyBehavior.StartDictation : WorkflowHotkeyBehavior.ProcessSelectedText, AppProcesses = ConfigAppProcesses.Text.Trim(),
@@ -932,6 +954,8 @@ public sealed partial class WorkflowsView : UserControl
 
     private void LeaveConfiguration()
     {
+        // Leaving stops a load this page started; a loaded model stays loaded.
+        ConfigModelLoad.Cancel();
         DismissDiscard();
         if (_creating)
         {

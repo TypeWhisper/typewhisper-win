@@ -58,6 +58,30 @@ public sealed partial class PortablePluginRuntimeRegistryTests
     }
 
     [Fact]
+    public async Task DownloadedModelsThatAreNotLoadedAreOfferedForLoading()
+    {
+        await using var registry = await LocalLlmRegistry();
+        // Before any load the pickers can still offer every downloaded model.
+        var unloaded = registry.LlmProviders.Single();
+        Assert.False(unloaded.Ready);
+        Assert.True(unloaded.ManagesLocalModels);
+        Assert.Empty(unloaded.Models);
+        Assert.Equal(["small", "large"], unloaded.LoadableModels.Select(model => model.Id));
+        await registry.LoadLocalLlmModelAsync(Id, "small");
+        await registry.RefreshCapabilitiesAsync();
+        var loaded = registry.LlmProviders.Single();
+        Assert.Equal("small", Assert.Single(loaded.Models).Id);
+        Assert.Equal("large", Assert.Single(loaded.LoadableModels).Id);
+        // A remembered model released while idle stays a ready model, not one to load.
+        _time.Advance(TimeSpan.FromSeconds(60));
+        await AdvanceUntilReleasedAsync();
+        await registry.RefreshCapabilitiesAsync();
+        var released = registry.LlmProviders.Single();
+        Assert.Equal("small", Assert.Single(released.Models).Id);
+        Assert.Equal("large", Assert.Single(released.LoadableModels).Id);
+    }
+
+    [Fact]
     public async Task AnIdleReleaseWaitsForRunningPluginOperations()
     {
         await using var registry = await LocalLlmRegistry();

@@ -36,7 +36,7 @@ Only the template pieces are tokenized with special-token parsing. Instructions 
 
 ## Setup
 
-Download a model from its card, then choose Load model before selecting it in a workflow. No model is downloaded or loaded automatically on activation. Unload releases memory; Remove unloads the chosen model before deleting its GGUF file. Discard incomplete downloads removes only known partial files. The bundled backend is CPU-only; the CPU-thread preference takes effect at the next model load.
+Choose Download and load on a model card: the model loads right after its download, so it can be selected in a workflow or as the default LLM at once. A downloaded model that is not loaded is also listed in those LLM pickers and loads when chosen there, with its progress below the picker. No model is downloaded or loaded automatically on activation. Unload releases memory; Remove unloads the chosen model before deleting its GGUF file. Discard incomplete downloads removes only known partial files. The bundled backend is CPU-only; the CPU-thread preference takes effect at the next model load.
 
 ## Build and verification
 

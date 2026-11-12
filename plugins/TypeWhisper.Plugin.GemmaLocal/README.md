@@ -7,7 +7,7 @@ Host 1.1.3 adds `ILocalLlmModelManagement`; older hosts reject this package befo
 
 ## Setup
 
-Download a model from its card, then choose Load model before selecting it in a workflow. No model is downloaded or loaded automatically on activation. TypeWhisper remembers the model you loaded: after it was released for inactivity (Settings > Advanced > Recording > Unload idle models) or after a restart, the next request loads it again. Unload releases memory and stops this automatic loading; Remove unloads the chosen model before deleting its GGUF file.
+Choose Download and load on a model card: the model loads right after its download, so it can be selected in a workflow or as the default LLM at once. A downloaded model that is not loaded is also listed in those LLM pickers and loads when chosen there, with its progress below the picker. No model is downloaded or loaded automatically on activation. TypeWhisper remembers the model you loaded: after it was released for inactivity (Settings > Advanced > Recording > Unload idle models) or after a restart, the next request loads it again. Unload releases memory and stops this automatic loading; Remove unloads the chosen model before deleting its GGUF file.
 
 Switching directly to another model keeps the current model available until the replacement loads successfully, temporarily requiring memory for both. On memory-constrained machines, choose Unload on the current model first, then load the replacement. This explicit path releases memory before loading; automatic replacement preserves the working model on failure or cancellation.
 
