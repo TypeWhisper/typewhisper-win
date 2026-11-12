@@ -9,9 +9,6 @@ public static class CloudFolderSyncFiles
     /// <summary>Operation and device files above this size are skipped. Real ones are a few kilobytes.</summary>
     public const long MaxFileBytes = 1024 * 1024;
 
-    /// <summary>At most this many operation files are read per device folder, the newest by file name.</summary>
-    public const int MaxOperationFilesPerDevice = 20_000;
-
     /// <summary>Changes dated further ahead than this are ignored until the local clock reaches them.</summary>
     public static readonly TimeSpan MaxClockSkew = TimeSpan.FromMinutes(5);
 
@@ -63,29 +60,26 @@ public static class CloudFolderSyncFiles
     }
 
     /// <summary>
-    /// The operation files of one device folder in file-name order, without linked files. When a folder holds more
-    /// than <see cref="MaxOperationFilesPerDevice"/> files, only the newest by file name are returned.
+    /// The operation files of one device folder in file-name order, without linked files. Every file is returned:
+    /// leaving older ones out would hide their changes and deletions from a device that joins later.
     /// </summary>
-    public static IReadOnlyList<string> OperationFiles(string deviceDirectory)
-    {
-        var files = new DirectoryInfo(deviceDirectory).EnumerateFiles("*.json")
-            .OrderByDescending(file => file.Name, StringComparer.Ordinal)
-            .Take(MaxOperationFilesPerDevice)
+    public static IReadOnlyList<string> OperationFiles(string deviceDirectory) =>
+        new DirectoryInfo(deviceDirectory).EnumerateFiles("*.json")
             .Where(file => !IsLink(file))
+            .OrderBy(file => file.Name, StringComparer.Ordinal)
             .Select(file => file.FullName)
             .ToList();
-        files.Reverse();
-        return files;
-    }
 
     /// <summary>Reads a sync file, or returns null when it is linked or larger than <see cref="MaxFileBytes"/>.</summary>
     public static string? ReadSmallFile(string path)
     {
         if (IsLink(new FileInfo(path))) return null;
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-        if (stream.Length > MaxFileBytes) return null;
-        // Read only the size seen above, even if the file grows meanwhile; a cut-off file fails to parse.
-        var bytes = new byte[stream.Length];
+        // Read only the size checked here, even if another writer grows the file meanwhile; a cut-off file fails to
+        // parse.
+        var length = stream.Length;
+        if (length > MaxFileBytes) return null;
+        var bytes = new byte[length];
         stream.ReadExactly(bytes);
         using var reader = new StreamReader(new MemoryStream(bytes));
         return reader.ReadToEnd();
