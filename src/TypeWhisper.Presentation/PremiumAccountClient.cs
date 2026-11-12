@@ -21,6 +21,14 @@ public sealed record PremiumAccountEntitlement(string Status, string Tier, strin
 {
     /// <summary>Whether verified claims currently permit access.</summary>
     public bool IsActive => (Status is "active" or "granted") && (ExpiresAt is null || ExpiresAt > DateTimeOffset.UtcNow);
+
+    /// <summary>
+    /// Whether the claims permit access at <paramref name="now"/>. Claims verified longer than
+    /// <see cref="PremiumAccountClient.OfflineAllowance"/> ago count only while no refresh has failed since.
+    /// </summary>
+    public bool IsActiveAt(DateTimeOffset now, bool refreshFailed) =>
+        (Status is "active" or "granted") && (ExpiresAt is null || ExpiresAt > now) &&
+        !(refreshFailed && now - VerifiedAt > PremiumAccountClient.OfflineAllowance);
 }
 
 // The same browser/PKCE exchange and signed entitlement envelope used by macOS.
@@ -29,8 +37,11 @@ public sealed class PremiumAccountClient
 {
     /// <summary>Pinned P256 public key shared with the Mac client.</summary>
     public const string ProductionKey = "8ZwFh+yrpkZZ1VsZgjpZcOz2h3jKpGG93MTdRaCPqXFn/Loqh8u36hB9FLho+ozwuHbaNeoN1MxM2/AJKyBNvQ==";
+    /// <summary>How long verified access lasts once refreshing it fails, counted from the server's verification time.</summary>
+    public static readonly TimeSpan OfflineAllowance = TimeSpan.FromDays(30);
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private readonly HttpClient _http;
+    private bool _refreshFailed;
     private readonly string _deviceId;
     private readonly Action<string?> _save;
     private readonly byte[] _key;
@@ -38,6 +49,11 @@ public sealed class PremiumAccountClient
     private Pending? _pending;
     /// <summary>The verified account entitlement.</summary>
     public PremiumAccountEntitlement? Entitlement { get; private set; }
+    /// <summary>
+    /// Whether the verified entitlement grants Premium now. A copy of an old envelope, or a device that stays
+    /// offline, keeps access only until a refresh fails more than <see cref="OfflineAllowance"/> after verification.
+    /// </summary>
+    public bool HasActiveEntitlement => Entitlement?.IsActiveAt(DateTimeOffset.UtcNow, _refreshFailed) == true;
     /// <summary>Whether an account token is loaded.</summary>
     public bool SignedIn => !string.IsNullOrEmpty(_token);
     /// <summary>Whether a browser callback is pending.</summary>
@@ -123,12 +139,20 @@ public sealed class PremiumAccountClient
     public async Task RefreshAsync(CancellationToken ct)
     {
         if (!SignedIn) return;
-        var response = await Request<EntitlementResponse>("/v1/entitlements/current", HttpMethod.Get, null, true, ct);
+        EntitlementResponse response;
+        try { response = await Request<EntitlementResponse>("/v1/entitlements/current", HttpMethod.Get, null, true, ct); }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException or NotSupportedException
+            || ex is OperationCanceledException && !ct.IsCancellationRequested)
+        {
+            // The service could not be reached or answered with an error; a rejected session was cleared already.
+            _refreshFailed = true;
+            throw;
+        }
         AcceptEntitlement(response.Entitlement);
     }
     private void AcceptEntitlement(PremiumAccountEntitlement? value)
     {
-        try { Entitlement = Verify(value); Persist(); }
+        try { Entitlement = Verify(value); _refreshFailed = false; Persist(); }
         catch { Entitlement = null; Persist(); throw; }
     }
     /// <summary>Detaches this account device before clearing the local session.</summary>
@@ -143,7 +167,7 @@ public sealed class PremiumAccountClient
     }
     /// <summary>Discards the pending authorization verifier.</summary>
     public void Cancel() => _pending = null;
-    private void Clear() { _token = null; Entitlement = null; Cancel(); _save(null); }
+    private void Clear() { _token = null; Entitlement = null; _refreshFailed = false; Cancel(); _save(null); }
     private void Persist() => _save(JsonSerializer.Serialize(new Session(_token!, Entitlement), Json));
     private static void ValidateToken(string token)
     {

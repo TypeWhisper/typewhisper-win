@@ -16,7 +16,7 @@ internal static class WinUIPremiumAccount
     private static bool _closing;
     internal static bool Busy { get; private set; }
     internal static bool SignedIn => _client?.SignedIn == true;
-    internal static bool Premium => _client?.Entitlement?.IsActive == true && SignedIn;
+    internal static bool Premium => _client?.HasActiveEntitlement == true && SignedIn;
     internal static bool Waiting => _callback is not null;
     internal static string Status { get; private set; } = Loc.T("Sign in to manage your TypeWhisper Premium account.");
     internal static event Action? Changed;
