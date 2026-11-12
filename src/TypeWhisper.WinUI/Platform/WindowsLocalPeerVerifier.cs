@@ -26,8 +26,7 @@ internal sealed class WindowsLocalPeerVerifier : ILocalPeerVerifier
         // (WSL2 mirrored networking, container relays) or to a process that exited; none of them may proceed.
         try
         {
-            var pid = FindOwningProcess(peer, localPort);
-            return pid is > 4 && HasOwnUser(pid.Value);
+            return FindOwningProcess(peer, localPort) is { Pid: > 4 } owner && HasOwnUser(owner.Pid, owner.Created);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -36,7 +35,9 @@ internal sealed class WindowsLocalPeerVerifier : ILocalPeerVerifier
         }
     }
 
-    private static unsafe uint? FindOwningProcess(IPEndPoint peer, int localPort)
+    private readonly record struct Owner(uint Pid, long Created);
+
+    private static unsafe Owner? FindOwningProcess(IPEndPoint peer, int localPort)
     {
         var address = peer.Address.IsIPv4MappedToIPv6 ? peer.Address.MapToIPv4() : peer.Address;
         var ipv6 = address.AddressFamily == AddressFamily.InterNetworkV6;
@@ -53,7 +54,7 @@ internal sealed class WindowsLocalPeerVerifier : ILocalPeerVerifier
                 uint result;
                 fixed (byte* table = buffer)
                     result = NativeMethods.GetExtendedTcpTable((IntPtr)table, ref size, false, ipv6 ? NativeMethods.AF_INET6 : NativeMethods.AF_INET,
-                        NativeMethods.TCP_TABLE_OWNER_PID_CONNECTIONS, 0);
+                        NativeMethods.TCP_TABLE_OWNER_MODULE_CONNECTIONS, 0);
                 if (result == NativeMethods.ERROR_INSUFFICIENT_BUFFER)
                 {
                     // Remember the larger table with headroom so a busy machine normally needs one call.
@@ -70,32 +71,36 @@ internal sealed class WindowsLocalPeerVerifier : ILocalPeerVerifier
         return null;
     }
 
-    // MIB_TCPTABLE_OWNER_PID: DWORD count, then MIB_TCPROW_OWNER_PID rows of state, local address, local port,
-    // remote address, remote port and PID (six DWORDs). Addresses and ports are stored in network byte order.
-    private static uint? FindIPv4(ReadOnlySpan<byte> table, ReadOnlySpan<byte> peerAddress, ushort peerPort, ushort localPort)
+    // MIB_TCPTABLE_OWNER_MODULE: DWORD count, padding to the rows' 8-byte alignment, then MIB_TCPROW_OWNER_MODULE
+    // rows of state, local address, local port, remote address, remote port and PID (six DWORDs), the creation
+    // FILETIME and 16 ULONGLONGs of module information. Addresses and ports are stored in network byte order.
+    private const int RowsOffset = 8, IPv4RowSize = 160, IPv6RowSize = 192;
+
+    private static Owner? FindIPv4(ReadOnlySpan<byte> table, ReadOnlySpan<byte> peerAddress, ushort peerPort, ushort localPort)
     {
-        var rows = Math.Min(BinaryPrimitives.ReadUInt32LittleEndian(table), (uint)((table.Length - 4) / 24));
+        var rows = Math.Min(BinaryPrimitives.ReadUInt32LittleEndian(table), (uint)((table.Length - RowsOffset) / IPv4RowSize));
         for (var i = 0; i < rows; i++)
         {
-            var row = table.Slice(4 + i * 24, 24);
+            var row = table.Slice(RowsOffset + i * IPv4RowSize, IPv4RowSize);
             // The row is the peer's socket: its local side is the peer, its remote side is our loopback listener.
             if (Port(row[8..]) == peerPort && row.Slice(4, 4).SequenceEqual(peerAddress) && Port(row[16..]) == localPort && row[12] == 127)
-                return BinaryPrimitives.ReadUInt32LittleEndian(row[20..]);
+                return new(BinaryPrimitives.ReadUInt32LittleEndian(row[20..]), BinaryPrimitives.ReadInt64LittleEndian(row[24..]));
         }
         return null;
     }
 
-    // MIB_TCP6TABLE_OWNER_PID rows: local address (16), local scope, local port, remote address (16), remote scope,
-    // remote port, state and PID. Loopback has no scope, so scopes are not compared.
-    private static uint? FindIPv6(ReadOnlySpan<byte> table, ReadOnlySpan<byte> peerAddress, ushort peerPort, ushort localPort)
+    // MIB_TCP6ROW_OWNER_MODULE rows: local address (16), local scope, local port, remote address (16), remote scope,
+    // remote port, state, PID, creation FILETIME and module information. Loopback has no scope, so scopes are not
+    // compared.
+    private static Owner? FindIPv6(ReadOnlySpan<byte> table, ReadOnlySpan<byte> peerAddress, ushort peerPort, ushort localPort)
     {
         ReadOnlySpan<byte> loopback = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1];
-        var rows = Math.Min(BinaryPrimitives.ReadUInt32LittleEndian(table), (uint)((table.Length - 4) / 56));
+        var rows = Math.Min(BinaryPrimitives.ReadUInt32LittleEndian(table), (uint)((table.Length - RowsOffset) / IPv6RowSize));
         for (var i = 0; i < rows; i++)
         {
-            var row = table.Slice(4 + i * 56, 56);
+            var row = table.Slice(RowsOffset + i * IPv6RowSize, IPv6RowSize);
             if (Port(row[20..]) == peerPort && row[..16].SequenceEqual(peerAddress) && Port(row[44..]) == localPort && row.Slice(24, 16).SequenceEqual(loopback))
-                return BinaryPrimitives.ReadUInt32LittleEndian(row[52..]);
+                return new(BinaryPrimitives.ReadUInt32LittleEndian(row[52..]), BinaryPrimitives.ReadInt64LittleEndian(row[56..]));
         }
         return null;
     }
@@ -103,13 +108,17 @@ internal sealed class WindowsLocalPeerVerifier : ILocalPeerVerifier
     private static ushort Port(ReadOnlySpan<byte> field) =>
         BinaryPrimitives.ReverseEndianness((ushort)BinaryPrimitives.ReadUInt32LittleEndian(field));
 
-    private unsafe bool HasOwnUser(uint pid)
+    private unsafe bool HasOwnUser(uint pid, long connectionCreated)
     {
         // Limited query access opens elevated processes of the same user; other users' processes refuse it.
         var process = NativeMethods.OpenProcess(NativeMethods.PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
         if (process == IntPtr.Zero) return false;
         try
         {
+            // The table keeps naming the process that created the socket, even after it handed the socket to another
+            // process and exited. A process started after the connection was created only reuses that ID.
+            if (!NativeMethods.GetProcessTimes(process, out var processCreated, out _, out _, out _) ||
+                connectionCreated <= 0 || processCreated > connectionCreated) return false;
             if (!NativeMethods.OpenProcessToken(process, NativeMethods.TOKEN_QUERY, out var token)) return false;
             try
             {

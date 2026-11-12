@@ -14,7 +14,7 @@ Installation copies the bundled CLI to `%LOCALAPPDATA%\TypeWhisper\1.1\Cli`, add
 & "$env:LOCALAPPDATA\TypeWhisper\1.1\Cli\typewhisper.exe" status
 ```
 
-The installed CLI remembers the profile of the app that installed it. It reads that profile's `api-discovery.json` for the port and authentication mode/token, with `api-port` as a legacy fallback. An unbound CLI checks `%LOCALAPPDATA%\TypeWhisper-WinUI` before `%LOCALAPPDATA%\TypeWhisper-WinUI-DevUserData`. Without valid discovery, the port falls back to `8978`.
+The installed CLI remembers the profile of the app that installed it. It reads that profile's `api-discovery.json` for the port and authentication mode/token. An unbound CLI checks `%LOCALAPPDATA%\TypeWhisper-WinUI` before `%LOCALAPPDATA%\TypeWhisper-WinUI-DevUserData`. A discovery file counts only while the process it names is still the TypeWhisper app of your Windows user; a file left behind by a crashed app is ignored, so its token is never sent to whatever listens on that port now. Without a valid discovery file the CLI reports that TypeWhisper is not running, unless you pass `--port`.
 
 Use `--profile <directory>` to select another profile, or set `TYPEWHISPER_PROFILE`. The explicit flag takes precedence over the environment variable, then the installed profile binding. For example:
 
@@ -24,7 +24,7 @@ typewhisper status --profile "$env:LOCALAPPDATA\TypeWhisper-WinUI-DevUserData"
 
 `--dev` selects `%LOCALAPPDATA%\TypeWhisper-WinUI-DevUserData` explicitly and does not fall back to production discovery. It overrides `TYPEWHISPER_PROFILE` and the installed profile binding; combining it with `--profile` is an input error.
 
-`--port <N>` overrides discovery. `--api-token <token>` overrides `TYPEWHISPER_API_TOKEN`, which overrides the discovered token. A discovery token is only reused for its matching port, and is omitted when discovery reports authentication disabled. The CLI only connects to `127.0.0.1`.
+`--port <N>` overrides discovery. `--api-token <token>` overrides `TYPEWHISPER_API_TOKEN`, which overrides the discovered token. A discovery token is only reused for its matching port, and is omitted when discovery reports authentication disabled. The CLI only connects to `127.0.0.1`. On an interactive console, control characters in printed text (for example escape sequences in History entries) are replaced; redirected output is written unchanged.
 
 ## Commands
 
