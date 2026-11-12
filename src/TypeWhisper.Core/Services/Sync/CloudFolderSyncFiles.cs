@@ -55,8 +55,8 @@ public static class CloudFolderSyncFiles
     {
         var root = new DirectoryInfo(operationsPath);
         if (!root.Exists || IsLink(root)) yield break;
-        foreach (var device in root.EnumerateDirectories())
-            if (!IsLink(device)) yield return device.FullName;
+        foreach (var device in root.EnumerateDirectories().Where(device => !IsLink(device)))
+            yield return device.FullName;
     }
 
     /// <summary>

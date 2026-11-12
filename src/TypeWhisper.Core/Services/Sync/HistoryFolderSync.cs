@@ -94,7 +94,7 @@ public static class HistoryFolderSync
         now = Utc(now);
         var package = CloudFolderSyncEngine.PackagePath(folderPath);
         var ownOperations = Path.Combine(package, "ops", Segment(transportDeviceId));
-        foreach (var directory in new[] { package, Path.Combine(package, "ops"), ownOperations, Path.Combine(package, "devices") })
+        foreach (var directory in new[] { package, Path.Join(package, "ops"), ownOperations, Path.Join(package, "devices") })
             CloudFolderSyncFiles.EnsureNotLinked(directory);
         Directory.CreateDirectory(ownOperations);
         WriteDevice(package, transportDeviceId, state.HistoryDeviceId, deviceName, appVersion, now);
@@ -109,7 +109,7 @@ public static class HistoryFolderSync
         ReadDevices(package, state);
         // Changes dated implausibly far ahead would win every later conflict, and a deletion would remove the entry
         // everywhere. They are ignored, and not marked as read, until the local clock reaches them.
-        var operations = ReadOperations(Path.Combine(package, "ops"), cancellationToken, cache)
+        var operations = ReadOperations(Path.Join(package, "ops"), cancellationToken, cache)
             .Where(operation => IsPlausible(operation, now)).ToList();
         var (merged, applied, deferred) = Merge(package, records, operations, transportDeviceId, state, audio);
         // Audio still downloading from the cloud provider is retried on the next pass.
@@ -471,7 +471,7 @@ public static class HistoryFolderSync
 
     private static void ReadDevices(string package, HistorySyncState state)
     {
-        var devices = new DirectoryInfo(Path.Combine(package, "devices"));
+        var devices = new DirectoryInfo(Path.Join(package, "devices"));
         if (!devices.Exists || CloudFolderSyncFiles.IsLink(devices)) return;
         foreach (var file in devices.EnumerateFiles("*.json").Select(file => file.FullName))
         {

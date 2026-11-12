@@ -1407,7 +1407,7 @@ public sealed class CloudFolderSyncTests : IDisposable
         var repeated = await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(35));
         Assert.Equal(1, republish.OperationsWritten);
         Assert.Equal(0, repeated.OperationsWritten);
-        var published = Directory.GetFiles(Path.Combine(CloudFolderSyncEngine.PackagePath(_tempDir), "ops", "windows"), "*.json")
+        var published = Directory.GetFiles(Path.Join(CloudFolderSyncEngine.PackagePath(_tempDir), "ops", "windows"), "*.json")
             .Select(path => CloudFolderSyncJson.Deserialize<CloudFolderSyncOperation>(File.ReadAllText(path))!).ToArray();
         Assert.Contains(published, operation => operation.Dictionary is { IsRegex: true, IsEnabled: true, Replacement: "new" });
     }
@@ -1454,9 +1454,9 @@ public sealed class CloudFolderSyncTests : IDisposable
 
     private void WritePeerOperation(CloudFolderSyncOperation operation, string? name = null, string device = "peer")
     {
-        var folder = Path.Combine(CloudFolderSyncEngine.PackagePath(_tempDir), "ops", device);
+        var folder = Path.Join(CloudFolderSyncEngine.PackagePath(_tempDir), "ops", device);
         Directory.CreateDirectory(folder);
-        File.WriteAllText(Path.Combine(folder, (name ?? operation.OperationId) + ".json"), CloudFolderSyncJson.Serialize(operation));
+        File.WriteAllText(Path.Join(folder, (name ?? operation.OperationId) + ".json"), CloudFolderSyncJson.Serialize(operation));
     }
 
     private static bool ReceivedEnabled(InMemoryUserDataSyncStore store) =>
@@ -1623,9 +1623,9 @@ public sealed class CloudFolderSyncTests : IDisposable
     public async Task OversizedOperationFilesAreNotRead()
     {
         var operation = Upsert(DictionaryEntry("TypeWhisper", Date(20)));
-        var folder = Path.Combine(CloudFolderSyncEngine.PackagePath(_tempDir), "ops", "peer");
+        var folder = Path.Join(CloudFolderSyncEngine.PackagePath(_tempDir), "ops", "peer");
         Directory.CreateDirectory(folder);
-        File.WriteAllText(Path.Combine(folder, "large.json"),
+        File.WriteAllText(Path.Join(folder, "large.json"),
             CloudFolderSyncJson.Serialize(operation) + new string(' ', (int)CloudFolderSyncFiles.MaxFileBytes));
         var store = new InMemoryUserDataSyncStore();
         var state = new CloudFolderSyncState { DeviceId = "windows" };
