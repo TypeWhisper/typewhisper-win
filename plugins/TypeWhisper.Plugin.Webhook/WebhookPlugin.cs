@@ -9,7 +9,10 @@ namespace TypeWhisper.Plugin.Webhook;
 /// <summary>Explicitly configured JSON delivery without changing the transcribed text.</summary>
 public sealed partial class WebhookPlugin : IPostProcessorPlugin, IPluginProfileSettings, IPluginSettingsActions, IPluginConnectionSettings
 {
-    private sealed record Endpoint(string Id, string Name, string Url, string Method, bool Enabled, string Workflows, string? SecretName = null);
+    // Url is held in memory only. A destination URL often carries its own access token (chat and automation
+    // webhooks), so it is stored encrypted under UrlSecretName and the settings file keeps it empty.
+    private sealed record Endpoint(string Id, string Name, string Url, string Method, bool Enabled, string Workflows, string? SecretName = null,
+        string? UrlSecretName = null);
     private readonly HttpClient _http;
     private readonly TimeSpan _deliveryBudget;
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -27,7 +30,7 @@ public sealed partial class WebhookPlugin : IPostProcessorPlugin, IPluginProfile
     /// <inheritdoc />
     public string PluginName => "Webhook";
     /// <inheritdoc />
-    public string PluginVersion => "1.3.3";
+    public string PluginVersion => "1.3.4";
     /// <inheritdoc />
     public string ProcessorName => "Webhook delivery";
     /// <inheritdoc />
@@ -35,15 +38,62 @@ public sealed partial class WebhookPlugin : IPostProcessorPlugin, IPluginProfile
     private IPluginHostServices Host => _host ?? throw new InvalidOperationException("Plugin is not active.");
     private string L(string english, string german) => PluginLocalization.Get(_host, english, german);
     /// <inheritdoc />
-    public Task ActivateAsync(IPluginHostServices host)
+    public async Task ActivateAsync(IPluginHostServices host)
     {
         var endpoints = host.GetSetting<Endpoint[]>("endpoints.v2") ?? [];
         if (endpoints.Length > 50 || endpoints.Any(e => e is null || !Guid.TryParse(e.Id, out _) || e.Name is null || e.Url is null || e.Workflows is null || e.Method is not ("POST" or "PUT")) || endpoints.Select(e => e.Id).Distinct().Count() != endpoints.Length)
             throw new InvalidDataException("Invalid webhook configuration. The saved file has been preserved.");
+        for (var index = 0; index < endpoints.Length; index++)
+            if (endpoints[index].UrlSecretName is { } name)
+                endpoints[index] = endpoints[index] with { Url = await LoadUrlAsync(host, name, endpoints[index].Url).ConfigureAwait(false) };
         _host = host; _endpoints = endpoints; _editing = endpoints.FirstOrDefault()?.Id;
         lock (_logLock) _log.Clear();
-        return Task.CompletedTask;
+        await EncryptSavedUrlsAsync(host).ConfigureAwait(false);
     }
+
+    private static async Task<string> LoadUrlAsync(IPluginHostServices host, string name, string fallback)
+    {
+        try
+        {
+            if (await host.LoadSecretAsync(name).ConfigureAwait(false) is { } url) return url;
+            host.Log(PluginLogLevel.Warning, "A webhook destination URL is missing from encrypted storage. Enter it again.");
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        { host.Log(PluginLogLevel.Warning, "A webhook destination URL could not be read from encrypted storage."); }
+        return fallback;
+    }
+
+    // Versions before 1.3.4 kept destination URLs in the settings file. They move to encrypted storage, and the
+    // settings write that drops them is the commit point; until it succeeds the saved file stays as it was.
+    private async Task EncryptSavedUrlsAsync(IPluginHostServices host)
+    {
+        if (!_endpoints.Any(e => e.UrlSecretName is null && e.Url.Length > 0)) return;
+        var staged = new List<string>();
+        try
+        {
+            var next = new Endpoint[_endpoints.Length];
+            for (var index = 0; index < next.Length; index++)
+            {
+                var endpoint = _endpoints[index];
+                if (endpoint.UrlSecretName is null && endpoint.Url.Length > 0)
+                {
+                    var name = NewUrlSecretName(endpoint.Id);
+                    await host.StoreSecretAsync(name, endpoint.Url).ConfigureAwait(false);
+                    staged.Add(name);
+                    endpoint = endpoint with { UrlSecretName = name };
+                }
+                next[index] = endpoint;
+            }
+            Save(next);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            foreach (var name in staged) await CleanupSecretAsync(host, name).ConfigureAwait(false);
+            host.Log(PluginLogLevel.Warning, "Webhook destination URLs could not be moved to encrypted storage; they stay in the plugin settings and the move is retried on the next start.");
+        }
+    }
+
+    private static string NewUrlSecretName(string endpointId) => "url-" + endpointId + "-" + Guid.NewGuid().ToString("N");
     /// <inheritdoc />
     public Task DeactivateAsync() { _host = null; _endpoints = []; _editing = null; return Task.CompletedTask; }
     private Endpoint? Selected => _endpoints.FirstOrDefault(e => e.Id == _editing) ?? _endpoints.FirstOrDefault();
@@ -129,8 +179,9 @@ public sealed partial class WebhookPlugin : IPostProcessorPlugin, IPluginProfile
         {
             var host = Host;
             var (endpoint, headers) = ReadDraft(profileId, values);
+            var saved = _endpoints.Single(e => e.Id == endpoint.Id);
             var oldSecret = endpoint.SecretName ?? "headers-" + endpoint.Id;
-            string? staged = null;
+            string? staged = null, stagedUrl = null;
             try
             {
                 if (headers is not null)
@@ -139,15 +190,26 @@ public sealed partial class WebhookPlugin : IPostProcessorPlugin, IPluginProfile
                     await host.StoreSecretAsync(staged, headers).ConfigureAwait(false);
                     endpoint = endpoint with { SecretName = staged };
                 }
+                if (endpoint.Url != saved.Url || endpoint.UrlSecretName is null && endpoint.Url.Length > 0)
+                {
+                    if (endpoint.Url.Length > 0)
+                    {
+                        stagedUrl = NewUrlSecretName(endpoint.Id);
+                        await host.StoreSecretAsync(stagedUrl, endpoint.Url).ConfigureAwait(false);
+                    }
+                    endpoint = endpoint with { UrlSecretName = stagedUrl };
+                }
                 ct.ThrowIfCancellationRequested();
                 Save(_endpoints.Select(e => e.Id == endpoint.Id ? endpoint : e).ToArray());
             }
             catch
             {
                 if (staged is not null) await CleanupSecretAsync(host, staged).ConfigureAwait(false);
+                if (stagedUrl is not null) await CleanupSecretAsync(host, stagedUrl).ConfigureAwait(false);
                 throw;
             }
             if (staged is not null) await CleanupSecretAsync(host, oldSecret).ConfigureAwait(false);
+            if (saved.UrlSecretName is { } oldUrl && oldUrl != endpoint.UrlSecretName) await CleanupSecretAsync(host, oldUrl).ConfigureAwait(false);
         }
         finally { _gate.Release(); }
     }
@@ -179,6 +241,7 @@ public sealed partial class WebhookPlugin : IPostProcessorPlugin, IPluginProfile
             {
                 Save(_endpoints.Where(x => x.Id != e.Id).ToArray()); _editing = _endpoints.FirstOrDefault()?.Id;
                 await CleanupSecretAsync(host, e.SecretName ?? "headers-" + e.Id).ConfigureAwait(false);
+                if (e.UrlSecretName is { } url) await CleanupSecretAsync(host, url).ConfigureAwait(false);
             }
             else throw new ArgumentException("Unknown or stale action.");
             return L("Saved.", "Gespeichert.");
@@ -277,11 +340,16 @@ public sealed partial class WebhookPlugin : IPostProcessorPlugin, IPluginProfile
         if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) || !(uri.Scheme == "https" || uri.Scheme == "http" && uri.IsLoopback) || uri.UserInfo.Length > 0 || uri.Fragment.Length > 0)
             throw new ArgumentException("Use an HTTPS URL or HTTP localhost URL without credentials or a fragment.");
     }
-    private void Save(Endpoint[] next) { Host.SetSetting("endpoints.v2", next); _endpoints = next; }
+    // An encrypted URL is written empty; one without encrypted storage yet stays until it is moved.
+    private void Save(Endpoint[] next)
+    {
+        Host.SetSetting("endpoints.v2", next.Select(e => e.UrlSecretName is null ? e : e with { Url = "" }).ToArray());
+        _endpoints = next;
+    }
     private static async Task CleanupSecretAsync(IPluginHostServices host, string key)
     {
         try { await host.DeleteSecretAsync(key).ConfigureAwait(false); }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { host.Log(PluginLogLevel.Warning, "An inactive webhook header secret could not be removed."); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { host.Log(PluginLogLevel.Warning, "An inactive webhook secret could not be removed."); }
     }
     private void Log(string name, string message) { lock (_logLock) { _log.Enqueue(DateTimeOffset.Now.ToString("HH:mm:ss") + " · " + name + ": " + message); while (_log.Count > 20) _log.Dequeue(); } }
     /// <inheritdoc />
