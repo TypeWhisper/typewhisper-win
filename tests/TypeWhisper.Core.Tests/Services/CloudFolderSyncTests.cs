@@ -1638,21 +1638,21 @@ public sealed class CloudFolderSyncTests : IDisposable
     public async Task LinkedFoldersInTheSyncFolderAreNotFollowed()
     {
         if (!OperatingSystem.IsWindows()) return;
-        var outside = Path.Combine(_tempDir, "outside");
+        var outside = Path.Join(_tempDir, "outside");
         Directory.CreateDirectory(outside);
         var operation = Upsert(DictionaryEntry("TypeWhisper", Date(20)));
-        File.WriteAllText(Path.Combine(outside, "linked.json"), CloudFolderSyncJson.Serialize(operation));
-        var sync = Path.Combine(_tempDir, "sync");
-        var ops = Path.Combine(CloudFolderSyncEngine.PackagePath(sync), "ops");
+        File.WriteAllText(Path.Join(outside, "linked.json"), CloudFolderSyncJson.Serialize(operation));
+        var sync = Path.Join(_tempDir, "sync");
+        var ops = Path.Join(CloudFolderSyncEngine.PackagePath(sync), "ops");
         Directory.CreateDirectory(ops);
-        using var peer = CreateJunction(Path.Combine(ops, "peer"), outside);
+        using var peer = CreateJunction(Path.Join(ops, "peer"), outside);
         var store = new InMemoryUserDataSyncStore();
         var state = new CloudFolderSyncState { DeviceId = "windows" };
         await CloudFolderSyncEngine.SyncAsync(sync, store, state, new PaidEntitlements(true), Date(30));
         Assert.Empty(store.DictionaryEntries);
 
         // This device never writes through a linked folder.
-        using var device = CreateJunction(Path.Combine(ops, "linked-device"), outside);
+        using var device = CreateJunction(Path.Join(ops, "linked-device"), outside);
         await Assert.ThrowsAsync<IOException>(() => CloudFolderSyncEngine.SyncAsync(sync, store,
             new CloudFolderSyncState { DeviceId = "linked-device" }, new PaidEntitlements(true), Date(40)));
         Assert.Equal(["linked.json"], Directory.GetFiles(outside).Select(Path.GetFileName));

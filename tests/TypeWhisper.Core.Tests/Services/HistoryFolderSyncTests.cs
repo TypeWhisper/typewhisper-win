@@ -265,9 +265,9 @@ public sealed class HistoryFolderSyncTests : IDisposable
 
     private void WriteDeletion(DateTime deletedAt, string id)
     {
-        var directory = Path.Combine(Package, "ops", MacTransport);
+        var directory = Path.Join(Package, "ops", MacTransport);
         Directory.CreateDirectory(directory);
-        File.WriteAllText(Path.Combine(directory, $"1790000000001-{id}.json"), JsonSerializer.Serialize(new HistorySyncOperation
+        File.WriteAllText(Path.Join(directory, $"1790000000001-{id}.json"), JsonSerializer.Serialize(new HistorySyncOperation
         {
             OperationId = id, DeviceId = MacTransport, ItemId = "history:" + RecordUuid.ToLowerInvariant(), Kind = "delete",
             UpdatedAt = deletedAt, DeletedAt = deletedAt, HistoryPayloadVersion = 1, HistoryGeneration = HistoryFolderSync.Generation
@@ -300,7 +300,7 @@ public sealed class HistoryFolderSyncTests : IDisposable
     public void OversizedOperationFilesAreNotRead()
     {
         WriteMacOperation("historyContent", MacContent(Now.AddMinutes(-10)), Now.AddMinutes(-10));
-        var file = Directory.GetFiles(Path.Combine(Package, "ops", MacTransport)).Single();
+        var file = Directory.GetFiles(Path.Join(Package, "ops", MacTransport)).Single();
         File.AppendAllText(file, new string(' ', (int)CloudFolderSyncFiles.MaxFileBytes));
         var cache = new HistorySyncOperationCache();
         var result = HistoryFolderSync.Sync(_folder, "windows-transport", new HistorySyncState { Enabled = true }, [], "PC", "1", Now, default, null, cache);
@@ -312,9 +312,9 @@ public sealed class HistoryFolderSyncTests : IDisposable
     {
         if (!OperatingSystem.IsWindows()) return;
         WriteMacOperation("historyContent", MacContent(Now.AddMinutes(-10)), Now.AddMinutes(-10));
-        var outside = Path.Combine(_folder, "outside");
-        Directory.Move(Path.Combine(Package, "ops", MacTransport), outside);
-        using var link = CloudFolderSyncTests.CreateJunction(Path.Combine(Package, "ops", MacTransport), outside);
+        var outside = Path.Join(_folder, "outside");
+        Directory.Move(Path.Join(Package, "ops", MacTransport), outside);
+        using var link = CloudFolderSyncTests.CreateJunction(Path.Join(Package, "ops", MacTransport), outside);
         Assert.Equal(0, Sync(_folder, "windows-transport", new HistorySyncState { Enabled = true }, []).ChangesApplied);
     }
 
