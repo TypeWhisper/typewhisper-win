@@ -10,7 +10,7 @@ namespace TypeWhisper.Presentation.Tests;
 [SupportedOSPlatform("windows")]
 public sealed class TargetAppProcessTrustTests
 {
-    [Fact]
+    [WindowsFact]
     public void OnlyProcessesOfThisSessionAndUserAtTheSameIntegrityOrAboveReceiveDictation()
     {
         var user = new SecurityIdentifier("S-1-5-21-1-2-3-1001");
@@ -24,7 +24,7 @@ public sealed class TargetAppProcessTrustTests
         Assert.False(TargetAppProcessTrust.Admits(own, null));
     }
 
-    [Fact]
+    [WindowsFact]
     public void ReadsTheIdentityOfThisProcessAndRefusesSystemProcesses()
     {
         var own = TargetAppProcessTrust.Read((uint)Environment.ProcessId);
@@ -39,7 +39,7 @@ public sealed class TargetAppProcessTrustTests
         Assert.False(TargetAppProcessTrust.IsTrusted(uint.MaxValue));
     }
 
-    [Fact]
+    [WindowsFact]
     public void AClosedWindowNoLongerStandsForItsProcess()
     {
         Assert.False(TargetAppWindow.IsOwnedBy(IntPtr.Zero, (uint)Environment.ProcessId));

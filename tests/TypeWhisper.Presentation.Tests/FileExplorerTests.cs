@@ -6,7 +6,7 @@ namespace TypeWhisper.Presentation.Tests;
 // Showing a recording or History audio in File Explorer starts Explorer from the Windows folder.
 public sealed class FileExplorerTests
 {
-    [Fact]
+    [WindowsFact]
     public void StartsExplorerFromTheWindowsFolderWithoutTheShell()
     {
         var path = Path.Join(Path.GetTempPath(), "Recordings with spaces", "take 1.wav");
