@@ -3276,5 +3276,12 @@
   "Try again": "重试",
   "{0} is downloaded but not loaded.": "{0} 已下载，但尚未加载。",
   "No model is downloaded yet. Download one in the {0} plugin settings; it loads right after the download.": "尚未下载任何模型。请在 {0} 的插件设置中下载一个；下载后会立即加载。",
-  "{0} is loaded and ready.": "{0} 已加载，可以使用。"
+  "{0} is loaded and ready.": "{0} 已加载，可以使用。",
+  "Recording microphone and system audio": "正在录制麦克风和系统音频",
+  "Recording microphone": "正在录制麦克风",
+  "Recording system audio": "正在录制系统音频",
+  "Another app started a recording": "另一个应用开始了录音",
+  "TypeWhisper is recording the microphone and system audio. Stop it from the tray menu or in Recorder.": "TypeWhisper 正在录制麦克风和系统音频。可从托盘菜单或在录音中停止。",
+  "TypeWhisper is recording the system audio. Stop it from the tray menu or in Recorder.": "TypeWhisper 正在录制系统音频。可从托盘菜单或在录音中停止。",
+  "TypeWhisper is recording the microphone. Stop it from the tray menu or in Recorder.": "TypeWhisper 正在录制麦克风。可从托盘菜单或在录音中停止。"
 }

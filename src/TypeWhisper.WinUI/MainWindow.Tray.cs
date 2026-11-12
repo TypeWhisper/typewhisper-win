@@ -28,6 +28,19 @@ public sealed partial class MainWindow
     }
 
     internal bool RecorderRecording => RecorderView.IsRecording;
+    internal (bool Microphone, bool SystemAudio) RecorderSources => RecorderView.RecordingSources;
+    internal event Action<bool, bool>? ApiRecorderStarted
+    {
+        add => RecorderView.ApiRecordingStarted += value;
+        remove => RecorderView.ApiRecordingStarted -= value;
+    }
+
+    // Clicking the notice about a recording another app started shows the Recorder, where it can be stopped.
+    internal void ShowRecorderFromTray()
+    {
+        if (_closing || _profileRestoreClosing) return;
+        OpenRecorder(() => RecorderView.FocusEntry());
+    }
     internal bool CanToggleRecorder => !_closing && !_profileRestoreClosing && RecorderView.CanToggleRecording;
     internal event Action? RecorderChanged
     {

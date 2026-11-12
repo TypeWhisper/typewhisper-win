@@ -88,6 +88,10 @@ public sealed partial class RecorderView : UserControl
     internal bool IsRecording { get; private set; }
     internal bool CanToggleRecording { get; private set; }
     internal event Action? RecordingStateChanged;
+    /// <summary>The sources of the running recording, for the tray while it lasts.</summary>
+    internal (bool Microphone, bool SystemAudio) RecordingSources => (_preferencesAtStart.MicrophoneEnabled, _preferencesAtStart.SystemAudioEnabled);
+    /// <summary>Raised after another app started a recording through the local API, with its sources.</summary>
+    internal event Action<bool, bool>? ApiRecordingStarted;
 
     // The tray's primary action, as in the macOS menu bar: starts with the saved sources or stops and saves.
     internal async Task<bool> ToggleRecordingAsync()
@@ -213,6 +217,11 @@ public sealed partial class RecorderView : UserControl
         Refresh();
     }
     partial void ReportApiFailure(string stage, Exception error) => AppDiagnostics.WriteFailure(stage, error);
+    partial void ReportApiRecordingStarted(bool microphone, bool systemAudio)
+    {
+        AppDiagnostics.Write("recorder.api.started");
+        ApiRecordingStarted?.Invoke(microphone, systemAudio);
+    }
     private void RecordingName_Changed(object sender, TextChangedEventArgs e) => SessionTitle = RecordingName.Text;
     private void Source_Changed(object sender, RoutedEventArgs e)
     {

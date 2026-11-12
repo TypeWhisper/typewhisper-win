@@ -3276,5 +3276,12 @@
   "Try again": "再試行",
   "{0} is downloaded but not loaded.": "{0} はダウンロード済みですが、読み込まれていません。",
   "No model is downloaded yet. Download one in the {0} plugin settings; it loads right after the download.": "まだモデルがダウンロードされていません。{0} のプラグイン設定でダウンロードしてください。ダウンロード後すぐに読み込まれます。",
-  "{0} is loaded and ready.": "{0} を読み込みました。使用できます。"
+  "{0} is loaded and ready.": "{0} を読み込みました。使用できます。",
+  "Recording microphone and system audio": "マイクとシステムオーディオを録音中",
+  "Recording microphone": "マイクを録音中",
+  "Recording system audio": "システムオーディオを録音中",
+  "Another app started a recording": "別のアプリが録音を開始しました",
+  "TypeWhisper is recording the microphone and system audio. Stop it from the tray menu or in Recorder.": "TypeWhisper はマイクとシステムオーディオを録音しています。トレイメニューまたはレコーダーで停止できます。",
+  "TypeWhisper is recording the system audio. Stop it from the tray menu or in Recorder.": "TypeWhisper はシステムオーディオを録音しています。トレイメニューまたはレコーダーで停止できます。",
+  "TypeWhisper is recording the microphone. Stop it from the tray menu or in Recorder.": "TypeWhisper はマイクを録音しています。トレイメニューまたはレコーダーで停止できます。"
 }

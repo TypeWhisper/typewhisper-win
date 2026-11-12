@@ -3276,5 +3276,12 @@
   "Try again": "Erneut versuchen",
   "{0} is downloaded but not loaded.": "{0} ist heruntergeladen, aber nicht geladen.",
   "No model is downloaded yet. Download one in the {0} plugin settings; it loads right after the download.": "Es ist noch kein Modell heruntergeladen. Lade eines in den Plugin-Einstellungen von {0} herunter; es wird direkt nach dem Download geladen.",
-  "{0} is loaded and ready.": "{0} ist geladen und bereit."
+  "{0} is loaded and ready.": "{0} ist geladen und bereit.",
+  "Recording microphone and system audio": "Nimmt Mikrofon und Systemaudio auf",
+  "Recording microphone": "Nimmt das Mikrofon auf",
+  "Recording system audio": "Nimmt Systemaudio auf",
+  "Another app started a recording": "Eine andere App hat eine Aufnahme gestartet",
+  "TypeWhisper is recording the microphone and system audio. Stop it from the tray menu or in Recorder.": "TypeWhisper nimmt Mikrofon und Systemaudio auf. Stoppe die Aufnahme über das Tray-Menü oder im Recorder.",
+  "TypeWhisper is recording the system audio. Stop it from the tray menu or in Recorder.": "TypeWhisper nimmt Systemaudio auf. Stoppe die Aufnahme über das Tray-Menü oder im Recorder.",
+  "TypeWhisper is recording the microphone. Stop it from the tray menu or in Recorder.": "TypeWhisper nimmt das Mikrofon auf. Stoppe die Aufnahme über das Tray-Menü oder im Recorder."
 }
