@@ -89,13 +89,10 @@ internal sealed partial class LocalDictationSession
     }
 
     /// <summary>Cancels the running local text model load, if any.</summary>
+    // The load clears _localLlmLoad under this lock before its source is disposed, so a source seen here is never disposed.
     internal void CancelLocalLlmLoad()
     {
-        lock (_localLlmLoadSync)
-        {
-            try { _localLlmLoad?.Cancel(); }
-            catch (ObjectDisposedException) { }
-        }
+        lock (_localLlmLoadSync) _localLlmLoad?.Cancel();
     }
 
     // Shutdown waits for a cancelled load before the runtime is released.
