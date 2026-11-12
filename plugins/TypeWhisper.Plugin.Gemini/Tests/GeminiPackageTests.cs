@@ -27,7 +27,7 @@ public sealed partial class GeminiPluginTests
             var entry = new PortableCatalogEntry
             {
                 Id = "com.typewhisper.gemini", Name = "Google Gemini", Version = PortablePluginPackage.ReadManifest(source).Version, MinHostVersion = "1.1.5",
-                DownloadUrl = "https://fixture.invalid/gemini.zip", Size = bytes.Length,
+                DownloadUrl = "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-fixture-v1.0.0/gemini.zip", Size = bytes.Length,
                 Sha256 = Convert.ToHexString(SHA256.HashData(bytes)), SupportedArchitectures = [PortablePluginCatalog.Architecture]
             };
             var store = Store(); await store.InitializeAsync(); await store.InstallAsync(entry);

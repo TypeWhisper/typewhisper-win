@@ -154,7 +154,7 @@ public sealed class CopilotPackageTests
     private static PortableCatalogEntry Entry(byte[] payload, string version = "1.1.7") => new()
     {
         Id = Id, Name = "GitHub Copilot", Version = version, MinHostVersion = "1.1.2",
-        DownloadUrl = "https://fixture.invalid/copilot.zip", Size = payload.Length,
+        DownloadUrl = "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-fixture-v1.0.0/copilot.zip", Size = payload.Length,
         Sha256 = Convert.ToHexString(SHA256.HashData(payload)), SupportedArchitectures = [PortablePluginCatalog.Architecture]
     };
 

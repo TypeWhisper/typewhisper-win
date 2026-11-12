@@ -29,7 +29,7 @@ public partial class OpenAiCompatiblePluginTests
             var entry = new PortableCatalogEntry
             {
                 Id = "com.typewhisper.openai-compatible", Name = "OpenAI Compatible", Version = "1.1.3", MinHostVersion = "1.1.2",
-                DownloadUrl = "https://fixture.invalid/openai-compatible.zip", Size = bytes.Length, Sha256 = Convert.ToHexString(SHA256.HashData(bytes)),
+                DownloadUrl = "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-fixture-v1.0.0/openai-compatible.zip", Size = bytes.Length, Sha256 = Convert.ToHexString(SHA256.HashData(bytes)),
                 SupportedArchitectures = [PortablePluginCatalog.Architecture]
             };
             var store = Store(); await store.InitializeAsync(); await store.InstallAsync(entry);

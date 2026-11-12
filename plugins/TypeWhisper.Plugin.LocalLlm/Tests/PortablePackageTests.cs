@@ -38,7 +38,7 @@ public sealed class PortablePackageTests
         using var http = new HttpClient(new ArchiveTransport(archive));
         PortablePluginStore Store() => new(Path.Combine(fixture.Root,"store"),new(1,1,3),http,_ => fixture.Host);
         var entry = new PortableCatalogEntry { Id=manifest.Id,Name=manifest.Name,Version=manifest.Version,MinHostVersion=manifest.MinHostVersion!,
-            DownloadUrl="https://fixture.invalid/package.zip",Size=new FileInfo(archive).Length,Sha256=hash,SupportedArchitectures=[PortablePluginCatalog.Architecture] };
+            DownloadUrl="https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-fixture-v1.0.0/package.zip",Size=new FileInfo(archive).Length,Sha256=hash,SupportedArchitectures=[PortablePluginCatalog.Architecture] };
         var store=Store(); await store.InitializeAsync(); await store.InstallAsync(entry);
         var path=store.Resolve(entry.Id);
         await Assert.ThrowsAsync<InvalidDataException>(() => PortablePluginPackage.LoadAsync(path, fixture.Host, new(1,1,2)));

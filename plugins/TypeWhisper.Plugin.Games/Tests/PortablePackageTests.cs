@@ -63,7 +63,7 @@ public sealed class PortablePackageTests : IDisposable
         var entry = new PortableCatalogEntry
         {
             Id = manifest.Id, Name = manifest.Name, Version = manifest.Version, MinHostVersion = manifest.MinHostVersion!,
-            DownloadUrl = "https://fixture.invalid/package.zip", Size = new FileInfo(archive).Length,
+            DownloadUrl = "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-fixture-v1.0.0/package.zip", Size = new FileInfo(archive).Length,
             Sha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(archive))), SupportedArchitectures = [PortablePluginCatalog.Architecture]
         };
         using var http = new HttpClient(new ArchiveTransport(archive));
