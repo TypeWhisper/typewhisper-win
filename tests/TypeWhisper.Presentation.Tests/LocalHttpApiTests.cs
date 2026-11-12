@@ -182,19 +182,24 @@ public sealed class LocalHttpApiTests
         }
         Assert.Equal(authenticatedCalls, calls);
 
-        // Browser extensions send their own origin scheme and pass, with the token when one is required.
+        // Browser extensions send their own origin scheme. Any installed extension can, so they pass only while
+        // the token is required, and then only with it.
         foreach (var origin in new[] { "chrome-extension://abcdefghijklmnopabcdefghijklmnop", "moz-extension://5f1c4e0a-1d2b-4c3d-9e8f-0a1b2c3d4e5f",
             "safari-web-extension://ABCDEF", "extension://abc" })
         {
             client.DefaultRequestHeaders.Remove("Origin");
             client.DefaultRequestHeaders.Add("Origin", origin);
             client.DefaultRequestHeaders.Authorization = null;
-            Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("v1/status")).StatusCode);
-            Assert.Equal(expected, (await client.PutAsync("v1/browser/context", new StringContent("{}"))).StatusCode);
+            var extension = requireAuthentication ? HttpStatusCode.OK : HttpStatusCode.Forbidden;
+            Assert.Equal(extension, (await client.GetAsync("v1/status")).StatusCode);
+            using (var body = new StringContent("{}"))
+                Assert.Equal(requireAuthentication ? HttpStatusCode.Unauthorized : HttpStatusCode.Forbidden,
+                    (await client.PutAsync("v1/browser/context", body)).StatusCode);
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Token);
-            Assert.Equal(HttpStatusCode.OK, (await client.PutAsync("v1/browser/context", new StringContent("{}"))).StatusCode);
+            using (var body = new StringContent("{}"))
+                Assert.Equal(extension, (await client.PutAsync("v1/browser/context", body)).StatusCode);
         }
-        Assert.Equal(authenticatedCalls + (requireAuthentication ? 4 : 8), calls);
+        Assert.Equal(authenticatedCalls + (requireAuthentication ? 4 : 0), calls);
         // Web pages that imitate the extension prefix stay blocked.
         foreach (var origin in new[] { "https://chrome-extension.example", "http://extension.example", "chrome-extension:abc" })
         {
@@ -203,6 +208,55 @@ public sealed class LocalHttpApiTests
             Assert.Equal(HttpStatusCode.Forbidden, (await client.PutAsync("v1/browser/context", new StringContent("{}"))).StatusCode);
         }
     }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PageTriggeredRequestsWithoutOriginAreRejected(bool requireAuthentication)
+    {
+        var calls = 0;
+        await using var server = new LocalHttpApi(FreePort(), Token, (_, _) =>
+        {
+            Interlocked.Increment(ref calls);
+            return Task.FromResult(LocalApiResponse.Json(200, new { }));
+        }, requireAuthentication: requireAuthentication);
+        await server.StartAsync();
+        using var client = Client(server);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Token);
+        // Images, links and form navigations from other pages carry Sec-Fetch-Site but no Origin.
+        foreach (var site in new[] { "cross-site", "same-site", "CROSS-SITE", "unexpected" })
+        {
+            client.DefaultRequestHeaders.Remove("Sec-Fetch-Site");
+            client.DefaultRequestHeaders.Add("Sec-Fetch-Site", site);
+            Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("v1/history?q=a")).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("v1/status")).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("docs")).StatusCode);
+        }
+        Assert.Equal(0, calls);
+        // Typed addresses and the API's own documentation page stay usable.
+        foreach (var site in new[] { "none", "same-origin" })
+        {
+            client.DefaultRequestHeaders.Remove("Sec-Fetch-Site");
+            client.DefaultRequestHeaders.Add("Sec-Fetch-Site", site);
+            Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("v1/models")).StatusCode);
+            Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("docs")).StatusCode);
+        }
+        Assert.Equal(2, calls);
+    }
+
+    [Theory]
+    [InlineData("chrome-extension://abc", null, true, true)]
+    [InlineData("chrome-extension://abc", "cross-site", true, true)]
+    [InlineData("chrome-extension://abc", null, false, false)]
+    [InlineData("https://example.com", null, true, false)]
+    [InlineData("null", null, true, false)]
+    [InlineData(null, null, false, true)]
+    [InlineData(null, "none", false, true)]
+    [InlineData(null, " Same-Origin ", false, true)]
+    [InlineData(null, "same-site", true, false)]
+    [InlineData(null, "cross-site", true, false)]
+    public void BrowserContextRules(string? origin, string? fetchSite, bool tokenRequired, bool allowed) =>
+        Assert.Equal(allowed, LocalHttpApi.AllowedBrowserContext(origin, fetchSite, tokenRequired));
 
     [Fact]
     public async Task DocumentationIsPublicStaticAndDoesNotExposeCredentialsOrBypassApiAuthentication()

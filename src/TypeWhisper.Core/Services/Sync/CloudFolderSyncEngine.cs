@@ -119,11 +119,16 @@ public sealed record CloudFolderSyncState
 /// <param name="OperationsWritten">Operations written supplied to the member.</param>
 /// <param name="MutationsApplied">Mutations applied supplied to the member.</param>
 /// <param name="SyncedAt">Synced at supplied to the member.</param>
+/// <param name="HeldForReview">
+/// Received entries that were saved turned off because they use a regular expression, line breaks or the
+/// clipboard. They stay off until someone turns them on in this app.
+/// </param>
 public sealed record CloudFolderSyncResult(
     int OperationsRead,
     int OperationsWritten,
     int MutationsApplied,
-    DateTime SyncedAt);
+    DateTime SyncedAt,
+    int HeldForReview = 0);
 
 /// <summary>
 /// Represents cloud folder sync manifest data.
@@ -298,6 +303,12 @@ public static class CloudFolderSyncEngine
     private const string DevicesDirectoryName = "devices";
     private const string OperationsDirectoryName = "ops";
 
+    /// <summary>The most entries a local dictionary or snippet catalog holds; the app refuses larger catalogs.</summary>
+    public const int MaxCatalogItems = 10_000;
+    private const int MaxKeyLength = 160;
+    private const int MaxReplacementLength = 10_000;
+    private const int MaxTagsLength = 300;
+
     /// <summary>
     /// Gets the package path.
     /// </summary>
@@ -319,12 +330,23 @@ public static class CloudFolderSyncEngine
     /// <summary>
     /// Performs sync asynchronously.
     /// </summary>
+    /// <param name="folderPath">The chosen sync folder.</param>
+    /// <param name="store">The local catalogs.</param>
+    /// <param name="state">This device's sync progress; updated by the pass.</param>
+    /// <param name="entitlements">Whether sync may run.</param>
+    /// <param name="now">The current time.</param>
+    /// <param name="cancellationToken">Cancels the pass before local changes are applied.</param>
+    /// <param name="reservedDictionaryItems">
+    /// Dictionary entries outside the store snapshot, such as installed term packs, that count toward
+    /// <see cref="MaxCatalogItems"/>.
+    /// </param>
     public static Task<CloudFolderSyncResult> SyncAsync(
         string folderPath,
         IUserDataSyncStore? store,
         CloudFolderSyncState state,
         PaidEntitlements entitlements,
-        DateTime? now = null, CancellationToken cancellationToken = default)
+        DateTime? now = null, CancellationToken cancellationToken = default,
+        int reservedDictionaryItems = 0)
     {
         if (!entitlements.CanUseCloudFolderSync)
             throw new CloudFolderSyncNotEntitledException();
@@ -344,11 +366,14 @@ public static class CloudFolderSyncEngine
             packagePath,
             EnsureRelativePathSegment(DevicesDirectoryName, nameof(DevicesDirectoryName)));
 
+        foreach (var directory in new[] { packagePath, operationsPath, deviceOperationsPath, devicesPath })
+            CloudFolderSyncFiles.EnsureNotLinked(directory);
         Directory.CreateDirectory(deviceOperationsPath);
         Directory.CreateDirectory(devicesPath);
         WritePackageMetadata(packagePath, devicesPath, deviceId, syncNow);
 
-        var initialRecords = RecordsFrom(store.Snapshot());
+        var initialSnapshot = store.Snapshot();
+        var initialRecords = RecordsFrom(initialSnapshot);
         var legacyRegexIds = new Dictionary<string, string>(StringComparer.Ordinal);
         var publicationState = state;
         if (state.KnownLocalItemIds.Any(id => id.StartsWith("dictionary:correction:", StringComparison.Ordinal) &&
@@ -390,9 +415,17 @@ public static class CloudFolderSyncEngine
         // Keep tombstones: deleting them while old upserts remain would resurrect data on a new device.
         cancellationToken.ThrowIfCancellationRequested();
 
-        var operations = NormalizeIdentities(ReadOperations(operationsPath, cancellationToken, out _), initialRecords, out var observedOperationIds);
+        // Changes dated implausibly far ahead would win every later conflict; they wait until their time comes.
+        var readable = ReadOperations(operationsPath, cancellationToken, out _).Where(operation => IsPlausible(operation, syncNow)).ToArray();
+        var operations = NormalizeIdentities(readable, initialRecords, out var observedOperationIds);
         var winners = WinningOperations(operations);
-        var mutations = MakeMutations(winners, initialRecords, state.DeviceId, state.AppliedOperationIds);
+        var localCounts = new Dictionary<UserDataSyncCollection, int>
+        {
+            [UserDataSyncCollection.Dictionary] = initialSnapshot.DictionaryEntries.Count + Math.Max(0, reservedDictionaryItems),
+            [UserDataSyncCollection.Snippets] = initialSnapshot.Snippets.Count
+        };
+        var plan = MakeMutations(winners, initialRecords, state.DeviceId, state.AppliedOperationIds, localCounts);
+        var mutations = plan.Mutations;
 
         cancellationToken.ThrowIfCancellationRequested();
         if (mutations.Count > 0)
@@ -409,6 +442,8 @@ public static class CloudFolderSyncEngine
         {
             var entry = mutation.Entry;
             var itemId = UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original, entry.IsRegex);
+            // An entry turned off for review here must not publish its off state back to its other devices.
+            if (plan.HeldItemIds.Contains(itemId)) continue;
             if (entry.EntryType == UserDataSyncDictionaryEntryType.Correction &&
                 (!entry.IsRegexFieldPresent || operations.Any(operation =>
                     operation.SchemaVersion == 1 && !state.AppliedOperationIds.Contains(operation.OperationId) &&
@@ -417,14 +452,16 @@ public static class CloudFolderSyncEngine
         }
         // Suppressed v1 regex upserts were seen too. Remember them even if a
         // winning tombstone later disappears, so the stale rule cannot reappear.
-        state.AppliedOperationIds.UnionWith(observedOperationIds);
+        // Additions skipped because a catalog is full are read again once there is room.
+        state.AppliedOperationIds.UnionWith(observedOperationIds.Where(id => !plan.DeferredOperationIds.Contains(id)));
         state.LastSyncAt = syncNow;
 
         return Task.FromResult(new CloudFolderSyncResult(
             operations.Count,
             localOperations.Count,
             mutations.Count,
-            syncNow));
+            syncNow,
+            plan.HeldItemIds.Count));
     }
 
     /// <summary>
@@ -480,24 +517,48 @@ public static class CloudFolderSyncEngine
         return winners;
     }
 
+    // Received entries must fit the limits of the local catalogs, or the Dictionary and Snippets pages refuse to
+    // open them. Entries that do not fit are left out on this device.
     private static bool IsValidOperation(CloudFolderSyncOperation operation) =>
         IsSupportedSchema(operation) && !string.IsNullOrWhiteSpace(operation.OperationId) &&
         !string.IsNullOrWhiteSpace(operation.DeviceId) && !string.IsNullOrWhiteSpace(operation.ItemId) &&
         operation.UpdatedAt != default && Enum.IsDefined(operation.Collection) && Enum.IsDefined(operation.Kind) &&
         (operation.Kind == CloudFolderSyncOperationKind.Delete ||
          operation.Collection == UserDataSyncCollection.Dictionary && operation.Dictionary is { } d &&
-            IsValidDictionaryOriginal(d) && Enum.IsDefined(d.EntryType) &&
-            (d.EntryType != UserDataSyncDictionaryEntryType.Correction || d.Replacement is { Length: <= 10000 }) &&
+            IsValidDictionaryOriginal(d) && Enum.IsDefined(d.EntryType) && Enum.IsDefined(d.Source) &&
+            (d.EntryType != UserDataSyncDictionaryEntryType.Correction || d.Replacement is { Length: <= MaxReplacementLength }) &&
             (d.CtcMinSimilarity is null || float.IsFinite(d.CtcMinSimilarity.Value) && d.CtcMinSimilarity >= .4f && d.CtcMinSimilarity <= .95f) ||
-         operation.Collection == UserDataSyncCollection.Snippets && operation.Snippet is { } n &&
-            !string.IsNullOrWhiteSpace(n.Trigger) && n.Replacement is not null);
+         operation.Collection == UserDataSyncCollection.Snippets && operation.Snippet is { } n && IsValidSnippet(n));
+
+    private static bool IsPlausible(CloudFolderSyncOperation operation, DateTime now) =>
+        CloudFolderSyncFiles.IsPlausible(operation.UpdatedAt, now) && CloudFolderSyncFiles.IsPlausible(operation.DeletedAt, now) &&
+        CloudFolderSyncFiles.IsPlausible(operation.Dictionary?.UpdatedAt, now) && CloudFolderSyncFiles.IsPlausible(operation.Snippet?.UpdatedAt, now);
+
+    // Keys are saved trimmed, as the Dictionary and Snippets pages save them.
+    private static bool IsValidKey(string? key) =>
+        key?.Trim() is { Length: > 0 and <= MaxKeyLength } trimmed && trimmed.IndexOfAny(['\r', '\n']) < 0;
+
+    private static bool IsValidSnippet(UserDataSyncSnippet snippet)
+    {
+        if (!IsValidKey(snippet.Trigger) || snippet.Replacement is not { Length: <= MaxReplacementLength } ||
+            snippet.Tags is null || snippet.Tags.Any(tag => tag is null) || string.Join(",", snippet.Tags).Length > MaxTagsLength)
+            return false;
+        try
+        {
+            // A date or time placeholder with an invalid format would make every expansion of this snippet fail.
+            var probe = new Snippet { Id = "sync", Trigger = snippet.Trigger.Trim(), Replacement = snippet.Replacement };
+            _ = SnippetService.ApplySnippetsSnapshot(probe.Trigger, [probe], () => "");
+            return true;
+        }
+        catch (FormatException) { return false; }
+    }
 
     private static bool IsValidDictionaryOriginal(UserDataSyncDictionaryEntry entry)
     {
         if (entry.EntryType != UserDataSyncDictionaryEntryType.Correction || !entry.IsRegex)
-            return !string.IsNullOrWhiteSpace(entry.Original);
+            return IsValidKey(entry.Original);
         // Match the persisted catalog's single-line key limits before saving.
-        if (string.IsNullOrEmpty(entry.Original) || entry.Original.Length > 160 ||
+        if (string.IsNullOrEmpty(entry.Original) || entry.Original.Length > MaxKeyLength ||
             entry.Original.Contains('\r') || entry.Original.Contains('\n')) return false;
         try
         {
@@ -740,44 +801,110 @@ public static class CloudFolderSyncEngine
         return operations;
     }
 
-    private static IReadOnlyList<UserDataSyncMutation> MakeMutations(
+    private sealed record MutationPlan(
+        List<UserDataSyncMutation> Mutations,
+        HashSet<string> HeldItemIds,
+        HashSet<string> DeferredOperationIds);
+
+    private static MutationPlan MakeMutations(
         IReadOnlyDictionary<string, CloudFolderSyncOperation> winners,
         IReadOnlyDictionary<string, CloudFolderSyncRecord> localRecords,
         string localDeviceId,
-        IReadOnlySet<string> appliedOperationIds)
+        IReadOnlySet<string> appliedOperationIds,
+        IReadOnlyDictionary<UserDataSyncCollection, int> localCounts)
     {
-        var mutations = new List<UserDataSyncMutation>();
+        var plan = new MutationPlan([], new(StringComparer.Ordinal), new(StringComparer.Ordinal));
+        var pending = winners.Values
+            .OrderBy(operation => operation.ItemId, StringComparer.Ordinal)
+            .Where(operation => !appliedOperationIds.Contains(operation.OperationId))
+            .Select(operation => (Operation: operation, Local: localRecords.GetValueOrDefault(operation.ItemId)))
+            .Where(pair => ShouldApply(pair.Operation, pair.Local, localDeviceId))
+            .ToArray();
+        // Deletions make room before additions are counted against the catalog limit.
+        var counts = new Dictionary<UserDataSyncCollection, int>(localCounts);
+        foreach (var (operation, local) in pending)
+            if (operation.Kind == CloudFolderSyncOperationKind.Delete && local is not null)
+                counts[operation.Collection] = counts.GetValueOrDefault(operation.Collection) - 1;
+        bool HasRoom(CloudFolderSyncOperation operation, CloudFolderSyncRecord? local)
+        {
+            if (local is not null) return true;
+            if (counts.GetValueOrDefault(operation.Collection) >= MaxCatalogItems)
+            {
+                plan.DeferredOperationIds.Add(operation.OperationId);
+                return false;
+            }
+            counts[operation.Collection] = counts.GetValueOrDefault(operation.Collection) + 1;
+            return true;
+        }
 
-        foreach (var operation in winners.Values
-                     .OrderBy(operation => operation.ItemId, StringComparer.Ordinal)
-                     .Where(operation => !appliedOperationIds.Contains(operation.OperationId))
-                     .Where(operation =>
-                     {
-                         localRecords.TryGetValue(operation.ItemId, out var local);
-                         return ShouldApply(operation, local, localDeviceId);
-                     }))
+        foreach (var (operation, local) in pending)
         {
             switch (operation.Kind, operation.Collection)
             {
                 case (CloudFolderSyncOperationKind.Delete, UserDataSyncCollection.Dictionary):
-                    mutations.Add(new UserDataSyncMutation.DeleteDictionary(operation.ItemId));
+                    plan.Mutations.Add(new UserDataSyncMutation.DeleteDictionary(operation.ItemId));
                     break;
                 case (CloudFolderSyncOperationKind.Delete, UserDataSyncCollection.Snippets):
-                    mutations.Add(new UserDataSyncMutation.DeleteSnippet(operation.ItemId));
+                    plan.Mutations.Add(new UserDataSyncMutation.DeleteSnippet(operation.ItemId));
                     break;
                 case (CloudFolderSyncOperationKind.Upsert, UserDataSyncCollection.Dictionary):
-                    if (operation.Dictionary is { } dictionary)
-                        mutations.Add(new UserDataSyncMutation.UpsertDictionary(dictionary));
+                    if (operation.Dictionary is { } dictionary && HasRoom(operation, local))
+                    {
+                        var entry = ForLocalCatalog(dictionary);
+                        if (NeedsReview(entry, local?.Dictionary))
+                        {
+                            entry = entry with { IsEnabled = false };
+                            plan.HeldItemIds.Add(operation.ItemId);
+                        }
+                        plan.Mutations.Add(new UserDataSyncMutation.UpsertDictionary(entry));
+                    }
                     break;
                 case (CloudFolderSyncOperationKind.Upsert, UserDataSyncCollection.Snippets):
-                    if (operation.Snippet is { } snippet)
-                        mutations.Add(new UserDataSyncMutation.UpsertSnippet(snippet));
+                    if (operation.Snippet is { } snippet && HasRoom(operation, local))
+                    {
+                        var received = snippet with { Trigger = snippet.Trigger.Trim() };
+                        if (NeedsReview(received, local?.Snippet))
+                        {
+                            received = received with { IsEnabled = false };
+                            plan.HeldItemIds.Add(operation.ItemId);
+                        }
+                        plan.Mutations.Add(new UserDataSyncMutation.UpsertSnippet(received));
+                    }
                     break;
             }
         }
 
-        return mutations;
+        return plan;
     }
+
+    // Terms carry no replacement, and literal phrases are saved trimmed, as the Dictionary page saves them.
+    private static UserDataSyncDictionaryEntry ForLocalCatalog(UserDataSyncDictionaryEntry entry) => entry with
+    {
+        Original = entry.EntryType == UserDataSyncDictionaryEntryType.Correction && entry.IsRegex ? entry.Original : entry.Original.Trim(),
+        Replacement = entry.EntryType == UserDataSyncDictionaryEntryType.Term ? null : entry.Replacement
+    };
+
+    // Anyone who can write to the sync folder can add entries. Entries that can rewrite whole dictations, insert
+    // line breaks (which can submit text in chat apps and terminals) or insert the clipboard are saved turned off,
+    // unless this device already has the same entry turned on. Turning such an entry on here accepts it.
+    private static bool NeedsReview(UserDataSyncDictionaryEntry entry, UserDataSyncDictionaryEntry? local) =>
+        entry.IsEnabled && entry.EntryType == UserDataSyncDictionaryEntryType.Correction &&
+        (entry.IsRegex || HasLineBreak(entry.Replacement, includeEscapes: true)) &&
+        !(local is { IsEnabled: true } && local.EntryType == entry.EntryType && local.IsRegex == entry.IsRegex &&
+          local.CaseSensitive == entry.CaseSensitive && string.Equals(local.Original, entry.Original, StringComparison.Ordinal) &&
+          string.Equals(local.Replacement, entry.Replacement, StringComparison.Ordinal));
+
+    private static bool NeedsReview(UserDataSyncSnippet snippet, UserDataSyncSnippet? local) =>
+        snippet.IsEnabled &&
+        (snippet.Replacement.Contains("{clipboard", StringComparison.Ordinal) || HasLineBreak(snippet.Replacement, includeEscapes: false)) &&
+        !(local is { IsEnabled: true } && local.CaseSensitive == snippet.CaseSensitive &&
+          string.Equals(local.Trigger, snippet.Trigger, StringComparison.Ordinal) &&
+          string.Equals(local.Replacement, snippet.Replacement, StringComparison.Ordinal));
+
+    // Dictionary replacements expand \n and \r escapes into line breaks; snippets insert their text as written.
+    private static bool HasLineBreak(string? text, bool includeEscapes) =>
+        text is not null && (text.IndexOfAny(['\r', '\n', '\u0085', (char)0x2028, (char)0x2029]) >= 0 ||
+            includeEscapes && (text.Contains(@"\n", StringComparison.Ordinal) || text.Contains(@"\r", StringComparison.Ordinal)));
 
     private static bool ShouldApply(
         CloudFolderSyncOperation operation,
@@ -865,7 +992,7 @@ public static class CloudFolderSyncEngine
 
     private static JsonObject? ReadDevice(string path)
     {
-        try { return File.Exists(path) ? JsonNode.Parse(File.ReadAllText(path)) as JsonObject : null; }
+        try { return File.Exists(path) && CloudFolderSyncFiles.ReadSmallFile(path) is { } text ? JsonNode.Parse(text) as JsonObject : null; }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException) { return null; }
     }
 
@@ -887,14 +1014,20 @@ public static class CloudFolderSyncEngine
 
         var operations = new List<CloudFolderSyncOperation>();
 
-        foreach (var deviceDirectory in Directory.EnumerateDirectories(operationsPath))
+        foreach (var deviceDirectory in CloudFolderSyncFiles.DeviceDirectories(operationsPath))
         {
-            foreach (var file in Directory.EnumerateFiles(deviceDirectory, "*.json"))
+            foreach (var file in CloudFolderSyncFiles.OperationFiles(deviceDirectory))
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 try
                 {
-                    using var document = JsonDocument.Parse(File.ReadAllText(file));
+                    // Linked or oversized files are never read and count as unreadable.
+                    if (CloudFolderSyncFiles.ReadSmallFile(file) is not { } text)
+                    {
+                        unreadableHistory = true;
+                        continue;
+                    }
+                    using var document = JsonDocument.Parse(text);
                     var envelope = document.RootElement;
                     if (!HasReadableOperationEnvelope(envelope))
                     {

@@ -246,7 +246,7 @@ public sealed class HistoryFolderSyncTests : IDisposable
     public void OperationCacheStaysWithinItsBoundAndFollowsTheFolder()
     {
         for (var i = 0; i < 12; i++)
-            WriteMacOperation("historyContent", MacContent(Now.AddMinutes(i)), Now.AddMinutes(i), $"000000{i:00}-0000-4000-8000-000000000000");
+            WriteMacOperation("historyContent", MacContent(Now.AddMinutes(-i)), Now.AddMinutes(-i), $"000000{i:00}-0000-4000-8000-000000000000");
         var cache = new HistorySyncOperationCache(capacity: 8);
         var state = new HistorySyncState { Enabled = true };
 
@@ -261,6 +261,61 @@ public sealed class HistoryFolderSyncTests : IDisposable
         // Another folder has nothing in common with the remembered paths.
         HistoryFolderSync.Sync(Path.Combine(_folder, "other"), "windows-transport", new HistorySyncState { Enabled = true }, [], "PC", "1", Now, default, null, cache);
         Assert.Equal(0, cache.Count);
+    }
+
+    private void WriteDeletion(DateTime deletedAt, string id)
+    {
+        var directory = Path.Join(Package, "ops", MacTransport);
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(Path.Join(directory, $"1790000000001-{id}.json"), JsonSerializer.Serialize(new HistorySyncOperation
+        {
+            OperationId = id, DeviceId = MacTransport, ItemId = "history:" + RecordUuid.ToLowerInvariant(), Kind = "delete",
+            UpdatedAt = deletedAt, DeletedAt = deletedAt, HistoryPayloadVersion = 1, HistoryGeneration = HistoryFolderSync.Generation
+        }));
+    }
+
+    [Fact]
+    public void DeletionDatedFarAheadWaitsUntilItsTime()
+    {
+        WriteMacOperation("historyContent", MacContent(Now.AddMinutes(-10)), Now.AddMinutes(-10));
+        var state = new HistorySyncState { Enabled = true };
+        var records = Sync(_folder, "windows-transport", state, []).Records!;
+        const string deletion = "DE1E7E00-0000-4000-8000-000000000001";
+        WriteDeletion(Now.AddDays(365), deletion);
+
+        var result = Sync(_folder, "windows-transport", state, records, Now.AddMinutes(1));
+        Assert.Null(result.Records);
+        Assert.DoesNotContain(deletion, state.AppliedOperationIds);
+
+        // A small clock difference between devices is still accepted.
+        const string skewed = "DE1E7E00-0000-4000-8000-000000000002";
+        WriteDeletion(Now.AddMinutes(4), skewed);
+        result = Sync(_folder, "windows-transport", state, records, Now.AddMinutes(1));
+        Assert.Empty(result.Records!);
+        Assert.Contains(skewed, state.AppliedOperationIds);
+        Assert.DoesNotContain(deletion, state.AppliedOperationIds);
+    }
+
+    [Fact]
+    public void OversizedOperationFilesAreNotRead()
+    {
+        WriteMacOperation("historyContent", MacContent(Now.AddMinutes(-10)), Now.AddMinutes(-10));
+        var file = Directory.GetFiles(Path.Join(Package, "ops", MacTransport)).Single();
+        File.AppendAllText(file, new string(' ', (int)CloudFolderSyncFiles.MaxFileBytes));
+        var cache = new HistorySyncOperationCache();
+        var result = HistoryFolderSync.Sync(_folder, "windows-transport", new HistorySyncState { Enabled = true }, [], "PC", "1", Now, default, null, cache);
+        Assert.Equal(0, result.ChangesApplied);
+    }
+
+    [Fact]
+    public void LinkedDeviceFoldersAreNotFollowed()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        WriteMacOperation("historyContent", MacContent(Now.AddMinutes(-10)), Now.AddMinutes(-10));
+        var outside = Path.Join(_folder, "outside");
+        Directory.Move(Path.Join(Package, "ops", MacTransport), outside);
+        using var link = CloudFolderSyncTests.CreateJunction(Path.Join(Package, "ops", MacTransport), outside);
+        Assert.Equal(0, Sync(_folder, "windows-transport", new HistorySyncState { Enabled = true }, []).ChangesApplied);
     }
 
     [Fact]

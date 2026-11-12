@@ -11,6 +11,7 @@ internal static partial class WinUICloudSync
     private static readonly CancellationTokenSource Lifetime = new();
     private static Task _operation = Task.CompletedTask;
     private static bool _closing;
+    private static int _heldForReview;
     internal static bool ChoosingFolder { get; set; }
     internal static Task WaitForIdleAsync() => _operation;
     internal static bool Busy { get; private set; }
@@ -95,7 +96,12 @@ internal static partial class WinUICloudSync
                 return completion.Task;
             }, Lifetime.Token);
             Status = Loc.T("Synced at {0:t} · {1} sent · {2} applied", result.SyncedAt.ToLocalTime(), result.OperationsWritten, result.MutationsApplied);
+            // Received entries saved turned off stay listed until the app restarts, not just until the next pass.
+            _heldForReview += result.HeldForReview;
+            if (result.HeldForReview > 0) AppDiagnostics.Write("sync.lexicon.held-for-review");
             if (await SyncHistoryAsync() is { } history) Status += " · " + history;
+            if (_heldForReview > 0)
+                Status += " · " + Loc.T("{0} received entries use a regular expression, line breaks or the clipboard and were turned off. Review them in Dictionary or Snippets and turn them on if you trust them.", _heldForReview);
         }
         catch (OperationCanceledException) { Status = Loc.T("Sync canceled."); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { Status = Loc.T("Sync could not finish: {0}", ex.Message); }

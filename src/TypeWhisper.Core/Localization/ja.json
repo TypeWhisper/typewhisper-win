@@ -1219,7 +1219,8 @@
   "Learn more": "詳しく見る",
   "Learned {0} correction(s). Manage them in Dictionary > Corrections.": "{0} 件の修正を学習しました。「辞書」>「修正」で管理できます。",
   "Leave empty to translate into English. This is a text workflow using the selected LLM provider.": "空欄にすると英語に翻訳します。選択したLLMプロバイダーを使用するテキストワークフローです。",
-  "Leave off for the existing Raycast extension. Local apps can then connect without a token.": "既存のRaycast拡張機能を使う場合はオフのままにしてください。ローカルアプリはトークンなしで接続できます。",
+  "Clients send the API token as a bearer token. The typewhisper command and Raycast read it from api-discovery.json in your TypeWhisper profile; the browser extension needs it pasted into its settings.": "クライアントは API トークンを Bearer トークンとして送信します。typewhisper コマンドと Raycast は TypeWhisper プロファイル内の api-discovery.json からトークンを読み取ります。ブラウザー拡張機能では設定にトークンを貼り付ける必要があります。",
+  "Without a token, any app on this PC can start dictation and read your history and settings through the API.": "トークンがない場合、この PC 上のどのアプリでも API を通じて音声入力を開始し、履歴や設定を読み取れます。",
   "Leave this slot empty": "この枠を空にします",
   "Left": "左",
   "Left widget": "左のウィジェット",
@@ -3285,5 +3286,7 @@
   "TypeWhisper is recording the system audio. Stop it from the tray menu or in Recorder.": "TypeWhisper はシステムオーディオを録音しています。トレイメニューまたはレコーダーで停止できます。",
   "TypeWhisper is recording the microphone. Stop it from the tray menu or in Recorder.": "TypeWhisper はマイクを録音しています。トレイメニューまたはレコーダーで停止できます。",
   "Also without a confirmed text field": "テキストフィールドを確認できない場合も",
-  "For games and apps without accessibility support. TypeWhisper cannot check there where Enter lands, so it presses it 100 ms after pasting.": "アクセシビリティに対応していないゲームやアプリ向けです。TypeWhisper は Enter がどこに届くかを確認できないため、貼り付けの 100 ミリ秒後に押します。"
+  "For games and apps without accessibility support. TypeWhisper cannot check there where Enter lands, so it presses it 100 ms after pasting.": "アクセシビリティに対応していないゲームやアプリ向けです。TypeWhisper は Enter がどこに届くかを確認できないため、貼り付けの 100 ミリ秒後に押します。",
+  "The sync folder contains a linked folder. Remove the link or choose another sync folder.": "同期フォルダーにリンクされたフォルダーが含まれています。リンクを削除するか、別の同期フォルダーを選択してください。",
+  "{0} received entries use a regular expression, line breaks or the clipboard and were turned off. Review them in Dictionary or Snippets and turn them on if you trust them.": "受信した {0} 件の項目は正規表現、改行、またはクリップボードを使用するため、オフにしました。辞書またはスニペットで確認し、信頼できる場合はオンにしてください。"
 }
