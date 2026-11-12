@@ -94,6 +94,8 @@ public static class HistoryFolderSync
         now = Utc(now);
         var package = CloudFolderSyncEngine.PackagePath(folderPath);
         var ownOperations = Path.Combine(package, "ops", Segment(transportDeviceId));
+        foreach (var directory in new[] { package, Path.Combine(package, "ops"), ownOperations, Path.Combine(package, "devices") })
+            CloudFolderSyncFiles.EnsureNotLinked(directory);
         Directory.CreateDirectory(ownOperations);
         WriteDevice(package, transportDeviceId, state.HistoryDeviceId, deviceName, appVersion, now);
         foreach (var expired in state.ExplicitDeletions.Where(pair => now - pair.Value > DeletionRetention).Select(pair => pair.Key).ToArray())
@@ -105,7 +107,10 @@ public static class HistoryFolderSync
             .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
         cancellationToken.ThrowIfCancellationRequested();
         ReadDevices(package, state);
-        var operations = ReadOperations(Path.Combine(package, "ops"), cancellationToken, cache);
+        // Changes dated implausibly far ahead would win every later conflict, and a deletion would remove the entry
+        // everywhere. They are ignored, and not marked as read, until the local clock reaches them.
+        var operations = ReadOperations(Path.Combine(package, "ops"), cancellationToken, cache)
+            .Where(operation => IsPlausible(operation, now)).ToList();
         var (merged, applied, deferred) = Merge(package, records, operations, transportDeviceId, state, audio);
         // Audio still downloading from the cloud provider is retried on the next pass.
         state.AppliedOperationIds.UnionWith(operations.Select(operation => operation.OperationId).Where(id => !deferred.Contains(id)));
@@ -212,6 +217,7 @@ public static class HistoryFolderSync
             var sha = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
             var relative = $"assets/history/{Generation}/{id.ToString().ToLowerInvariant()}/{sha}.wav";
             var destination = AssetPath(package, relative)!;
+            if (CloudFolderSyncFiles.HasLinkedFolder(package, destination)) throw new IOException("The audio folder in the sync folder is a link.");
             Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
             // Assets are named by their content hash, so when two devices publish the same recording at once either
             // flushed copy may win; the check below still verifies what ended up in the folder.
@@ -251,8 +257,9 @@ public static class HistoryFolderSync
         var operations = new List<HistorySyncOperation>();
         if (!Directory.Exists(operationsPath)) return operations;
         cache?.BeginPass(operationsPath);
-        foreach (var device in Directory.EnumerateDirectories(operationsPath))
-            foreach (var file in Directory.EnumerateFiles(device, "*.json"))
+        // Linked folders and files are not followed, and each device folder is read up to a fixed number of files.
+        foreach (var device in CloudFolderSyncFiles.DeviceDirectories(operationsPath))
+            foreach (var file in CloudFolderSyncFiles.OperationFiles(device))
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 if (Path.GetFileName(file).StartsWith('.')) continue;
@@ -263,7 +270,9 @@ public static class HistoryFolderSync
                     var stamp = (info.Length, info.LastWriteTimeUtc);
                     if (cache is not null && cache.TryGet(file, stamp, out var cached)) { if (cached is { } hit) operations.Add(hit); continue; }
                     // Dictionary and snippet operations share the folder; only History operations matter here.
-                    var text = File.ReadAllText(file);
+                    // Oversized files are remembered as unusable, so they are not opened again while unchanged.
+                    var text = CloudFolderSyncFiles.ReadSmallFile(file);
+                    if (text is null) { cache?.Set(file, stamp, null); continue; }
                     var operation = text.Contains("\"history\"", StringComparison.Ordinal) ? JsonSerializer.Deserialize<HistorySyncOperation>(text, Json) : null;
                     if (operation is not null && !IsValid(operation)) operation = null;
                     cache?.Set(file, stamp, operation);
@@ -295,6 +304,12 @@ public static class HistoryFolderSync
             _ => false
         };
     }
+
+    private static bool IsPlausible(HistorySyncOperation operation, DateTime now) =>
+        CloudFolderSyncFiles.IsPlausible(operation.UpdatedAt, now) && CloudFolderSyncFiles.IsPlausible(operation.DeletedAt, now) &&
+        CloudFolderSyncFiles.IsPlausible(operation.HistoryContent?.UpdatedAt, now) &&
+        CloudFolderSyncFiles.IsPlausible(operation.HistoryInbox?.UpdatedAt, now) &&
+        CloudFolderSyncFiles.IsPlausible(operation.HistoryAudio?.UpdatedAt, now);
 
     private static (List<TranscriptionRecord> Records, int Applied, HashSet<string> Deferred) Merge(string package, IReadOnlyList<TranscriptionRecord> local,
         IReadOnlyList<HistorySyncOperation> operations, string transportDeviceId, HistorySyncState state, HistorySyncAudioAccess? audio)
@@ -374,7 +389,7 @@ public static class HistoryFolderSync
     {
         // As on macOS, audio of entries created before audio sync was turned on stays on its device.
         if (Utc(payload.CreatedAt) < Utc(audio.Since).AddMinutes(-5)) return null;
-        if (AssetPath(package, payload.RelativeAssetPath) is not { } path) return null;
+        if (AssetPath(package, payload.RelativeAssetPath) is not { } path || CloudFolderSyncFiles.HasLinkedFolder(package, path)) return null;
         try
         {
             var info = new FileInfo(path);
@@ -456,13 +471,14 @@ public static class HistoryFolderSync
 
     private static void ReadDevices(string package, HistorySyncState state)
     {
-        var devices = Path.Combine(package, "devices");
-        if (!Directory.Exists(devices)) return;
-        foreach (var file in Directory.EnumerateFiles(devices, "*.json"))
+        var devices = new DirectoryInfo(Path.Combine(package, "devices"));
+        if (!devices.Exists || CloudFolderSyncFiles.IsLink(devices)) return;
+        foreach (var file in devices.EnumerateFiles("*.json").Select(file => file.FullName))
         {
             try
             {
-                if (JsonSerializer.Deserialize<HistorySyncDeviceRecord>(File.ReadAllText(file), Json) is not { } device
+                if (CloudFolderSyncFiles.ReadSmallFile(file) is not { } text
+                    || JsonSerializer.Deserialize<HistorySyncDeviceRecord>(text, Json) is not { } device
                     || string.IsNullOrWhiteSpace(device.DeviceId) || string.IsNullOrWhiteSpace(device.Platform)) continue;
                 var key = string.IsNullOrWhiteSpace(device.HistoryOriginDeviceId) ? "transport:" + device.DeviceId : device.HistoryOriginDeviceId.Trim();
                 state.Devices[key] = new HistorySyncDevice(string.IsNullOrWhiteSpace(device.Name) ? null : device.Name.Trim(), device.Platform);

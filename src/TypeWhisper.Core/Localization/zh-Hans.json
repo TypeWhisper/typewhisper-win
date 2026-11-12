@@ -3276,5 +3276,7 @@
   "Try again": "重试",
   "{0} is downloaded but not loaded.": "{0} 已下载，但尚未加载。",
   "No model is downloaded yet. Download one in the {0} plugin settings; it loads right after the download.": "尚未下载任何模型。请在 {0} 的插件设置中下载一个；下载后会立即加载。",
-  "{0} is loaded and ready.": "{0} 已加载，可以使用。"
+  "{0} is loaded and ready.": "{0} 已加载，可以使用。",
+  "The sync folder contains a linked folder. Remove the link or choose another sync folder.": "同步文件夹中包含链接的文件夹。请移除该链接或选择其他同步文件夹。",
+  "{0} received entries use a regular expression, line breaks or the clipboard and were turned off. Review them in Dictionary or Snippets and turn them on if you trust them.": "收到的 {0} 个条目使用了正则表达式、换行或剪贴板，已被关闭。请在“词典”或“快捷短语”中检查，如果信任它们，再将其打开。"
 }

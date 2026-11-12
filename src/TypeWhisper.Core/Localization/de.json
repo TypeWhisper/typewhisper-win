@@ -3276,5 +3276,7 @@
   "Try again": "Erneut versuchen",
   "{0} is downloaded but not loaded.": "{0} ist heruntergeladen, aber nicht geladen.",
   "No model is downloaded yet. Download one in the {0} plugin settings; it loads right after the download.": "Es ist noch kein Modell heruntergeladen. Lade eines in den Plugin-Einstellungen von {0} herunter; es wird direkt nach dem Download geladen.",
-  "{0} is loaded and ready.": "{0} ist geladen und bereit."
+  "{0} is loaded and ready.": "{0} ist geladen und bereit.",
+  "The sync folder contains a linked folder. Remove the link or choose another sync folder.": "Der Sync-Ordner enthält einen verknüpften Ordner. Entferne die Verknüpfung oder wähle einen anderen Sync-Ordner.",
+  "{0} received entries use a regular expression, line breaks or the clipboard and were turned off. Review them in Dictionary or Snippets and turn them on if you trust them.": "{0} empfangene Einträge verwenden einen regulären Ausdruck, Zeilenumbrüche oder die Zwischenablage und wurden ausgeschaltet. Prüfe sie unter Wörterbuch oder Snippets und schalte sie ein, wenn du ihnen vertraust."
 }

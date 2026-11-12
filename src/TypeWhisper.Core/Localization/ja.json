@@ -3276,5 +3276,7 @@
   "Try again": "再試行",
   "{0} is downloaded but not loaded.": "{0} はダウンロード済みですが、読み込まれていません。",
   "No model is downloaded yet. Download one in the {0} plugin settings; it loads right after the download.": "まだモデルがダウンロードされていません。{0} のプラグイン設定でダウンロードしてください。ダウンロード後すぐに読み込まれます。",
-  "{0} is loaded and ready.": "{0} を読み込みました。使用できます。"
+  "{0} is loaded and ready.": "{0} を読み込みました。使用できます。",
+  "The sync folder contains a linked folder. Remove the link or choose another sync folder.": "同期フォルダーにリンクされたフォルダーが含まれています。リンクを削除するか、別の同期フォルダーを選択してください。",
+  "{0} received entries use a regular expression, line breaks or the clipboard and were turned off. Review them in Dictionary or Snippets and turn them on if you trust them.": "受信した {0} 件の項目は正規表現、改行、またはクリップボードを使用するため、オフにしました。辞書またはスニペットで確認し、信頼できる場合はオンにしてください。"
 }
