@@ -56,7 +56,7 @@ public sealed class PluginCatalogDownloadUrlTests
     [Fact]
     public async Task InstallRefusesAForeignDownloadBeforeAnyRequest()
     {
-        var root = Path.Combine(Path.GetTempPath(), "plugin-url-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Join(Path.GetTempPath(), "plugin-url-" + Guid.NewGuid().ToString("N"));
         var handler = new Handler([1, 2, 3]);
         using var http = new HttpClient(handler);
         try
@@ -69,8 +69,15 @@ public sealed class PluginCatalogDownloadUrlTests
         }
         finally
         {
-            try { Directory.Delete(root, true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+            TryDelete(root);
         }
+    }
+
+    // Removing the temporary store is best effort; a file still in use must not fail the test.
+    private static bool TryDelete(string directory)
+    {
+        try { Directory.Delete(directory, true); return true; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
     }
 
     private static PortableCatalogEntry Entry(string url) => new()

@@ -31,8 +31,8 @@ public sealed class LegacyApplicationSettingsTests : IDisposable
         Assert.Equal("Ctrl+Shift+F9,Ctrl+Alt+D", File.ReadAllText(Path.Combine(_root, "dictation-hotkeys.txt")));
         Assert.True(new SetupPreferencesStore(Path.Combine(_root, "setup.json")).Current.Completed);
         // The installed track decides; the upgrade saves no channel of its own.
-        Assert.False(File.Exists(Path.Combine(_root, "updates.json")));
-        var updates = new AppUpdatePreferences(Path.Combine(_root, "updates.json"), "1.2.0");
+        Assert.False(File.Exists(Path.Join(_root, "updates.json")));
+        var updates = new AppUpdatePreferences(Path.Join(_root, "updates.json"), "1.2.0");
         Assert.Equal(AppUpdateChannel.Stable, updates.Channel);
         Assert.False(updates.HasExplicitChoice);
         using var selection = JsonDocument.Parse(File.ReadAllText(Path.Combine(_root, "Dictation/settings.json")));
@@ -73,8 +73,8 @@ public sealed class LegacyApplicationSettingsTests : IDisposable
     private (string Updates, string Report) MigratedProfile(DateTime upgradedAt, DateTime updatesWrittenAt, string channel = "\"Daily\"")
     {
         Directory.CreateDirectory(_root);
-        var updates = Path.Combine(_root, "updates.json");
-        var report = Path.Combine(_root, "legacy-migration-report.json");
+        var updates = Path.Join(_root, "updates.json");
+        var report = Path.Join(_root, "legacy-migration-report.json");
         File.WriteAllText(updates, channel);
         File.WriteAllText(report, "{}");
         File.SetLastWriteTimeUtc(updates, updatesWrittenAt);
