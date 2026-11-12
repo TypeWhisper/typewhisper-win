@@ -30,7 +30,11 @@ public sealed class LegacyApplicationSettingsTests : IDisposable
         Assert.Equal("de,en", new DictationTextPreferencesStore(Path.Combine(_root, "dictation-text.json")).Current.PreferredLanguageHints);
         Assert.Equal("Ctrl+Shift+F9,Ctrl+Alt+D", File.ReadAllText(Path.Combine(_root, "dictation-hotkeys.txt")));
         Assert.True(new SetupPreferencesStore(Path.Combine(_root, "setup.json")).Current.Completed);
-        Assert.Equal(AppUpdateChannel.Daily, new AppUpdatePreferences(Path.Combine(_root, "updates.json"), "1.1.0").Channel);
+        // The installed track decides; the upgrade saves no channel of its own.
+        Assert.False(File.Exists(Path.Combine(_root, "updates.json")));
+        var updates = new AppUpdatePreferences(Path.Combine(_root, "updates.json"), "1.2.0");
+        Assert.Equal(AppUpdateChannel.Stable, updates.Channel);
+        Assert.False(updates.HasExplicitChoice);
         using var selection = JsonDocument.Parse(File.ReadAllText(Path.Combine(_root, "Dictation/settings.json")));
         Assert.Equal("com.typewhisper.groq", selection.RootElement.GetProperty("Provider").GetString());
     }
@@ -65,5 +69,62 @@ public sealed class LegacyApplicationSettingsTests : IDisposable
     [InlineData("{\"autoPaste\":true,\"autoPaste\":false}")]
     public void InvalidSettingsAreNotSilentlyReplacedWithDefaults(string json) =>
         Assert.Throws<JsonException>(() => SettingsService.ParseForMigration(json));
+    // An upgrade before this release wrote "Daily" first and the report last; a choice saved in the app comes later.
+    private (string Updates, string Report) MigratedProfile(DateTime upgradedAt, DateTime updatesWrittenAt, string channel = "\"Daily\"")
+    {
+        Directory.CreateDirectory(_root);
+        var updates = Path.Combine(_root, "updates.json");
+        var report = Path.Combine(_root, "legacy-migration-report.json");
+        File.WriteAllText(updates, channel);
+        File.WriteAllText(report, "{}");
+        File.SetLastWriteTimeUtc(updates, updatesWrittenAt);
+        File.SetLastWriteTimeUtc(report, upgradedAt);
+        return (updates, report);
+    }
+    private static readonly DateTime UpgradedAt = new(2026, 10, 22, 9, 0, 0, DateTimeKind.Utc);
+
+    [Theory]
+    [InlineData("1.2.1")]
+    [InlineData("1.3.0-rc.1")]
+    public void MigratedDailyChannelIsRemovedFromStableAndCandidateInstallations(string version)
+    {
+        var (updates, report) = MigratedProfile(UpgradedAt, UpgradedAt.AddMinutes(-3));
+        Assert.True(LegacyApplicationSettings.RepairMigratedUpdateChannel(updates, report, version));
+        Assert.False(File.Exists(updates));
+        var preferences = new AppUpdatePreferences(updates, version);
+        Assert.False(preferences.HasExplicitChoice);
+        Assert.NotEqual(AppUpdateChannel.Daily, preferences.Channel);
+        // Once removed there is nothing left to repair.
+        Assert.False(LegacyApplicationSettings.RepairMigratedUpdateChannel(updates, report, version));
+    }
+
+    [Fact]
+    public void DailyChosenInTheAppAfterTheUpgradeIsKept()
+    {
+        var (updates, report) = MigratedProfile(UpgradedAt, UpgradedAt.AddDays(1));
+        Assert.False(LegacyApplicationSettings.RepairMigratedUpdateChannel(updates, report, "1.2.1"));
+        Assert.Equal(AppUpdateChannel.Daily, new AppUpdatePreferences(updates, "1.2.1").Channel);
+    }
+
+    [Theory]
+    [InlineData("\"Stable\"", "1.2.1")]
+    [InlineData("\"ReleaseCandidate\"", "1.2.1")]
+    [InlineData("\"Daily\"", "1.3.0-daily.20261112.155")]
+    public void OtherChoicesAndDailyInstallationsAreKept(string channel, string version)
+    {
+        var (updates, report) = MigratedProfile(UpgradedAt, UpgradedAt.AddMinutes(-3), channel);
+        Assert.False(LegacyApplicationSettings.RepairMigratedUpdateChannel(updates, report, version));
+        Assert.Equal(channel, File.ReadAllText(updates));
+    }
+
+    [Fact]
+    public void ProfilesWithoutAnUpgradeReportAreKept()
+    {
+        var (updates, report) = MigratedProfile(UpgradedAt, UpgradedAt.AddMinutes(-3));
+        File.Delete(report);
+        Assert.False(LegacyApplicationSettings.RepairMigratedUpdateChannel(updates, report, "1.2.1"));
+        Assert.True(File.Exists(updates));
+    }
+
     public void Dispose() { if (Directory.Exists(_root)) Directory.Delete(_root, true); }
 }

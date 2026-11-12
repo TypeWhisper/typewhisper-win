@@ -8,13 +8,21 @@ public sealed partial class MainWindow
     internal Func<Func<bool>, Task<string?>>? InstallApplicationUpdateAsync { get; set; }
     private AppUpdateController? _applicationUpdates;
     private AppUpdateController ApplicationUpdates => _applicationUpdates ??= new(
-        new AppUpdatePreferences(WinUIProfile.DataPath("updates.json"), WindowsApplicationUpdates.CurrentVersion),
+        LoadUpdatePreferences(),
         new WindowsApplicationUpdates(), action =>
         {
             if (_closing || _profileRestoreClosing || !_dictation.CanChangeProvider || _dictation.Packages.Updates.Busy || _dictation.Models.Busy)
                 return Task.FromResult<string?>(Loc.T("Finish recording, processing and plugin updates before restarting TypeWhisper."));
             return InstallApplicationUpdateAsync?.Invoke(action) ?? Task.FromResult<string?>(Loc.T("Restart is currently unavailable."));
         }, () => ManagedUpdatePolicy.From(WinUIManagedPolicy.Current, WindowsMachineWideInstallation.Current));
+    private static AppUpdatePreferences LoadUpdatePreferences()
+    {
+        var path = WinUIProfile.DataPath("updates.json");
+        if (LegacyApplicationSettings.RepairMigratedUpdateChannel(path, WinUIProfile.DataPath(LegacyWindowsProfileMigration.ReportName),
+            WindowsApplicationUpdates.CurrentVersion))
+            AppDiagnostics.Write("app.update.channel.migrated-daily-removed");
+        return new(path, WindowsApplicationUpdates.CurrentVersion);
+    }
     private AppUpdateReminder? _updateReminder;
     private AppUpdateReminder UpdateReminder
     {
