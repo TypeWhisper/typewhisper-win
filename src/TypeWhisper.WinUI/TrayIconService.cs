@@ -156,8 +156,8 @@ internal sealed class TrayIconService : IDisposable
         RefreshToolTip();
     }
 
-    // The app icon with a red dot in its lower right corner while the Recorder captures audio, as a lasting sign next to
-    // the notification, which Do Not Disturb may hold back.
+    // A red record button instead of the app icon while the Recorder captures audio, as a lasting sign next to the
+    // notification, which Do Not Disturb may hold back.
     private void ShowRecordingMark(bool recording)
     {
         try
@@ -182,11 +182,13 @@ internal sealed class TrayIconService : IDisposable
         using var bitmap = source.ToBitmap();
         using (var graphics = System.Drawing.Graphics.FromImage(bitmap))
         {
+            // A corner dot was too small to notice in the tray, so the whole icon becomes a record button.
             graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-            var diameter = bitmap.Width * 0.55f;
-            var ring = Math.Max(1f, bitmap.Width / 16f);
-            var x = bitmap.Width - diameter;
-            var y = bitmap.Height - diameter;
+            graphics.Clear(System.Drawing.Color.Transparent);
+            var diameter = bitmap.Width - 1f;
+            var ring = Math.Max(1f, bitmap.Width / 10f);
+            var x = 0.5f;
+            var y = 0.5f;
             using var white = new System.Drawing.SolidBrush(System.Drawing.Color.White);
             using var red = new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(232, 17, 35));
             graphics.FillEllipse(white, x, y, diameter, diameter);
