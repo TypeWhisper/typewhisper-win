@@ -307,7 +307,10 @@ public static class UserDataExport
             text.Append("The restorable backup file could not be created for this data (it may exceed the 64 MB backup limit). ")
                 .Append(result.Skipped.Count == 0 ? "The same data is in the profile folder.\r\n" : "The profile folder holds the same data except the items listed at the end.\r\n");
         text.Append(ProfileFolderName).Append("/: a copy of your TypeWhisper data folder, including history and its audio, recordings, ")
-            .Append("dictionary, snippets, workflows, preferences and plugin settings.\r\n");
+            .Append("dictionary, snippets, workflows, preferences and plugin settings.\r\n")
+            .Append("Plugin settings are copied as each plugin saved them. Besides choices they can hold addresses of your services, ")
+            .Append("such as server URLs, and folder paths, so keep this archive private. Plugins keep keys and other secrets ")
+            .Append("in encrypted storage, which is not exported.\r\n");
         if (hasPreviousVersion)
             text.Append(PreviousVersionFolderName).Append("/: data an earlier TypeWhisper version kept in its own folders, ")
                 .Append("such as archived audio and recordings. Its settings and license files are left out because they can hold API keys.\r\n");
