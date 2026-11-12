@@ -18,7 +18,7 @@ runs:
   steps:
     - name: Get official GitHub artifact uploader
       if: inputs.policy != 'none'
-      uses: actions/checkout@v7
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
         repository: actions/upload-artifact
         ref: cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -26,7 +26,7 @@ runs:
         persist-credentials: false
     - name: Get official SignPath client
       if: inputs.policy != 'none'
-      uses: actions/checkout@v7
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
         repository: signpath/github-action-submit-signing-request
         ref: f6d04783b4569d051e0c80105fe66e82819d0092 # v3

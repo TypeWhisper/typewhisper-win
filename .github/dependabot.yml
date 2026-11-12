@@ -1,7 +1,10 @@
 version: 2
 updates:
+  # Workflows and the local composite actions pin actions by commit; updates move the pin and its version comment.
   - package-ecosystem: "github-actions"
-    directory: "/"
+    directories:
+      - "/"
+      - "/.github/actions/*"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 2

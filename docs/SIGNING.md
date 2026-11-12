@@ -55,7 +55,10 @@ GitHub cannot return an existing secret's value; use the original token or rotat
 it in SignPath if it is no longer available.
 
 Unsigned jobs use the separate `unsigned-candidate` environment, which must
-contain no signing credentials. Both test and production signing require `main`
+contain no signing credentials. The Candidate tests run in their own
+`candidate-tests` job without an environment, so test and dependency code never
+runs on the runner that receives the signing token; publication waits for that
+job. Workflows pin every action to a commit SHA with its version as a comment. Both test and production signing require `main`
 or a `release/X.Y` branch, and the environment rule above decides which of them
 may sign.
 The environment restriction adds no manual approval step; SignPath's own release

@@ -22,7 +22,7 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 2
 
@@ -30,7 +30,7 @@ jobs:
         shell: pwsh
         run: git diff --check HEAD^ HEAD
 
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: '10.0.x'
           cache: true
@@ -49,7 +49,7 @@ jobs:
       - name: Build solution
         run: dotnet build TypeWhisper.slnx -c Release --no-restore -bl:artifacts/logs/typewhisper-solution.binlog
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: winui-build-logs
@@ -65,8 +65,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: '10.0.x'
           cache: true
@@ -96,7 +96,7 @@ jobs:
         run: |
           ./eng/Get-StorePackageVersion.Tests.ps1
           ./eng/New-StorePackageManifest.Tests.ps1
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
       - name: Verify Store beta and Stable submission guards without credentials
@@ -110,7 +110,7 @@ jobs:
       - name: Verify audio test orchestration with fake endpoints
         shell: pwsh
         run: ./eng/Test-WinUILocalAudio.Tests.ps1
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: winui-headless-${{ matrix.os }}
