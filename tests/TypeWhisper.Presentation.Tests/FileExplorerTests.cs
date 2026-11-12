@@ -13,7 +13,7 @@ public sealed class FileExplorerTests
 
         var info = FileExplorer.SelectFileStartInfo(path);
 
-        Assert.Equal(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe"), info.FileName);
+        Assert.Equal(Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe"), info.FileName);
         Assert.True(Path.IsPathFullyQualified(info.FileName));
         Assert.False(info.UseShellExecute);
         Assert.Equal($"/select,\"{Path.GetFullPath(path)}\"", info.Arguments);

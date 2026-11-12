@@ -7,7 +7,7 @@ namespace TypeWhisper.WinUI;
 internal static class FileExplorer
 {
     internal static string ExecutablePath =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
+        Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
 
     /// <summary>The start information that opens the folder of <paramref name="path"/> with the file selected.</summary>
     internal static ProcessStartInfo SelectFileStartInfo(string path)

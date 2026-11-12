@@ -27,12 +27,11 @@ public sealed class TargetAppProcessTrustTests
     [WindowsFact]
     public void ReadsTheIdentityOfThisProcessAndRefusesSystemProcesses()
     {
-        var own = TargetAppProcessTrust.Read((uint)Environment.ProcessId);
+        var own = Assert.NotNull(TargetAppProcessTrust.Read((uint)Environment.ProcessId));
 
-        Assert.NotNull(own);
-        Assert.Equal(WindowsIdentity.GetCurrent().User, own.Value.User);
-        Assert.Equal((uint)Process.GetCurrentProcess().SessionId, own.Value.Session);
-        Assert.True(own.Value.Integrity > 0);
+        Assert.Equal(WindowsIdentity.GetCurrent().User, own.User);
+        Assert.Equal((uint)Process.GetCurrentProcess().SessionId, own.Session);
+        Assert.True(own.Integrity > 0);
         Assert.True(TargetAppProcessTrust.IsTrusted((uint)Environment.ProcessId));
         // The System process runs in session 0 under another account.
         Assert.False(TargetAppProcessTrust.IsTrusted(4));

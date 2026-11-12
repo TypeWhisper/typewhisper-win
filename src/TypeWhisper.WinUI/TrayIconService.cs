@@ -177,7 +177,7 @@ internal sealed class TrayIconService : IDisposable
     private static System.Drawing.Icon CreateTrayIcon(bool recording)
     {
         var size = Math.Max(16, GetSystemMetricsForDpi(SmallIconWidth, GetDpiForSystem()));
-        using var source = new System.Drawing.Icon(Path.Combine(AppContext.BaseDirectory, "app.ico"), size, size);
+        using var source = new System.Drawing.Icon(Path.Join(AppContext.BaseDirectory, "app.ico"), size, size);
         if (!recording) return (System.Drawing.Icon)source.Clone();
         using var bitmap = source.ToBitmap();
         using (var graphics = System.Drawing.Graphics.FromImage(bitmap))
