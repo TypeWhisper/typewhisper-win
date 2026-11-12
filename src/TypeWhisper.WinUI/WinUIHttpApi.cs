@@ -42,13 +42,14 @@ internal sealed partial class WinUIHttpApi(LocalDictationSession session, Dispat
     internal async Task InitializeAsync()
     {
         session.Changed += RefreshApiDictation;
-        RemoveLeftoverUploads();
         // Settings can change the API while the app starts. Reading the saved values and applying them under the
         // change lock keeps that change: it is either saved before the file is read here or applied after this.
         await _changes.WaitAsync();
         try
         {
             if (_closed) return;
+            // A server started from Settings while the app started may already hold uploads; only an idle one clears.
+            if (!Running) RemoveLeftoverUploads();
             // A server started from Settings while the app started already runs the values it saved.
             var running = Running ? _preferences : null;
             if (File.Exists(SettingsPath))
