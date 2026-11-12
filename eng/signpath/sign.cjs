@@ -32,14 +32,15 @@ function actionOutput(text, name) {
   throw new Error(`Missing action output ${name}.`);
 }
 
-// Velopack submits the application executables, the setup and the per-machine MSI.
+// The build submits the TypeWhisper executables and assemblies; Velopack submits the launcher, updater, setup
+// and the per-machine MSI.
 function allowedExecutable(file) {
-  return /^(?:(?:TypeWhisper[^\\/]*|Squirrel|Update)\.exe|TypeWhisper[^\\/]*\.msi)$/i.test(path.basename(file));
+  return /^(?:(?:TypeWhisper[^\\/]*|Squirrel|Update)\.exe|TypeWhisper[^\\/]*\.(?:dll|msi))$/i.test(path.basename(file));
 }
 
 function sign(files, env = process.env) {
   if (!files.length || files.some(file => !allowedExecutable(file) || !fs.statSync(file).isFile())) {
-    throw new Error('Only TypeWhisper and Velopack executables and the TypeWhisper MSI may be submitted for signing.');
+    throw new Error('Only TypeWhisper and Velopack executables, TypeWhisper assemblies and the TypeWhisper MSI may be submitted for signing.');
   }
   if (!['test-signing', 'release-signing'].includes(env.SIGNPATH_POLICY)) throw new Error('Invalid signing policy.');
   const workspace = env.GITHUB_WORKSPACE;
