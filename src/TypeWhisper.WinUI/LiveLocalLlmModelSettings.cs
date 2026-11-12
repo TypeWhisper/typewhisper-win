@@ -16,10 +16,13 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
     private readonly List<Row> _rows = [];
     private readonly ProgressBar _downloadProgress = new() { Minimum = 0, Maximum = 100, Height = 6 };
     private readonly HandCursorButton _cancelDownload = Button(Loc.T("Cancel download"));
+    private readonly HandCursorButton _cancelLoad = Button(Loc.T("Cancel"));
     private CancellationTokenSource? _lifetime;
     private CancellationTokenSource? _operation;
     private bool _busy;
     private bool _refreshPending;
+    // The page shows a load without its model rows; the next model list replaces that view.
+    private bool _showingLoad;
 
     internal LiveLocalLlmModelSettings(LocalDictationSession session, string pluginId)
     {
@@ -32,6 +35,7 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
             if (_session.LocalLlmDownloadPluginId == _pluginId)
                 await _session.LocalLlmDownload.CancelAndDrainAsync();
         };
+        _cancelLoad.Click += (_, _) => { _cancelLoad.IsEnabled = false; _status.Text = Loc.T("Stopping…"); _session.CancelLocalLlmLoad(); };
         Loaded += async (_, _) =>
         {
             _lifetime = new();
@@ -54,6 +58,8 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
     {
         if (_lifetime is not { } lifetime || _busy) return;
         if (ShowActiveDownload()) return;
+        // A running load holds the model list until it ends, so it shows before the wait.
+        ShowRunningLoad();
         _busy = true;
         try
         {
@@ -61,6 +67,11 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
                 Task.FromResult((plugin as ILocalLlmModelManagement)?.LocalModels.ToArray() ?? []), lifetime.Token,
                 refreshCapabilities: false);
             if (!Current(lifetime)) return;
+            if (_showingLoad)
+            {
+                _showingLoad = false;
+                _status.Text = AutomaticLoadStatus() ?? _session.LocalLlmLoad?.Message ?? "";
+            }
             var restorable = _session.PluginRuntime.RestorableLocalLlmModel(_pluginId);
             _rows.Clear(); _content.Children.Clear();
             if (models.Length == 0)
@@ -127,6 +138,7 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
     {
         if (!IsLoaded) return;
         if (AutomaticLoadStatus() is { } status) _status.Text = status;
+        ShowRunningLoad();
         ModelStateChanged();
     });
 
@@ -136,21 +148,32 @@ internal sealed class LiveLocalLlmModelSettings : UserControl
         : null;
 
     // A load that runs elsewhere, after a download or from an LLM picker, shows on its row and holds the other actions.
+    // Without that row, for example right after a download, the page shows the load on its own until the model list returns.
     private void ShowRunningLoad()
     {
         if (_operation is not null || _session.LocalLlmLoad is not { Loading: true } load || load.PluginId != _pluginId) return;
         foreach (var item in _rows) foreach (var button in item.Actions.Children.OfType<Control>()) button.IsEnabled = false;
-        if (_rows.FirstOrDefault(item => item.Model.Model.Id == load.ModelId) is not { } row) return;
-        row.Progress.Visibility = Visibility.Visible; row.Progress.IsIndeterminate = true;
-        row.State.Text = Loc.T("Loading model into memory…");
-        row.Cancel.Visibility = Visibility.Visible; row.Cancel.IsEnabled = true;
+        if (_rows.FirstOrDefault(item => item.Model.Model.Id == load.ModelId) is { } row)
+        {
+            row.Progress.Visibility = Visibility.Visible; row.Progress.IsIndeterminate = true;
+            row.State.Text = Loc.T("Loading model into memory…");
+            row.Cancel.Visibility = Visibility.Visible; row.Cancel.IsEnabled = true;
+            return;
+        }
+        if (_showingLoad) return;
+        _showingLoad = true;
+        _content.Children.Clear(); _rows.Clear();
+        _status.Text = Loc.T("Loading {0} into memory…", load.ModelName);
+        _downloadProgress.IsIndeterminate = true;
+        _cancelLoad.IsEnabled = true;
+        _content.Children.Add(_status); _content.Children.Add(_downloadProgress); _content.Children.Add(_cancelLoad);
     }
 
     private bool ShowActiveDownload()
     {
         var state = _session.LocalLlmDownload.State;
         if (!state.IsBusy || _session.LocalLlmDownloadPluginId != _pluginId) return false;
-        _content.Children.Clear(); _rows.Clear();
+        _content.Children.Clear(); _rows.Clear(); _showingLoad = false;
         _status.Text = state.Progress is { } fraction
             ? Loc.T("Downloading {0} · {1:P0}", _session.LocalLlmDownloadModelName, fraction)
             : Loc.T("Downloading {0}…", _session.LocalLlmDownloadModelName);

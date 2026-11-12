@@ -72,6 +72,8 @@ internal sealed class LocalLlmModelLoadPanel : StackPanel
         var provider = _provider();
         var selected = _selectedModel();
         if (_result is { } result && (result.Provider != provider?.SelectionId || result.Model != selected)) _result = null;
+        // A model loaded here can be released since, for example when another model of the plugin was loaded.
+        if (_result is { Failed: false } && Loadable() is not null) _result = null;
         _progress.Visibility = Visibility.Collapsed;
         if (_result is { } last)
         {

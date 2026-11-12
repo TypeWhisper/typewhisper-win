@@ -95,14 +95,14 @@ public sealed partial class WorkflowsView
         content.Children.Add(help); content.Children.Add(provider); content.Children.Add(model); content.Children.Add(load); content.Children.Add(message);
         var dialog = _defaultsDialog = new ContentDialog
         {
-            Title = Loc.T("Default workflow LLM"), Content = content, IsPrimaryButtonEnabled = enforced is null,
+            Title = Loc.T("Default workflow LLM"), Content = content, IsPrimaryButtonEnabled = editable,
             PrimaryButtonText = Loc.T("Save"), CloseButtonText = Loc.T("Cancel"), DefaultButton = ContentDialogButton.Primary
         };
         // Save waits for a running load; the pickers stay put meanwhile, and the loaded model then counts as available.
         load.Changed += () =>
         {
             provider.IsEnabled = model.IsEnabled = editable && !load.IsLoading;
-            dialog.IsPrimaryButtonEnabled = enforced is null && !load.IsLoading;
+            dialog.IsPrimaryButtonEnabled = editable && !load.IsLoading;
             if (!load.IsLoading) RefreshModels(model.SelectedId);
         };
         dialog.PrimaryButtonClick += (_, args) =>
