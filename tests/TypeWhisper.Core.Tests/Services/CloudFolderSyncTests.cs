@@ -629,12 +629,14 @@ public sealed class CloudFolderSyncTests : IDisposable
         var state = new CloudFolderSyncState { DeviceId = "windows" };
         var entitlement = new PaidEntitlements(true);
         await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(30));
-        Assert.Equal(current, Assert.Single(store.DictionaryEntries));
+        // A received regular expression is saved turned off until it is reviewed here.
+        var received = current with { IsEnabled = !latestIsRegex };
+        Assert.Equal(received, Assert.Single(store.DictionaryEntries));
         Assert.Contains(old.OperationId, state.AppliedOperationIds);
         await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(40));
         File.Delete(Path.Combine(folder, "current.json"));
         await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(50));
-        Assert.Equal(current, Assert.Single(store.DictionaryEntries));
+        Assert.Equal(received, Assert.Single(store.DictionaryEntries));
     }
 
     [Theory]
@@ -658,7 +660,7 @@ public sealed class CloudFolderSyncTests : IDisposable
         var store = new InMemoryUserDataSyncStore();
         var state = new CloudFolderSyncState { DeviceId = "windows" };
         await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, new PaidEntitlements(true), Date(30));
-        if (length is >= 0 and <= 10000) Assert.Equal(entry, Assert.Single(store.DictionaryEntries));
+        if (length is >= 0 and <= 10000) Assert.Equal(entry with { IsEnabled = false }, Assert.Single(store.DictionaryEntries));
         else { Assert.Empty(store.DictionaryEntries); Assert.DoesNotContain(operation.OperationId, state.AppliedOperationIds); }
     }
 
@@ -1054,7 +1056,7 @@ public sealed class CloudFolderSyncTests : IDisposable
         File.WriteAllText(Path.Combine(folder, "valid.json"), CloudFolderSyncJson.Serialize(operation));
         var store = new InMemoryUserDataSyncStore();
         await CloudFolderSyncEngine.SyncAsync(_tempDir, store, new CloudFolderSyncState { DeviceId = "windows" }, new PaidEntitlements(true), Date(30));
-        Assert.Equal(entry, Assert.Single(store.DictionaryEntries));
+        Assert.Equal(entry with { IsEnabled = false }, Assert.Single(store.DictionaryEntries));
     }
 
     [Fact]
@@ -1194,6 +1196,10 @@ public sealed class CloudFolderSyncTests : IDisposable
         var entitlement = new PaidEntitlements(true);
         await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(25));
         Assert.True(Assert.Single(store.DictionaryEntries).IsRegex);
+        // A received rule waits turned off for review and is not republished in that state.
+        Assert.False(store.DictionaryEntries[0].IsEnabled);
+        Assert.Equal(0, (await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(28))).OperationsWritten);
+        store.DictionaryEntries[0] = store.DictionaryEntries[0] with { IsEnabled = true, UpdatedAt = Date(29) };
         var republish = await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(30));
         Assert.Equal(1, republish.OperationsWritten);
         Assert.Equal(2, CloudFolderSyncJson.Deserialize<CloudFolderSyncOperation>(File.ReadAllText(Assert.Single(OperationFiles("windows")) ))!.SchemaVersion);
@@ -1224,12 +1230,13 @@ public sealed class CloudFolderSyncTests : IDisposable
         var state = new CloudFolderSyncState { DeviceId = "windows" };
         var entitlement = new PaidEntitlements(true);
         await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(35));
-        Assert.Equal(regex, Assert.Single(store.DictionaryEntries));
+        // The same regular expression already on here stays on; a newly received one waits for review.
+        Assert.Equal(hasLocalEntries ? regex : regex with { IsEnabled = false }, Assert.Single(store.DictionaryEntries));
         Assert.Equal(0, (await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(40))).OperationsWritten);
         var newcomer = new InMemoryUserDataSyncStore();
         var newcomerState = new CloudFolderSyncState { DeviceId = "newcomer" };
         await CloudFolderSyncEngine.SyncAsync(_tempDir, newcomer, newcomerState, entitlement, Date(45));
-        Assert.Equal(regex, Assert.Single(newcomer.DictionaryEntries));
+        Assert.Equal(regex with { IsEnabled = false }, Assert.Single(newcomer.DictionaryEntries));
 
         File.WriteAllText(Path.Combine(folder, "delete-regex.json"), CloudFolderSyncJson.Serialize(
             CloudFolderSyncOperation.Delete(UserDataSyncCollection.Dictionary, regexId, "modern", Date(50))));
@@ -1387,13 +1394,22 @@ public sealed class CloudFolderSyncTests : IDisposable
         var store = new InMemoryUserDataSyncStore(dictionaryEntries: [entry]);
         var state = new CloudFolderSyncState { DeviceId = "windows" };
         var entitlement = new PaidEntitlements(true);
-        await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(25));
+        var received = await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(25));
         Assert.True(Assert.Single(store.DictionaryEntries).IsRegex);
         Assert.Equal("new", store.DictionaryEntries[0].Replacement);
-        var republish = await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(30));
+        // The changed rule waits for review here; its off state is not published back to the other device.
+        Assert.Equal(1, received.HeldForReview);
+        Assert.False(store.DictionaryEntries[0].IsEnabled);
+        Assert.Equal(0, (await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(30))).OperationsWritten);
+        // Turning it on here publishes it once, with its regex mode.
+        store.DictionaryEntries[0] = store.DictionaryEntries[0] with { IsEnabled = true, UpdatedAt = Date(32) };
+        var republish = await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(33));
         var repeated = await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(35));
         Assert.Equal(1, republish.OperationsWritten);
         Assert.Equal(0, repeated.OperationsWritten);
+        var published = Directory.GetFiles(Path.Join(CloudFolderSyncEngine.PackagePath(_tempDir), "ops", "windows"), "*.json")
+            .Select(path => CloudFolderSyncJson.Deserialize<CloudFolderSyncOperation>(File.ReadAllText(path))!).ToArray();
+        Assert.Contains(published, operation => operation.Dictionary is { IsRegex: true, IsEnabled: true, Replacement: "new" });
     }
 
     [Theory]
@@ -1415,6 +1431,246 @@ public sealed class CloudFolderSyncTests : IDisposable
         if (hasRegex) Assert.Equal(entry, Assert.Single(store.DictionaryEntries));
         else Assert.Empty(store.DictionaryEntries);
         Assert.DoesNotContain(operation.OperationId, state.AppliedOperationIds);
+    }
+
+    public static TheoryData<string> ReviewedEntries => ["regex", "escaped-line-break", "line-break", "clipboard-snippet", "multi-line-snippet"];
+
+    private static CloudFolderSyncOperation ReceivedOperation(string kind) => kind switch
+    {
+        "regex" => Upsert(DictionaryEntry("(?s).+", Date(20), UserDataSyncDictionaryEntryType.Correction, "replaced") with { IsRegex = true }),
+        "escaped-line-break" => Upsert(DictionaryEntry("hello", Date(20), UserDataSyncDictionaryEntryType.Correction, "hello\\nworld")),
+        "line-break" => Upsert(DictionaryEntry("hello", Date(20), UserDataSyncDictionaryEntryType.Correction, "hello\r\nworld")),
+        "clipboard-snippet" => UpsertSnippet(Snippet("the", "{clipboard}", Date(20))),
+        "multi-line-snippet" => UpsertSnippet(Snippet(";sig", "Best regards\nMarco", Date(20))),
+        "literal" => Upsert(DictionaryEntry("teh", Date(20), UserDataSyncDictionaryEntryType.Correction, "the")),
+        _ => UpsertSnippet(Snippet(";hi", "Hello {date}", Date(20)))
+    };
+
+    private static CloudFolderSyncOperation Upsert(UserDataSyncDictionaryEntry entry, string device = "peer") =>
+        CloudFolderSyncOperation.UpsertDictionary(entry, UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original, entry.IsRegex), device);
+
+    private static CloudFolderSyncOperation UpsertSnippet(UserDataSyncSnippet snippet, string device = "peer") =>
+        CloudFolderSyncOperation.UpsertSnippet(snippet, UserDataSyncIdentity.SnippetItemId(snippet.Trigger), device);
+
+    private void WritePeerOperation(CloudFolderSyncOperation operation, string? name = null, string device = "peer")
+    {
+        var folder = Path.Join(CloudFolderSyncEngine.PackagePath(_tempDir), "ops", device);
+        Directory.CreateDirectory(folder);
+        File.WriteAllText(Path.Join(folder, (name ?? operation.OperationId) + ".json"), CloudFolderSyncJson.Serialize(operation));
+    }
+
+    private static bool ReceivedEnabled(InMemoryUserDataSyncStore store) =>
+        store.DictionaryEntries.Select(entry => entry.IsEnabled).Concat(store.Snippets.Select(snippet => snippet.IsEnabled)).Single();
+
+    [Theory]
+    [MemberData(nameof(ReviewedEntries))]
+    public async Task ReceivedEntriesThatCanRewriteOrSubmitTextArriveTurnedOff(string kind)
+    {
+        var operation = ReceivedOperation(kind);
+        WritePeerOperation(operation);
+        var store = new InMemoryUserDataSyncStore();
+        var state = new CloudFolderSyncState { DeviceId = "windows" };
+
+        var result = await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, new PaidEntitlements(true), Date(30));
+
+        Assert.Equal(1, result.MutationsApplied);
+        Assert.Equal(1, result.HeldForReview);
+        Assert.False(ReceivedEnabled(store));
+        Assert.Contains(operation.OperationId, state.AppliedOperationIds);
+        // The off state stays on this device; the other device keeps its entry on.
+        Assert.Equal(0, (await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, new PaidEntitlements(true), Date(40))).OperationsWritten);
+        Assert.Empty(OperationFiles("windows"));
+    }
+
+    [Theory]
+    [InlineData("literal")]
+    [InlineData("snippet")]
+    public async Task OrdinaryReceivedEntriesStayOn(string kind)
+    {
+        WritePeerOperation(ReceivedOperation(kind));
+        var store = new InMemoryUserDataSyncStore();
+        var result = await CloudFolderSyncEngine.SyncAsync(_tempDir, store, new CloudFolderSyncState { DeviceId = "windows" }, new PaidEntitlements(true), Date(30));
+        Assert.Equal(0, result.HeldForReview);
+        Assert.True(ReceivedEnabled(store));
+    }
+
+    [Fact]
+    public async Task EntryAlreadyOnHereStaysOnWhenItsOtherDeviceChangesOtherFields()
+    {
+        // A snippet created on this device and sent around keeps working when it comes back with new tags.
+        var local = Snippet("the", "{clipboard}", Date(10));
+        var store = new InMemoryUserDataSyncStore(snippets: [local]);
+        WritePeerOperation(UpsertSnippet(local with { Tags = ["work"], UpdatedAt = Date(20) }));
+        var state = new CloudFolderSyncState { DeviceId = "windows" };
+        var result = await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, new PaidEntitlements(true), Date(30));
+        Assert.Equal(0, result.HeldForReview);
+        Assert.Equal(["work"], Assert.Single(store.Snippets).Tags);
+        Assert.True(store.Snippets[0].IsEnabled);
+
+        // A changed replacement is new content and waits for review.
+        WritePeerOperation(UpsertSnippet(local with { Replacement = "{clipboard} ", UpdatedAt = Date(40) }));
+        result = await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, new PaidEntitlements(true), Date(50));
+        Assert.Equal(1, result.HeldForReview);
+        Assert.False(Assert.Single(store.Snippets).IsEnabled);
+    }
+
+    [Fact]
+    public async Task ReceivedChangesCannotTurnOnAnEntryWaitingForReview()
+    {
+        var local = DictionaryEntry("(?s).+", Date(10), UserDataSyncDictionaryEntryType.Correction, "replaced") with { IsRegex = true, IsEnabled = false };
+        var store = new InMemoryUserDataSyncStore(dictionaryEntries: [local]);
+        WritePeerOperation(Upsert(local with { IsEnabled = true, UpdatedAt = Date(20) }));
+        var result = await CloudFolderSyncEngine.SyncAsync(_tempDir, store, new CloudFolderSyncState { DeviceId = "windows" }, new PaidEntitlements(true), Date(30));
+        Assert.Equal(1, result.HeldForReview);
+        Assert.False(Assert.Single(store.DictionaryEntries).IsEnabled);
+    }
+
+    [Fact]
+    public async Task ReceivedChangesCanTurnAnEntryOff()
+    {
+        var local = Snippet("the", "{clipboard}", Date(10));
+        var store = new InMemoryUserDataSyncStore(snippets: [local]);
+        WritePeerOperation(UpsertSnippet(local with { IsEnabled = false, UpdatedAt = Date(20) }));
+        var result = await CloudFolderSyncEngine.SyncAsync(_tempDir, store, new CloudFolderSyncState { DeviceId = "windows" }, new PaidEntitlements(true), Date(30));
+        Assert.Equal(0, result.HeldForReview);
+        Assert.False(Assert.Single(store.Snippets).IsEnabled);
+    }
+
+    public static TheoryData<string> EntriesOutsideCatalogLimits =>
+        ["long-term", "term-line-break", "long-trigger", "trigger-line-break", "long-snippet", "long-tags", "invalid-date-format", "blank-term"];
+
+    [Theory]
+    [MemberData(nameof(EntriesOutsideCatalogLimits))]
+    public async Task ReceivedEntriesOutsideTheCatalogLimitsAreLeftOut(string kind)
+    {
+        var operation = kind switch
+        {
+            "long-term" => Upsert(DictionaryEntry(new string('a', 161), Date(20))),
+            "term-line-break" => Upsert(DictionaryEntry("two\nlines", Date(20))),
+            "blank-term" => Upsert(DictionaryEntry("  ", Date(20))),
+            "long-trigger" => UpsertSnippet(Snippet(new string('a', 161), "x", Date(20))),
+            "trigger-line-break" => UpsertSnippet(Snippet("two\nlines", "x", Date(20))),
+            "long-snippet" => UpsertSnippet(Snippet(";long", new string('x', 10_001), Date(20))),
+            "long-tags" => UpsertSnippet(Snippet(";tags", "x", Date(20)) with { Tags = [new string('t', 301)] }),
+            _ => UpsertSnippet(Snippet(";date", "{date:%}", Date(20)))
+        };
+        WritePeerOperation(operation);
+        var store = new InMemoryUserDataSyncStore();
+        var state = new CloudFolderSyncState { DeviceId = "windows" };
+        await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, new PaidEntitlements(true), Date(30));
+        Assert.Empty(store.DictionaryEntries);
+        Assert.Empty(store.Snippets);
+        Assert.DoesNotContain(operation.OperationId, state.AppliedOperationIds);
+    }
+
+    [Fact]
+    public async Task ReceivedTermsAreSavedInTheFormTheDictionaryPageUses()
+    {
+        WritePeerOperation(Upsert(DictionaryEntry(" TypeWhisper ", Date(20), replacement: "ignored")));
+        WritePeerOperation(UpsertSnippet(Snippet(" ;sig ", "Regards", Date(20))));
+        var store = new InMemoryUserDataSyncStore();
+        await CloudFolderSyncEngine.SyncAsync(_tempDir, store, new CloudFolderSyncState { DeviceId = "windows" }, new PaidEntitlements(true), Date(30));
+        var term = Assert.Single(store.DictionaryEntries);
+        Assert.Equal("TypeWhisper", term.Original);
+        Assert.Null(term.Replacement);
+        Assert.Equal(";sig", Assert.Single(store.Snippets).Trigger);
+    }
+
+    [Fact]
+    public async Task FullCatalogDefersNewEntriesUntilThereIsRoom()
+    {
+        var operation = Upsert(DictionaryEntry("TypeWhisper", Date(20)));
+        WritePeerOperation(operation);
+        var store = new InMemoryUserDataSyncStore();
+        var state = new CloudFolderSyncState { DeviceId = "windows" };
+        await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, new PaidEntitlements(true), Date(30),
+            reservedDictionaryItems: CloudFolderSyncEngine.MaxCatalogItems);
+        Assert.Empty(store.DictionaryEntries);
+        Assert.DoesNotContain(operation.OperationId, state.AppliedOperationIds);
+
+        await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, new PaidEntitlements(true), Date(40),
+            reservedDictionaryItems: CloudFolderSyncEngine.MaxCatalogItems - 1);
+        Assert.Equal("TypeWhisper", Assert.Single(store.DictionaryEntries).Original);
+        Assert.Contains(operation.OperationId, state.AppliedOperationIds);
+    }
+
+    [Fact]
+    public async Task ChangesDatedFarAheadWaitUntilTheirTime()
+    {
+        var local = DictionaryEntry("TypeWhisper", Date(10));
+        var store = new InMemoryUserDataSyncStore(dictionaryEntries: [local]);
+        var state = new CloudFolderSyncState { DeviceId = "windows" };
+        var entitlement = new PaidEntitlements(true);
+        await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(20));
+        var itemId = UserDataSyncIdentity.DictionaryItemId(local.EntryType, local.Original);
+        var tombstone = CloudFolderSyncOperation.Delete(UserDataSyncCollection.Dictionary, itemId, "peer", Date(30).AddHours(1));
+        WritePeerOperation(tombstone);
+        // The operation itself looks current, but its entry claims a later edit time.
+        var disguised = Upsert(DictionaryEntry("Later", Date(30).AddDays(1))) with { UpdatedAt = Date(30) };
+        WritePeerOperation(disguised);
+
+        await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(30));
+        Assert.Equal(local, Assert.Single(store.DictionaryEntries));
+        Assert.DoesNotContain(tombstone.OperationId, state.AppliedOperationIds);
+        Assert.DoesNotContain(disguised.OperationId, state.AppliedOperationIds);
+
+        // Within the allowed clock difference, and once its time has come, the deletion applies.
+        await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(30).AddMinutes(56));
+        Assert.Empty(store.DictionaryEntries.Where(entry => entry.Original == "TypeWhisper"));
+    }
+
+    [Fact]
+    public async Task OversizedOperationFilesAreNotRead()
+    {
+        var operation = Upsert(DictionaryEntry("TypeWhisper", Date(20)));
+        var folder = Path.Join(CloudFolderSyncEngine.PackagePath(_tempDir), "ops", "peer");
+        Directory.CreateDirectory(folder);
+        File.WriteAllText(Path.Join(folder, "large.json"),
+            CloudFolderSyncJson.Serialize(operation) + new string(' ', (int)CloudFolderSyncFiles.MaxFileBytes));
+        var store = new InMemoryUserDataSyncStore();
+        var state = new CloudFolderSyncState { DeviceId = "windows" };
+        await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, new PaidEntitlements(true), Date(30));
+        Assert.Empty(store.DictionaryEntries);
+        Assert.DoesNotContain(operation.OperationId, state.AppliedOperationIds);
+    }
+
+    [Fact]
+    public async Task LinkedFoldersInTheSyncFolderAreNotFollowed()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var outside = Path.Join(_tempDir, "outside");
+        Directory.CreateDirectory(outside);
+        var operation = Upsert(DictionaryEntry("TypeWhisper", Date(20)));
+        File.WriteAllText(Path.Join(outside, "linked.json"), CloudFolderSyncJson.Serialize(operation));
+        var sync = Path.Join(_tempDir, "sync");
+        var ops = Path.Join(CloudFolderSyncEngine.PackagePath(sync), "ops");
+        Directory.CreateDirectory(ops);
+        using var peer = CreateJunction(Path.Join(ops, "peer"), outside);
+        var store = new InMemoryUserDataSyncStore();
+        var state = new CloudFolderSyncState { DeviceId = "windows" };
+        await CloudFolderSyncEngine.SyncAsync(sync, store, state, new PaidEntitlements(true), Date(30));
+        Assert.Empty(store.DictionaryEntries);
+
+        // This device never writes through a linked folder.
+        using var device = CreateJunction(Path.Join(ops, "linked-device"), outside);
+        await Assert.ThrowsAsync<IOException>(() => CloudFolderSyncEngine.SyncAsync(sync, store,
+            new CloudFolderSyncState { DeviceId = "linked-device" }, new PaidEntitlements(true), Date(40)));
+        Assert.Equal(["linked.json"], Directory.GetFiles(outside).Select(Path.GetFileName));
+    }
+
+    // Creates a directory junction, which needs no administrator rights, and removes it again on dispose.
+    internal static IDisposable CreateJunction(string link, string target)
+    {
+        using var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("cmd.exe", $"/c mklink /J \"{link}\" \"{target}\"")
+        { CreateNoWindow = true, UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true })!;
+        process.WaitForExit();
+        Assert.Equal(0, process.ExitCode);
+        return new Junction(link);
+    }
+
+    private sealed class Junction(string path) : IDisposable
+    {
+        public void Dispose() { if (Directory.Exists(path)) Directory.Delete(path); }
     }
 
     private static UserDataSyncDictionaryEntry DictionaryEntry(
