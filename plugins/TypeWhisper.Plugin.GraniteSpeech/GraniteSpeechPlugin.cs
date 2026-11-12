@@ -22,9 +22,16 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTransc
     internal static string RuntimeRevision => TorchRequirement.Replace("==", "-", StringComparison.Ordinal) + "-v1";
     internal static string RuntimeWheels(string device)
     {
-        var flavor = device == "Cpu" ? "+cpu" : "+cu130";
-        return TorchRequirement + flavor + " " + TorchAudioRequirement + flavor;
+        var flavor = RuntimeFlavor(device);
+        return TorchRequirement + "+" + flavor + " " + TorchAudioRequirement + "+" + flavor;
     }
+    private static string RuntimeFlavor(string device) => device == "Cpu" ? "cpu" : "cu130";
+    // Each device flavor installs a fully resolved lock file with SHA-256 hashes, so pip accepts only the
+    // reviewed wheels from either index and resolves no further packages.
+    internal static string RuntimeLockFile(string device) => $"requirements-{RuntimeFlavor(device)}.lock.txt";
+    internal static string PipInstallArguments(string device, string lockFilePath) =>
+        $"-m pip install -q --no-cache-dir --require-hashes --no-deps --only-binary :all: -r \"{lockFilePath}\" " +
+        $"--index-url https://download.pytorch.org/whl/{RuntimeFlavor(device)} --extra-index-url https://pypi.org/simple/";
     private static string ReadRequirement(string package) => File.ReadLines(GetScriptPath("requirements.txt"))
         .Select(line => line.Trim()).Single(line => line.StartsWith(package + "==", StringComparison.Ordinal));
     private const string PythonVersion = "3.12.10";
@@ -61,7 +68,7 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTransc
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.7";
+    public string PluginVersion => "1.2.8";
 
     // ITranscriptionEnginePlugin
     /// <summary>
@@ -232,15 +239,10 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTransc
         progress?.Report(0.10);
         Log(PluginLogLevel.Info, "Step 3: Installing Python packages (this may take a while)...");
 
-        var reqPath = GetScriptPath("requirements.txt");
+        var lockPath = GetScriptPath(RuntimeLockFile(_device));
         await RetryAsync(async () =>
         {
-            await RunProcessAsync(pythonExe,
-                $"-m pip install -q --no-cache-dir -r \"{reqPath}\" " +
-                RuntimeWheels(_device) + " " +
-                (_device == "Cpu" ? "--index-url https://download.pytorch.org/whl/cpu " : "--index-url https://download.pytorch.org/whl/cu130 ") +
-                "--extra-index-url https://pypi.org/simple/",
-                ct, timeoutMs: 1_800_000);
+            await RunProcessAsync(pythonExe, PipInstallArguments(_device, lockPath), ct, timeoutMs: 1_800_000);
 
             await RunProcessAsync(pythonExe,
                 "-c \"import torch; import transformers; import soundfile; import huggingface_hub\"",
