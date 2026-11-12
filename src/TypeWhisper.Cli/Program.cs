@@ -20,10 +20,13 @@ static class Program
     static async Task<int> Main(string[] args)
     {
         Console.CancelKeyPress += (_, e) => { e.Cancel = true; Cancellation.Cancel(); };
+        if (!Console.IsOutputRedirected) Console.SetOut(new CliTerminalWriter(Console.Out));
+        if (!Console.IsErrorRedirected) Console.SetError(new CliTerminalWriter(Console.Error));
         try { return await RunAsync(args); }
         catch (OperationCanceledException)
         { return Error(Cancellation.IsCancellationRequested ? "Operation cancelled." : "Request timed out.", Cancellation.IsCancellationRequested ? 1 : 2); }
         catch (HttpRequestException) { return Error("TypeWhisper is not running or API server is disabled.", 2); }
+        catch (CliServerNotFoundException ex) { return Error(ex.Message, 2); }
         catch (JsonException) { return Error("Invalid response from server.", 3); }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         { return Error(ex.Message); }
@@ -568,7 +571,7 @@ static class Program
               completions <shell>       Print a powershell, bash, zsh or fish completion script
 
             Global options:
-              --port <N>                API server port (default: auto-discover, fallback 8978)
+              --port <N>                API server port (default: discovered from the running app)
               --profile <directory>     Discover an explicit profile (or TYPEWHISPER_PROFILE)
               --dev                     Connect to the WinUI development profile
               --api-token <token>       API token (overrides TYPEWHISPER_API_TOKEN and discovery)

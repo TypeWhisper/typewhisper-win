@@ -13,13 +13,19 @@ namespace TypeWhisper.Cli;
 /// <param name="EnvironmentApiToken">Environment api token supplied to the member.</param>
 /// <param name="ProfileDirectory">Explicit profile directory containing discovery files.</param>
 /// <param name="DevMode">Selects the WinUI development profile without production fallback.</param>
+/// <param name="IsServerProcess">Decides whether the process ID in a discovery file is the TypeWhisper app that
+/// wrote it, given the file's last write time. Defaults to <see cref="CliServerProcess.IsTypeWhisperOfCurrentUser"/>.</param>
 public sealed record CliConnectionOptions(
     string? ApplicationDataRoot = null,
     int? PortOverride = null,
     string? ApiTokenOverride = null,
     string? EnvironmentApiToken = null,
     string? ProfileDirectory = null,
-    bool DevMode = false);
+    bool DevMode = false,
+    Func<int, DateTime, bool>? IsServerProcess = null);
+
+/// <summary>Raised when no running TypeWhisper app announces its API in the selected profiles.</summary>
+public sealed class CliServerNotFoundException() : Exception("TypeWhisper is not running or API server is disabled.");
 
 /// <summary>
 /// Represents cli connection data.
@@ -56,10 +62,11 @@ public sealed record CliTranscribeRequest(
 /// </summary>
 public static class CliConnectionResolver
 {
-    private const int DefaultPort = 8978;
-
     /// <summary>
-    /// Resolves the supplied input to a configured value.
+    /// Resolves the port and token of the running app. Only a discovery file whose process is still the TypeWhisper
+    /// app of this user counts: after a crash the file stays behind, and whatever listens on its port then must not
+    /// receive the token, audio or backups. Without one, only an explicit port is used, and only with a token the
+    /// user supplied. Throws <see cref="CliServerNotFoundException"/> when there is nothing to connect to.
     /// </summary>
     public static CliConnection Resolve(CliConnectionOptions options)
     {
@@ -71,18 +78,16 @@ public static class CliConnectionResolver
             : FirstNonBlank(options.ProfileDirectory, bound);
         var directories = explicitProfile is not null ? new[] { Path.GetFullPath(explicitProfile) }
             : new[] { Path.Join(root, "TypeWhisper-WinUI"), Path.Join(root, "TypeWhisper-WinUI-DevUserData") };
-        var candidates = directories.Select(directory => new
-        {
-            Discovery = ReadDiscovery(Path.Join(directory, "api-discovery.json")),
-            LegacyPort = ValidatePort(ReadLegacyPort(Path.Join(directory, "api-port")))
-        }).ToArray();
+        var isServer = options.IsServerProcess ?? CliServerProcess.IsTypeWhisperOfCurrentUser;
+        var live = directories.Select(directory => ReadDiscovery(Path.Join(directory, "api-discovery.json")))
+            .Where(discovery => discovery is { Pid: > 0 } && isServer(discovery.Pid.Value, discovery.WrittenUtc)).ToArray();
         var requestedPort = ValidatePort(options.PortOverride);
         var selected = requestedPort is { } selectedPort
-            ? candidates.FirstOrDefault(candidate => ValidatePort(candidate.Discovery?.Port) == selectedPort || candidate.LegacyPort == selectedPort)
-            : candidates.FirstOrDefault(candidate => ValidatePort(candidate.Discovery?.Port) is not null || candidate.LegacyPort is not null);
-        var port = requestedPort ?? ValidatePort(selected?.Discovery?.Port) ?? selected?.LegacyPort ?? DefaultPort;
+            ? live.FirstOrDefault(discovery => discovery!.Port == selectedPort)
+            : live.FirstOrDefault();
+        var port = requestedPort ?? selected?.Port ?? throw new CliServerNotFoundException();
         // A token belongs to its discovered endpoint. Never carry it over to an unrelated --port.
-        var discoveredToken = selected?.Discovery is { } discovery && discovery.Port == port && discovery.RequiresAuthentication != false
+        var discoveredToken = selected is { } discovery && discovery.Port == port && discovery.RequiresAuthentication != false
             ? discovery.Token : null;
         var token = FirstNonBlank(options.ApiTokenOverride, options.EnvironmentApiToken, discoveredToken);
         return new CliConnection(port, token);
@@ -114,34 +119,17 @@ public static class CliConnectionResolver
             if (!File.Exists(path) || new FileInfo(path).Length > 65536)
                 return null;
 
+            var written = File.GetLastWriteTimeUtc(path);
             var discovery = JsonSerializer.Deserialize<ApiDiscovery>(
                 File.ReadAllText(path),
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
-            return discovery?.Version == 1 && IsPortInRange(discovery.Port) ? discovery : null;
+            return discovery?.Version == 1 && IsPortInRange(discovery.Port) ? discovery with { WrittenUtc = written } : null;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
             return null;
         }
-    }
-
-    private static int? ReadLegacyPort(string path)
-    {
-        try
-        {
-            if (File.Exists(path) && int.TryParse(File.ReadAllText(path).Trim(), out var port))
-                return port;
-        }
-        catch (Exception ex) when (ex is IOException
-            or UnauthorizedAccessException
-            or NotSupportedException
-            or System.Security.SecurityException)
-        {
-            return null;
-        }
-
-        return null;
     }
 
     private static string? FirstNonBlank(params string?[] values) =>
@@ -167,6 +155,11 @@ public static class CliConnectionResolver
         /// <summary>Whether the discovered endpoint requires bearer authentication.</summary>
         [System.Text.Json.Serialization.JsonPropertyName("requires_authentication")]
         public bool? RequiresAuthentication { get; init; }
+        /// <summary>The app process that wrote the file.</summary>
+        public int? Pid { get; init; }
+        /// <summary>When the file was last written; not part of the JSON.</summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public DateTime WrittenUtc { get; init; }
     }
 }
 
