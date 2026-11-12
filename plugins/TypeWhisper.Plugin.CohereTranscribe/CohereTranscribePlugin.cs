@@ -72,7 +72,7 @@ public sealed partial class CohereTranscribePlugin : IPcmTranscriptionEnginePlug
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.5";
+    public string PluginVersion => "1.2.6";
 
     /// <inheritdoc />
     public bool SupportsLocalLivePreview => true;
@@ -831,12 +831,18 @@ public sealed partial class CohereTranscribePlugin : IPcmTranscriptionEnginePlug
         return ResolveBackendCandidates(preference, cudaAvailable, vulkanAvailable);
     }
 
-    private static bool IsNativeLibraryAvailable(string libraryName)
+    // The GPU driver libraries are probed in the host process, so only the system directory is searched:
+    // a missing driver must not let a same-named DLL from the application, working or PATH directories load.
+    internal static bool IsNativeLibraryAvailable(string libraryName)
     {
         if (!OperatingSystem.IsWindows())
             return false;
 
-        if (!NativeLibrary.TryLoad(libraryName, out var handle))
+        if (!NativeLibrary.TryLoad(
+                libraryName,
+                typeof(CohereTranscribePlugin).Assembly,
+                DllImportSearchPath.System32,
+                out var handle))
             return false;
 
         NativeLibrary.Free(handle);
