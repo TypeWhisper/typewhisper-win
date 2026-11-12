@@ -10,9 +10,9 @@ namespace TypeWhisper.Presentation.Tests;
 // and entries that could change or submit dictated text must not run before they are reviewed.
 public sealed class CloudSyncLexiconTests : IDisposable
 {
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "cloud-sync-lexicon-" + Guid.NewGuid().ToString("N"));
-    private string Profile => Path.Combine(_root, "profile");
-    private string Folder => Path.Combine(_root, "cloud");
+    private readonly string _root = Path.Join(Path.GetTempPath(), "cloud-sync-lexicon-" + Guid.NewGuid().ToString("N"));
+    private string Profile => Path.Join(_root, "profile");
+    private string Folder => Path.Join(_root, "cloud");
     private static readonly DateTime At = DateTime.UtcNow.AddHours(-1);
 
     public CloudSyncLexiconTests()
@@ -25,9 +25,9 @@ public sealed class CloudSyncLexiconTests : IDisposable
 
     private void Write(CloudFolderSyncOperation operation)
     {
-        var folder = Path.Combine(CloudFolderSyncEngine.PackagePath(Folder), "ops", "peer");
+        var folder = Path.Join(CloudFolderSyncEngine.PackagePath(Folder), "ops", "peer");
         Directory.CreateDirectory(folder);
-        File.WriteAllText(Path.Combine(folder, operation.OperationId + ".json"), CloudFolderSyncJson.Serialize(operation));
+        File.WriteAllText(Path.Join(folder, operation.OperationId + ".json"), CloudFolderSyncJson.Serialize(operation));
     }
 
     private static UserDataSyncDictionaryEntry Entry(UserDataSyncDictionaryEntryType type, string original, string? replacement, bool regex = false) =>
@@ -62,8 +62,8 @@ public sealed class CloudSyncLexiconTests : IDisposable
         var result = await sync.SyncAsync(() => true);
         Assert.Equal(3, result.HeldForReview);
 
-        var dictionary = LexiconTransfer.ReadDictionary(File.ReadAllText(Path.Combine(Profile, "dictionary.json")), allowPackEntries: true);
-        var snippets = LexiconTransfer.ReadSnippets(File.ReadAllText(Path.Combine(Profile, "snippets.json")));
+        var dictionary = LexiconTransfer.ReadDictionary(File.ReadAllText(Path.Join(Profile, "dictionary.json")), allowPackEntries: true);
+        var snippets = LexiconTransfer.ReadSnippets(File.ReadAllText(Path.Join(Profile, "snippets.json")));
         Assert.Equal(["(?s).+", "hello", "padded", "teh"], dictionary.Select(entry => entry.Original).Order(StringComparer.Ordinal));
         Assert.Null(dictionary.Single(entry => entry.Original == "padded").Replacement);
         Assert.Equal(["padded", "teh"], dictionary.Where(entry => entry.IsEnabled).Select(entry => entry.Original).Order(StringComparer.Ordinal));
@@ -71,7 +71,7 @@ public sealed class CloudSyncLexiconTests : IDisposable
         Assert.False(snippets.Single(snippet => snippet.Trigger == "the").IsEnabled);
 
         // Dictation applies the ordinary entries only, and never reads the clipboard for the waiting snippet.
-        var snapshot = DictationLexiconSnapshot.Load(Path.Combine(Profile, "dictionary.json"), Path.Combine(Profile, "snippets.json"));
+        var snapshot = DictationLexiconSnapshot.Load(Path.Join(Profile, "dictionary.json"), Path.Join(Profile, "snippets.json"));
         var processed = await snapshot.ProcessAsync("hello teh the", new() { TranscriptionNumberNormalizationEnabled = false }, "en", "en", false,
             _ => throw new InvalidOperationException("Clipboard must not be read."), default, TranscriptionTask.Transcribe, null, "test-provider", "test-model");
         Assert.Equal("hello the the", processed.Text);
