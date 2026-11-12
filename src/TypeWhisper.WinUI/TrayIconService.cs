@@ -26,6 +26,7 @@ internal sealed class TrayIconService : IDisposable
     private Action? _notificationClicked;
     // While the Recorder captures audio: its sources for the tooltip, and the marked icon shown in the tray.
     private string? _recorderStatus;
+    private bool _markShown;
     private System.Drawing.Icon? _shownIcon;
 
     internal TrayIconService(Action toggleRecorder, Action recent, Action settings, Action history, Action files, Action exit, Action finishDictation, Action cancelProcessing, Action togglePause, Action recovery, Action updates,
@@ -149,10 +150,10 @@ internal sealed class TrayIconService : IDisposable
         ((FontIcon)_recorderAction.Icon).Glyph = recording ? "" : "";
         _recorderAction.IsEnabled = canToggle;
         var status = recording ? RecorderIndicator.Status(microphone, systemAudio) : null;
-        if (status == _recorderStatus) return;
-        var marked = (_recorderStatus is not null) != recording;
+        // A mark that could not be shown is tried again on the next update, even when the status did not change.
+        if (status == _recorderStatus && _markShown == recording) return;
         _recorderStatus = status;
-        if (marked) ShowRecordingMark(recording);
+        if (_markShown != recording) ShowRecordingMark(recording);
         RefreshToolTip();
     }
 
@@ -163,9 +164,15 @@ internal sealed class TrayIconService : IDisposable
         try
         {
             var icon = CreateTrayIcon(recording);
-            _icon.UpdateIcon(icon);
+            if (!_icon.UpdateIcon(icon))
+            {
+                icon.Dispose();
+                AppDiagnostics.Write("tray.recording-mark.not-updated");
+                return;
+            }
             _shownIcon?.Dispose();
             _shownIcon = icon;
+            _markShown = recording;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {

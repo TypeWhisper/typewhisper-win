@@ -27,7 +27,7 @@ internal static class TargetAppProcessTrust
     /// <summary>The session, user and integrity level of a process, or null when any of them cannot be read.</summary>
     internal static ProcessIdentity? Read(uint processId)
     {
-        if (!ProcessIdToSessionId(processId, out var session)) return null;
+        // The session comes from the token: ProcessIdToSessionId needs more access than an elevated process grants.
         var process = OpenProcess(QueryLimitedInformation, false, processId);
         if (process == IntPtr.Zero) return null;
         try
@@ -43,6 +43,8 @@ internal static class TargetAppProcessTrust
                     var user = new SecurityIdentifier(Marshal.ReadIntPtr(information));
                     if (!GetTokenInformation(token, TokenIntegrityLevel, information, InformationSize, out _)) return null;
                     var label = new SecurityIdentifier(Marshal.ReadIntPtr(information)).Value;
+                    if (!GetTokenInformation(token, TokenSessionId, information, sizeof(uint), out _)) return null;
+                    var session = (uint)Marshal.ReadInt32(information);
                     // A mandatory label is S-1-16-<level>, such as S-1-16-8192 for medium integrity.
                     return int.TryParse(label[(label.LastIndexOf('-') + 1)..], out var integrity)
                         ? new ProcessIdentity(session, user, integrity) : null;
@@ -60,8 +62,8 @@ internal static class TargetAppProcessTrust
     private const uint QueryLimitedInformation = 0x1000;
     private const uint TokenQuery = 0x0008;
     private const int TokenUser = 1;
+    private const int TokenSessionId = 12;
     private const int TokenIntegrityLevel = 25;
-    [DllImport("kernel32.dll")] private static extern bool ProcessIdToSessionId(uint processId, out uint sessionId);
     [DllImport("kernel32.dll")] private static extern IntPtr OpenProcess(uint desiredAccess, bool inheritHandle, uint processId);
     [DllImport("advapi32.dll")] private static extern bool OpenProcessToken(IntPtr process, uint desiredAccess, out IntPtr token);
     [DllImport("advapi32.dll")] private static extern bool GetTokenInformation(IntPtr token, int informationClass, IntPtr information, uint length, out uint returnLength);

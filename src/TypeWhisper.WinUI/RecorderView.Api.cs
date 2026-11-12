@@ -60,7 +60,9 @@ public sealed partial class RecorderView
                 await StartRecordingAsync(preferences with { MicrophoneEnabled = microphone, SystemAudioEnabled = systemAudio });
                 started.Started = true;
                 Refresh();
-                ReportApiRecordingStarted(microphone, systemAudio);
+                // The recording runs at this point; a notification that cannot be shown must not report it as failed.
+                try { ReportApiRecordingStarted(microphone, systemAudio); }
+                catch (Exception ex) when (ex is not OutOfMemoryException) { ReportApiFailure("recorder.api.notice-failed", ex); }
                 return LocalApiResponse.Json(200, new { id = started.Id, status = "recording" });
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
