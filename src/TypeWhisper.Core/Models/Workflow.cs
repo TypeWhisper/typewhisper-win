@@ -379,6 +379,14 @@ public sealed record WorkflowOutput
     public string? TargetAppProcessName { get; init; }
 
     /// <summary>
+    /// Whether the automatic Enter also follows a paste whose text field could not be confirmed, for games and other
+    /// apps without accessibility support. Off by default, because TypeWhisper cannot tell where Enter lands there.
+    /// Left out of the JSON when off, so versions without the option still read the workflow.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool SubmitWithoutFieldCheck { get; init; }
+
+    /// <summary>
     /// Gets or sets the raw number normalization mode value stored in workflow JSON.
     /// </summary>
     [JsonPropertyName("numberNormalizationModeRaw")]

@@ -49,7 +49,9 @@ public sealed partial class WorkflowsView : UserControl
     private readonly StackPanel ConfigShortcutHost = new();
     private readonly SettingsRow ConfigShortcutSection = new(), ConfigAppSection = new(), ConfigWebsiteSection = new(), ConfigContextSection = new(),
         ConfigTaskSection = new(), ConfigLanguageSection = new(), ConfigTranscriptionModelSection = new(), ConfigMemorySection = new(), ConfigInstructionSection = new(), ConfigProviderSection = new(),
-        ConfigModelSection = new(), ConfigTranslationSection = new(), ConfigActionSection = new(), ConfigAutoEnterSection = new();
+        ConfigModelSection = new(), ConfigTranslationSection = new(), ConfigActionSection = new(), ConfigAutoEnterSection = new(),
+        ConfigSubmitUnconfirmedSection = new();
+    private readonly ToggleSwitch ConfigSubmitUnconfirmed = AppToggleSwitch.Create(false);
     private TextBox ConfigName = null!, ConfigAppProcesses = null!, ConfigWebsiteDomains = null!, ConfigTranslationTarget = null!,
         ConfigPriority = null!, ConfigInstruction = null!;
     private HandCursorButton DeleteWorkflowButton = null!;
@@ -218,6 +220,8 @@ public sealed partial class WorkflowsView : UserControl
         ConfigActionTarget.SelectionChanged += _ => UpdateConfigurationState();
         ConfigAutoEnter.Configure(Loc.T("Press Enter after inserting"), "keyboard", Loc.T("Workflow Enter after inserting"));
         ConfigAutoEnter.SelectionChanged += _ => UpdateConfigurationState();
+        AutomationProperties.SetName(ConfigSubmitUnconfirmed, Loc.T("Also without a confirmed text field"));
+        ConfigSubmitUnconfirmed.Toggled += (_, _) => UpdateConfigurationState();
         ConfigTrigger.Configure(Loc.T("Activation"), "workflow", Loc.T("Workflow activation"));
         ConfigTrigger.SelectionChanged += _ => UpdateConfigurationState();
         ConfigTask.Configure(Loc.T("Transcription task"), "microphone", Loc.T("Workflow transcription task"));
@@ -323,6 +327,9 @@ public sealed partial class WorkflowsView : UserControl
         BuildTargetApp(behavior);
         // Its description explains the chosen option.
         behavior.Children.Add(ConfigAutoEnterSection.Set(Loc.T("Press Enter after inserting"), control: ConfigAutoEnter));
+        behavior.Children.Add(ConfigSubmitUnconfirmedSection.Set(Loc.T("Also without a confirmed text field"),
+            Loc.T("For games and apps without accessibility support. TypeWhisper cannot check there where Enter lands, so it presses it 100 ms after pasting."),
+            ConfigSubmitUnconfirmed));
         behavior.Children.Add(ConfigMemorySection.Set(Loc.T("Memory context"),
             Loc.T("Optional: search saved facts related to your text. Up to five matches are sent to this workflow’s LLM provider. Nothing is remembered automatically. Dictation-only workflows do not use memory context."), ConfigMemory));
         ConfigurationFields.Children.Add(behavior);
@@ -514,10 +521,13 @@ public sealed partial class WorkflowsView : UserControl
     private bool ConfigLanguageUnsupported => ConfigSelectedTranscriptionModel is null && ConfigSelectedLanguage is { } language && _session is { } session
         && (language == "auto" ? !session.DetectsLanguage
             : session.LanguageChoices.Count > 0 && !session.LanguageChoices.Contains(language, StringComparer.OrdinalIgnoreCase));
+    // The option only applies to the modes that press Enter on their own.
+    private bool ConfigSubmitsUnconfirmed => ConfigSubmitUnconfirmed.IsOn && ConfigAutoEnter.SelectedId is "always" or "spokenCommand";
     private bool ConfigurationDirty => _opened is not null && (ConfigName.Text != _opened.Title || ConfigInstruction.Text.ReplaceLineEndings("\n") != _opened.Instruction.ReplaceLineEndings("\n")
         || ConfigActionTarget.SelectedId != (_opened.TargetActionPluginId ?? "")
         || ConfigSelectedTargetApp != _opened.TargetApp
         || ConfigAutoEnter.SelectedId != _opened.AutoEnterMode.ToRawValue()
+        || ConfigSubmitsUnconfirmed != (_opened.SubmitWithoutFieldCheck && _opened.AutoEnterMode is WorkflowAutoEnterMode.Always or WorkflowAutoEnterMode.SpokenCommand)
         || ConfigMemory.SelectedId != (_opened.MemoryPluginId ?? "")
         || _draftIcon != _opened.IconKind
         || ConfigTrigger.SelectedId != _opened.ActivationId || ConfigAppProcesses.Text != _opened.AppProcesses
@@ -599,6 +609,7 @@ public sealed partial class WorkflowsView : UserControl
             new(WorkflowAutoEnterMode.Always.ToRawValue(), Loc.T("Always"), Loc.T("Submit every inserted dictation")),
             new(WorkflowAutoEnterMode.DuringDictation.ToRawValue(), Loc.T("When I press Enter during dictation"), Loc.T("Choose per dictation whether to submit"))],
             _opened.AutoEnterMode.ToRawValue());
+        ConfigSubmitUnconfirmed.IsOn = _opened.SubmitWithoutFieldCheck;
         ConfigureMemorySources(_opened.MemoryPluginId ?? "");
         DeleteWorkflowButton.Visibility = _creating ? Visibility.Collapsed : Visibility.Visible;
         _suggestedName = _creating ? WorkflowTemplateCatalog.DefinitionFor(_opened.Template).Name : null;
@@ -732,6 +743,8 @@ public sealed partial class WorkflowsView : UserControl
                 : Loc.T("This action is unavailable. Its saved selection is preserved; enable the plugin or choose another target.");
         // Enter follows text that dictation inserts, never a plugin action, a selected-text result or a manual run.
         ConfigAutoEnterSection.Visibility = ConfigSendsText ? Visibility.Visible : Visibility.Collapsed;
+        ConfigSubmitUnconfirmedSection.Visibility = ConfigSendsText && ConfigAutoEnter.SelectedId is "always" or "spokenCommand"
+            ? Visibility.Visible : Visibility.Collapsed;
         UpdateTargetAppState();
         ConfigAutoEnterSection.Description = ConfigAutoEnter.SelectedId switch
         {
@@ -779,6 +792,7 @@ public sealed partial class WorkflowsView : UserControl
             TargetActionPluginId = string.IsNullOrEmpty(ConfigActionTarget.SelectedId) ? null : ConfigActionTarget.SelectedId,
             TargetApp = ConfigSelectedTargetApp,
             AutoEnterMode = WorkflowAutoEnterModes.Parse(ConfigAutoEnter.SelectedId, false),
+            SubmitWithoutFieldCheck = ConfigSubmitsUnconfirmed,
             MemoryPluginId = string.IsNullOrEmpty(ConfigMemory.SelectedId) ? null : ConfigMemory.SelectedId,
             ProviderId = ConfigProvider.SelectedId, ModelId = ConfigModel.SelectedId,
             IsEnabled = ConfigEnabled.IsOn, Description = ConfigEnabled.IsOn ? Loc.T("Manual workflow") : Loc.T("Disabled manual workflow") };

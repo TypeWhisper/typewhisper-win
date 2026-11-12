@@ -1228,7 +1228,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                             // A chat app moves a paste on a button into its message field; Enter may follow it there.
                             followPasteRedirect: sent is not null,
                             // Only an Enter the user pressed follows a paste that could not be confirmed in its field.
-                            submitUnconfirmed: ClipboardPasteOperation.SubmitsUnconfirmed(autoEnterMode));
+                            submitUnconfirmed: ClipboardPasteOperation.SubmitsUnconfirmed(autoEnterMode)
+                                || autoEnterMode == AutoEnterModeAtStart && _workflowAtStart?.SubmitWithoutFieldCheck == true);
                         var inserted = insertion.Inserted;
                         submitSkipped = inserted && submit && !insertion.Submitted;
                         // Corrections are learned in the field the user keeps working in, which the target app is not.

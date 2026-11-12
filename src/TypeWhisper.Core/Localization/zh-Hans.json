@@ -3283,5 +3283,7 @@
   "Another app started a recording": "另一个应用开始了录音",
   "TypeWhisper is recording the microphone and system audio. Stop it from the tray menu or in Recorder.": "TypeWhisper 正在录制麦克风和系统音频。可从托盘菜单或在录音中停止。",
   "TypeWhisper is recording the system audio. Stop it from the tray menu or in Recorder.": "TypeWhisper 正在录制系统音频。可从托盘菜单或在录音中停止。",
-  "TypeWhisper is recording the microphone. Stop it from the tray menu or in Recorder.": "TypeWhisper 正在录制麦克风。可从托盘菜单或在录音中停止。"
+  "TypeWhisper is recording the microphone. Stop it from the tray menu or in Recorder.": "TypeWhisper 正在录制麦克风。可从托盘菜单或在录音中停止。",
+  "Also without a confirmed text field": "即使无法确认文本框",
+  "For games and apps without accessibility support. TypeWhisper cannot check there where Enter lands, so it presses it 100 ms after pasting.": "适用于不支持辅助功能的游戏和应用。TypeWhisper 无法确认 Enter 会落在哪里，因此会在粘贴 100 毫秒后按下它。"
 }

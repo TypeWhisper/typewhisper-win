@@ -3283,5 +3283,7 @@
   "Another app started a recording": "別のアプリが録音を開始しました",
   "TypeWhisper is recording the microphone and system audio. Stop it from the tray menu or in Recorder.": "TypeWhisper はマイクとシステムオーディオを録音しています。トレイメニューまたはレコーダーで停止できます。",
   "TypeWhisper is recording the system audio. Stop it from the tray menu or in Recorder.": "TypeWhisper はシステムオーディオを録音しています。トレイメニューまたはレコーダーで停止できます。",
-  "TypeWhisper is recording the microphone. Stop it from the tray menu or in Recorder.": "TypeWhisper はマイクを録音しています。トレイメニューまたはレコーダーで停止できます。"
+  "TypeWhisper is recording the microphone. Stop it from the tray menu or in Recorder.": "TypeWhisper はマイクを録音しています。トレイメニューまたはレコーダーで停止できます。",
+  "Also without a confirmed text field": "テキストフィールドを確認できない場合も",
+  "For games and apps without accessibility support. TypeWhisper cannot check there where Enter lands, so it presses it 100 ms after pasting.": "アクセシビリティに対応していないゲームやアプリ向けです。TypeWhisper は Enter がどこに届くかを確認できないため、貼り付けの 100 ミリ秒後に押します。"
 }
