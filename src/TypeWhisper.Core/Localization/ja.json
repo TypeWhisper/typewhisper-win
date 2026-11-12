@@ -2198,7 +2198,7 @@
   "Spoken language": "話す言語",
   "Spoken trigger": "音声トリガー",
   "Stable": "安定版",
-  "Stable contains released versions. Daily contains the latest development builds. Release Candidate contains versions being tested before release. Changing channels does not install anything until you choose Download and restart.": "「安定版」はリリース済みのバージョンです。「デイリー」は最新の開発ビルドです。「リリース候補版」はリリース前のテスト中のバージョンです。チャンネルを変更しても、「ダウンロードして再起動」を選ぶまで何もインストールされません。",
+  "Stable contains released versions. Daily contains the latest development builds. Release Candidate contains versions being tested before release and also offers the final release. If you did not choose a channel here, TypeWhisper stays on Stable after installing a final release. Changing channels does not install anything until you choose Download and restart.": "「安定版」はリリース済みのバージョンです。「デイリー」は最新の開発ビルドです。「リリース候補版」はリリース前のテスト中のバージョンで、正式版も提供されます。ここでチャンネルを選んでいない場合、正式版をインストールした後は「安定版」のままになります。チャンネルを変更しても、「ダウンロードして再起動」を選ぶまで何もインストールされません。",
   "Standard": "標準",
   "Start TypeWhisper with Windows": "Windows の起動時に TypeWhisper を開始",
   "Start and stop dictation without leaving your app.": "アプリを離れることなく、ディクテーションの開始と停止ができます。",

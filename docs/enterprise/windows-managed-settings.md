@@ -308,15 +308,21 @@ is. If you choose another folder with `VELOPACK_INSTALLDIR`, place it below
 `Program Files` or give it the same permissions before you install: full control for
 `SYSTEM` and `Administrators`, read and execute for `Users`, and no write access for
 anyone else. The folder holds the program files that every user of the device runs,
-so a user who can write to it can change what other users run. To set and check the
-permissions for `D:\Apps\TypeWhisper` in an elevated PowerShell:
+so a user who can write to it can change what other users run. Start with a folder that
+does not exist yet: a new folder has only inherited entries, which `/inheritance:r`
+removes, so the three grants below are all that remains. An existing folder can carry
+explicit entries that these commands keep. To create the folder `D:\Apps\TypeWhisper`
+and set and check its permissions in an elevated PowerShell:
 
 ```powershell
 $dir = 'D:\Apps\TypeWhisper'
-New-Item -ItemType Directory -Force -Path $dir | Out-Null
+if (Test-Path -LiteralPath $dir) { throw "$dir already exists; choose a new folder." }
+New-Item -ItemType Directory -Path $dir | Out-Null
 icacls $dir /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' '*S-1-5-32-545:(OI)(CI)RX'
-icacls $dir   # lists only SYSTEM, Administrators (F) and Users (RX)
+icacls $dir   # must list only SYSTEM, Administrators (F) and Users (RX)
 ```
+
+If `icacls` lists any other entry, remove it before you install.
 
 `S-1-5-18`, `S-1-5-32-544` and `S-1-5-32-545` are `SYSTEM`, `Administrators` and
 `Users` in every Windows language. Also check that no parent folder grants users the

@@ -2198,7 +2198,7 @@
   "Spoken language": "Gesprochene Sprache",
   "Spoken trigger": "Gesprochener Auslöser",
   "Stable": "Stable",
-  "Stable contains released versions. Daily contains the latest development builds. Release Candidate contains versions being tested before release. Changing channels does not install anything until you choose Download and restart.": "„Stable“ enthält veröffentlichte Versionen. „Daily“ enthält die neuesten Entwicklungs-Builds. „Release Candidate“ enthält Versionen, die vor der Veröffentlichung getestet werden. Ein Kanalwechsel installiert nichts, bis du „Herunterladen und neu starten“ wählst.",
+  "Stable contains released versions. Daily contains the latest development builds. Release Candidate contains versions being tested before release and also offers the final release. If you did not choose a channel here, TypeWhisper stays on Stable after installing a final release. Changing channels does not install anything until you choose Download and restart.": "„Stable“ enthält veröffentlichte Versionen. „Daily“ enthält die neuesten Entwicklungs-Builds. „Release Candidate“ enthält Versionen, die vor der Veröffentlichung getestet werden, und bietet auch die fertige Version an. Hast du hier keinen Kanal gewählt, bleibt TypeWhisper nach der Installation einer fertigen Version bei „Stable“. Ein Kanalwechsel installiert nichts, bis du „Herunterladen und neu starten“ wählst.",
   "Standard": "Standard",
   "Start TypeWhisper with Windows": "TypeWhisper mit Windows starten",
   "Start and stop dictation without leaving your app.": "Starte und stoppe das Diktat, ohne deine App zu verlassen.",

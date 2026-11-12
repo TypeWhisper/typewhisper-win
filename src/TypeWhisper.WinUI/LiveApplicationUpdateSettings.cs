@@ -22,7 +22,7 @@ internal static class LiveApplicationUpdateSettings
         // The description shows the result of the last check.
         var row = new SettingsRow().Set(Loc.T("Installed version: {0}", WindowsApplicationUpdates.CurrentVersion), control: actions);
         var channelRow = new SettingsRow("UpdateChannel").Set(Loc.T("Update channel"),
-            Loc.T("Stable contains released versions. Daily contains the latest development builds. Release Candidate contains versions being tested before release. Changing channels does not install anything until you choose Download and restart."), picker);
+            Loc.T("Stable contains released versions. Daily contains the latest development builds. Release Candidate contains versions being tested before release and also offers the final release. If you did not choose a channel here, TypeWhisper stays on Stable after installing a final release. Changing channels does not install anything until you choose Download and restart."), picker);
         var app = new SettingsCard(Loc.T("App updates"));
         app.Children.Add(row); app.Children.Add(channelRow);
         panel.Children.Add(app);
