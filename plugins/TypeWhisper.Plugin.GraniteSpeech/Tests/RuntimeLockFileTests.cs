@@ -37,9 +37,9 @@ public sealed class RuntimeLockFileTests
         Assert.All(entries, entry => Assert.NotEmpty(entry.Value));
         Assert.Equal(entries.Count, entries.Keys.Select(key => key.Split("==")[0]).Distinct(StringComparer.OrdinalIgnoreCase).Count());
 
-        foreach (var line in File.ReadLines(TestFile.ProjectFile("plugins", "TypeWhisper.Plugin.GraniteSpeech", "Scripts", "requirements.txt")))
+        foreach (var requirement in File.ReadLines(TestFile.ProjectFile("plugins", "TypeWhisper.Plugin.GraniteSpeech", "Scripts", "requirements.txt"))
+                     .Select(line => line.Trim()))
         {
-            var requirement = line.Trim();
             if (requirement.Length == 0) continue;
             var expected = requirement.StartsWith("torch==", StringComparison.Ordinal) || requirement.StartsWith("torchaudio==", StringComparison.Ordinal)
                 ? requirement + "+" + flavor
@@ -55,13 +55,12 @@ public sealed class RuntimeLockFileTests
     {
         var entries = new Dictionary<string, List<string>>(StringComparer.Ordinal);
         List<string>? current = null;
-        foreach (var raw in text.Split('\n'))
+        foreach (var line in text.Split('\n').Select(raw => raw.Trim().TrimEnd('\\').Trim()))
         {
-            var line = raw.Trim().TrimEnd('\\').Trim();
             if (line.Length == 0 || line.StartsWith('#')) continue;
             if (line.StartsWith("--hash=", StringComparison.Ordinal))
             {
-                Assert.NotNull(current);
+                if (current is null) throw new InvalidDataException("Hash line before its requirement: " + line);
                 Assert.Matches(Hash, line);
                 current.Add(line);
                 continue;

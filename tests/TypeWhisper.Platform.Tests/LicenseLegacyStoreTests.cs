@@ -14,9 +14,13 @@ public sealed class LicenseLegacyStoreTests : IDisposable
 
     public LicenseLegacyStoreTests() => Directory.CreateDirectory(_directory);
 
-    public void Dispose()
+    public void Dispose() => TryDelete(_directory);
+
+    // Removing the temporary folder is best effort; a file still in use must not fail the test.
+    private static bool TryDelete(string directory)
     {
-        try { Directory.Delete(_directory, true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+        try { Directory.Delete(directory, recursive: true); return true; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
     }
 
     private void WriteLegacy() => File.WriteAllText(Legacy, JsonSerializer.Serialize(new

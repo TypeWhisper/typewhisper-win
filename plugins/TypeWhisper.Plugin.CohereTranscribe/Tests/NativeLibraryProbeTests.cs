@@ -32,7 +32,14 @@ public sealed class NativeLibraryProbeTests
         finally
         {
             Environment.SetEnvironmentVariable("PATH", path);
-            try { Directory.Delete(directory, recursive: true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+            TryDelete(directory);
         }
+    }
+
+    // Removing the temporary folder is best effort; a file still in use must not fail the test.
+    private static bool TryDelete(string directory)
+    {
+        try { Directory.Delete(directory, recursive: true); return true; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
     }
 }

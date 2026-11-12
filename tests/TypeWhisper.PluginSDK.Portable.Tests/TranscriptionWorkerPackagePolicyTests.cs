@@ -12,9 +12,13 @@ public sealed class TranscriptionWorkerPackagePolicyTests : IDisposable
     private string Bundled => Path.Join(_root, "Plugins");
     private TranscriptionWorkerPackagePolicy Policy() => new(new HashSet<string> { PluginId }, Installed, Bundled);
 
-    public void Dispose()
+    public void Dispose() => TryDelete(_root);
+
+    // Removing the temporary folder is best effort; a file still in use must not fail the test.
+    private static bool TryDelete(string directory)
     {
-        try { Directory.Delete(_root, true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+        try { Directory.Delete(directory, recursive: true); return true; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
     }
 
     private static string WritePackage(string directory, string id = PluginId)
