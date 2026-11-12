@@ -190,14 +190,23 @@ public sealed partial class WebhookPlugin : IPostProcessorPlugin, IPluginProfile
                     await host.StoreSecretAsync(staged, headers).ConfigureAwait(false);
                     endpoint = endpoint with { SecretName = staged };
                 }
-                if (endpoint.Url != saved.Url || endpoint.UrlSecretName is null && endpoint.Url.Length > 0)
+                var urlChanged = endpoint.Url != saved.Url;
+                if (urlChanged || endpoint.UrlSecretName is null && endpoint.Url.Length > 0)
                 {
                     if (endpoint.Url.Length > 0)
                     {
                         stagedUrl = NewUrlSecretName(endpoint.Id);
-                        await host.StoreSecretAsync(stagedUrl, endpoint.Url).ConfigureAwait(false);
+                        try { await host.StoreSecretAsync(stagedUrl, endpoint.Url).ConfigureAwait(false); }
+                        catch (Exception ex) when (!urlChanged && ex is not (OperationCanceledException or OutOfMemoryException))
+                        {
+                            // An unchanged URL from before 1.3.4 stays where it is until encrypted storage works again,
+                            // so the name, workflows and enable switch can still be changed. A new URL is never
+                            // written in plain text.
+                            await CleanupSecretAsync(host, stagedUrl).ConfigureAwait(false);
+                            stagedUrl = null;
+                        }
                     }
-                    endpoint = endpoint with { UrlSecretName = stagedUrl };
+                    if (urlChanged || stagedUrl is not null) endpoint = endpoint with { UrlSecretName = stagedUrl };
                 }
                 ct.ThrowIfCancellationRequested();
                 Save(_endpoints.Select(e => e.Id == endpoint.Id ? endpoint : e).ToArray());

@@ -86,6 +86,26 @@ public sealed class UrlStorageTests
         Assert.Equal(PrivateUrl, retried.TextSettings.Single(x => x.Id == id + ":url").Value);
     }
 
+    [Fact]
+    public async Task WithoutEncryptedStorageAnUnmovedDestinationCanStillBeDisabledButNotGetANewUrl()
+    {
+        using var f = new PortableFixture(); var id = Guid.NewGuid().ToString("N");
+        f.Host.SetSetting("endpoints.v2", new[] { new { Id = id, Name = "Chat", Url = PrivateUrl, Method = "POST", Enabled = true, Workflows = "" } });
+        f.Secrets.FailWrites = true;
+        using var p = new WebhookPlugin(); await p.ActivateAsync(f.Host);
+
+        await p.SaveProfileSettingsAsync(id, new Dictionary<string, string> { { id + ":name", "Muted" }, { id + ":enabled", "false" } }, null, default);
+        Assert.Equal("false", p.TextSettings.Single(x => x.Id == id + ":enabled").Value);
+        Assert.Equal("Muted", p.TextSettings.Single(x => x.Id == id + ":name").Value);
+        Assert.Equal(PrivateUrl, p.TextSettings.Single(x => x.Id == id + ":url").Value);
+        Assert.Empty(f.Secrets.Values);
+
+        await Assert.ThrowsAnyAsync<Exception>(() => p.SaveProfileSettingsAsync(id,
+            new Dictionary<string, string> { { id + ":url", "https://hooks.example.test/new-token" } }, null, default));
+        Assert.DoesNotContain("new-token", File.ReadAllText(SettingsFile(f)));
+        Assert.Equal(PrivateUrl, p.TextSettings.Single(x => x.Id == id + ":url").Value);
+    }
+
     private sealed class Transport : HttpMessageHandler
     {
         internal string? LastUrl;

@@ -309,8 +309,9 @@ public static class UserDataExport
         text.Append(ProfileFolderName).Append("/: a copy of your TypeWhisper data folder, including history and its audio, recordings, ")
             .Append("dictionary, snippets, workflows, preferences and plugin settings.\r\n")
             .Append("Plugin settings are copied as each plugin saved them. Besides choices they can hold addresses of your services, ")
-            .Append("such as server URLs, and folder paths, so keep this archive private. Plugins keep keys and other secrets ")
-            .Append("in encrypted storage, which is not exported.\r\n");
+            .Append("such as server URLs, and folder paths, so keep this archive private. Plugins normally keep keys and other ")
+            .Append("secrets in encrypted storage, which is not exported, but a plugin that could not reach that storage may ")
+            .Append("still hold such a value in its settings.\r\n");
         if (hasPreviousVersion)
             text.Append(PreviousVersionFolderName).Append("/: data an earlier TypeWhisper version kept in its own folders, ")
                 .Append("such as archived audio and recordings. Its settings and license files are left out because they can hold API keys.\r\n");
