@@ -1119,6 +1119,14 @@ public sealed class LicenseService
             or NotSupportedException
             or OperationCanceledException;
 
+    // Check times are written in UTC with an offset ("o"); reading them back keeps them in UTC, so comparisons
+    // with DateTime.UtcNow do not shift by the local time zone.
+    internal static DateTime? ParseValidationTime(string? value) =>
+        DateTime.TryParse(value, System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal, out var parsed)
+            ? parsed
+            : null;
+
     private static string ResolveDataFilePath(string dataPath, string fileName)
     {
         var root = Path.GetFullPath(dataPath);
@@ -1207,6 +1215,12 @@ public sealed class LicenseService
         if (_suppressPersistence)
             return;
 
+        WriteStore();
+    }
+
+    // Returns whether the encrypted store now holds the current state.
+    private bool WriteStore()
+    {
         try
         {
             var data = new LicenseStoreData
@@ -1233,11 +1247,13 @@ public sealed class LicenseService
             Directory.CreateDirectory(Path.GetDirectoryName(_credentialPath)!);
             File.WriteAllText(_credentialPath, protectedPayload, Encoding.UTF8);
             StorageError = null;
+            return true;
         }
         catch (Exception ex)
         {
             StorageError = global::TypeWhisper.Core.Loc.T("License changes could not be saved on this device. Keep your key and retry before closing the app.");
             _reportFailure?.Invoke("license.store.save-failed", ex);
+            return false;
         }
     }
 
@@ -1270,7 +1286,11 @@ public sealed class LicenseService
         try
         {
             if (TryLoadEncryptedStore())
+            {
+                // An earlier migration wrote the encrypted store but left the plain-text file behind.
+                DeleteLegacyStore();
                 return;
+            }
 
             TryMigrateLegacyStore();
         }
@@ -1323,15 +1343,31 @@ public sealed class LicenseService
             SupporterTier = Enum.TryParse<SupporterTier>(legacy.Tier, out var tier)
                 ? NormalizePersistedSupporterTier(tier, SupporterStatus)
                 : null;
-            _supporterLastValidated = DateTime.TryParse(legacy.LastValidated, out var lastValidated)
-                ? lastValidated
-                : null;
+            _supporterLastValidated = ParseValidationTime(legacy.LastValidated);
 
-            PersistStore();
+            // Loading suppresses ordinary saves, so the migration writes the store itself. The plain-text file
+            // holds the key unencrypted and goes once the encrypted copy is written.
+            if (WriteStore())
+                DeleteLegacyStore();
         }
         catch (Exception ex)
         {
             _reportFailure?.Invoke("license.store.migrate-failed", ex);
+        }
+    }
+
+    // Deleted rather than moved to the recycle bin: the file holds the license key in plain text, and the
+    // encrypted store keeps everything it contained.
+    private void DeleteLegacyStore()
+    {
+        try
+        {
+            if (File.Exists(_legacyCredentialPath))
+                File.Delete(_legacyCredentialPath);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _reportFailure?.Invoke("license.store.legacy-delete-failed", ex);
         }
     }
 
@@ -1352,9 +1388,7 @@ public sealed class LicenseService
                 ? commercialTier
                 : null;
             CommercialIsLifetime = commercial.IsLifetime;
-            _commercialLastValidated = DateTime.TryParse(commercial.LastValidated, out var commercialLastValidated)
-                ? commercialLastValidated
-                : null;
+            _commercialLastValidated = ParseValidationTime(commercial.LastValidated);
         }
 
         if (data.Supporter is { } supporter)
@@ -1367,9 +1401,7 @@ public sealed class LicenseService
             SupporterTier = Enum.TryParse<SupporterTier>(supporter.Tier, out var supporterTier)
                 ? NormalizePersistedSupporterTier(supporterTier, SupporterStatus)
                 : null;
-            _supporterLastValidated = DateTime.TryParse(supporter.LastValidated, out var supporterLastValidated)
-                ? supporterLastValidated
-                : null;
+            _supporterLastValidated = ParseValidationTime(supporter.LastValidated);
         }
     }
 
