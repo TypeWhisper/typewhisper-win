@@ -1,3 +1,4 @@
+using TypeWhisper.Core.Models;
 using TypeWhisper.WinUI;
 using Xunit;
 
@@ -29,7 +30,8 @@ public class ClipboardPasteOperationTests
         public bool LoseFocusBeforeSubmit;
         public uint SubmitSent = 2;
         public Task<bool>? Landed;
-        public Task PrepareSubmitAsync() { Calls.Add("submit-prepare"); return Task.CompletedTask; }
+        public bool Unrecorded;
+        public Task<bool> PrepareSubmitAsync() { Calls.Add("submit-prepare"); return Task.FromResult(!Unrecorded); }
         public void DiscardSubmit() => Calls.Add("submit-discard");
         public Task<bool> WaitForSubmitAsync() { Calls.Add("submit-wait"); if (LoseFocusBeforeSubmit) CanPaste = false; return Landed ?? Task.FromResult(true); }
         public uint SendSubmit() { Calls.Add("enter"); return SubmitSent; }
@@ -110,6 +112,37 @@ public class ClipboardPasteOperationTests
         await result.Restored;
         Assert.Equal("restore", platform.Calls[^2]);
     }
+
+    [Fact]
+    public async Task UnrecordedFieldSkipsAutomaticEnterButKeepsThePaste()
+    {
+        var platform = new Fake { Unrecorded = true };
+        var result = await ClipboardPasteOperation.RunAsync(platform, "text", submit: true);
+        Assert.True(result.Inserted);
+        Assert.False(result.Submitted);
+        Assert.Contains("paste", platform.Calls);
+        Assert.DoesNotContain("submit-wait", platform.Calls);
+        Assert.DoesNotContain("enter", platform.Calls);
+        await result.Restored;
+        Assert.Equal("restore", platform.Calls[^2]);
+    }
+
+    [Fact]
+    public async Task UnrecordedFieldStillSubmitsAnEnterTheUserPressed()
+    {
+        var platform = new Fake { Unrecorded = true };
+        var result = await ClipboardPasteOperation.RunAsync(platform, "text", submit: true, submitUnconfirmed: true);
+        Assert.True(result.Submitted);
+        Assert.Equal(new[] { "capture", "submit-prepare", "paste", "submit-wait", "enter", "wait" }, platform.Calls.Take(6));
+    }
+
+    [Theory]
+    [InlineData(WorkflowAutoEnterMode.DuringDictation, true)]
+    [InlineData(WorkflowAutoEnterMode.Always, false)]
+    [InlineData(WorkflowAutoEnterMode.SpokenCommand, false)]
+    [InlineData(WorkflowAutoEnterMode.Never, false)]
+    public void OnlyAnEnterTheUserPressedFollowsAnUnconfirmedPaste(WorkflowAutoEnterMode mode, bool submits) =>
+        Assert.Equal(submits, ClipboardPasteOperation.SubmitsUnconfirmed(mode));
 
     [Fact]
     public async Task UnconfirmedPasteSkipsEnterAndKeepsTheText()
