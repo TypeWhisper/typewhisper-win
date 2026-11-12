@@ -31,14 +31,22 @@ internal static class TargetAppWindow
                 { Visible: false, Cloaked: false, Caption: true, Width: >= MinimumHiddenSize, Height: >= MinimumHiddenSize });
     }
 
-    /// <summary>The app's window to insert into, or null when none of its processes has one.</summary>
-    internal static TopLevelWindow? Find(string processName)
+    /// <summary>The app's window to insert into, or null when none of its processes has one. Only processes of this
+    /// session and user at TypeWhisper's integrity level or above count; see <see cref="TargetAppProcessTrust"/>.</summary>
+    internal static TopLevelWindow? Find(string processName) => Find(processName, out _);
+
+    /// <inheritdoc cref="Find(string)"/>
+    /// <param name="skipped">Whether a process with that name was left out for its session, user or integrity level.</param>
+    internal static TopLevelWindow? Find(string processName, out bool skipped)
     {
         var processIds = new HashSet<uint>();
+        skipped = false;
         foreach (var process in Process.GetProcessesByName(processName))
             using (process)
             {
-                if (process.Id != Environment.ProcessId) processIds.Add((uint)process.Id);
+                if (process.Id == Environment.ProcessId) continue;
+                if (OperatingSystem.IsWindows() && TargetAppProcessTrust.IsTrusted((uint)process.Id)) processIds.Add((uint)process.Id);
+                else skipped = true;
             }
         if (processIds.Count == 0) return null;
         var windows = new List<TopLevelWindow>();
@@ -56,6 +64,11 @@ internal static class TargetAppWindow
         }, IntPtr.Zero);
         return Choose(windows, processIds);
     }
+
+    /// <summary>Whether the window still exists and belongs to that process, so a closed window's handle or a reused
+    /// process id does not stand for the app.</summary>
+    internal static bool IsOwnedBy(IntPtr window, uint processId) =>
+        GetWindowThreadProcessId(window, out var owner) != 0 && owner == processId;
 
     /// <summary>Hides a window again, as the app had it in the notification area.</summary>
     internal static void Hide(IntPtr window) => ShowWindowAsync(window, HideWindow);

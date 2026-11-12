@@ -7,6 +7,8 @@ public sealed partial class RecorderView
 {
     // The app view implements this; the headless test host leaves it out, which drops the calls.
     partial void ReportApiFailure(string stage, Exception error);
+    // A recording another app started is announced, since nothing on screen asked for it.
+    partial void ReportApiRecordingStarted(bool microphone, bool systemAudio);
     private sealed class ApiRecorderSession
     {
         public required string Id { get; init; }
@@ -58,6 +60,9 @@ public sealed partial class RecorderView
                 await StartRecordingAsync(preferences with { MicrophoneEnabled = microphone, SystemAudioEnabled = systemAudio });
                 started.Started = true;
                 Refresh();
+                // The recording runs at this point; a notification that cannot be shown must not report it as failed.
+                try { ReportApiRecordingStarted(microphone, systemAudio); }
+                catch (Exception ex) when (ex is not OutOfMemoryException) { ReportApiFailure("recorder.api.notice-failed", ex); }
                 return LocalApiResponse.Json(200, new { id = started.Id, status = "recording" });
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)

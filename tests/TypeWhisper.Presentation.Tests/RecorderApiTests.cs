@@ -28,6 +28,8 @@ namespace TypeWhisper.WinUI
         private async Task StopAsync() { try { await _recorder.StopAndSaveAsync(); } catch (IOException) { } Refresh(); }
         private void Refresh() => UpdateApiRecorderSession();
         internal Task StartFromUiAsync() => StartRecordingAsync(new());
+        internal List<(bool Microphone, bool SystemAudio)> Announced { get; } = [];
+        partial void ReportApiRecordingStarted(bool microphone, bool systemAudio) => Announced.Add((microphone, systemAudio));
         internal Task StopFromUiAsync() => StopAsync();
     }
 }
@@ -111,6 +113,31 @@ namespace TypeWhisper.Presentation.Tests
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => view.HandleApiAsync(Request("start"), new CancellationToken(true)));
             var status = await Send(view, Request("status", "GET"));
             Assert.False(status.GetProperty("recording").GetBoolean());
+        }
+
+        [Fact]
+        public async Task OnlyARecordingTheApiStartedIsAnnouncedWithItsSources()
+        {
+            var view = new TypeWhisper.WinUI.RecorderView();
+            await view.StartFromUiAsync();
+            await view.StopFromUiAsync();
+            Assert.Empty(view.Announced);
+
+            await Send(view, Request("start", "POST", ("mic", "false"), ("system_audio", "true")));
+            await Send(view, Request("start"), 409);
+
+            Assert.Equal([(false, true)], view.Announced);
+        }
+
+        [Fact]
+        public void RecorderIndicatorNamesTheRecordedSources()
+        {
+            Assert.Equal("Recording microphone and system audio", TypeWhisper.WinUI.RecorderIndicator.Status(true, true));
+            Assert.Equal("Recording microphone", TypeWhisper.WinUI.RecorderIndicator.Status(true, false));
+            Assert.Equal("Recording system audio", TypeWhisper.WinUI.RecorderIndicator.Status(false, true));
+            Assert.Contains("system audio", TypeWhisper.WinUI.RecorderIndicator.ApiStartedMessage(false, true));
+            Assert.DoesNotContain("microphone", TypeWhisper.WinUI.RecorderIndicator.ApiStartedMessage(false, true));
+            Assert.Contains("microphone and system audio", TypeWhisper.WinUI.RecorderIndicator.ApiStartedMessage(true, true));
         }
     }
 }

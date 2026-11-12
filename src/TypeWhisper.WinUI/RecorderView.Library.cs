@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -92,7 +91,7 @@ public sealed partial class RecorderView
         try
         {
             if (!System.IO.File.Exists(path)) throw new System.IO.FileNotFoundException(Loc.T("The recording no longer exists."));
-            Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true });
+            FileExplorer.SelectFile(path);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { LibraryStatus.Text = Loc.T("Could not open recording: {0}", ex.Message); }
     }

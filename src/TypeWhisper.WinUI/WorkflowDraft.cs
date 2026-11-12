@@ -16,6 +16,8 @@ public sealed record WorkflowDraft(string Id, string Title, string Description, 
     public string? TargetApp { get; init; }
     /// <summary>When Enter follows the inserted text.</summary>
     public WorkflowAutoEnterMode AutoEnterMode { get; init; }
+    /// <summary>Whether Enter also follows a paste whose text field could not be confirmed.</summary>
+    public bool SubmitWithoutFieldCheck { get; init; }
     /// <summary>Optional memory context source.</summary>
     public string? MemoryPluginId { get; init; }
     /// <summary>Whether manual execution is enabled.</summary>
@@ -87,6 +89,8 @@ public sealed record WorkflowDraft(string Id, string Title, string Description, 
         if (output.TargetActionPluginId != TargetActionPluginId) output = output with { TargetActionPluginId = TargetActionPluginId };
         var targetApp = string.IsNullOrWhiteSpace(TargetApp) ? null : TargetApp.Trim();
         if (output.TargetAppProcessName != targetApp) output = output with { TargetAppProcessName = targetApp };
+        var unconfirmed = SubmitWithoutFieldCheck && AutoEnterMode is WorkflowAutoEnterMode.Always or WorkflowAutoEnterMode.SpokenCommand;
+        if (output.SubmitWithoutFieldCheck != unconfirmed) output = output with { SubmitWithoutFieldCheck = unconfirmed };
         return output.AutoEnterMode == AutoEnterMode ? output : output.WithAutoEnterMode(AutoEnterMode);
     }
 
@@ -103,7 +107,7 @@ public sealed record WorkflowDraft(string Id, string Title, string Description, 
         Hotkeys = string.Join(",", workflow.Trigger.Hotkeys),
         HotkeyBehavior = workflow.Trigger.HotkeyBehavior,
         WebsiteDomains = string.Join(", ", workflow.Trigger.WebsitePatterns), ContextMatchMode = workflow.Trigger.ContextMatchMode,
-        TargetActionPluginId = workflow.Output.TargetActionPluginId, TargetApp = workflow.Output.TargetAppProcessName, AutoEnterMode = workflow.Output.AutoEnterMode, MemoryPluginId = workflow.Behavior.MemoryPluginId,
+        TargetActionPluginId = workflow.Output.TargetActionPluginId, TargetApp = workflow.Output.TargetAppProcessName, AutoEnterMode = workflow.Output.AutoEnterMode, SubmitWithoutFieldCheck = workflow.Output.SubmitWithoutFieldCheck, MemoryPluginId = workflow.Behavior.MemoryPluginId,
         Template = workflow.Template, TranslationTarget = workflow.Behavior.TranslationTarget, SelectedTask = workflow.Behavior.SelectedTask,
         InputLanguage = TypeWhisper.Presentation.WorkflowSpokenLanguage.Inherits(workflow.Behavior.InputLanguage) ? null : workflow.Behavior.InputLanguage,
         TranscriptionModel = string.IsNullOrWhiteSpace(workflow.Behavior.TranscriptionModelOverride) ? null : workflow.Behavior.TranscriptionModelOverride, Stored = workflow

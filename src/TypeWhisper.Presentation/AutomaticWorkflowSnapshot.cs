@@ -42,6 +42,9 @@ public sealed class AutomaticWorkflowSnapshot
     /// <summary>When Enter follows insertion. A plugin action receives the text instead, so it never submits.</summary>
     public WorkflowAutoEnterMode AutoEnterMode => _workflow is { } workflow && Error is null && string.IsNullOrWhiteSpace(workflow.Output.TargetActionPluginId)
         ? workflow.Output.AutoEnterMode : WorkflowAutoEnterMode.Never;
+    /// <summary>Whether the automatic Enter also follows a paste whose text field could not be confirmed.</summary>
+    public bool SubmitWithoutFieldCheck => AutoEnterMode is WorkflowAutoEnterMode.Always or WorkflowAutoEnterMode.SpokenCommand
+        && _workflow!.Output.SubmitWithoutFieldCheck;
     /// <summary>The app that receives the text instead of the window the dictation started in; null inserts there.</summary>
     public string? TargetApp => _workflow is { } workflow && Error is null ? WorkflowTargetApp.Of(workflow) : null;
     /// <summary>Whether the workflow translates, so its output can be in another language than the dictation.</summary>

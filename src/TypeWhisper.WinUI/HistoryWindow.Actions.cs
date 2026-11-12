@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -302,7 +301,7 @@ public sealed partial class HistoryWindow
             var path = await Task.Run(() => AudioPath(id));
             if (path is null) { _notice.Text = Loc.T("The saved audio is no longer available. Your transcript was not changed."); return; }
             // The resolver only returns verified WAV files owned by the History audio store.
-            using var process = Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true });
+            FileExplorer.SelectFile(path);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {

@@ -252,8 +252,11 @@ public partial class App : Application
         void UpdateTrayActions() => _tray?.UpdateHotkeyPause(_window.DictationHotkeysPaused,
             _window.CanChangeDictationHotkeyPause, _window.DictationHotkeyPauseError);
         _window.TrayActionsChanged += UpdateTrayActions;
-        void UpdateTrayRecorder() => _tray?.UpdateRecorder(_window.RecorderRecording, _window.CanToggleRecorder);
+        void UpdateTrayRecorder() => _tray?.UpdateRecorder(_window.RecorderRecording, _window.CanToggleRecorder,
+            _window.RecorderSources.Microphone, _window.RecorderSources.SystemAudio);
         _window.RecorderChanged += UpdateTrayRecorder;
+        _window.ApiRecorderStarted += (microphone, systemAudio) => _tray?.ShowNotification(RecorderIndicator.ApiStartedTitle,
+            RecorderIndicator.ApiStartedMessage(microphone, systemAudio), () => _window.DispatcherQueue.TryEnqueue(_window.ShowRecorderFromTray));
         UpdateTrayRecorder();
         UpdateTrayActions();
         _window.DictationChanged += (status, recording) =>
