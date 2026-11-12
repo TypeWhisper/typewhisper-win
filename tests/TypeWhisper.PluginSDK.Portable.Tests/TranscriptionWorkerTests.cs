@@ -13,7 +13,7 @@ public sealed class TranscriptionWorkerTests : IAsyncLifetime
     private readonly List<string> _notices = [];
     private readonly List<string> _logs = [];
     // The test worker accepts packages only where the app's worker would: bundled\<id> or store\packages\<guid>.
-    private string PackageDirectory => Path.Combine(_root, "bundled", PluginId);
+    private string PackageDirectory => Path.Join(_root, "bundled", PluginId);
     private string DataDirectory => Path.Combine(_root, "data");
     private LoggingHost _host = null!;
     private WorkerProbePlugin _inner = null!;
@@ -376,7 +376,7 @@ public sealed class TranscriptionWorkerTests : IAsyncLifetime
     [Fact]
     public async Task PluginActivationErrorsAreNotTreatedAsCrashes()
     {
-        var broken = Path.Combine(_root, "store", "packages", Guid.NewGuid().ToString("N"));
+        var broken = Path.Join(_root, "store", "packages", Guid.NewGuid().ToString("N"));
         WritePackage(broken, typeof(WorkerProbePlugin));
         File.Delete(Path.Combine(broken, "fixture.dll"));
         await using var engine = Isolation().TryIsolate(_inner, broken, _host)!;
@@ -457,7 +457,7 @@ public sealed class TranscriptionWorkerTests : IAsyncLifetime
     [Fact]
     public async Task WorkerRefusesAPackageOutsideTheInstalledPluginFolders()
     {
-        var elsewhere = Path.Combine(_root, "elsewhere", PluginId);
+        var elsewhere = Path.Join(_root, "elsewhere", PluginId);
         WritePackage(elsewhere, typeof(WorkerProbePlugin));
         await using var engine = Isolation().TryIsolate(_inner, elsewhere, _host)!;
         var error = await Assert.ThrowsAnyAsync<Exception>(() => engine.TranscribePcmAsync(new float[] { 0 }, null, false, default));
@@ -469,9 +469,9 @@ public sealed class TranscriptionWorkerTests : IAsyncLifetime
     [Fact]
     public async Task WorkerRefusesAPackageWhoseManifestNamesAnotherPlugin()
     {
-        var other = Path.Combine(_root, "store", "packages", Guid.NewGuid().ToString("N"));
+        var other = Path.Join(_root, "store", "packages", Guid.NewGuid().ToString("N"));
         WritePackage(other, typeof(WorkerProbePlugin));
-        var manifest = Path.Combine(other, "manifest.json");
+        var manifest = Path.Join(other, "manifest.json");
         File.WriteAllText(manifest, File.ReadAllText(manifest).Replace(PluginId, "test.typewhisper.other", StringComparison.Ordinal));
         await using var engine = Isolation().TryIsolate(_inner, other, _host)!;
         var error = await Assert.ThrowsAnyAsync<Exception>(() => engine.TranscribePcmAsync(new float[] { 0 }, null, false, default));

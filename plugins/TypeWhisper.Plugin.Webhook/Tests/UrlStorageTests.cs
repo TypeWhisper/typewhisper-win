@@ -8,7 +8,7 @@ public sealed class UrlStorageTests
 {
     private const string PrivateUrl = "https://hooks.example.test/services/T000/B000/private-token";
 
-    private static string SettingsFile(PortableFixture f) => Path.Combine(f.Host.PluginDataDirectory, "settings.json");
+    private static string SettingsFile(PortableFixture f) => Path.Join(f.Host.PluginDataDirectory, "settings.json");
 
     [Fact]
     public async Task SavedUrlIsEncryptedAndRestoredAfterRestart()

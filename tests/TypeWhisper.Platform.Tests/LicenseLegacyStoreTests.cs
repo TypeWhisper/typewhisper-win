@@ -8,9 +8,9 @@ namespace TypeWhisper.Platform.Tests;
 // license.json held the key in plain text. It moves into the encrypted licenses.dat and is then deleted.
 public sealed class LicenseLegacyStoreTests : IDisposable
 {
-    private readonly string _directory = Path.Combine(Path.GetTempPath(), "license-legacy-" + Guid.NewGuid().ToString("N"));
-    private string Legacy => Path.Combine(_directory, "license.json");
-    private string Encrypted => Path.Combine(_directory, "licenses.dat");
+    private readonly string _directory = Path.Join(Path.GetTempPath(), "license-legacy-" + Guid.NewGuid().ToString("N"));
+    private string Legacy => Path.Join(_directory, "license.json");
+    private string Encrypted => Path.Join(_directory, "licenses.dat");
 
     public LicenseLegacyStoreTests() => Directory.CreateDirectory(_directory);
 
