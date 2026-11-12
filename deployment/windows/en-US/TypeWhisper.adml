@@ -57,7 +57,7 @@ Enabled or Not Configured: plugin downloads are allowed.</string>
 Enabled or Not Configured: model downloads are allowed.</string>
 
       <string id="UpdateMode">Application update mode</string>
-      <string id="UpdateMode_Explain">External deployment: no update checks, downloads or installations; the app refers users to the organization's deployment. Check only: the app checks for and announces new versions but never installs them. User-initiated installation: users install explicitly; nothing installs unattended.
+      <string id="UpdateMode_Explain">External deployment: no update checks, downloads or installations; the app refers users to the organization's deployment. Check only: the app checks for and announces new versions but never installs them. User-initiated installation: users install explicitly; nothing installs unattended. A machine-wide installation treats this as Check only.
 
 Disabled or Not Configured: the release behavior.</string>
       <string id="UpdateMode_External">External deployment</string>

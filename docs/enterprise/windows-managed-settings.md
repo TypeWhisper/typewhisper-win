@@ -36,7 +36,7 @@ any problems; the support report contains the same section.
 | `ManagedLicenseKey` | `REG_SZ` | enforced | Activates a commercial license for the signed-in user. See [managed license activation](windows-managed-license.md). |
 | `TranscriptionProviderId`, `TranscriptionModelId` | `REG_SZ` pair | enforced or recommended | Enforced fixes the transcription provider and model for every entry point; recommended is the initial selection of a profile without an explicit choice. Both values must be present at the same scope. See [provider and model pairs](#provider-and-model-pairs). |
 | `LlmProviderId`, `LlmModelId` | `REG_SZ` pair | enforced or recommended | Same rules for the text model used by workflows, translation and text processing, including the default workflow LLM. The pair does not enable optional processing by itself. |
-| `UpdateMode` | `REG_DWORD` 0–2 | enforced | 0 = External: no update checks, downloads or installations; the app points to the organization's deployment. 1 = CheckOnly: the app checks and announces versions but never installs. 2 = UserInitiated: users install explicitly; nothing installs unattended. Unset keeps the release behavior. |
+| `UpdateMode` | `REG_DWORD` 0–2 | enforced | 0 = External: no update checks, downloads or installations; the app points to the organization's deployment. 1 = CheckOnly: the app checks and announces versions but never installs. 2 = UserInitiated: users install explicitly; nothing installs unattended (a machine-wide installation treats 2 as 1). Unset keeps the release behavior. |
 | `UpdateChannel` | `REG_DWORD` 0–2 | enforced or recommended | 0 = Stable, 1 = Daily, 2 = ReleaseCandidate. Enforced fixes the channel; recommended is the default for profiles without an explicit choice. The separate Daily installation only receives Daily builds. |
 | `AllowedUpdateChannels` | list | enforced | Entries `stable`, `daily`, `release-candidate`. Checks and installations run only on an allowed channel. An empty configured list, or the single entry `none`, turns app updates off. An enforced channel outside the list is an error that blocks updates; the app never switches channels on its own. |
 | `LaunchAtLogin` | `REG_DWORD` 0/1 | enforced or recommended | Enforced sets the app-owned startup registration and locks the setting; the user's earlier choice is restored when the value is removed. Recommended applies only to a new profile that has not completed setup and has no explicit choice. Windows can still disable startup in Settings > Apps > Startup. |
@@ -297,10 +297,30 @@ models and plugins in their profile.
 A machine-wide installation is updated by your deployment: the app does not check,
 download or install app updates, shows "App updates are managed by your
 organization's deployment" in Settings > Account & about and locks the update
-channel. This needs no `UpdateMode` value. If you set `UpdateMode` anyway, keep it at
-0 or 1: standard users cannot write to `Program Files`, so an installation started
-from the app under 2 fails. Plugin updates are unaffected, because plugins live in
-the user's profile.
+channel. This needs no `UpdateMode` value. Under `UpdateMode` 1 the app checks and
+announces new versions; under 2 it behaves like 1 on a machine-wide installation and
+never installs an update itself, because the update would be prepared in the user's
+profile and then applied to the folder shared by all users. Plugin updates are
+unaffected, because plugins live in the user's profile.
+
+The installation folder must be writable by administrators only, as `C:\Program Files`
+is. If you choose another folder with `VELOPACK_INSTALLDIR`, place it below
+`Program Files` or give it the same permissions before you install: full control for
+`SYSTEM` and `Administrators`, read and execute for `Users`, and no write access for
+anyone else. The folder holds the program files that every user of the device runs,
+so a user who can write to it can change what other users run. To set and check the
+permissions for `D:\Apps\TypeWhisper` in an elevated PowerShell:
+
+```powershell
+$dir = 'D:\Apps\TypeWhisper'
+New-Item -ItemType Directory -Force -Path $dir | Out-Null
+icacls $dir /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' '*S-1-5-32-545:(OI)(CI)RX'
+icacls $dir   # lists only SYSTEM, Administrators (F) and Users (RX)
+```
+
+`S-1-5-18`, `S-1-5-32-544` and `S-1-5-32-545` are `SYSTEM`, `Administrators` and
+`Users` in every Windows language. Also check that no parent folder grants users the
+right to rename or delete the folder.
 
 | Item | Value |
 | --- | --- |

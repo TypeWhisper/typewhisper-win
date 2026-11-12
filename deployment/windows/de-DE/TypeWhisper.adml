@@ -57,7 +57,7 @@ Aktiviert oder Nicht konfiguriert: Plugin-Downloads sind erlaubt.</string>
 Aktiviert oder Nicht konfiguriert: Modell-Downloads sind erlaubt.</string>
 
       <string id="UpdateMode">Update-Modus der Anwendung</string>
-      <string id="UpdateMode_Explain">Externe Bereitstellung: keine Update-Prüfungen, Downloads oder Installationen; die App verweist auf die Bereitstellung der Organisation. Nur prüfen: Die App prüft auf neue Versionen und zeigt sie an, installiert sie aber nie. Installation durch den Benutzer: Benutzer installieren ausdrücklich; nichts wird unbeaufsichtigt installiert.
+      <string id="UpdateMode_Explain">Externe Bereitstellung: keine Update-Prüfungen, Downloads oder Installationen; die App verweist auf die Bereitstellung der Organisation. Nur prüfen: Die App prüft auf neue Versionen und zeigt sie an, installiert sie aber nie. Installation durch den Benutzer: Benutzer installieren ausdrücklich; nichts wird unbeaufsichtigt installiert. Eine maschinenweite Installation behandelt dies wie Nur prüfen.
 
 Deaktiviert oder Nicht konfiguriert: das Release-Verhalten.</string>
       <string id="UpdateMode_External">Externe Bereitstellung</string>

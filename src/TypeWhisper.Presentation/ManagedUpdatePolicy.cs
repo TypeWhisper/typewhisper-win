@@ -33,7 +33,9 @@ public sealed record ManagedUpdatePolicy(
     /// <summary>
     /// Reads <c>UpdateMode</c>, <c>UpdateChannel</c> and <c>AllowedUpdateChannels</c> from a snapshot. A machine-wide
     /// installation is updated by the organization's deployment, so it behaves as <see cref="AppUpdateMode.External"/>
-    /// unless policy sets another mode.
+    /// unless policy sets another mode. It never installs an update itself: <see cref="AppUpdateMode.UserInitiated"/>
+    /// counts as <see cref="AppUpdateMode.CheckOnly"/> there, because the update would be prepared in the user's profile
+    /// and then applied to the folder shared by all users.
     /// </summary>
     public static ManagedUpdatePolicy From(ManagedPolicySnapshot snapshot, bool machineWide = false)
     {
@@ -41,6 +43,7 @@ public sealed record ManagedUpdatePolicy(
             || snapshot.IsBlocked(ManagedPolicyKeys.AllowedUpdateChannels);
         var mode = snapshot.Enforced(ManagedPolicyKeys.UpdateMode) is { } enforcedMode ? (AppUpdateMode?)enforcedMode.Number
             : machineWide ? AppUpdateMode.External : null;
+        if (machineWide && mode == AppUpdateMode.UserInitiated) mode = AppUpdateMode.CheckOnly;
         var enforcedChannel = snapshot.Enforced(ManagedPolicyKeys.UpdateChannel) is { } channel ? (AppUpdateChannel?)channel.Number : null;
         var recommendedChannel = snapshot.Recommended(ManagedPolicyKeys.UpdateChannel) is { } recommended ? (AppUpdateChannel?)recommended.Number : null;
         HashSet<AppUpdateChannel>? allowed = null;
