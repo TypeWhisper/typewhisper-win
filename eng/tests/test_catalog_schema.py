@@ -30,7 +30,8 @@ class HostSchemaTests(unittest.TestCase):
 
     def entry(self):
         return dict(id='com.typewhisper.example', name='Example', version='1.0.0', minHostVersion='1.1.0',
-                    sha256='a' * 64, size=100, downloadUrl='https://example.com/plugin.zip',
+                    sha256='a' * 64, size=100,
+                    downloadUrl='https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-example-v1.0.0/plugin.zip',
                     categories=['memory'], platforms=['windows'], supportedArchitectures=['x64'], locality='cloud')
 
     def test_valid_array_and_object_with_default_minimum(self):
@@ -46,6 +47,8 @@ class HostSchemaTests(unittest.TestCase):
         mutations = [dict(categories=['all']), dict(categories=[' ']), dict(categories=None), dict(id='../bad'),
                      dict(name=' '), dict(version='invalid'), dict(minHostVersion='invalid'),
                      dict(sha256='bad'), dict(size=0), dict(size=2**50), dict(downloadUrl='http://example.com/a.zip'),
+                     dict(downloadUrl='https://example.com/plugin.zip'),
+                     dict(downloadUrl='https://github.com/someone/else/releases/download/v1/plugin.zip'),
                      dict(locality='bogus')]
         for mutation in mutations:
             with self.subTest(mutation=mutation):
