@@ -13,9 +13,10 @@ internal static class ClipboardText
         {
             var data = new DataPackage();
             data.SetText(text);
+            // SetContentWithOptions reports a clipboard held by another process by returning false, not by throwing.
             if (excludeFromHistory)
-                Clipboard.SetContentWithOptions(data, new ClipboardContentOptions { IsAllowedInHistory = false, IsRoamable = false });
-            else Clipboard.SetContent(data);
+                return Clipboard.SetContentWithOptions(data, new ClipboardContentOptions { IsAllowedInHistory = false, IsRoamable = false });
+            Clipboard.SetContent(data);
             return true;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { return false; }
