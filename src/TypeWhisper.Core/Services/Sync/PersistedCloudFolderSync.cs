@@ -78,8 +78,10 @@ public sealed class PersistedCloudFolderSync
                     throw new IOException(Loc.T("A previously synchronized local catalog is missing. Restore it before syncing again."));
                 buffer = new(ReadEntries<DictionaryEntry>(dictionaryBytes), ReadEntries<Snippet>(snippetBytes));
             }
+            // Installed term packs share dictionary.json, so they count toward its size limit.
+            var packEntries = buffer.Dictionary.Count(entry => !BufferStore.Personal(entry));
             var result = await Task.Run(() => CloudFolderSyncEngine.SyncAsync(preferences.Folder, buffer, state,
-                new PaidEntitlements(true), cancellationToken: ct), ct).ConfigureAwait(false);
+                new PaidEntitlements(true), cancellationToken: ct, reservedDictionaryItems: packEntries), ct).ConfigureAwait(false);
             var stateUnchanged = !buffer.DictionaryChanged && !buffer.SnippetsChanged
                 && savedState == CloudFolderSyncJson.Serialize(state with { LastSyncAt = null });
             void Commit()
@@ -126,7 +128,7 @@ public sealed class PersistedCloudFolderSync
                 : dictionary;
             Snippets = snippets;
         }
-        private static bool Personal(DictionaryEntry e) => !e.Id.StartsWith("pack:", StringComparison.Ordinal);
+        internal static bool Personal(DictionaryEntry e) => !e.Id.StartsWith("pack:", StringComparison.Ordinal);
         public UserDataSyncSnapshot Snapshot() => new(
             Dictionary.Where(Personal).Select(e => new UserDataSyncDictionaryEntry(
                 e.EntryType == DictionaryEntryType.Term ? UserDataSyncDictionaryEntryType.Term : UserDataSyncDictionaryEntryType.Correction,

@@ -21,7 +21,13 @@ public sealed record ParsedApiTranscription(
     ReadOnlyMemory<byte> Audio, string? FileName, string? LocalPath, string? Language,
     string? Task, string ResponseFormat, string? Model, string? Engine,
     IReadOnlyList<string>? LanguageHints = null, string? TargetLanguage = null,
-    bool AwaitDownload = false, bool ApplyCorrections = true);
+    bool AwaitDownload = false, bool ApplyCorrections = true)
+{
+    /// <summary>Set when the local file is missing, linked or unreadable. The backend still runs every check that
+    /// comes before reading audio and only then refuses the file, so all such files get the same answer as a file
+    /// that exists but cannot be decoded.</summary>
+    public bool LocalFileUnreadable { get; init; }
+}
 
 /// <summary>A transcript segment with actual provider timestamps in seconds.</summary>
 /// <param name="Text">Recognized segment text.</param>
@@ -41,6 +47,8 @@ public sealed class LocalApiRequestException(int statusCode, string message) : E
 /// <summary>Strict, platform-independent parsing of the supported file transcription contract.</summary>
 public static class LocalApiTranscription
 {
+    /// <summary>The single answer for a local file that is missing, linked, unreadable or cannot be decoded.</summary>
+    public const string UnreadableAudio = "The audio file could not be read or decoded. Use an existing local media file up to 60 minutes; linked paths are not supported.";
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
     private static readonly HashSet<string> OptionNames = new(StringComparer.Ordinal)
         { "language", "task", "response_format", "model", "engine", "language_hint", "language_hints", "target_language", "await_download", "apply_corrections" };

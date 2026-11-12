@@ -1219,7 +1219,8 @@
   "Learn more": "詳しく見る",
   "Learned {0} correction(s). Manage them in Dictionary > Corrections.": "{0} 件の修正を学習しました。「辞書」>「修正」で管理できます。",
   "Leave empty to translate into English. This is a text workflow using the selected LLM provider.": "空欄にすると英語に翻訳します。選択したLLMプロバイダーを使用するテキストワークフローです。",
-  "Leave off for the existing Raycast extension. Local apps can then connect without a token.": "既存のRaycast拡張機能を使う場合はオフのままにしてください。ローカルアプリはトークンなしで接続できます。",
+  "Clients send the API token as a bearer token. The typewhisper command and Raycast read it from api-discovery.json in your TypeWhisper profile; the browser extension needs it pasted into its settings.": "クライアントは API トークンを Bearer トークンとして送信します。typewhisper コマンドと Raycast は TypeWhisper プロファイル内の api-discovery.json からトークンを読み取ります。ブラウザー拡張機能では設定にトークンを貼り付ける必要があります。",
+  "Without a token, any app on this PC can start dictation and read your history and settings through the API.": "トークンがない場合、この PC 上のどのアプリでも API を通じて音声入力を開始し、履歴や設定を読み取れます。",
   "Leave this slot empty": "この枠を空にします",
   "Left": "左",
   "Left widget": "左のウィジェット",
@@ -2717,6 +2718,7 @@
   "TypeWhisper Setup": "TypeWhisper セットアップ",
   "TypeWhisper backup": "TypeWhisperのバックアップ",
   "TypeWhisper cannot receive files while its profile is unavailable or the app is shutting down. Please try again after reopening it.": "プロファイルを利用できない間、またはアプリの終了中は、TypeWhisperでファイルを受け取れません。アプリを開き直してから、もう一度お試しください。",
+  "TypeWhisper could not check this license with the licensing service for too long. Connect to the internet and select Refresh status to use it again.": "TypeWhisper は長期間、ライセンスサービスでこのライセンスを確認できませんでした。インターネットに接続し、[状態を更新] を選択すると再び使用できます。",
   "TypeWhisper could not complete automatic insertion. Copy the text, check the intended field, and paste any missing text there.": "TypeWhisperは自動挿入を完了できませんでした。テキストをコピーし、挿入先のフィールドを確認して、不足しているテキストを貼り付けてください。",
   "TypeWhisper could not finish deleting your data because a data folder is a link or cannot be read. Nothing behind the link was touched.": "データフォルダがリンクであるか読み取れないため、データの削除を完了できませんでした。リンク先には一切変更を加えていません。",
   "TypeWhisper could not finish starting. Close and reopen the app before trying again.": "TypeWhisper の起動を完了できませんでした。アプリを閉じて開き直してから、もう一度お試しください。",
@@ -3276,5 +3278,7 @@
   "Try again": "再試行",
   "{0} is downloaded but not loaded.": "{0} はダウンロード済みですが、読み込まれていません。",
   "No model is downloaded yet. Download one in the {0} plugin settings; it loads right after the download.": "まだモデルがダウンロードされていません。{0} のプラグイン設定でダウンロードしてください。ダウンロード後すぐに読み込まれます。",
-  "{0} is loaded and ready.": "{0} を読み込みました。使用できます。"
+  "{0} is loaded and ready.": "{0} を読み込みました。使用できます。",
+  "The sync folder contains a linked folder. Remove the link or choose another sync folder.": "同期フォルダーにリンクされたフォルダーが含まれています。リンクを削除するか、別の同期フォルダーを選択してください。",
+  "{0} received entries use a regular expression, line breaks or the clipboard and were turned off. Review them in Dictionary or Snippets and turn them on if you trust them.": "受信した {0} 件の項目は正規表現、改行、またはクリップボードを使用するため、オフにしました。辞書またはスニペットで確認し、信頼できる場合はオンにしてください。"
 }

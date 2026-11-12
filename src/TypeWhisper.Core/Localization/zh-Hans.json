@@ -1219,7 +1219,8 @@
   "Learn more": "了解更多",
   "Learned {0} correction(s). Manage them in Dictionary > Corrections.": "已学习 {0} 条修正。可在“词典”>“修正”中管理。",
   "Leave empty to translate into English. This is a text workflow using the selected LLM provider.": "留空则翻译为英语。这是使用所选 LLM 提供商的文本工作流。",
-  "Leave off for the existing Raycast extension. Local apps can then connect without a token.": "使用现有 Raycast 扩展时请保持关闭。本地应用无需令牌即可连接。",
+  "Clients send the API token as a bearer token. The typewhisper command and Raycast read it from api-discovery.json in your TypeWhisper profile; the browser extension needs it pasted into its settings.": "客户端以 Bearer 令牌的形式发送 API 令牌。typewhisper 命令和 Raycast 会从 TypeWhisper 配置文件中的 api-discovery.json 读取令牌；浏览器扩展需要在其设置中粘贴令牌。",
+  "Without a token, any app on this PC can start dictation and read your history and settings through the API.": "没有令牌时，这台电脑上的任何应用都可以通过 API 开始听写并读取你的历史记录和设置。",
   "Leave this slot empty": "将此栏位留空",
   "Left": "左侧",
   "Left widget": "左侧小组件",
@@ -2717,6 +2718,7 @@
   "TypeWhisper Setup": "TypeWhisper 设置",
   "TypeWhisper backup": "TypeWhisper 备份",
   "TypeWhisper cannot receive files while its profile is unavailable or the app is shutting down. Please try again after reopening it.": "配置文件不可用或应用正在关闭时，TypeWhisper 无法接收文件。请重新打开应用后再试。",
+  "TypeWhisper could not check this license with the licensing service for too long. Connect to the internet and select Refresh status to use it again.": "TypeWhisper 已有太长时间无法通过许可证服务检查此许可证。请连接到互联网并选择“刷新状态”以再次使用它。",
   "TypeWhisper could not complete automatic insertion. Copy the text, check the intended field, and paste any missing text there.": "TypeWhisper 无法完成自动插入。请复制文本，检查目标输入框，并将缺失的文本粘贴到其中。",
   "TypeWhisper could not finish deleting your data because a data folder is a link or cannot be read. Nothing behind the link was touched.": "由于某个数据文件夹是链接或无法读取，TypeWhisper 未能完成数据删除。链接指向的内容未被改动。",
   "TypeWhisper could not finish starting. Close and reopen the app before trying again.": "TypeWhisper 未能完成启动。请关闭并重新打开应用后再试。",
@@ -3276,5 +3278,7 @@
   "Try again": "重试",
   "{0} is downloaded but not loaded.": "{0} 已下载，但尚未加载。",
   "No model is downloaded yet. Download one in the {0} plugin settings; it loads right after the download.": "尚未下载任何模型。请在 {0} 的插件设置中下载一个；下载后会立即加载。",
-  "{0} is loaded and ready.": "{0} 已加载，可以使用。"
+  "{0} is loaded and ready.": "{0} 已加载，可以使用。",
+  "The sync folder contains a linked folder. Remove the link or choose another sync folder.": "同步文件夹中包含链接的文件夹。请移除该链接或选择其他同步文件夹。",
+  "{0} received entries use a regular expression, line breaks or the clipboard and were turned off. Review them in Dictionary or Snippets and turn them on if you trust them.": "收到的 {0} 个条目使用了正则表达式、换行或剪贴板，已被关闭。请在“词典”或“快捷短语”中检查，如果信任它们，再将其打开。"
 }

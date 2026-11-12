@@ -205,12 +205,77 @@ public sealed class LicenseServiceTests : IDisposable
         SeedStoredActivation(service, supporter, DateTime.UtcNow);
         await service.ValidateAllIfNeededAsync();
         Assert.Equal(0, calls);
-        SetPrivateField(service, supporter ? "_supporterLastValidated" : "_commercialLastValidated", DateTime.UtcNow.AddDays(-40));
+        // Due, but still within the offline allowance (7 + 30 days commercial, 30 + 30 days supporter).
+        SetPrivateField(service, supporter ? "_supporterLastValidated" : "_commercialLastValidated", DateTime.UtcNow.AddDays(supporter ? -40 : -20));
         await service.ValidateAllIfNeededAsync();
         await service.ValidateAllIfNeededAsync();
         Assert.Equal(2, calls);
         Assert.Equal(LicenseStatus.Active, supporter ? service.SupporterStatus : service.CommercialStatus);
         Assert.True(supporter ? service.HasSupporterActivation : service.HasCommercialActivation);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task OfflineBeyondTheAllowance_ExpiresButKeepsTheActivationUntilTheNextCheck(bool supporter)
+    {
+        var online = false;
+        var calls = 0;
+        var service = CreateService((_, _) =>
+        {
+            calls++;
+            return online ? GrantedLicense(supporter) : throw new HttpRequestException("Offline");
+        });
+        // 7 + 30 days for a commercial license and 30 + 30 days for a supporter license have passed.
+        SeedStoredActivation(service, supporter, DateTime.UtcNow.AddDays(supporter ? -61 : -38));
+
+        await service.ValidateAllIfNeededAsync();
+
+        Assert.Equal(1, calls);
+        Assert.Equal(LicenseStatus.Expired, supporter ? service.SupporterStatus : service.CommercialStatus);
+        Assert.True(supporter ? service.HasSupporterActivation : service.HasCommercialActivation);
+        Assert.Contains("too long", supporter ? service.SupporterRefreshError : service.CommercialRefreshError);
+        if (supporter) await service.RefreshSupporterLicenseAsync(); else await service.RefreshCommercialLicenseAsync();
+        Assert.Contains("too long", supporter ? service.SupporterRefreshError : service.CommercialRefreshError);
+
+        online = true;
+        await service.ValidateAllIfNeededAsync();
+        Assert.Equal(LicenseStatus.Active, supporter ? service.SupporterStatus : service.CommercialStatus);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ACheckTimeAheadOfTheClockCountsAsNeverChecked(bool supporter)
+    {
+        var calls = 0;
+        var service = CreateService((_, _) => { calls++; throw new HttpRequestException("Offline"); });
+        SeedStoredActivation(service, supporter, DateTime.UtcNow.AddMinutes(2));
+        await service.ValidateAllIfNeededAsync();
+        Assert.Equal(0, calls);
+
+        SeedStoredActivation(service, supporter, DateTime.UtcNow.AddYears(5));
+        await service.ValidateAllIfNeededAsync();
+
+        Assert.Equal(1, calls);
+        Assert.Equal(LicenseStatus.Expired, supporter ? service.SupporterStatus : service.CommercialStatus);
+        Assert.True(supporter ? service.HasSupporterActivation : service.HasCommercialActivation);
+    }
+
+    [Fact]
+    public void ValidationScheduleTrustsOnlyPastCheckTimes()
+    {
+        var now = new DateTime(2026, 11, 12, 12, 0, 0, DateTimeKind.Utc);
+        var week = TimeSpan.FromDays(7);
+        Assert.False(LicenseService.IsValidationDue(now.AddDays(-6), week, now));
+        Assert.True(LicenseService.IsValidationDue(now.AddDays(-8), week, now));
+        Assert.True(LicenseService.IsValidationDue(null, week, now));
+        Assert.False(LicenseService.IsValidationDue(now.AddMinutes(4), week, now));
+        Assert.True(LicenseService.IsValidationDue(now.AddMinutes(6), week, now));
+        Assert.False(LicenseService.HasOfflineAllowanceLapsed(now.AddDays(-36), week, now));
+        Assert.True(LicenseService.HasOfflineAllowanceLapsed(now.AddDays(-38), week, now));
+        Assert.True(LicenseService.HasOfflineAllowanceLapsed(now.AddDays(30), week, now));
+        Assert.True(LicenseService.HasOfflineAllowanceLapsed(null, week, now));
     }
 
     private static void SeedStoredActivation(LicenseService service, bool supporter, DateTime lastValidated)

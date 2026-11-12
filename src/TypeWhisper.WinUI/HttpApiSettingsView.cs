@@ -25,7 +25,7 @@ internal sealed class HttpApiSettingsView : UserControl
         var requireAuthentication = AppToggleSwitch.Create(api.RequireAuthentication);
         AutomationProperties.SetName(requireAuthentication, Loc.T("Require API token"));
         var authenticationRow = new SettingsRow().Set(Loc.T("Require API token"),
-            Loc.T("Leave off for the existing Raycast extension. Local apps can then connect without a token."), requireAuthentication);
+            Loc.T("Clients send the API token as a bearer token. The typewhisper command and Raycast read it from api-discovery.json in your TypeWhisper profile; the browser extension needs it pasted into its settings."), requireAuthentication);
         body.Children.Add(authenticationRow);
         var documentation = new HyperlinkButton { Content = Loc.T("Open documentation"), VerticalAlignment = VerticalAlignment.Center };
         var footer = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
@@ -49,6 +49,8 @@ internal sealed class HttpApiSettingsView : UserControl
             // The switch already says whether the API is on; while the app starts, a saved server has not started yet.
             enable.Status = api.Status != "HTTP API is off." && api.Status != Loc.T("HTTP API is off.") ? Loc.T(api.Status) : "";
             portRow.Visibility = authenticationRow.Visibility = actions.Visibility = api.Enabled ? Visibility.Visible : Visibility.Collapsed;
+            authenticationRow.Status = api.Enabled && !api.RequireAuthentication
+                ? Loc.T("Without a token, any app on this PC can start dictation and read your history and settings through the API.") : "";
             copyAddress.IsEnabled = copyToken.IsEnabled = documentation.IsEnabled = api.Running;
             documentation.NavigateUri = api.Running ? new Uri($"http://127.0.0.1:{api.Port}/docs") : null;
         }

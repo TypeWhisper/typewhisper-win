@@ -12,7 +12,8 @@ public sealed class TranscriptionWorkerTests : IAsyncLifetime
     private readonly string _root = Path.Combine(Path.GetTempPath(), "transcription-worker-" + Guid.NewGuid().ToString("N"));
     private readonly List<string> _notices = [];
     private readonly List<string> _logs = [];
-    private string PackageDirectory => Path.Combine(_root, "package");
+    // The test worker accepts packages only where the app's worker would: bundled\<id> or store\packages\<guid>.
+    private string PackageDirectory => Path.Join(_root, "bundled", PluginId);
     private string DataDirectory => Path.Combine(_root, "data");
     private LoggingHost _host = null!;
     private WorkerProbePlugin _inner = null!;
@@ -23,6 +24,8 @@ public sealed class TranscriptionWorkerTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
+        // Tests of this class run one at a time, and only they start the test worker.
+        Environment.SetEnvironmentVariable("TYPEWHISPER_TEST_WORKER_ROOT", _root);
         WritePackage(PackageDirectory, typeof(WorkerProbePlugin));
         _host = new(DataDirectory, _logs);
         _inner = new WorkerProbePlugin();
@@ -373,7 +376,7 @@ public sealed class TranscriptionWorkerTests : IAsyncLifetime
     [Fact]
     public async Task PluginActivationErrorsAreNotTreatedAsCrashes()
     {
-        var broken = Path.Combine(_root, "broken");
+        var broken = Path.Join(_root, "store", "packages", Guid.NewGuid().ToString("N"));
         WritePackage(broken, typeof(WorkerProbePlugin));
         File.Delete(Path.Combine(broken, "fixture.dll"));
         await using var engine = Isolation().TryIsolate(_inner, broken, _host)!;
@@ -449,6 +452,42 @@ public sealed class TranscriptionWorkerTests : IAsyncLifetime
         worker = Process.GetProcessById(pid);
         Assert.Null(await registry.SetEnabledAsync(PluginId, false));
         await worker.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
+    public async Task WorkerRefusesAPackageOutsideTheInstalledPluginFolders()
+    {
+        var elsewhere = Path.Join(_root, "elsewhere", PluginId);
+        WritePackage(elsewhere, typeof(WorkerProbePlugin));
+        await using var engine = Isolation().TryIsolate(_inner, elsewhere, _host)!;
+        var error = await Assert.ThrowsAnyAsync<Exception>(() => engine.TranscribePcmAsync(new float[] { 0 }, null, false, default));
+        Assert.Contains("installed plugin folders", error.Message);
+        Assert.DoesNotContain(_logs, line => line.StartsWith("loaded ", StringComparison.Ordinal));
+        Assert.DoesNotContain(_logs, line => line.Contains("worker crashed", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task WorkerRefusesAPackageWhoseManifestNamesAnotherPlugin()
+    {
+        var other = Path.Join(_root, "store", "packages", Guid.NewGuid().ToString("N"));
+        WritePackage(other, typeof(WorkerProbePlugin));
+        var manifest = Path.Join(other, "manifest.json");
+        File.WriteAllText(manifest, File.ReadAllText(manifest).Replace(PluginId, "test.typewhisper.other", StringComparison.Ordinal));
+        await using var engine = Isolation().TryIsolate(_inner, other, _host)!;
+        var error = await Assert.ThrowsAnyAsync<Exception>(() => engine.TranscribePcmAsync(new float[] { 0 }, null, false, default));
+        Assert.Contains("expected plugin", error.Message);
+        Assert.DoesNotContain(_logs, line => line.StartsWith("loaded ", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void WorkerArgumentsCarryThePluginId()
+    {
+        var arguments = new TranscriptionWorkerArguments("pipe", 1, "package", "data", "assets", "model", TranscriptionAccelerationPreference.Cpu,
+            new(1, 1, 6)) { PluginId = PluginId };
+        Assert.True(TranscriptionWorkerArguments.TryParse([TranscriptionWorkerServer.Argument, .. arguments.ToArguments()], out var parsed));
+        Assert.Equal(PluginId, parsed.PluginId);
+        var withoutId = arguments with { PluginId = "" };
+        Assert.False(TranscriptionWorkerArguments.TryParse([TranscriptionWorkerServer.Argument, .. withoutId.ToArguments()], out _));
     }
 
     private sealed class LoggingHost(string directory, List<string> logs) : IPluginHostServices

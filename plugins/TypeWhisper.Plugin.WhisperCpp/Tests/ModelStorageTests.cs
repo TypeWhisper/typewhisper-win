@@ -17,7 +17,7 @@ public partial class WhisperCppPluginTests
         await plugin.ActivateAsync(new FakePluginHostServices(temp.Path));
         const int expected = 29_875_721;
         var stream = new CountedNonSeekableWeights(new byte[expected + 81920 * 3]);
-        plugin.OpenModelDownloadAsync = (_, _, _) => Task.FromResult<Stream>(stream);
+        plugin.OpenModelDownloadAsync = (_, _) => Task.FromResult<Stream>(stream);
         await Assert.ThrowsAsync<InvalidDataException>(() => plugin.DownloadModelAsync("tiny-q5_0", null, default));
         Assert.InRange(stream.BytesRead, expected + 1L, expected + 81920L);
         Assert.False(plugin.IsModelDownloaded("tiny-q5_0"));
@@ -35,7 +35,7 @@ public partial class WhisperCppPluginTests
         await File.WriteAllBytesAsync(orphan, new byte[16]);
         var opened = false;
         long? checkedDirectoryFree = null;
-        plugin.OpenModelDownloadAsync = (_, _, _) => { opened = true; return Task.FromResult(Stream.Null); };
+        plugin.OpenModelDownloadAsync = (_, _) => { opened = true; return Task.FromResult(Stream.Null); };
         plugin.AvailableBytes = directory =>
         {
             Assert.False(File.Exists(orphan));
@@ -75,7 +75,8 @@ public partial class WhisperCppPluginTests
         plugin.SelectModel("tiny-q5_0");
         Assert.False(plugin.IsModelDownloaded("tiny-q5_0")); Assert.False(plugin.IsConfigured);
         await Assert.ThrowsAsync<InvalidDataException>(() => plugin.LoadModelAsync("tiny-q5_0", default));
-        plugin.OpenModelDownloadAsync = (_, _, _) => Task.FromResult<Stream>(new NonSeekableWeights(new byte[29_875_721]));
+        plugin.OpenModelDownloadAsync = (_, _) => Task.FromResult<Stream>(new NonSeekableWeights(new byte[29_875_721]));
+        plugin.ExpectedModelSha256 = _ => ZeroWeightsSha256(29_875_721);
         await plugin.DownloadModelAsync("tiny-q5_0", null, default);
         Assert.True(plugin.IsModelDownloaded("tiny-q5_0")); Assert.True(plugin.IsConfigured);
         Assert.Equal(29_875_721, new FileInfo(path).Length);
@@ -100,12 +101,66 @@ public partial class WhisperCppPluginTests
     {
         using var temp = new TempDirectory(); using var plugin = new WhisperCppPlugin();
         await plugin.ActivateAsync(new FakePluginHostServices(temp.Path));
-        plugin.OpenModelDownloadAsync = (_, _, _) => Task.FromResult<Stream>(new NonSeekableWeights(new byte[29_875_721]));
+        plugin.OpenModelDownloadAsync = (_, _) => Task.FromResult<Stream>(new NonSeekableWeights(new byte[29_875_721]));
+        plugin.ExpectedModelSha256 = _ => ZeroWeightsSha256(29_875_721);
         var progress = new CapturedProgress();
         await plugin.DownloadModelAsync("tiny-q5_0", progress, default);
         Assert.Contains(progress.Values, p => p > 0 && p < 1);
         Assert.Equal(1, progress.Values[^1]); Assert.True(plugin.IsModelDownloaded("tiny-q5_0"));
     }
+
+    [Fact]
+    public async Task DownloadWithTheRightSizeButAnotherHashIsNotPublished()
+    {
+        using var temp = new TempDirectory(); using var plugin = new WhisperCppPlugin();
+        await plugin.ActivateAsync(new FakePluginHostServices(temp.Path));
+        Uri? requested = null;
+        plugin.OpenModelDownloadAsync = (uri, _) => { requested = uri; return Task.FromResult<Stream>(new NonSeekableWeights(new byte[29_875_721])); };
+        var progress = new CapturedProgress();
+
+        var error = await Assert.ThrowsAsync<InvalidDataException>(() => plugin.DownloadModelAsync("tiny-q5_0", progress, default));
+
+        Assert.Contains("integrity check", error.Message);
+        Assert.Equal(WhisperCppPlugin.GetModelDownloadUri("tiny-q5_0"), requested);
+        Assert.False(plugin.IsModelDownloaded("tiny-q5_0"));
+        Assert.DoesNotContain(1.0, progress.Values);
+        Assert.Empty(Directory.GetFiles(Path.Join(temp.Path, "Models")));
+    }
+
+    [Theory]
+    [InlineData("tiny", "classic/ggml-tiny.bin")]
+    [InlineData("tiny-q5_0", "q5_0/ggml-tiny.bin")]
+    [InlineData("large-v3-turbo-q5_0", "q5_0/ggml-large-v3-turbo.bin")]
+    public void ModelDownloadsUseTheFixedRepositoryRevision(string modelId, string remotePath)
+    {
+        Assert.Equal(
+            $"https://huggingface.co/sandrohanea/whisper.net/resolve/{WhisperCppPlugin.ModelRevision}/{remotePath}",
+            WhisperCppPlugin.GetModelDownloadUri(modelId).AbsoluteUri);
+        Assert.Matches("^[0-9a-f]{40}$", WhisperCppPlugin.ModelRevision);
+    }
+
+    [Fact]
+    public void EveryModelHasAPinnedSha256()
+    {
+        using var plugin = new WhisperCppPlugin();
+        var ids = plugin.TranscriptionModels.Select(model => model.Id).ToArray();
+        Assert.Equal(14, ids.Length);
+        var hashes = ids.Select(id => plugin.ExpectedModelSha256(id)).ToArray();
+        Assert.All(hashes, hash => Assert.Matches("^[0-9a-f]{64}$", hash));
+        Assert.Equal(hashes.Length, hashes.Distinct().Count());
+    }
+
+    [Fact]
+    public void ModelHashComparisonIsExact()
+    {
+        var actual = System.Security.Cryptography.SHA256.HashData(new byte[16]);
+        WhisperCppPlugin.ValidateModelHash(actual, Convert.ToHexString(actual).ToLowerInvariant());
+        actual[0] ^= 1;
+        Assert.Throws<InvalidDataException>(() => WhisperCppPlugin.ValidateModelHash(actual, Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(new byte[16]))));
+    }
+
+    private static string ZeroWeightsSha256(int length) =>
+        Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(new byte[length]));
 
     [Fact]
     public void OrphanCleanupPreservesActiveAndUnrelatedFiles()

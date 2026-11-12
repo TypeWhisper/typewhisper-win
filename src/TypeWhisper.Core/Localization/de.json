@@ -1219,7 +1219,8 @@
   "Learn more": "Mehr erfahren",
   "Learned {0} correction(s). Manage them in Dictionary > Corrections.": "{0} Korrektur(en) gelernt. Verwalte sie unter Wörterbuch > Korrekturen.",
   "Leave empty to translate into English. This is a text workflow using the selected LLM provider.": "Leer lassen, um ins Englische zu übersetzen. Dies ist ein Text-Workflow mit dem gewählten LLM-Anbieter.",
-  "Leave off for the existing Raycast extension. Local apps can then connect without a token.": "Für die bestehende Raycast-Erweiterung ausgeschaltet lassen. Lokale Apps können sich dann ohne Token verbinden.",
+  "Clients send the API token as a bearer token. The typewhisper command and Raycast read it from api-discovery.json in your TypeWhisper profile; the browser extension needs it pasted into its settings.": "Clients senden den API-Token als Bearer-Token. Der Befehl typewhisper und Raycast lesen ihn aus api-discovery.json in deinem TypeWhisper-Profil; in der Browser-Erweiterung musst du ihn in den Einstellungen einfügen.",
+  "Without a token, any app on this PC can start dictation and read your history and settings through the API.": "Ohne Token kann jede App auf diesem PC über die API Diktate starten und deinen Verlauf und deine Einstellungen lesen.",
   "Leave this slot empty": "Dieses Feld leer lassen",
   "Left": "Links",
   "Left widget": "Linkes Widget",
@@ -2717,6 +2718,7 @@
   "TypeWhisper Setup": "TypeWhisper einrichten",
   "TypeWhisper backup": "TypeWhisper-Backup",
   "TypeWhisper cannot receive files while its profile is unavailable or the app is shutting down. Please try again after reopening it.": "TypeWhisper kann keine Dateien empfangen, solange das Profil nicht verfügbar ist oder die App beendet wird. Bitte versuche es nach dem erneuten Öffnen noch einmal.",
+  "TypeWhisper could not check this license with the licensing service for too long. Connect to the internet and select Refresh status to use it again.": "TypeWhisper konnte diese Lizenz zu lange nicht beim Lizenzdienst prüfen. Verbinde dich mit dem Internet und wähle Status aktualisieren, um sie wieder zu nutzen.",
   "TypeWhisper could not complete automatic insertion. Copy the text, check the intended field, and paste any missing text there.": "TypeWhisper konnte das automatische Einfügen nicht abschließen. Kopiere den Text, prüfe das gewünschte Feld und füge dort fehlenden Text ein.",
   "TypeWhisper could not finish deleting your data because a data folder is a link or cannot be read. Nothing behind the link was touched.": "TypeWhisper konnte das Löschen deiner Daten nicht abschließen, weil ein Datenordner eine Verknüpfung ist oder nicht gelesen werden kann. Hinter der Verknüpfung wurde nichts verändert.",
   "TypeWhisper could not finish starting. Close and reopen the app before trying again.": "TypeWhisper konnte nicht vollständig starten. Schließe die App und öffne sie erneut, bevor du es noch einmal versuchst.",
@@ -3276,5 +3278,7 @@
   "Try again": "Erneut versuchen",
   "{0} is downloaded but not loaded.": "{0} ist heruntergeladen, aber nicht geladen.",
   "No model is downloaded yet. Download one in the {0} plugin settings; it loads right after the download.": "Es ist noch kein Modell heruntergeladen. Lade eines in den Plugin-Einstellungen von {0} herunter; es wird direkt nach dem Download geladen.",
-  "{0} is loaded and ready.": "{0} ist geladen und bereit."
+  "{0} is loaded and ready.": "{0} ist geladen und bereit.",
+  "The sync folder contains a linked folder. Remove the link or choose another sync folder.": "Der Sync-Ordner enthält einen verknüpften Ordner. Entferne die Verknüpfung oder wähle einen anderen Sync-Ordner.",
+  "{0} received entries use a regular expression, line breaks or the clipboard and were turned off. Review them in Dictionary or Snippets and turn them on if you trust them.": "{0} empfangene Einträge verwenden einen regulären Ausdruck, Zeilenumbrüche oder die Zwischenablage und wurden ausgeschaltet. Prüfe sie unter Wörterbuch oder Snippets und schalte sie ein, wenn du ihnen vertraust."
 }

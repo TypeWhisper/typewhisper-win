@@ -11,6 +11,11 @@ internal sealed partial class DictationPluginServices
         "com.typewhisper.voxtral-local"
     };
 
+    // The worker accepts only these plugins and only from this profile's installed packages, which the
+    // plugin store keeps in PluginPackages\packages\<guid>. Test and development profiles resolve their own root.
+    internal static TranscriptionWorkerPackagePolicy WorkerPackagePolicy() =>
+        new(IsolatedTranscriptionPlugins, WinUIProfile.DataPath("PluginPackages", "packages"));
+
     // The worker is this executable in worker mode. TYPEWHISPER_TRANSCRIPTION_WORKER=0 keeps the
     // engines in the app process for diagnosis.
     private TranscriptionIsolation? CreateTranscriptionIsolation()

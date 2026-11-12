@@ -183,7 +183,8 @@ public sealed class LocalHttpApi : IAsyncDisposable
             var publicStatus = request.HttpMethod == "GET" && request.Url?.AbsolutePath == "/v1/status";
             var publicDocs = request.HttpMethod == "GET" && request.Url?.AbsolutePath is "/docs" or "/docs/";
             if (request.RemoteEndPoint is null || !IPAddress.IsLoopback(request.RemoteEndPoint.Address) ||
-                !AllowedHost(request.UserHostName) || !AllowedOrigin(request.Headers["Origin"]))
+                !AllowedHost(request.UserHostName) ||
+                !AllowedBrowserContext(request.Headers["Origin"], request.Headers["Sec-Fetch-Site"], _requireAuthentication))
                 response = Error(403, "Request origin is not allowed.");
             // The peer check guards the token-free mode and backs up the token: the discovery file is readable
             // only by the owning user, so a token presented by another user's process was leaked, not granted.
@@ -270,13 +271,23 @@ public sealed class LocalHttpApi : IAsyncDisposable
                 || string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase));
     }
 
-    // Web pages always send their http(s) or "null" origin. Browser extensions send their own scheme and call with
-    // host permission for this address, so they need no CORS headers; the token and peer checks still apply.
-    private static bool AllowedOrigin(string? origin)
+    /// <summary>Returns whether the browser headers of a request are acceptable. Web pages always send their
+    /// http(s) or "null" origin. Browser extensions send their own scheme and call with host permission for this
+    /// address, so they need no CORS headers; every installed extension can do that, so extensions are admitted only
+    /// while the token is required. Requests a page triggers without an Origin header (images, links, form
+    /// navigations) still carry Sec-Fetch-Site in current browsers: only requests the user started directly
+    /// ("none") or that come from this API's own documentation page ("same-origin") are admitted. Local tools send
+    /// neither header.</summary>
+    public static bool AllowedBrowserContext(string? origin, string? fetchSite, bool tokenRequired)
     {
-        if (origin is null) return true;
+        if (origin is not null) return tokenRequired && IsExtensionOrigin(origin);
+        return fetchSite is null || fetchSite.Trim().ToLowerInvariant() is "none" or "same-origin";
+    }
+
+    private static bool IsExtensionOrigin(string origin)
+    {
         var separator = origin.IndexOf("://", StringComparison.Ordinal);
-        return separator > 0 && origin[..separator].ToLowerInvariant() is "chrome-extension" or "moz-extension"
+        return separator > 0 && origin[..separator].Trim().ToLowerInvariant() is "chrome-extension" or "moz-extension"
             or "safari-web-extension" or "extension";
     }
 

@@ -10,10 +10,11 @@ internal static class Program
         // A local speech engine runs in a copy of this executable, so a native crash ends only that copy.
         // Worker mode must start before installer hooks, WinUI and single-instance activation.
         if (TypeWhisper.PluginHost.TranscriptionWorkerServer.IsWorkerInvocation(args))
-            Environment.Exit(TypeWhisper.PluginHost.TranscriptionWorkerServer.Run(args));
-        // The Parakeet plugin checks its CUDA runtime in a copy of this executable before it uses the graphics card.
+            Environment.Exit(TypeWhisper.PluginHost.TranscriptionWorkerServer.Run(args, DictationPluginServices.WorkerPackagePolicy()));
+        // Parakeet versions before 1.3.0 checked their CUDA runtime in a copy of this executable. The check no longer
+        // exists; the copy reports a failure at once, so such a version falls back to the CPU instead of opening the app.
         if (TypeWhisper.PluginHost.NativeModelProbe.IsProbeInvocation(args))
-            Environment.Exit(TypeWhisper.PluginHost.NativeModelProbe.Run(args, LocalCtcVocabulary.HostVersion));
+            Environment.Exit(TypeWhisper.PluginHost.NativeModelProbe.Run());
 #if !DEBUG && !TYPEWHISPER_STORE
         // Installer callbacks must run before XAML, single-instance activation or profile access.
         // Candidate builds do not contact an update feed or automatically apply an update.

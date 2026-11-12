@@ -38,24 +38,40 @@ public sealed partial class WhisperCppPlugin :
     private const string RocmHookMissingDetail =
         "Set TYPEWHISPER_WHISPERCPP_ROCM_LIBRARY_PATH to a custom ROCm whisper.dll path and restart TypeWhisper.";
 
-    // Exact artifact sizes from whisper.net v3, revision a28c1f379c0359332f8d101184249cba28b1ff53.
+    // Downloads use this fixed revision of the whisper.net model repository, so the exact sizes and
+    // SHA-256 values below describe the served files. Each download is verified before it is published.
     // https://huggingface.co/sandrohanea/whisper.net/tree/a28c1f379c0359332f8d101184249cba28b1ff53
+    internal const string ModelRevision = "a28c1f379c0359332f8d101184249cba28b1ff53";
     private static readonly IReadOnlyList<ModelDefinition> Models =
     [
-        new("tiny", "Tiny", GgmlType.Tiny, QuantizationType.NoQuantization, "ggml-tiny.bin", "~75 MB", 75, 99, false, 77691713),
-        new("tiny.en", "Tiny (English)", GgmlType.TinyEn, QuantizationType.NoQuantization, "ggml-tiny.en.bin", "~75 MB", 75, 1, false, 77704715),
-        new("tiny-q5_0", "Tiny (Q5_0)", GgmlType.Tiny, QuantizationType.Q5_0, "ggml-tiny-q5_0.bin", "~31 MB", 31, 99, false, 29875721),
-        new("base", "Base", GgmlType.Base, QuantizationType.NoQuantization, "ggml-base.bin", "~142 MB", 142, 99, true, 147951465),
-        new("base.en", "Base (English)", GgmlType.BaseEn, QuantizationType.NoQuantization, "ggml-base.en.bin", "~142 MB", 142, 1, false, 147964211),
-        new("base-q5_0", "Base (Q5_0)", GgmlType.Base, QuantizationType.Q5_0, "ggml-base-q5_0.bin", "~57 MB", 57, 99, true, 55295433),
-        new("small", "Small", GgmlType.Small, QuantizationType.NoQuantization, "ggml-small.bin", "~466 MB", 466, 99, false, 487601967),
-        new("small.en", "Small (English)", GgmlType.SmallEn, QuantizationType.NoQuantization, "ggml-small.en.bin", "~466 MB", 466, 1, false, 487614201),
-        new("small-q5_0", "Small (Q5_0)", GgmlType.Small, QuantizationType.Q5_0, "ggml-small-q5_0.bin", "~182 MB", 182, 99, false, 175209663),
-        new("medium", "Medium", GgmlType.Medium, QuantizationType.NoQuantization, "ggml-medium.bin", "~1.5 GB", 1530, 99, false, 1533763059),
-        new("medium.en", "Medium (English)", GgmlType.MediumEn, QuantizationType.NoQuantization, "ggml-medium.en.bin", "~1.5 GB", 1530, 1, false, 1533774781),
-        new("medium-q5_0", "Medium (Q5_0)", GgmlType.Medium, QuantizationType.Q5_0, "ggml-medium-q5_0.bin", "~601 MB", 601, 99, false, 539212467),
-        new("large-v3-turbo", "Large V3 Turbo", GgmlType.LargeV3Turbo, QuantizationType.NoQuantization, "ggml-large-v3-turbo.bin", "~1.6 GB", 1620, 99, false, 1624555275),
-        new("large-v3-turbo-q5_0", "Large V3 Turbo (Q5_0)", GgmlType.LargeV3Turbo, QuantizationType.Q5_0, "ggml-large-v3-turbo-q5_0.bin", "~684 MB", 684, 99, false, 574041195),
+        new("tiny", "Tiny", GgmlType.Tiny, QuantizationType.NoQuantization, "ggml-tiny.bin", "~75 MB", 75, 99, false, 77691713,
+            "classic/ggml-tiny.bin", "be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21"),
+        new("tiny.en", "Tiny (English)", GgmlType.TinyEn, QuantizationType.NoQuantization, "ggml-tiny.en.bin", "~75 MB", 75, 1, false, 77704715,
+            "classic/ggml-tiny.en.bin", "921e4cf8686fdd993dcd081a5da5b6c365bfde1162e72b08d75ac75289920b1f"),
+        new("tiny-q5_0", "Tiny (Q5_0)", GgmlType.Tiny, QuantizationType.Q5_0, "ggml-tiny-q5_0.bin", "~31 MB", 31, 99, false, 29875721,
+            "q5_0/ggml-tiny.bin", "bf65504605bf1b8c7775b641aae82990010ea27d589e3b84ac82592cbdd38ed0"),
+        new("base", "Base", GgmlType.Base, QuantizationType.NoQuantization, "ggml-base.bin", "~142 MB", 142, 99, true, 147951465,
+            "classic/ggml-base.bin", "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe"),
+        new("base.en", "Base (English)", GgmlType.BaseEn, QuantizationType.NoQuantization, "ggml-base.en.bin", "~142 MB", 142, 1, false, 147964211,
+            "classic/ggml-base.en.bin", "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002"),
+        new("base-q5_0", "Base (Q5_0)", GgmlType.Base, QuantizationType.Q5_0, "ggml-base-q5_0.bin", "~57 MB", 57, 99, true, 55295433,
+            "q5_0/ggml-base.bin", "0238cb211a43e8ec0c64c0c4f98d4dbd22682579fa2ab20b49f083c529e7d1f3"),
+        new("small", "Small", GgmlType.Small, QuantizationType.NoQuantization, "ggml-small.bin", "~466 MB", 466, 99, false, 487601967,
+            "classic/ggml-small.bin", "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b"),
+        new("small.en", "Small (English)", GgmlType.SmallEn, QuantizationType.NoQuantization, "ggml-small.en.bin", "~466 MB", 466, 1, false, 487614201,
+            "classic/ggml-small.en.bin", "c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d"),
+        new("small-q5_0", "Small (Q5_0)", GgmlType.Small, QuantizationType.Q5_0, "ggml-small-q5_0.bin", "~182 MB", 182, 99, false, 175209663,
+            "q5_0/ggml-small.bin", "23ad5215d37677f8eb8cbc41b4d0d4e451229f811be5206ff116dd9337eba748"),
+        new("medium", "Medium", GgmlType.Medium, QuantizationType.NoQuantization, "ggml-medium.bin", "~1.5 GB", 1530, 99, false, 1533763059,
+            "classic/ggml-medium.bin", "6c14d5adee5f86394037b4e4e8b59f1673b6cee10e3cf0b11bbdbee79c156208"),
+        new("medium.en", "Medium (English)", GgmlType.MediumEn, QuantizationType.NoQuantization, "ggml-medium.en.bin", "~1.5 GB", 1530, 1, false, 1533774781,
+            "classic/ggml-medium.en.bin", "cc37e93478338ec7700281a7ac30a10128929eb8f427dda2e865faa8f6da4356"),
+        new("medium-q5_0", "Medium (Q5_0)", GgmlType.Medium, QuantizationType.Q5_0, "ggml-medium-q5_0.bin", "~601 MB", 601, 99, false, 539212467,
+            "q5_0/ggml-medium.bin", "22f1cfcb5cd29dcb9728c459ccf449ee9da4015008d784070627d41de364f0db"),
+        new("large-v3-turbo", "Large V3 Turbo", GgmlType.LargeV3Turbo, QuantizationType.NoQuantization, "ggml-large-v3-turbo.bin", "~1.6 GB", 1620, 99, false, 1624555275,
+            "classic/ggml-large-v3-turbo.bin", "1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69"),
+        new("large-v3-turbo-q5_0", "Large V3 Turbo (Q5_0)", GgmlType.LargeV3Turbo, QuantizationType.Q5_0, "ggml-large-v3-turbo-q5_0.bin", "~684 MB", 684, 99, false, 574041195,
+            "q5_0/ggml-large-v3-turbo.bin", "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2"),
     ];
 
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -86,8 +102,8 @@ public sealed partial class WhisperCppPlugin :
         TranscriptionAccelerationBackend.Cpu,
         "Using CPU");
     internal Func<string, long?> AvailableBytes { get; set; } = ModelStorageSpace.GetAvailableBytes;
-    internal Func<GgmlType, QuantizationType, CancellationToken, Task<Stream>> OpenModelDownloadAsync { get; set; } =
-        (type, quantization, ct) => WhisperGgmlDownloader.Default.GetGgmlModelAsync(type, quantization, ct);
+    internal Func<Uri, CancellationToken, Task<Stream>> OpenModelDownloadAsync { get; set; }
+    internal Func<string, string> ExpectedModelSha256 { get; set; } = modelId => GetModel(modelId).Sha256;
 
     /// <summary>
     /// Initializes a new instance of the WhisperCppPlugin class.
@@ -95,6 +111,25 @@ public sealed partial class WhisperCppPlugin :
     public WhisperCppPlugin()
     {
         CreateFactory = path => WhisperFactory.FromPath(path, CreateFactoryOptions());
+        OpenModelDownloadAsync = OpenPinnedModelAsync;
+    }
+
+    internal static Uri GetModelDownloadUri(string modelId) =>
+        new($"https://huggingface.co/sandrohanea/whisper.net/resolve/{ModelRevision}/{GetModel(modelId).RemotePath}");
+
+    private async Task<Stream> OpenPinnedModelAsync(Uri uri, CancellationToken ct)
+    {
+        var response = await _httpClient.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+        try
+        {
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            response.Dispose();
+            throw;
+        }
     }
 
     internal WhisperCppPlugin(IWhisperCppCudaRuntimeInstaller cudaRuntimeInstaller) : this()
@@ -149,7 +184,7 @@ public sealed partial class WhisperCppPlugin :
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.24";
+    public string PluginVersion => "1.2.25";
 
     /// <summary>
     /// Gets the stable provider identifier used for model and settings selection.
@@ -359,7 +394,8 @@ public sealed partial class WhisperCppPlugin :
 
             try
             {
-                await using var modelStream = await OpenModelDownloadAsync(model.Type, model.Quantization, ct);
+                await using var modelStream = await OpenModelDownloadAsync(GetModelDownloadUri(modelId), ct);
+                using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
 
                 var buffer = new byte[81920];
                 long bytesCopied = 0;
@@ -376,6 +412,7 @@ public sealed partial class WhisperCppPlugin :
                         if (bytesCopied > totalBytes - read)
                             throw new InvalidDataException("The model download exceeds the expected artifact size.");
                         await fileStream.WriteAsync(buffer.AsMemory(0, read), ct);
+                        hash.AppendData(buffer, 0, read);
                         bytesCopied += read;
 
                         if (totalBytes > 0)
@@ -387,6 +424,7 @@ public sealed partial class WhisperCppPlugin :
 
                 ct.ThrowIfCancellationRequested();
                 ValidateModelDownload(bytesCopied, model.ExpectedSizeBytes);
+                ValidateModelHash(hash.GetHashAndReset(), ExpectedModelSha256(modelId));
                 File.Move(tempPath, modelPath, overwrite: true);
                 progress?.Report(1.0);
             }
@@ -406,6 +444,12 @@ public sealed partial class WhisperCppPlugin :
     {
         if (bytesCopied != expectedSizeBytes)
             throw new InvalidDataException("The model download does not match the expected artifact size. Please retry the download.");
+    }
+
+    internal static void ValidateModelHash(byte[] actual, string expectedSha256)
+    {
+        if (!Convert.ToHexString(actual).Equals(expectedSha256, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("The model download failed its integrity check. Please retry the download.");
     }
 
     /// <summary>
@@ -666,7 +710,7 @@ public sealed partial class WhisperCppPlugin :
         _gate.Dispose();
     }
 
-    private ModelDefinition GetModel(string modelId) => Models.FirstOrDefault(model => model.Id == modelId)
+    private static ModelDefinition GetModel(string modelId) => Models.FirstOrDefault(model => model.Id == modelId)
         ?? throw new ArgumentException($"Unknown model: {modelId}");
 
     internal static IReadOnlyList<RuntimeLibrary> GetRuntimeLibraryOrder(
@@ -1264,5 +1308,7 @@ public sealed partial class WhisperCppPlugin :
         long EstimatedSizeMB,
         int LanguageCount,
         bool IsRecommended,
-        long ExpectedSizeBytes);
+        long ExpectedSizeBytes,
+        string RemotePath,
+        string Sha256);
 }
