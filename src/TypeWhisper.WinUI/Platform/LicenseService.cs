@@ -27,6 +27,11 @@ public sealed class LicenseService
     private static readonly byte[] Entropy = "TypeWhisper.License.v2"u8.ToArray();
     private static readonly TimeSpan CommercialValidationInterval = TimeSpan.FromDays(7);
     private static readonly TimeSpan SupporterValidationInterval = TimeSpan.FromDays(30);
+    // A check time this far ahead of the clock is not trusted and counts as never checked.
+    internal static readonly TimeSpan ValidationClockSkew = TimeSpan.FromMinutes(5);
+    // How long after its check became due a license stays active while the licensing service cannot be reached:
+    // up to 37 days without a successful check for a commercial license and 60 days for a supporter license.
+    internal static readonly TimeSpan OfflineAllowance = TimeSpan.FromDays(30);
     private static readonly Regex IndividualDeviceCountPattern = new(
         @"(?<!\d)3 devices?\b",
         RegexOptions.CultureInvariant,
@@ -436,8 +441,7 @@ public sealed class LicenseService
         }
 
         if (CommercialStatus != LicenseStatus.Active ||
-            !_commercialLastValidated.HasValue ||
-            DateTime.UtcNow - _commercialLastValidated.Value > CommercialValidationInterval)
+            IsValidationDue(_commercialLastValidated, CommercialValidationInterval, DateTime.UtcNow))
         {
             await ValidateCommercialLicenseAsync(ct);
         }
@@ -567,8 +571,7 @@ public sealed class LicenseService
         }
 
         if (SupporterStatus != LicenseStatus.Active ||
-            !_supporterLastValidated.HasValue ||
-            DateTime.UtcNow - _supporterLastValidated.Value > SupporterValidationInterval)
+            IsValidationDue(_supporterLastValidated, SupporterValidationInterval, DateTime.UtcNow))
         {
             await ValidateSupporterAsync(ct);
         }
@@ -793,6 +796,18 @@ public sealed class LicenseService
             }
 
             _reportFailure?.Invoke("license.commercial.validate-failed", ex);
+            if (CommercialStatus != LicenseStatus.Unlicensed &&
+                HasOfflineAllowanceLapsed(_commercialLastValidated, CommercialValidationInterval, DateTime.UtcNow))
+            {
+                // Key, activation and tier stay: the next successful check makes the license active again.
+                CommercialStatus = LicenseStatus.Expired;
+                CommercialRefreshError = OfflineLapsedMessage();
+                PersistStore();
+                NotifyStateChanged();
+                if (reportErrors)
+                    throw new InvalidOperationException(CommercialRefreshError, ex);
+                return;
+            }
             if (reportErrors)
                 throw;
         }
@@ -831,6 +846,18 @@ public sealed class LicenseService
             }
 
             _reportFailure?.Invoke("license.supporter.validate-failed", ex);
+            if (SupporterStatus != LicenseStatus.Unlicensed &&
+                HasOfflineAllowanceLapsed(_supporterLastValidated, SupporterValidationInterval, DateTime.UtcNow))
+            {
+                // Key, activation and tier stay: the next successful check makes the license active again.
+                SupporterStatus = LicenseStatus.Expired;
+                SupporterRefreshError = OfflineLapsedMessage();
+                PersistStore();
+                NotifyStateChanged();
+                if (reportErrors)
+                    throw new InvalidOperationException(SupporterRefreshError, ex);
+                return;
+            }
             if (reportErrors)
                 throw;
         }
@@ -1118,6 +1145,22 @@ public sealed class LicenseService
             or JsonException
             or NotSupportedException
             or OperationCanceledException;
+
+    // The last successful check, unless it lies ahead of the clock: such a time was not written by a check.
+    internal static DateTime? TrustedValidationTime(DateTime? lastValidated, DateTime utcNow) =>
+        lastValidated is { } last && ToUtc(last) <= utcNow + ValidationClockSkew ? ToUtc(last) : null;
+
+    internal static bool IsValidationDue(DateTime? lastValidated, TimeSpan interval, DateTime utcNow) =>
+        TrustedValidationTime(lastValidated, utcNow) is not { } last || utcNow - last > interval;
+
+    internal static bool HasOfflineAllowanceLapsed(DateTime? lastValidated, TimeSpan interval, DateTime utcNow) =>
+        TrustedValidationTime(lastValidated, utcNow) is not { } last || utcNow - last > interval + OfflineAllowance;
+
+    private static DateTime ToUtc(DateTime value) => value.Kind == DateTimeKind.Local ? value.ToUniversalTime()
+        : DateTime.SpecifyKind(value, DateTimeKind.Utc);
+
+    private static string OfflineLapsedMessage() =>
+        global::TypeWhisper.Core.Loc.T("TypeWhisper could not check this license with the licensing service for too long. Connect to the internet and select Refresh status to use it again.");
 
     // Check times are written in UTC with an offset ("o"); reading them back keeps them in UTC, so comparisons
     // with DateTime.UtcNow do not shift by the local time zone.

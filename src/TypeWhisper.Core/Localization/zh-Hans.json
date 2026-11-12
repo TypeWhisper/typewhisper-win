@@ -2717,6 +2717,7 @@
   "TypeWhisper Setup": "TypeWhisper 设置",
   "TypeWhisper backup": "TypeWhisper 备份",
   "TypeWhisper cannot receive files while its profile is unavailable or the app is shutting down. Please try again after reopening it.": "配置文件不可用或应用正在关闭时，TypeWhisper 无法接收文件。请重新打开应用后再试。",
+  "TypeWhisper could not check this license with the licensing service for too long. Connect to the internet and select Refresh status to use it again.": "TypeWhisper 已有太长时间无法通过许可证服务检查此许可证。请连接到互联网并选择“刷新状态”以再次使用它。",
   "TypeWhisper could not complete automatic insertion. Copy the text, check the intended field, and paste any missing text there.": "TypeWhisper 无法完成自动插入。请复制文本，检查目标输入框，并将缺失的文本粘贴到其中。",
   "TypeWhisper could not finish deleting your data because a data folder is a link or cannot be read. Nothing behind the link was touched.": "由于某个数据文件夹是链接或无法读取，TypeWhisper 未能完成数据删除。链接指向的内容未被改动。",
   "TypeWhisper could not finish starting. Close and reopen the app before trying again.": "TypeWhisper 未能完成启动。请关闭并重新打开应用后再试。",

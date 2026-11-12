@@ -2717,6 +2717,7 @@
   "TypeWhisper Setup": "TypeWhisper einrichten",
   "TypeWhisper backup": "TypeWhisper-Backup",
   "TypeWhisper cannot receive files while its profile is unavailable or the app is shutting down. Please try again after reopening it.": "TypeWhisper kann keine Dateien empfangen, solange das Profil nicht verfügbar ist oder die App beendet wird. Bitte versuche es nach dem erneuten Öffnen noch einmal.",
+  "TypeWhisper could not check this license with the licensing service for too long. Connect to the internet and select Refresh status to use it again.": "TypeWhisper konnte diese Lizenz zu lange nicht beim Lizenzdienst prüfen. Verbinde dich mit dem Internet und wähle Status aktualisieren, um sie wieder zu nutzen.",
   "TypeWhisper could not complete automatic insertion. Copy the text, check the intended field, and paste any missing text there.": "TypeWhisper konnte das automatische Einfügen nicht abschließen. Kopiere den Text, prüfe das gewünschte Feld und füge dort fehlenden Text ein.",
   "TypeWhisper could not finish deleting your data because a data folder is a link or cannot be read. Nothing behind the link was touched.": "TypeWhisper konnte das Löschen deiner Daten nicht abschließen, weil ein Datenordner eine Verknüpfung ist oder nicht gelesen werden kann. Hinter der Verknüpfung wurde nichts verändert.",
   "TypeWhisper could not finish starting. Close and reopen the app before trying again.": "TypeWhisper konnte nicht vollständig starten. Schließe die App und öffne sie erneut, bevor du es noch einmal versuchst.",
