@@ -20,6 +20,14 @@ public sealed class ElevenLabsStreamingTests
         else Assert.DoesNotContain("language_code", uri.Query);
     }
 
+    [Fact]
+    public void MixedLanguagesAddsMultilangModeOnlyWhenRequested()
+    {
+        Assert.Contains("model_id=scribe_v3_live", ElevenLabsStreamingSession.BuildRealtimeUri("scribe_v3_live", "de", true, multilangMode: true).Query);
+        Assert.Contains("multilang_mode=true", ElevenLabsStreamingSession.BuildRealtimeUri("scribe_v3_live", "de", true, multilangMode: true).Query);
+        Assert.DoesNotContain("multilang_mode", ElevenLabsStreamingSession.BuildRealtimeUri("scribe_v3_live", null, true).Query);
+    }
+
     [Theory]
     [InlineData(3200)] [InlineData(3202)] [InlineData(100)]
     public async Task FinalizationFlushesEvenWithoutBufferedTailAndWaitsForTimestampedFinal(int length)

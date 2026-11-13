@@ -33,6 +33,7 @@ public sealed partial class ElevenLabsPlugin : ITranscriptionEnginePlugin, IApiK
     private const string NoVerbatimSettingName = "noVerbatim";
     private const string SpeakerCountSettingName = "numSpeakers";
     private const string UseDictionaryTermsSettingName = "useDictionaryTerms";
+    private const string MultilangModeSettingName = "multilangMode";
 
     private static readonly char[] InvalidKeytermCharacters = ['<', '>', '{', '}', '[', ']', '\\'];
     private static readonly char[] KeytermSeparators = [',', '\r', '\n'];
@@ -79,6 +80,7 @@ public sealed partial class ElevenLabsPlugin : ITranscriptionEnginePlugin, IApiK
     private bool _noVerbatim = true;
     private int _speakerCount = DefaultSpeakerCount;
     private bool _useDictionaryTerms = true;
+    private bool _multilangMode;
 
     /// <summary>
     /// Initializes a new instance of the ElevenLabsPlugin class.
@@ -122,6 +124,7 @@ public sealed partial class ElevenLabsPlugin : ITranscriptionEnginePlugin, IApiK
         _speakerCount = NormalizeSpeakerCount(
             host.GetSetting<int?>(SpeakerCountSettingName) ?? DefaultSpeakerCount);
         _useDictionaryTerms = host.GetSetting<bool?>(UseDictionaryTermsSettingName) ?? true;
+        _multilangMode = host.GetSetting<bool?>(MultilangModeSettingName) ?? false;
         host.Log(PluginLogLevel.Info, $"Activated (configured={IsConfigured})");
     }
 
@@ -275,6 +278,7 @@ public sealed partial class ElevenLabsPlugin : ITranscriptionEnginePlugin, IApiK
             RealtimeModelIdFor(_selectedModelId)!,
             NormalizeLanguage(language),
             _noVerbatim,
+            _multilangMode && SupportsMultilangMode(_selectedModelId),
             ct);
     }
 
@@ -287,6 +291,7 @@ public sealed partial class ElevenLabsPlugin : ITranscriptionEnginePlugin, IApiK
     internal bool NoVerbatim => _noVerbatim;
     internal int SpeakerCount => _speakerCount;
     internal bool UseDictionaryTerms => _useDictionaryTerms;
+    internal bool MultilangMode => _multilangMode;
 
     /// <inheritdoc />
     public async Task SetApiKeyAsync(string apiKey)
@@ -424,6 +429,15 @@ public sealed partial class ElevenLabsPlugin : ITranscriptionEnginePlugin, IApiK
         _speakerCount = normalized;
     }
 
+    internal void SetMultilangMode(bool enabled)
+    {
+        if (_multilangMode == enabled)
+            return;
+
+        _host?.SetSetting(MultilangModeSettingName, enabled);
+        _multilangMode = enabled;
+    }
+
     internal void SetUseDictionaryTerms(bool enabled)
     {
         if (_useDictionaryTerms == enabled)
@@ -547,6 +561,9 @@ public sealed partial class ElevenLabsPlugin : ITranscriptionEnginePlugin, IApiK
         ModelEntries.FirstOrDefault(m => m.Id == modelId)?.RealtimeModelId;
 
     internal static bool ModelStreams(string? modelId) => RealtimeModelIdFor(modelId) is not null;
+
+    // Only Scribe v3 Live takes multilang_mode; Scribe v2 Realtime rejects the session with invalid_request.
+    internal static bool SupportsMultilangMode(string? modelId) => modelId == ScribeV3ModelId;
 
     // Selections of retired models, such as the deprecated Scribe v1, move to the default model.
     // A saved Scribe v2 selection stays.

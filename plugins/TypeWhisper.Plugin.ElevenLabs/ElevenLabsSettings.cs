@@ -14,6 +14,12 @@ public sealed partial class ElevenLabsPlugin
               "Automatisch zeigt Live-Text, mit Scribe v3 Live für Scribe v3 und Scribe v2 Realtime für Scribe v2. Scribe v2 Medical, Audioereignisse oder mehrere Sprecher verwenden die vollständige Aufnahme. Mit Wörterbuchbegriffen kommt der endgültige Text aus der vollständigen Aufnahme."),
             FormatTranscriptionMode(_transcriptionMode))
         { Choices = [new("automatic", L("Automatic", "Automatisch")), new("restOnly", L("After recording", "Nach der Aufnahme"))] },
+        // Shown only for Scribe v3; the settings page reloads its fields after a model change.
+        .. (SupportsMultilangMode(_selectedModelId)
+            ? [Toggle(MultilangModeSettingName, L("Mixed languages", "Gemischte Sprachen"),
+                L("For dictations that switch languages within a sentence. Applies to Scribe v3 Live in Automatic mode. Final text from the complete recording, such as with dictionary terms, does not use it.",
+                  "Für Diktate, die innerhalb eines Satzes die Sprache wechseln. Gilt für Scribe v3 Live im Modus Automatisch. Endgültiger Text aus der vollständigen Aufnahme, etwa mit Wörterbuchbegriffen, nutzt die Option nicht."), _multilangMode)]
+            : Array.Empty<PluginTextSetting>()),
         Toggle(NoVerbatimSettingName, L("Clean transcript", "Bereinigtes Transkript"),
             L("Remove filler words and false starts.", "Füllwörter und Satzabbrüche entfernen."), _noVerbatim),
         Toggle(TagAudioEventsSettingName, L("Audio events", "Audioereignisse"),
@@ -44,6 +50,7 @@ public sealed partial class ElevenLabsPlugin
             case TagAudioEventsSettingName: SetTagAudioEvents(bool.Parse(value)); break;
             case SpeakerCountSettingName: SetSpeakerCount(int.Parse(value, System.Globalization.CultureInfo.InvariantCulture)); break;
             case UseDictionaryTermsSettingName: SetUseDictionaryTerms(bool.Parse(value)); break;
+            case MultilangModeSettingName: SetMultilangMode(bool.Parse(value)); break;
         }
         _host.NotifyCapabilitiesChanged();
         return Task.CompletedTask;

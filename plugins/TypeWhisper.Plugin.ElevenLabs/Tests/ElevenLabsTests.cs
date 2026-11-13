@@ -243,6 +243,33 @@ public sealed class ElevenLabsTests : IDisposable
     }
 
     [Fact]
+    public async Task MixedLanguagesIsOffByDefaultPersistsAndOnlyShowsForScribeV3()
+    {
+        var host = Host;
+        using (var plugin = new ElevenLabsPlugin())
+        {
+            await plugin.ActivateAsync(host);
+            var field = Assert.Single(plugin.TextSettings, s => s.Id == "multilangMode");
+            Assert.Equal("false", field.Value);
+            Assert.False(plugin.MultilangMode);
+            await plugin.SaveTextSettingAsync("multilangMode", "true", default);
+            Assert.True(plugin.MultilangMode);
+            plugin.SelectModel("scribe_v2");
+            Assert.DoesNotContain(plugin.TextSettings, s => s.Id == "multilangMode");
+            await Assert.ThrowsAsync<ArgumentException>(() => plugin.SaveTextSettingAsync("multilangMode", "false", default));
+            plugin.SelectModel("scribe_v2_medical");
+            Assert.DoesNotContain(plugin.TextSettings, s => s.Id == "multilangMode");
+            plugin.SelectModel("scribe_v3");
+        }
+        using var restored = new ElevenLabsPlugin();
+        await restored.ActivateAsync(host);
+        Assert.True(restored.MultilangMode);
+        Assert.Equal("true", Assert.Single(restored.TextSettings, s => s.Id == "multilangMode").Value);
+        Assert.True(ElevenLabsPlugin.SupportsMultilangMode("scribe_v3"));
+        Assert.False(ElevenLabsPlugin.SupportsMultilangMode("scribe_v2"));
+    }
+
+    [Fact]
     public async Task SavedScribeV2SelectionStaysAndStreams()
     {
         var host = Host;

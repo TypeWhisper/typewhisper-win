@@ -12,5 +12,7 @@
   "Dictionary terms": "Wörterbuchbegriffe",
   "Use active TypeWhisper dictionary terms to improve recognition.": "Aktive TypeWhisper-Wörterbuchbegriffe zur Erkennung verwenden.",
   "On": "Ein",
-  "Off": "Aus"
+  "Off": "Aus",
+  "Mixed languages": "Gemischte Sprachen",
+  "For dictations that switch languages within a sentence. Applies to Scribe v3 Live in Automatic mode. Final text from the complete recording, such as with dictionary terms, does not use it.": "Für Diktate, die innerhalb eines Satzes die Sprache wechseln. Gilt für Scribe v3 Live im Modus Automatisch. Endgültiger Text aus der vollständigen Aufnahme, etwa mit Wörterbuchbegriffen, nutzt die Option nicht."
 }

@@ -12,5 +12,7 @@
   "Dictionary terms": "Dictionary terms",
   "Use active TypeWhisper dictionary terms to improve recognition.": "Use active TypeWhisper dictionary terms to improve recognition.",
   "On": "On",
-  "Off": "Off"
+  "Off": "Off",
+  "Mixed languages": "Mixed languages",
+  "For dictations that switch languages within a sentence. Applies to Scribe v3 Live in Automatic mode. Final text from the complete recording, such as with dictionary terms, does not use it.": "For dictations that switch languages within a sentence. Applies to Scribe v3 Live in Automatic mode. Final text from the complete recording, such as with dictionary terms, does not use it."
 }
