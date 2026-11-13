@@ -1,6 +1,6 @@
 {
   "Transcription mode": "Transcription mode",
-  "Automatic shows live text. Scribe v2 Medical, audio events or multiple speakers use the complete recording. With dictionary terms, the final text comes from the complete recording.": "Automatic shows live text. Scribe v2 Medical, audio events or multiple speakers use the complete recording. With dictionary terms, the final text comes from the complete recording.",
+  "Automatic shows live text, with Scribe v3 Live for Scribe v3 and Scribe v2 Realtime for Scribe v2. Scribe v2 Medical, audio events or multiple speakers use the complete recording. With dictionary terms, the final text comes from the complete recording.": "Automatic shows live text, with Scribe v3 Live for Scribe v3 and Scribe v2 Realtime for Scribe v2. Scribe v2 Medical, audio events or multiple speakers use the complete recording. With dictionary terms, the final text comes from the complete recording.",
   "Automatic": "Automatic",
   "After recording": "After recording",
   "Clean transcript": "Clean transcript",

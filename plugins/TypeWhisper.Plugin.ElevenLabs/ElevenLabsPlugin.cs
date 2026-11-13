@@ -19,7 +19,10 @@ internal enum ElevenLabsTranscriptionMode
 /// </summary>
 public sealed partial class ElevenLabsPlugin : ITranscriptionEnginePlugin, IApiKeyPlugin, IPluginTextSettings
 {
-    internal const string DefaultModelId = "scribe_v2";
+    internal const string ScribeV3ModelId = "scribe_v3";
+    internal const string ScribeV2ModelId = "scribe_v2";
+    // Scribe v3 costs the same as Scribe v2 and makes fewer errors.
+    internal const string DefaultModelId = ScribeV3ModelId;
     internal const int AutomaticSpeakerCount = 0;
     internal const int DefaultSpeakerCount = 1;
     private const string BaseUrl = "https://api.elevenlabs.io";
@@ -40,10 +43,12 @@ public sealed partial class ElevenLabsPlugin : ITranscriptionEnginePlugin, IApiK
 
     internal const string MedicalModelId = "scribe_v2_medical";
 
-    // Scribe v2 Medical is a batch model with Scribe v2's request shape and price; it has no realtime variant.
+    // Each streaming model has a realtime variant on the same WebSocket endpoint. Scribe v2 Medical is
+    // a batch model with Scribe v2's request shape and price; it has no realtime variant.
     private static readonly IReadOnlyList<ElevenLabsModelEntry> ModelEntries =
     [
-        new(DefaultModelId, "Scribe v2", "scribe_v2", "scribe_v2_realtime"),
+        new(ScribeV3ModelId, "Scribe v3", ScribeV3ModelId, "scribe_v3_live"),
+        new(ScribeV2ModelId, "Scribe v2", ScribeV2ModelId, "scribe_v2_realtime"),
         new(MedicalModelId, "Scribe v2 Medical", MedicalModelId, RealtimeModelId: null),
     ];
 
@@ -101,7 +106,7 @@ public sealed partial class ElevenLabsPlugin : ITranscriptionEnginePlugin, IApiK
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.0";
+    public string PluginVersion => "1.3.0";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
@@ -264,10 +269,10 @@ public sealed partial class ElevenLabsPlugin : ITranscriptionEnginePlugin, IApiK
         if (!SupportsStreaming)
             throw new NotSupportedException("Realtime streaming is disabled by the selected transcription mode.");
 
-        var entry = ResolveModelEntry(_selectedModelId);
+        // SupportsStreaming guarantees a realtime variant for the selected model.
         return await ElevenLabsStreamingSession.ConnectAsync(
             _apiKey!,
-            entry.RealtimeModelId!,
+            RealtimeModelIdFor(_selectedModelId)!,
             NormalizeLanguage(language),
             _noVerbatim,
             ct);
@@ -538,9 +543,13 @@ public sealed partial class ElevenLabsPlugin : ITranscriptionEnginePlugin, IApiK
             ? null
             : language;
 
-    internal static bool ModelStreams(string? modelId) =>
-        ModelEntries.FirstOrDefault(m => m.Id == modelId)?.RealtimeModelId is not null;
+    internal static string? RealtimeModelIdFor(string? modelId) =>
+        ModelEntries.FirstOrDefault(m => m.Id == modelId)?.RealtimeModelId;
 
+    internal static bool ModelStreams(string? modelId) => RealtimeModelIdFor(modelId) is not null;
+
+    // Selections of retired models, such as the deprecated Scribe v1, move to the default model.
+    // A saved Scribe v2 selection stays.
     private static string NormalizeModelId(string? modelId) =>
         ModelEntries.Any(m => m.Id == modelId) ? modelId! : DefaultModelId;
 
