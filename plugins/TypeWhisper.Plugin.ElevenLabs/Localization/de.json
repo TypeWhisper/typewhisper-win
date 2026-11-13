@@ -1,6 +1,6 @@
 {
   "Transcription mode": "Transkriptionsmodus",
-  "Automatic shows live text. Scribe v2 Medical, audio events or multiple speakers use the complete recording. With dictionary terms, the final text comes from the complete recording.": "Automatisch zeigt Live-Text. Scribe v2 Medical, Audioereignisse oder mehrere Sprecher verwenden die vollständige Aufnahme. Mit Wörterbuchbegriffen kommt der endgültige Text aus der vollständigen Aufnahme.",
+  "Automatic shows live text, with Scribe v3 Live for Scribe v3 and Scribe v2 Realtime for Scribe v2. Scribe v2 Medical, audio events or multiple speakers use the complete recording. With dictionary terms, the final text comes from the complete recording.": "Automatisch zeigt Live-Text, mit Scribe v3 Live für Scribe v3 und Scribe v2 Realtime für Scribe v2. Scribe v2 Medical, Audioereignisse oder mehrere Sprecher verwenden die vollständige Aufnahme. Mit Wörterbuchbegriffen kommt der endgültige Text aus der vollständigen Aufnahme.",
   "Automatic": "Automatisch",
   "After recording": "Nach der Aufnahme",
   "Clean transcript": "Bereinigtes Transkript",
@@ -12,5 +12,7 @@
   "Dictionary terms": "Wörterbuchbegriffe",
   "Use active TypeWhisper dictionary terms to improve recognition.": "Aktive TypeWhisper-Wörterbuchbegriffe zur Erkennung verwenden.",
   "On": "Ein",
-  "Off": "Aus"
+  "Off": "Aus",
+  "Mixed languages": "Gemischte Sprachen",
+  "For dictations that switch languages within a sentence. Applies to Scribe v3 Live in Automatic mode. Final text from the complete recording, such as with dictionary terms, does not use it.": "Für Diktate, die innerhalb eines Satzes die Sprache wechseln. Gilt für Scribe v3 Live im Modus Automatisch. Endgültiger Text aus der vollständigen Aufnahme, etwa mit Wörterbuchbegriffen, nutzt die Option nicht."
 }

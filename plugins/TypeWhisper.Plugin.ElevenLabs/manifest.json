@@ -2,10 +2,10 @@
   "id": "com.typewhisper.elevenlabs",
   "locality": "cloud",
   "name": "ElevenLabs",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "minHostVersion": "1.1.5",
   "author": "TypeWhisper",
-  "description": "Scribe v2 and Scribe v2 Medical transcription with live text, sentence timings and dictionary terms",
+  "description": "Scribe v3, Scribe v2 and Scribe v2 Medical transcription with live text, sentence timings and dictionary terms",
   "categories": [
     "transcription"
   ],
