@@ -26,7 +26,7 @@ public class SherpaOnnxPluginTests
         var sut = new SherpaOnnxPlugin();
 
         Assert.NotNull(manifest);
-        Assert.Equal("1.3.4", manifest.Version);
+        Assert.Equal("1.4.0", manifest.Version);
         Assert.Equal(manifest.Version, sut.PluginVersion);
     }
 
@@ -126,10 +126,76 @@ public class SherpaOnnxPluginTests
     {
         var models = new SherpaOnnxPlugin().TranscriptionModels;
 
-        Assert.Equal(["parakeet-ultra-0.6b", "parakeet-tdt-0.6b", "canary-180m-flash"], models.Select(model => model.Id));
+        Assert.Equal(["parakeet-ultra-0.6b", "fluid-speech-pro", "parakeet-tdt-0.6b", "canary-180m-flash"], models.Select(model => model.Id));
         Assert.Equal("parakeet-ultra-0.6b", Assert.Single(models, model => model.IsRecommended).Id);
-        Assert.Equal(["Moondream", "NVIDIA", "NVIDIA"], models.Select(model => model.Publisher));
-        Assert.Equal(models[1].LanguageCodes, models[0].LanguageCodes);
+        Assert.Equal(["Moondream", "FluidVoice", "NVIDIA", "NVIDIA"], models.Select(model => model.Publisher));
+        Assert.Equal(models[2].LanguageCodes, models[0].LanguageCodes);
+        Assert.Equal(models[2].LanguageCodes, models[1].LanguageCodes);
+    }
+
+    [Fact]
+    public void FluidSpeechProRunsOnTheCpuFromPinnedFilesInItsOwnRelease()
+    {
+        var model = Assert.Single(SherpaOnnxPlugin.DefaultModels, model => model.Id == "fluid-speech-pro");
+
+        Assert.Null(model.Gguf);
+        Assert.False(model.SupportsTranslation);
+        Assert.Equal(["encoder.int8.onnx", "decoder.int8.onnx", "joiner.int8.onnx", "tokens.txt"], model.Files.Select(file => file.FileName));
+        Assert.All(model.Files, file => Assert.StartsWith(
+            "https://github.com/TypeWhisper/typewhisper-win/releases/download/model-fluid-speech-pro-int8-v1/", file.DownloadUrl));
+        // The vocabulary is Parakeet TDT 0.6B v3's, byte for byte.
+        var parakeet = Assert.Single(SherpaOnnxPlugin.DefaultModels, model => model.Id == "parakeet-tdt-0.6b");
+        Assert.Equal(parakeet.Files.Single(file => file.FileName == "tokens.txt").Sha256, model.Files.Single(file => file.FileName == "tokens.txt").Sha256);
+    }
+
+    [Theory]
+    [InlineData("whether that's an M<unk>A or supporting new products", "whether that's an M&A or supporting new products")]
+    [InlineData("booked directly into P<unk>L, into the selling cost line.", "booked directly into P&L, into the selling cost line.")]
+    [InlineData("die Ä<unk>Ö-Regel", "die Ä&Ö-Regel")]
+    [InlineData("hello <unk>… world", "hello… world")]
+    [InlineData("{set <unk>} done", "{set} done")]
+    [InlineData("compared by infrared spectroscopy <unk> FTIR.", "compared by infrared spectroscopy FTIR.")]
+    [InlineData("alongside the word <unk>say<unk> for you", "alongside the word say for you")]
+    [InlineData("Er sagte: <unk>Morgen geht es los.<unk>", "Er sagte: Morgen geht es los.")]
+    [InlineData("is the 'pay amolai<unk>, bred with olive oil", "is the 'pay amolai, bred with olive oil")]
+    [InlineData("<unk>Hello there<unk>", "Hello there")]
+    [InlineData("no markers  here", "no markers  here")]
+    // Fluid Speech Pro on FLEURS: Greek final sigma, Italian and Estonian quotes, Maltese apostrophes.
+    [InlineData("Η δέκα τη καταιγίδα τη<unk> εποχή<unk> των Ατλαντικών", "Η δέκα τη καταιγίδα της εποχής των Ατλαντικών")]
+    [InlineData("Επίση<unk>, μετά την επανάσταση", "Επίσης, μετά την επανάσταση")]
+    [InlineData("εναντίον του<unk>.", "εναντίον τους.")]
+    [InlineData("Se avete visto il film<unk>Il mistero dei Templari<unk>, potreste", "Se avete visto il film Il mistero dei Templari, potreste")]
+    [InlineData("Se avete visto il film,<unk>Il mistero dei Templari<unk>, potreste", "Se avete visto il film, Il mistero dei Templari, potreste")]
+    [InlineData("hakati nimetama<unk>Kopersiooniks Dragoon.", "hakati nimetama Kopersiooniks Dragoon.")]
+    [InlineData("Karpaneto kompeta f<unk>żewġ triela", "Karpaneto kompeta f'żewġ triela")]
+    [InlineData("ħafna mezzi oħra ta<unk> trasport.", "ħafna mezzi oħra ta trasport.")]
+    public void UnknownTokensBecomeTheCharacterTheirContextCallsForOrAreDropped(string raw, string expected) =>
+        Assert.Equal(expected, UnknownTokens.Remove(raw));
+
+    [Fact]
+    public void UnknownTokenTimingsAreDroppedSoEveryRemainingTokenIsInTheText()
+    {
+        VocabularyTokenTiming[] timings =
+        [
+            new("▁an", 0.0, 0.1), new("▁M", 0.1, 0.2), new("<unk>", 0.2, 0.3), new("A", 0.3, 0.4),
+            new("▁<unk>", 0.4, 0.5), new("▁deal", 0.5, 0.6), new("<unk>", 0.6, 0.7)
+        ];
+        var text = UnknownTokens.Remove("an M<unk>A <unk>deal<unk>");
+
+        var kept = UnknownTokens.Remove(timings);
+
+        Assert.Equal("an M&A deal", text);
+        Assert.Equal(["▁an", "▁M", "A", "▁deal"], kept.Select(timing => timing.Text));
+        var cursor = 0;
+        foreach (var token in kept.Select(timing => timing.Text.Replace('▁', ' ').Trim()))
+        {
+            cursor = text.IndexOf(token, cursor, StringComparison.OrdinalIgnoreCase);
+            Assert.True(cursor >= 0, token);
+            cursor += token.Length;
+        }
+
+        VocabularyTokenTiming[] clean = [new("▁hello", 0, 0.1)];
+        Assert.Same(clean, UnknownTokens.Remove(clean));
     }
 
     [Fact]
@@ -163,7 +229,7 @@ public class SherpaOnnxPluginTests
             @"^https://(huggingface\.co/[^/]+/[^/]+/resolve/[0-9a-f]{40}|github\.com/TypeWhisper/typewhisper-win/releases/download/[^/]+)/[^/]+$");
         var files = SherpaOnnxPlugin.DefaultModels.SelectMany(model => model.Files).ToList();
 
-        Assert.Equal(11, files.Count);
+        Assert.Equal(15, files.Count);
         Assert.All(files, file => Assert.Matches(pinnedUrl, file.DownloadUrl));
         Assert.All(files, file => Assert.Matches("^[0-9a-f]{64}$", file.Sha256));
         Assert.All(

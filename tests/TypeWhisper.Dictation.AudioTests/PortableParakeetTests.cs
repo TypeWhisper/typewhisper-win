@@ -11,6 +11,7 @@ public sealed class PortableParakeetTests(ITestOutputHelper output)
     [LocalParakeetTheory]
     [InlineData("parakeet-tdt-0.6b")]
     [InlineData("parakeet-ultra-0.6b")]
+    [InlineData("fluid-speech-pro")]
     [InlineData("canary-180m-flash")]
     [Trait("Category", "LocalParakeet")]
     public async Task PublishedPluginTranscribesPcmAndProvidesModelMetadata(string modelId)
@@ -60,6 +61,7 @@ public sealed class PortableParakeetTests(ITestOutputHelper output)
     [LocalParakeetTheory]
     [InlineData("parakeet-tdt-0.6b")]
     [InlineData("parakeet-ultra-0.6b")]
+    [InlineData("fluid-speech-pro")]
     [InlineData("canary-180m-flash")]
     [Trait("Category", "LocalParakeet")]
     public async Task PublishedPluginKeepsEverySectionOfMinuteLongDictation(string modelId)
