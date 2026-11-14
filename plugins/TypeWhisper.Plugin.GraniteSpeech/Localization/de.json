@@ -5,5 +5,6 @@
   "Automatic": "Automatisch",
   "Remove model and runtime": "Modell und Laufzeit entfernen",
   "Unloads the model and deletes its local model files and managed runtime. Settings are preserved.": "Entlädt das Modell und löscht seine lokalen Modelldateien und die verwaltete Laufzeit. Einstellungen bleiben erhalten.",
-  "Model and runtime removed.": "Modell und Laufzeit entfernt."
+  "Model and runtime removed.": "Modell und Laufzeit entfernt.",
+  "Last setup failed:": "Letzte Einrichtung fehlgeschlagen:"
 }

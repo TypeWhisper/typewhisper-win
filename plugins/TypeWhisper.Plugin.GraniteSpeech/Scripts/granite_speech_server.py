@@ -17,6 +17,89 @@ import time
 MODEL_NAME = "ibm-granite/granite-4.0-1b-speech"
 MODEL_REVISION = "bd87ab862416353633ea431fe49b1614003623c5"
 
+# Without long path support Windows rejects paths of 260 characters and more (MAX_PATH).
+MAX_PATH = 260
+
+
+def model_dir():
+    """Short folder that holds the model files directly, without the Hugging Face cache levels."""
+    return os.environ.get("TYPEWHISPER_MODEL_DIR") or None
+
+
+def legacy_cache_dir():
+    """Hugging Face hub cache that versions up to 1.2.8 downloaded the model into."""
+    home = os.environ.get("TYPEWHISPER_LEGACY_HF_HOME")
+    return os.path.join(home, "hub") if home else None
+
+
+def model_source():
+    """Returns the model location and loading options: the model folder, or the cache of an older install."""
+    directory = model_dir()
+    if directory and os.path.isfile(os.path.join(directory, "config.json")):
+        return directory, {}
+    return MODEL_NAME, {"revision": MODEL_REVISION, "cache_dir": legacy_cache_dir()}
+
+
+def long_paths_enabled():
+    if os.name != "nt":
+        return True
+    try:
+        import winreg
+
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Control\FileSystem") as key:
+            return winreg.QueryValueEx(key, "LongPathsEnabled")[0] == 1
+    except OSError:
+        return False
+
+
+def windows_path_length(path):
+    """Length in UTF-16 code units, which Windows counts: characters outside the BMP take two."""
+    return len(path.encode("utf-16-le")) // 2
+
+
+def path_length_error(directory, filenames):
+    """Explains a model folder whose files Windows cannot open, or returns None.
+
+    huggingface_hub switches to extended-length paths for its own lock, metadata and partial files, but
+    transformers later opens the model files through ordinary paths.
+    """
+    if not filenames or long_paths_enabled():
+        return None
+    longest = max(windows_path_length(os.path.join(os.path.abspath(directory), name)) for name in filenames)
+    if longest < MAX_PATH:
+        return None
+    return (
+        f"The model folder path is too long: model files would need {longest} characters, "
+        f"Windows allows {MAX_PATH - 1} without long path support. "
+        f"Use a profile folder with a shorter path, or enable long path support in Windows, then retry. "
+        f"Model folder: {directory}"
+    )
+
+
+def adopt_legacy_file(filename, directory, legacy_cache):
+    """Moves a model file an older install cached into the model folder, so setup does not download it again.
+
+    The download afterwards still checks the file against the pinned revision.
+    """
+    if not legacy_cache:
+        return False
+    target = os.path.join(directory, filename)
+    if os.path.exists(target):
+        return False
+    try:
+        from huggingface_hub import try_to_load_from_cache
+
+        cached = try_to_load_from_cache(MODEL_NAME, filename, cache_dir=legacy_cache, revision=MODEL_REVISION)
+        if not isinstance(cached, str):
+            return False
+        # Snapshot entries are symlinks to blobs where Windows allows symlinks; move the blob itself.
+        source = os.path.realpath(cached)
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        os.replace(source, target)
+        return True
+    except OSError:
+        return False
+
 
 def inference_dtype(torch, device):
     return torch.bfloat16 if device == "cuda" and torch.cuda.is_bf16_supported() else torch.float32
@@ -67,14 +150,16 @@ def cmd_check():
         issues.append("soundfile not installed")
 
     if not issues:
-        try:
-            from huggingface_hub import try_to_load_from_cache
+        source, options = model_source()
+        if source == MODEL_NAME:
+            try:
+                from huggingface_hub import try_to_load_from_cache
 
-            result = try_to_load_from_cache(MODEL_NAME, "config.json", revision=MODEL_REVISION)
-            if not isinstance(result, str):
+                result = try_to_load_from_cache(MODEL_NAME, "config.json", **options)
+                if not isinstance(result, str):
+                    issues.append("model not downloaded")
+            except Exception:
                 issues.append("model not downloaded")
-        except Exception:
-            issues.append("model not downloaded")
 
     respond({"ready": len(issues) == 0, "issues": issues})
 
@@ -82,9 +167,16 @@ def cmd_check():
 def cmd_setup():
     """Download HF model files, reporting progress as JSON lines.
 
-    Packages are already installed by the C# host via pip.
+    Packages are already installed by the C# host via pip. The files go straight into the model folder
+    instead of the Hugging Face cache, whose repository, blob hash and partial-file levels made the
+    paths too long for some Windows profiles.
     """
     respond({"progress": 0.0, "phase": "model"})
+
+    directory = model_dir()
+    if not directory:
+        respond({"error": "No model folder was provided."})
+        sys.exit(1)
 
     from huggingface_hub import HfApi, hf_hub_download
 
@@ -104,8 +196,14 @@ def cmd_setup():
         if f.endswith((".safetensors", ".json", ".txt", ".model", ".py", ".jinja"))
     ]
 
+    path_error = path_length_error(directory, model_files)
+    if path_error:
+        respond({"error": path_error})
+        sys.exit(1)
+
     total_bytes = sum(sizes[f] for f in model_files)
     completed_bytes = 0
+    legacy_cache = legacy_cache_dir()
     from tqdm.auto import tqdm
 
     class DownloadProgress(tqdm):
@@ -125,10 +223,11 @@ def cmd_setup():
 
     max_retries = 3
 
-    for i, filename in enumerate(model_files):
+    for filename in model_files:
+        adopt_legacy_file(filename, directory, legacy_cache)
         for attempt in range(max_retries):
             try:
-                hf_hub_download(MODEL_NAME, filename, revision=MODEL_REVISION, tqdm_class=DownloadProgress)
+                hf_hub_download(MODEL_NAME, filename, revision=MODEL_REVISION, local_dir=directory, tqdm_class=DownloadProgress)
                 break
             except Exception as e:
                 if attempt < max_retries - 1:
@@ -191,11 +290,12 @@ def cmd_serve():
             try:
                 if os.environ.get("TYPEWHISPER_DEVICE") == "NvidiaCuda" and device != "cuda":
                     raise RuntimeError("NVIDIA CUDA is unavailable. Select CPU or install a compatible NVIDIA driver.")
-                processor = AutoProcessor.from_pretrained(MODEL_NAME, revision=MODEL_REVISION, local_files_only=True)
+                source, options = model_source()
+                processor = AutoProcessor.from_pretrained(source, local_files_only=True, **options)
                 tokenizer = processor.tokenizer
                 model = AutoModelForSpeechSeq2Seq.from_pretrained(
-                    MODEL_NAME, revision=MODEL_REVISION, local_files_only=True,
-                    torch_dtype=inference_dtype(torch, device)
+                    source, local_files_only=True,
+                    torch_dtype=inference_dtype(torch, device), **options
                 )
                 model = model.to(device).eval()
                 respond({"status": "ok", "device": device, "req_id": req_id})
