@@ -40,23 +40,26 @@ internal sealed class ElevenLabsStreamingSession : IStreamingSession
     internal static bool IsRealtimeError(string messageType) =>
         RealtimeErrorTypes.Contains(messageType) || messageType.Contains("error", StringComparison.OrdinalIgnoreCase);
 
-    internal static Uri BuildRealtimeUri(string model, string? language, bool noVerbatim)
+    internal static Uri BuildRealtimeUri(string model, string? language, bool noVerbatim, bool multilangMode = false)
     {
         var query = "model_id=" + Uri.EscapeDataString(model) +
             "&audio_format=pcm_16000&commit_strategy=manual&include_timestamps=true&include_language_detection=true" +
             "&no_verbatim=" + (noVerbatim ? "true" : "false");
         if (!string.IsNullOrWhiteSpace(language) && !language.Equals("auto", StringComparison.OrdinalIgnoreCase))
             query += "&language_code=" + Uri.EscapeDataString(language);
+        // Follows switches between languages within a sentence. Only Scribe v3 Live accepts it.
+        if (multilangMode)
+            query += "&multilang_mode=true";
         return new("wss://api.elevenlabs.io/v1/speech-to-text/realtime?" + query);
     }
 
-    public static async Task<ElevenLabsStreamingSession> ConnectAsync(string key, string model, string? language, bool noVerbatim, CancellationToken ct)
+    public static async Task<ElevenLabsStreamingSession> ConnectAsync(string key, string model, string? language, bool noVerbatim, bool multilangMode, CancellationToken ct)
     {
         var socket = new ClientWebSocket();
         socket.Options.SetRequestHeader("xi-api-key", key);
         try
         {
-            await socket.ConnectAsync(BuildRealtimeUri(model, language, noVerbatim), ct).ConfigureAwait(false);
+            await socket.ConnectAsync(BuildRealtimeUri(model, language, noVerbatim, multilangMode), ct).ConfigureAwait(false);
             return new(socket);
         }
         catch { socket.Dispose(); throw; }

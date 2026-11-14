@@ -1226,7 +1226,10 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                                 (_originalField is not null && await _originalField.IsCurrentAsync(_operationCancellation.Token)), submit,
                             () => _outputAtStart.RestrictedBy(OutputPreferences.Current).PreserveClipboard,
                             // A chat app moves a paste on a button into its message field; Enter may follow it there.
-                            followPasteRedirect: sent is not null);
+                            followPasteRedirect: sent is not null,
+                            // Only an Enter the user pressed follows a paste that could not be confirmed in its field.
+                            submitUnconfirmed: ClipboardPasteOperation.SubmitsUnconfirmed(autoEnterMode)
+                                || autoEnterMode == AutoEnterModeAtStart && _workflowAtStart?.SubmitWithoutFieldCheck == true);
                         var inserted = insertion.Inserted;
                         submitSkipped = inserted && submit && !insertion.Submitted;
                         // Corrections are learned in the field the user keeps working in, which the target app is not.
@@ -1252,7 +1255,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             // A blocked or failed paste leaves the text on the clipboard, as on macOS, and says so where the
             // user looks while dictating. The overlay only claims a copy that succeeded.
             var pasteFailed = outcome.ReviewReason == DictationReviewReason.PasteFailed;
-            if (pasteFailed) outcome = outcome with { CopiedToClipboard = ClipboardText.TrySet(outcome.Record.FinalText) };
+            if (pasteFailed) outcome = outcome with { CopiedToClipboard = ClipboardText.TrySet(outcome.Record.FinalText, excludeFromHistory: true) };
             // The review names the workflow's target app that was not open, instead of a field to check.
             if (pasteFailed && _targetAppMissing is { } closedApp)
                 outcome = outcome with { Message = Loc.T("{0} is not open, so nothing was inserted. Open {0}, then paste the text there.", closedApp) };

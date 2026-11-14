@@ -24,6 +24,10 @@ internal sealed class TrayIconService : IDisposable
     private bool _hotkeysPaused;
     private string? _pauseError;
     private Action? _notificationClicked;
+    // While the Recorder captures audio: its sources for the tooltip, and the marked icon shown in the tray.
+    private string? _recorderStatus;
+    private bool _markShown;
+    private System.Drawing.Icon? _shownIcon;
 
     internal TrayIconService(Action toggleRecorder, Action recent, Action settings, Action history, Action files, Action exit, Action finishDictation, Action cancelProcessing, Action togglePause, Action recovery, Action updates,
         Action pasteLast, Action copyLast, Action readLast, Action diagnostics)
@@ -93,6 +97,7 @@ internal sealed class TrayIconService : IDisposable
     public void Dispose()
     {
         _icon.Dispose();
+        _shownIcon?.Dispose();
         _menuWindow.Close();
     }
 
@@ -103,7 +108,7 @@ internal sealed class TrayIconService : IDisposable
         _status.Text = _pauseError ?? (_hotkeysPaused ? Loc.T("Dictation hotkeys paused. Resume them from the tray menu.") : _dictationStatus);
         _recordingAction.Visibility = recording ? Visibility.Visible : Visibility.Collapsed;
         ToolTipService.SetToolTip(_status, _status.Text);
-        _icon.ToolTipText = WinUIProfile.DisplayName + " · " + _status.Text[..Math.Min(_status.Text.Length, 90)];
+        RefreshToolTip();
     }
 
     internal void UpdateHotkeyPause(bool paused, bool canChange, string? error)
@@ -114,7 +119,15 @@ internal sealed class TrayIconService : IDisposable
         _pauseHotkeys.IsEnabled = canChange;
         _status.Text = error ?? (paused ? Loc.T("Dictation hotkeys paused. Resume them from the tray menu.") : _dictationStatus);
         ToolTipService.SetToolTip(_status, _status.Text);
-        _icon.ToolTipText = WinUIProfile.DisplayName + " · " + _status.Text[..Math.Min(_status.Text.Length, 90)];
+        RefreshToolTip();
+    }
+
+    // The Recorder's sources come first, so a long dictation status never cuts them off. Windows shows at most 127
+    // characters.
+    private void RefreshToolTip()
+    {
+        var text = _recorderStatus is { } recorder ? recorder + " · " + _status.Text : _status.Text;
+        _icon.ToolTipText = WinUIProfile.DisplayName + " · " + text[..Math.Min(text.Length, 100)];
     }
 
     internal void SetShutdownState(string status)
@@ -130,13 +143,77 @@ internal sealed class TrayIconService : IDisposable
         if (!_closing) _cancelProcessing.Visibility = canCancel ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    internal void UpdateRecorder(bool recording, bool canToggle)
+    internal void UpdateRecorder(bool recording, bool canToggle, bool microphone = false, bool systemAudio = false)
     {
         if (_closing) return;
         _recorderAction.Text = recording ? Loc.T("Stop recording") : Loc.T("Start recording");
         ((FontIcon)_recorderAction.Icon).Glyph = recording ? "" : "";
         _recorderAction.IsEnabled = canToggle;
+        var status = recording ? RecorderIndicator.Status(microphone, systemAudio) : null;
+        // A mark that could not be shown is tried again on the next update, even when the status did not change.
+        if (status == _recorderStatus && _markShown == recording) return;
+        _recorderStatus = status;
+        if (_markShown != recording) ShowRecordingMark(recording);
+        RefreshToolTip();
     }
+
+    // A red record button instead of the app icon while the Recorder captures audio, as a lasting sign next to the
+    // notification, which Do Not Disturb may hold back.
+    private void ShowRecordingMark(bool recording)
+    {
+        try
+        {
+            var icon = CreateTrayIcon(recording);
+            if (!_icon.UpdateIcon(icon))
+            {
+                icon.Dispose();
+                AppDiagnostics.Write("tray.recording-mark.not-updated");
+                return;
+            }
+            _shownIcon?.Dispose();
+            _shownIcon = icon;
+            _markShown = recording;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // The tooltip still names the recording.
+            AppDiagnostics.Write("tray.recording-mark.failed", ex);
+        }
+    }
+
+    private static System.Drawing.Icon CreateTrayIcon(bool recording)
+    {
+        var size = Math.Max(16, GetSystemMetricsForDpi(SmallIconWidth, GetDpiForSystem()));
+        using var source = new System.Drawing.Icon(Path.Join(AppContext.BaseDirectory, "app.ico"), size, size);
+        if (!recording) return (System.Drawing.Icon)source.Clone();
+        using var bitmap = source.ToBitmap();
+        using (var graphics = System.Drawing.Graphics.FromImage(bitmap))
+        {
+            // A corner dot was too small to notice in the tray, so the whole icon becomes a record button.
+            graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            graphics.Clear(System.Drawing.Color.Transparent);
+            var diameter = bitmap.Width - 1f;
+            var ring = Math.Max(1f, bitmap.Width / 10f);
+            var x = 0.5f;
+            var y = 0.5f;
+            using var white = new System.Drawing.SolidBrush(System.Drawing.Color.White);
+            using var red = new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(232, 17, 35));
+            graphics.FillEllipse(white, x, y, diameter, diameter);
+            graphics.FillEllipse(red, x + ring, y + ring, diameter - 2 * ring, diameter - 2 * ring);
+        }
+        var handle = bitmap.GetHicon();
+        try
+        {
+            using var borrowed = System.Drawing.Icon.FromHandle(handle);
+            return (System.Drawing.Icon)borrowed.Clone();
+        }
+        finally { DestroyIcon(handle); }
+    }
+
+    private const int SmallIconWidth = 49;
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern int GetSystemMetricsForDpi(int index, uint dpi);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern uint GetDpiForSystem();
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool DestroyIcon(IntPtr icon);
     internal void AllowShutdownRetry() => _exitAction.IsEnabled = true;
 
     // A Windows notification from the tray icon, shown at the bottom right like in TypeWhisper 1.0.

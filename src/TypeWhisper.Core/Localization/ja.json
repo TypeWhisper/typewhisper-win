@@ -3279,6 +3279,15 @@
   "{0} is downloaded but not loaded.": "{0} はダウンロード済みですが、読み込まれていません。",
   "No model is downloaded yet. Download one in the {0} plugin settings; it loads right after the download.": "まだモデルがダウンロードされていません。{0} のプラグイン設定でダウンロードしてください。ダウンロード後すぐに読み込まれます。",
   "{0} is loaded and ready.": "{0} を読み込みました。使用できます。",
+  "Recording microphone and system audio": "マイクとシステムオーディオを録音中",
+  "Recording microphone": "マイクを録音中",
+  "Recording system audio": "システムオーディオを録音中",
+  "Another app started a recording": "別のアプリが録音を開始しました",
+  "TypeWhisper is recording the microphone and system audio. Stop it from the tray menu or in Recorder.": "TypeWhisper はマイクとシステムオーディオを録音しています。トレイメニューまたはレコーダーで停止できます。",
+  "TypeWhisper is recording the system audio. Stop it from the tray menu or in Recorder.": "TypeWhisper はシステムオーディオを録音しています。トレイメニューまたはレコーダーで停止できます。",
+  "TypeWhisper is recording the microphone. Stop it from the tray menu or in Recorder.": "TypeWhisper はマイクを録音しています。トレイメニューまたはレコーダーで停止できます。",
+  "Also without a confirmed text field": "テキストフィールドを確認できない場合も",
+  "For games and apps without accessibility support. TypeWhisper cannot check there where Enter lands, so it presses it 100 ms after pasting.": "アクセシビリティに対応していないゲームやアプリ向けです。TypeWhisper は Enter がどこに届くかを確認できないため、貼り付けの 100 ミリ秒後に押します。",
   "The sync folder contains a linked folder. Remove the link or choose another sync folder.": "同期フォルダーにリンクされたフォルダーが含まれています。リンクを削除するか、別の同期フォルダーを選択してください。",
   "{0} received entries use a regular expression, line breaks or the clipboard and were turned off. Review them in Dictionary or Snippets and turn them on if you trust them.": "受信した {0} 件の項目は正規表現、改行、またはクリップボードを使用するため、オフにしました。辞書またはスニペットで確認し、信頼できる場合はオンにしてください。"
 }

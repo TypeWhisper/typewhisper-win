@@ -16,14 +16,15 @@ internal sealed class ClipboardTextInserter(IntPtr owner) : IDisposable
     /// <summary>Returns once Ctrl+V was sent, or with <paramref name="submit"/> once Enter followed it.
     /// The clipboard stays gated until <see cref="Restored"/> completes.</summary>
     internal async Task<ClipboardInsertion> InsertAsync(string text, IntPtr target, Func<bool>? verifyField = null, Func<Task<bool>>? verifyFieldAsync = null,
-        bool submit = false, Func<bool>? preserveClipboard = null, bool followPasteRedirect = false)
+        bool submit = false, Func<bool>? preserveClipboard = null, bool followPasteRedirect = false, bool submitUnconfirmed = false)
     {
         var dictation = AppDiagnostics.CurrentDictation;
         await TransactionGate.WaitAsync();
         var releaseNow = true;
         try
         {
-            var result = await ClipboardPasteOperation.RunAsync(new Platform(_clipboard, target, verifyField, verifyFieldAsync, followPasteRedirect), text, submit, preserveClipboard);
+            var result = await ClipboardPasteOperation.RunAsync(new Platform(_clipboard, target, verifyField, verifyFieldAsync, followPasteRedirect), text, submit,
+                preserveClipboard, submitUnconfirmed);
             AppDiagnostics.Write(result.Inserted ? "clipboard.paste.sent" : "clipboard.paste.rejected");
             if (result.Inserted && submit) AppDiagnostics.Write(result.Submitted ? "clipboard.submit.sent" : "clipboard.submit.skipped");
             _restored = ReleaseAfterRestoreAsync(result.Restored, dictation);
@@ -66,12 +67,18 @@ internal sealed class ClipboardTextInserter(IntPtr owner) : IDisposable
         // Replaces the temporary text, which clipboard history skips, with ordinary text, so it also appears in Win+V.
         public Task KeepAsync(IDisposable lease, string text) => clipboard.CommitTemporaryTextAsync((IClipboardLease)lease, text, CancellationToken.None);
         public Task WaitForPasteAsync() => Task.Delay(500);
-        public async Task PrepareSubmitAsync() => _landing = await PasteLandingObserver.CaptureAsync(target, followPasteRedirect);
+        public async Task<bool> PrepareSubmitAsync()
+        {
+            _landing = await PasteLandingObserver.CaptureAsync(target, followPasteRedirect);
+            if (_landing is null) AppDiagnostics.Write("submit.landing.unavailable");
+            return _landing is not null;
+        }
         public void DiscardSubmit() { _landing?.Dispose(); _landing = null; }
-        // Without an identifiable field, Ctrl+V is ahead in the input queue and a short delay covers most targets.
+        // Without an identifiable field only an Enter the user pressed gets here. Ctrl+V is ahead in the input queue then,
+        // and a short delay covers most targets.
         public async Task<bool> WaitForSubmitAsync()
         {
-            if (_landing is not { } landing) { AppDiagnostics.Write("submit.landing.unavailable"); await Task.Delay(100); return true; }
+            if (_landing is not { } landing) { await Task.Delay(100); return true; }
             _landing = null;
             using (landing) return await landing.WaitAsync();
         }

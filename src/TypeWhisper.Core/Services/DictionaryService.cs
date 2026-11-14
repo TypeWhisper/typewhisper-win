@@ -15,6 +15,11 @@ public sealed class DictionaryService : IDictionaryService
 {
     private const string PackEntryPrefix = "pack:";
     private static readonly TimeSpan CorrectionRegexTimeout = TimeSpan.FromMilliseconds(250);
+    // All corrections of one text together; the rules after it are left out once it is spent.
+    private static readonly TimeSpan CorrectionBudget = TimeSpan.FromSeconds(1);
+    // A correction may make the text at most four times longer plus this, which still fits one full-length
+    // replacement (10,000 characters) in a short dictation.
+    private const int CorrectionGrowthAllowance = 16_384;
 
     private readonly string _filePath;
     private List<DictionaryEntry> _cache = [];
@@ -156,9 +161,13 @@ public sealed class DictionaryService : IDictionaryService
     public static CorrectionSet CompileCorrections(IReadOnlyList<DictionaryEntry> entries) => new(entries);
 
     /// <summary>Enabled corrections, longest original first, then ordinal original and literal before regex.</summary>
+    /// <remarks>Applying them is bounded: a rule that runs out of time is set aside for the lifetime of the set, a rule
+    /// whose result would grow the text beyond four times its length plus a fixed allowance is skipped for that text,
+    /// and the remaining rules are left out once all of them together took one second.</remarks>
     public sealed class CorrectionSet
     {
         private readonly (string Id, Regex Regex, string Replacement)[] _rules;
+        private readonly bool[] _suspended;
 
         internal CorrectionSet(IReadOnlyList<DictionaryEntry> entries)
         {
@@ -189,31 +198,57 @@ public sealed class DictionaryService : IDictionaryService
                 }
             }
             _rules = [.. rules];
+            _suspended = new bool[_rules.Length];
         }
+
+        /// <summary>The number of rules set aside because they ran out of time.</summary>
+        public int SuspendedRules => _suspended.Count(suspended => suspended);
 
         /// <summary>Applies every correction in order to <paramref name="text"/>.</summary>
         public string Apply(string text) => Apply(text, null);
 
         internal string Apply(string text, Action<string>? onMatch)
         {
-            foreach (var (id, regex, replacement) in _rules)
+            var limit = 4L * text.Length + CorrectionGrowthAllowance;
+            var clock = Stopwatch.StartNew();
+            for (var index = 0; index < _rules.Length; index++)
             {
+                if (Volatile.Read(ref _suspended[index]))
+                    continue;
+                if (clock.Elapsed >= CorrectionBudget)
+                    break;
+
+                var (id, regex, replacement) = _rules[index];
                 try
                 {
                     if (!regex.IsMatch(text))
                         continue;
 
-                    text = regex.Replace(text, _ => replacement);
+                    var length = (long)text.Length;
+                    text = regex.Replace(text, match =>
+                    {
+                        // Stops before building the text, for example for a pattern that matches between every character.
+                        length += replacement.Length - match.Length;
+                        if (length > limit) throw new CorrectionTooLongException();
+                        return replacement;
+                    });
                     onMatch?.Invoke(id);
                 }
                 catch (RegexMatchTimeoutException)
                 {
-                    // A pathological regex must not block dictation post-processing.
+                    // A pathological regex must not block dictation post-processing, now or in the next dictation.
+                    Volatile.Write(ref _suspended[index], true);
+                }
+                catch (CorrectionTooLongException)
+                {
+                    // The text keeps its state before this rule.
                 }
             }
 
             return text;
         }
+
+        private sealed class CorrectionTooLongException : Exception;
     }
 
     private static string ExpandReplacementEscapes(string replacement)

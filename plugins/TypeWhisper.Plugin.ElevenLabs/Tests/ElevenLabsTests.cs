@@ -50,7 +50,7 @@ public sealed class ElevenLabsTests : IDisposable
             Assert.Equal("test-key", request.Headers.GetValues("xi-api-key").Single());
             var parts = Assert.IsType<MultipartFormDataContent>(request.Content).ToArray();
             async Task<string> Value(string key) => await parts.Single(p => p.Headers.ContentDisposition!.Name!.Trim('"') == key).ReadAsStringAsync(ct);
-            Assert.Equal("scribe_v2", await Value("model_id"));
+            Assert.Equal("scribe_v3", await Value("model_id"));
             Assert.Equal("de", await Value("language_code"));
             Assert.Equal("false", await Value("no_verbatim"));
             Assert.Equal("true", await Value("tag_audio_events"));
@@ -94,15 +94,15 @@ public sealed class ElevenLabsTests : IDisposable
     {
         using var plugin = new ElevenLabsPlugin();
         await plugin.ActivateAsync(Host);
-        Assert.Equal("scribe_v2", plugin.SelectedModelId);
+        Assert.Equal("scribe_v3", plugin.SelectedModelId);
         Assert.Contains("de", plugin.SupportedLanguages);
         Assert.Contains("jv", plugin.SupportedLanguages);
         Assert.DoesNotContain("jw", plugin.SupportedLanguages);
         Assert.DoesNotContain("haw", plugin.SupportedLanguages);
         Assert.DoesNotContain("vo", plugin.SupportedLanguages);
-        Assert.Equal(new[] { "scribe_v2", "scribe_v2_medical" }, plugin.TranscriptionModels.Select(m => m.Id));
+        Assert.Equal(new[] { "scribe_v3", "scribe_v2", "scribe_v2_medical" }, plugin.TranscriptionModels.Select(m => m.Id));
         Assert.All(plugin.TranscriptionModels, m => Assert.Equal(plugin.SupportedLanguages, m.LanguageCodes));
-        Assert.True(plugin.TranscriptionModels.Single(m => m.Id == "scribe_v2").IsRecommended);
+        Assert.Equal("scribe_v3", Assert.Single(plugin.TranscriptionModels, m => m.IsRecommended).Id);
         Assert.True(plugin.SupportsStreaming);
         Assert.False(plugin.SupportsStreamingForPrompt("TypeWhisper"));
         Assert.True(plugin.SupportsStreamingPreviewForPrompt("TypeWhisper"));
@@ -223,13 +223,61 @@ public sealed class ElevenLabsTests : IDisposable
     }
 
     [Fact]
-    public async Task RetiredModelSelectionMovesToScribeV2()
+    public async Task RetiredModelSelectionMovesToTheDefaultModel()
     {
         var host = Host;
         host.SetSetting("selectedModel", "scribe_v1");
         using var plugin = new ElevenLabsPlugin();
         await plugin.ActivateAsync(host);
+        Assert.Equal("scribe_v3", plugin.SelectedModelId);
+    }
+
+    [Theory]
+    [InlineData("scribe_v3", "scribe_v3_live")]
+    [InlineData("scribe_v2", "scribe_v2_realtime")]
+    [InlineData("scribe_v2_medical", null)]
+    public void EachStreamingModelUsesItsOwnRealtimeModel(string modelId, string? realtimeModelId)
+    {
+        Assert.Equal(realtimeModelId, ElevenLabsPlugin.RealtimeModelIdFor(modelId));
+        Assert.Equal(realtimeModelId is not null, ElevenLabsPlugin.ModelStreams(modelId));
+    }
+
+    [Fact]
+    public async Task MixedLanguagesIsOffByDefaultPersistsAndOnlyShowsForScribeV3()
+    {
+        var host = Host;
+        using (var plugin = new ElevenLabsPlugin())
+        {
+            await plugin.ActivateAsync(host);
+            var field = Assert.Single(plugin.TextSettings, s => s.Id == "multilangMode");
+            Assert.Equal("false", field.Value);
+            Assert.False(plugin.MultilangMode);
+            await plugin.SaveTextSettingAsync("multilangMode", "true", default);
+            Assert.True(plugin.MultilangMode);
+            plugin.SelectModel("scribe_v2");
+            Assert.DoesNotContain(plugin.TextSettings, s => s.Id == "multilangMode");
+            await Assert.ThrowsAsync<ArgumentException>(() => plugin.SaveTextSettingAsync("multilangMode", "false", default));
+            plugin.SelectModel("scribe_v2_medical");
+            Assert.DoesNotContain(plugin.TextSettings, s => s.Id == "multilangMode");
+            plugin.SelectModel("scribe_v3");
+        }
+        using var restored = new ElevenLabsPlugin();
+        await restored.ActivateAsync(host);
+        Assert.True(restored.MultilangMode);
+        Assert.Equal("true", Assert.Single(restored.TextSettings, s => s.Id == "multilangMode").Value);
+        Assert.True(ElevenLabsPlugin.SupportsMultilangMode("scribe_v3"));
+        Assert.False(ElevenLabsPlugin.SupportsMultilangMode("scribe_v2"));
+    }
+
+    [Fact]
+    public async Task SavedScribeV2SelectionStaysAndStreams()
+    {
+        var host = Host;
+        host.SetSetting("selectedModel", "scribe_v2");
+        using var plugin = new ElevenLabsPlugin();
+        await plugin.ActivateAsync(host);
         Assert.Equal("scribe_v2", plugin.SelectedModelId);
+        Assert.True(plugin.SupportsStreaming);
     }
 
     [Theory]
@@ -302,7 +350,7 @@ public sealed class ElevenLabsTests : IDisposable
         await using var package = await PortablePluginPackage.LoadAsync(directory, Host, new(1, 1, 5));
         Assert.IsAssignableFrom<IApiKeyPlugin>(package.Plugin);
         var engine = Assert.IsAssignableFrom<ITranscriptionEnginePlugin>(package.Plugin);
-        Assert.Equal("scribe_v2", engine.SelectedModelId);
+        Assert.Equal("scribe_v3", engine.SelectedModelId);
         Assert.Contains("en", engine.SupportedLanguages);
         Assert.Contains("de", engine.SupportedLanguages);
         Assert.False(engine.SupportsLocalLivePreview);
@@ -327,7 +375,7 @@ public sealed class ElevenLabsTests : IDisposable
         { Content = new ByteArrayContent(payload), RequestMessage = request })));
         var entry = new PortableCatalogEntry
         {
-            Id = id, Name = "ElevenLabs", Version = "1.2.0", MinHostVersion = "1.1.5",
+            Id = id, Name = "ElevenLabs", Version = "1.3.0", MinHostVersion = "1.1.5",
             DownloadUrl = "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-fixture-v1.0.0/elevenlabs.zip", Size = payload.Length,
             Sha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(payload)),
             SupportedArchitectures = [PortablePluginCatalog.Architecture]

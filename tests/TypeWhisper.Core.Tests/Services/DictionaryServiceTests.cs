@@ -313,6 +313,67 @@ public class DictionaryServiceTests : IDisposable
     }
 
     [Fact]
+    public void CorrectionThatWouldMultiplyTheTextIsSkipped()
+    {
+        var expansion = new string('x', 10_000);
+        DictionaryEntry[] entries =
+        [
+            new() { Id = "everywhere", EntryType = DictionaryEntryType.Correction, Original = "(?:)", Replacement = expansion, IsRegex = true },
+            new() { Id = "typo", EntryType = DictionaryEntryType.Correction, Original = "teh", Replacement = "the" },
+        ];
+
+        var corrections = DictionaryService.CompileCorrections(entries);
+
+        Assert.Equal("the text stays short", corrections.Apply("teh text stays short"));
+        Assert.Equal(0, corrections.SuspendedRules);
+    }
+
+    [Fact]
+    public void LongReplacementOfAShortDictationIsStillApplied()
+    {
+        var signature = new string('s', 10_000);
+        var corrections = DictionaryService.CompileCorrections([new DictionaryEntry
+            { Id = "signature", EntryType = DictionaryEntryType.Correction, Original = "my signature", Replacement = signature }]);
+
+        Assert.Equal(signature, corrections.Apply("my signature"));
+    }
+
+    [Fact]
+    public void CorrectionThatRanOutOfTimeIsSetAsideForLaterTexts()
+    {
+        DictionaryEntry[] entries =
+        [
+            new() { Id = "slow", EntryType = DictionaryEntryType.Correction, Original = "(a+)+$", Replacement = "b", IsRegex = true },
+            new() { Id = "typo", EntryType = DictionaryEntryType.Correction, Original = "teh", Replacement = "the" },
+        ];
+        var corrections = DictionaryService.CompileCorrections(entries);
+        var input = "teh " + new string('a', 40) + "!";
+
+        Assert.Equal("the " + new string('a', 40) + "!", corrections.Apply(input));
+        Assert.Equal(1, corrections.SuspendedRules);
+        Assert.Equal("the " + new string('a', 40) + "!", corrections.Apply(input));
+        Assert.Equal(1, corrections.SuspendedRules);
+    }
+
+    [Fact]
+    public void CorrectionsStopOnceTheirTimeBudgetIsSpent()
+    {
+        var entries = Enumerable.Range(0, 8).Select(index => new DictionaryEntry
+        {
+            Id = "slow" + index, EntryType = DictionaryEntryType.Correction, Original = "(a+)+" + new string('$', index + 1),
+            Replacement = "b", IsRegex = true
+        }).ToArray();
+        var corrections = DictionaryService.CompileCorrections(entries);
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+
+        corrections.Apply(new string('a', 40) + "!");
+
+        // Each rule may take 250 ms; the budget of one second leaves the rest out.
+        Assert.InRange(corrections.SuspendedRules, 1, 6);
+        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(1.9), clock.Elapsed.ToString());
+    }
+
+    [Fact]
     public void ApplyCorrections_TreatsReplacementTokensLiterallyInRegexMode()
     {
         _sut.AddEntry(new DictionaryEntry
