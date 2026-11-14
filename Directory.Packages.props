@@ -22,7 +22,7 @@
     <PackageVersion Include="NAudio.Wasapi" Version="3.3.0" />
     <PackageVersion Include="NAudio.WinMM" Version="3.3.0" />
     <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.15" />
-    <PackageVersion Include="System.Speech" Version="10.0.15" />
+    <PackageVersion Include="System.Speech" Version="11.0.0" />
     <!-- Packaging workflows read this version when installing the vpk tool. -->
     <PackageVersion Include="Velopack" Version="1.2.161" />
     <PackageVersion Include="WinUIEx" Version="2.9.3" />
