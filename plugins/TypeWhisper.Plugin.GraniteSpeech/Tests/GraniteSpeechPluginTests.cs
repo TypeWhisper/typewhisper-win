@@ -168,6 +168,72 @@ public sealed class GraniteSpeechPluginTests
     }
 
     [Fact]
+    public void ModelEnvironmentUsesShortFoldersAndNamesTheOldCache()
+    {
+        var dataDir = Path.Join(Path.GetTempPath(), "granite-env", "managed-runtime");
+        var environment = new Dictionary<string, string?>();
+
+        GraniteSpeechPlugin.ConfigureModelEnvironment(environment, dataDir);
+
+        Assert.Equal(Path.Join(dataDir, "hf"), environment["HF_HOME"]);
+        Assert.Equal(Path.Join(dataDir, "model"), environment["TYPEWHISPER_MODEL_DIR"]);
+        Assert.Equal(Path.Join(dataDir, "hf-cache"), environment["TYPEWHISPER_LEGACY_HF_HOME"]);
+    }
+
+    [Fact]
+    public async Task OldCacheIsRemovedOnlyOnceTheModelFolderIsComplete()
+    {
+        var dataDir = Path.Combine(Path.GetTempPath(), "granite-legacy-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var legacy = Path.Join(dataDir, "hf-cache", "hub");
+            Directory.CreateDirectory(legacy);
+            await File.WriteAllTextAsync(Path.Join(legacy, "weights.bin"), "old");
+            using var sut = new GraniteSpeechPlugin();
+
+            sut.RemoveLegacyCache(dataDir);
+            Assert.True(Directory.Exists(legacy));
+
+            Directory.CreateDirectory(Path.Join(dataDir, "model"));
+            await File.WriteAllTextAsync(Path.Join(dataDir, "model", "config.json"), "{}");
+            sut.RemoveLegacyCache(dataDir);
+            Assert.False(Directory.Exists(Path.Join(dataDir, "hf-cache")));
+            Assert.True(File.Exists(Path.Join(dataDir, "model", "config.json")));
+        }
+        finally { if (Directory.Exists(dataDir)) Directory.Delete(dataDir, true); }
+    }
+
+    [Fact]
+    public async Task SetupFailureIsShownInSettingsAndLoggedUntilTheModelIsRemoved()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "granite-setup-error-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var host = new FakePluginHostServices(root);
+            using var sut = new GraniteSpeechPlugin();
+            await sut.ActivateAsync(host);
+            var description = Assert.Single(sut.TextSettings).Description;
+            Assert.DoesNotContain("Last setup failed", description);
+
+            sut.RecordSetupFailure(new InvalidOperationException("Model download failed: The model folder path is too long"));
+
+            Assert.Equal(description + " Last setup failed: Model download failed: The model folder path is too long",
+                Assert.Single(sut.TextSettings).Description);
+            Assert.Equal(1, host.CapabilityChanges);
+            var log = await File.ReadAllTextAsync(Path.Join(root, GraniteSpeechPlugin.SetupLogFileName));
+            Assert.Contains($"[{sut.PluginVersion}] Setup failed: System.InvalidOperationException: Model download failed: The model folder path is too long", log);
+
+            sut.RecordSetupFailure(new InvalidOperationException(new string('x', 2000)));
+            Assert.EndsWith(new string('x', 600) + "…", Assert.Single(sut.TextSettings).Description);
+
+            await sut.RemoveModelAsync("granite-4.0-1b-speech", CancellationToken.None);
+            Assert.Equal(description, Assert.Single(sut.TextSettings).Description);
+            Assert.True(File.Exists(Path.Join(root, GraniteSpeechPlugin.SetupLogFileName)));
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
+    [Fact]
     public void RuntimeSelectionPinsTheActualWheelFlavor()
     {
         Assert.Equal("torch==2.13.0+cpu torchaudio==2.11.0+cpu", GraniteSpeechPlugin.RuntimeWheels("Cpu"));
@@ -311,8 +377,9 @@ public sealed class GraniteSpeechPluginTests
         private readonly Dictionary<string, object?> _settings = [];
         public T? GetSetting<T>(string key) => _settings.TryGetValue(key, out var value) ? (T?)value : default;
         public void SetSetting<T>(string key, T value) => _settings[key] = value;
+        public int CapabilityChanges { get; private set; }
         public void Log(PluginLogLevel level, string message) { }
-        public void NotifyCapabilitiesChanged() { }
+        public void NotifyCapabilitiesChanged() => CapabilityChanges++;
     }
 
     private sealed class NoOpPluginEventBus : IPluginEventBus

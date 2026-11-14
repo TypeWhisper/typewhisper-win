@@ -21,7 +21,8 @@ public sealed partial class GraniteSpeechPlugin
     [
         new("device", L("Processing device", "Verarbeitungsgerät"),
             L("Choose the processor for the next model load. Switching a CPU-only runtime to CUDA requires downloading the updated runtime; cached model files are reused.",
-              "Wähle den Prozessor für das nächste Laden. Beim Wechsel einer reinen CPU-Laufzeit zu CUDA muss die Laufzeit erneut heruntergeladen werden; vorhandene Modelldateien werden weiterverwendet."), _device)
+              "Wähle den Prozessor für das nächste Laden. Beim Wechsel einer reinen CPU-Laufzeit zu CUDA muss die Laufzeit erneut heruntergeladen werden; vorhandene Modelldateien werden weiterverwendet.")
+            + (_setupError is { } error ? " " + L("Last setup failed:", "Letzte Einrichtung fehlgeschlagen:") + " " + error : ""), _device)
         {
             Section = PluginSettingsSection.Transcription,
             Choices = [new("Auto", L("Automatic", "Automatisch")), new("Cpu", "CPU"), new("NvidiaCuda", "NVIDIA CUDA")]

@@ -40,6 +40,14 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTransc
     private const string PythonEmbedSha256 = "4acbed6dd1c744b0376e3b1cf57ce906f9dc9e95e68824584c8099a63025a3c3";
     private const string GetPipUrl = "https://raw.githubusercontent.com/pypa/get-pip/af54dfe793b24685f8dc4ebba0630d9f2d77653c/public/get-pip.py";
     private const string GetPipSha256 = "fb24e693bab954209a063d90953621412ccad4a500905a726286e038f508ddf6";
+    // Model files live directly in a short folder. Versions up to 1.2.8 used a Hugging Face cache whose
+    // repository, blob hash and partial-file levels exceeded MAX_PATH for longer user names (#782).
+    internal const string ModelDirectoryName = "model";
+    internal const string HfHomeDirectoryName = "hf";
+    internal const string LegacyHfHomeDirectoryName = "hf-cache";
+    internal const string SetupLogFileName = "setup.log";
+    private const long MaximumSetupLogBytes = 256 * 1024;
+    private const int MaximumSetupErrorLength = 600;
 
     private static readonly IReadOnlyList<string> GraniteSupportedLanguages =
         ["en", "fr", "de", "es", "pt", "ja"];
@@ -54,6 +62,7 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTransc
     private StreamReader? _sidecarOut;
     private string? _selectedModelId;
     private string? _loadedModelId;
+    private string? _setupError;
     private int _requestId;
 
     // ITypeWhisperPlugin
@@ -68,7 +77,7 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTransc
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.8";
+    public string PluginVersion => "1.2.9";
 
     // ITranscriptionEnginePlugin
     /// <summary>
@@ -170,7 +179,17 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTransc
         if (modelId != ModelId) throw new ArgumentException("Unknown model.", nameof(modelId));
         if (!OperatingSystem.IsWindows() || System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture != System.Runtime.InteropServices.Architecture.X64) throw new PlatformNotSupportedException("Granite Speech requires Windows x64.");
         await _sidecarLock.WaitAsync(ct);
-        try {
+        try { await SetUpAsync(progress, ct); }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            RecordSetupFailure(error);
+            throw;
+        }
+        finally { _sidecarLock.Release(); }
+    }
+
+    private async Task SetUpAsync(IProgress<double>? progress, CancellationToken ct)
+    {
         StopSidecar();
         var dataDir = GetDataDirectory();
         Directory.CreateDirectory(dataDir);
@@ -265,20 +284,65 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTransc
             UseShellExecute = false,
             CreateNoWindow = true,
         };
-        psi.Environment["HF_HOME"] = Path.Join(dataDir, "hf-cache");
+        ConfigureModelEnvironment(psi.Environment, dataDir);
 
         var proc = _setupProcess = Process.Start(psi)
             ?? throw new InvalidOperationException("Failed to start model download");
 
         await ReadSetupProcessAsync(proc, progress, ct);
 
+        // Setup moved every file it could reuse out of the old cache; the rest is a duplicate.
+        RemoveLegacyCache(dataDir);
+
         await File.WriteAllTextAsync(
             Path.Combine(dataDir, ".setup-complete"),
             RuntimeRevision + (_device == "Cpu" ? "|cpu" : "|cuda"), ct);
 
+        _setupError = null;
         Log(PluginLogLevel.Info, "Setup complete");
         progress?.Report(1.0);
-        } finally { _sidecarLock.Release(); }
+    }
+
+    /// <summary>
+    /// Points the Python process at the short model folder and Hugging Face home, and at the cache of an
+    /// older install so setup can reuse its files and an install that was not set up again keeps loading.
+    /// </summary>
+    internal static void ConfigureModelEnvironment(IDictionary<string, string?> environment, string dataDir)
+    {
+        environment["HF_HOME"] = Path.Join(dataDir, HfHomeDirectoryName);
+        environment["TYPEWHISPER_MODEL_DIR"] = Path.Join(dataDir, ModelDirectoryName);
+        environment["TYPEWHISPER_LEGACY_HF_HOME"] = Path.Join(dataDir, LegacyHfHomeDirectoryName);
+    }
+
+    internal void RemoveLegacyCache(string dataDir)
+    {
+        var legacy = Path.Join(dataDir, LegacyHfHomeDirectoryName);
+        if (!Directory.Exists(legacy) || !File.Exists(Path.Join(dataDir, ModelDirectoryName, "config.json"))) return;
+        try { Directory.Delete(legacy, recursive: true); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        { Log(PluginLogLevel.Warning, $"Could not remove the previous model cache {legacy}: {error.Message}"); }
+    }
+
+    /// <summary>
+    /// Keeps the setup failure visible: the host shows a generic download error, so the plugin settings show
+    /// the reason and the plugin data folder keeps a log for support.
+    /// </summary>
+    internal void RecordSetupFailure(Exception error)
+    {
+        var message = error.Message.Trim();
+        _setupError = message.Length <= MaximumSetupErrorLength ? message : message[..MaximumSetupErrorLength] + "…";
+        Log(PluginLogLevel.Error, "Setup failed: " + message);
+        if (_host is not { } host) return;
+        try
+        {
+            Directory.CreateDirectory(host.PluginDataDirectory);
+            var path = Path.Join(host.PluginDataDirectory, SetupLogFileName);
+            if (File.Exists(path) && new FileInfo(path).Length > MaximumSetupLogBytes) File.Move(path, path + ".old", overwrite: true);
+            File.AppendAllText(path, $"{DateTimeOffset.Now:O} [{PluginVersion}] Setup failed: {error}{Environment.NewLine}");
+        }
+        catch (Exception logError) when (logError is IOException or UnauthorizedAccessException)
+        { Debug.WriteLine($"[GraniteSpeech] Could not write the setup log: {logError.Message}"); }
+        host.NotifyCapabilitiesChanged();
     }
 
     /// <summary>
@@ -302,6 +366,7 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTransc
             if (Directory.Exists(dataDirectory))
                 Directory.Delete(dataDirectory, recursive: true);
             _selectedModelId = null;
+            _setupError = null;
             host.NotifyCapabilitiesChanged();
         }
         finally
@@ -425,7 +490,7 @@ public sealed partial class GraniteSpeechPlugin : ITypeWhisperPlugin, IPcmTransc
         psi.Environment["PYTHONUNBUFFERED"] = "1";
         psi.Environment["TYPEWHISPER_DEVICE"] = _device;
         psi.Environment["HF_HUB_OFFLINE"] = "1";
-        psi.Environment["HF_HOME"] = Path.Join(GetDataDirectory(), "hf-cache");
+        ConfigureModelEnvironment(psi.Environment, GetDataDirectory());
 
         _sidecar = Process.Start(psi)
             ?? throw new InvalidOperationException("Failed to start Python sidecar");
