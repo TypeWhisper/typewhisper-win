@@ -11,12 +11,17 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $signing = $env:SIGNPATH_POLICY -in @('test-signing', 'release-signing')
 if ($signing) {
-    # Sign the raw candidate too. Its CLI manifest hashes shared DLLs, which this
-    # executable-only configuration does not modify.
-    $candidateExecutables = @(Get-ChildItem -LiteralPath candidate -Filter 'TypeWhisper*.exe' -Recurse -File |
+    # Sign the raw candidate too: the application and CLI executables and the TypeWhisper assemblies.
+    # Velopack's signing callback below only handles executables, so the packages contain these signed files.
+    $candidateFiles = @(Get-ChildItem -LiteralPath candidate -Recurse -File |
+        Where-Object { $_.Name -like 'TypeWhisper*.exe' -or $_.Name -like 'TypeWhisper*.dll' } |
         Select-Object -ExpandProperty FullName)
-    & $env:SIGNPATH_NODE $env:SIGNPATH_HELPER @candidateExecutables
+    & $env:SIGNPATH_NODE $env:SIGNPATH_HELPER @candidateFiles
     if ($LASTEXITCODE -ne 0) { throw 'Candidate signing failed.' }
+    # The CLI manifest recorded the hashes of the shared assemblies before they were signed.
+    ./eng/Optimize-CliBundle.ps1 -PublishDirectory candidate -RefreshSharedHashes
+    ./eng/Test-WinUIDailyCandidate.ps1 -PublishDirectory candidate -ExpectedVersion $Version `
+        -RuntimeIdentifier $RuntimeIdentifier -Channel $Channel
 }
 
 $packages = @(switch ($Channel) {

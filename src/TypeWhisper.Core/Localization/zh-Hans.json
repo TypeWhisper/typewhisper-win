@@ -2198,7 +2198,7 @@
   "Spoken language": "口语语言",
   "Spoken trigger": "口述触发词",
   "Stable": "稳定版",
-  "Stable contains released versions. Daily contains the latest development builds. Release Candidate contains versions being tested before release. Changing channels does not install anything until you choose Download and restart.": "“稳定版”包含已发布的版本。“每日版”包含最新的开发版本。“候选发布版”包含发布前正在测试的版本。更改通道不会安装任何内容，直到你选择“下载并重启”。",
+  "Stable contains released versions. Daily contains the latest development builds. Release Candidate contains versions being tested before release and also offers the final release. If you did not choose a channel here, TypeWhisper stays on Stable after installing a final release. Changing channels does not install anything until you choose Download and restart.": "“稳定版”包含已发布的版本。“每日版”包含最新的开发版本。“候选发布版”包含发布前正在测试的版本，也会提供正式版。如果你未在此选择通道，安装正式版后 TypeWhisper 将保持使用“稳定版”。更改通道不会安装任何内容，直到你选择“下载并重启”。",
   "Standard": "标准",
   "Start TypeWhisper with Windows": "随 Windows 启动 TypeWhisper",
   "Start and stop dictation without leaving your app.": "无需离开当前应用，即可开始或停止听写。",

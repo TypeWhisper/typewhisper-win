@@ -39,7 +39,7 @@ public sealed class LocalInferenceTests(ITestOutputHelper output)
             var entry = new PortableCatalogEntry
             {
                 Id = "com.typewhisper.qwen3-local", Name = "Qwen3 ASR (Local)", Version = "1.1.3", MinHostVersion = "1.1.6",
-                DownloadUrl = "https://fixture.invalid/qwen.zip", Size = new FileInfo(zip).Length,
+                DownloadUrl = "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-fixture-v1.0.0/qwen.zip", Size = new FileInfo(zip).Length,
                 Sha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(zip))),
                 SupportedArchitectures = ["x64", "arm64"], Categories = ["transcription"]
             };

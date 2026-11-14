@@ -376,7 +376,7 @@ public sealed class ElevenLabsTests : IDisposable
         var entry = new PortableCatalogEntry
         {
             Id = id, Name = "ElevenLabs", Version = "1.3.0", MinHostVersion = "1.1.5",
-            DownloadUrl = "https://packages.test/elevenlabs.zip", Size = payload.Length,
+            DownloadUrl = "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-fixture-v1.0.0/elevenlabs.zip", Size = payload.Length,
             Sha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(payload)),
             SupportedArchitectures = [PortablePluginCatalog.Architecture]
         };

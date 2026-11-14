@@ -152,7 +152,7 @@ public sealed class DeepgramPortableTests : IDisposable
         var entry = new PortableCatalogEntry
         {
             Id = id, Name = "Deepgram", Version = "1.1.3", MinHostVersion = "1.1.0",
-            DownloadUrl = "https://packages.test/deepgram.zip", Size = payload.Length,
+            DownloadUrl = "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-fixture-v1.0.0/deepgram.zip", Size = payload.Length,
             Sha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(payload)),
             SupportedArchitectures = [PortablePluginCatalog.Architecture]
         };

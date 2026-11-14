@@ -31,7 +31,7 @@ public partial class ClaudeTests
             var entry = new PortableCatalogEntry
             {
                 Id = "com.typewhisper.claude", Name = "Claude", Version = "1.2.0", MinHostVersion = "1.1.2",
-                DownloadUrl = "https://fixture.invalid/claude.zip", Size = bytes.Length,
+                DownloadUrl = "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-fixture-v1.0.0/claude.zip", Size = bytes.Length,
                 Sha256 = Convert.ToHexString(SHA256.HashData(bytes)), SupportedArchitectures = [PortablePluginCatalog.Architecture]
             };
             var store = Store(); await store.InitializeAsync(); await store.InstallAsync(entry);

@@ -41,7 +41,8 @@ internal sealed class WindowsApplicationUpdates : IAppUpdateBackend
         if (!installation.Supports(channel))
             throw new InvalidOperationException(Loc.T("This installation receives Daily builds only. Install TypeWhisper from the download page to use Stable or Release Candidate."));
         var feed = installation.Feed(channel);
-        var source = new AppReleaseGithubSource("https://github.com/TypeWhisper/typewhisper-win", feed, channel != AppUpdateChannel.Stable);
+        var source = new AppReleaseGithubSource("https://github.com/TypeWhisper/typewhisper-win", feed, channel != AppUpdateChannel.Stable,
+            additionalChannels: installation.AdditionalFeeds(channel));
         var manager = new UpdateManager(source, new UpdateOptions { ExplicitChannel = feed, AllowVersionDowngrade = allowDowngrade });
         try
         {

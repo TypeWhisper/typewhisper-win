@@ -53,9 +53,22 @@ public sealed class ManagedUpdatePolicyTests : IDisposable
         Assert.True(machineWide.IsManaged);
         Assert.Contains("deployment", machineWide.CheckRefusal(AppUpdateChannel.Stable));
 
-        var policyWins = ManagedUpdatePolicy.From(Build(enforced: [Number(ManagedPolicyKeys.UpdateMode, 2)]), machineWide: true);
-        Assert.Equal(AppUpdateMode.UserInitiated, policyWins.Mode);
-        Assert.Null(policyWins.InstallRefusal(AppUpdateChannel.Stable));
+        var checkOnly = ManagedUpdatePolicy.From(Build(enforced: [Number(ManagedPolicyKeys.UpdateMode, 1)]), machineWide: true);
+        Assert.Equal(AppUpdateMode.CheckOnly, checkOnly.Mode);
+        Assert.Null(checkOnly.CheckRefusal(AppUpdateChannel.Stable));
+    }
+
+    [Fact]
+    public void From_MachineWideInstallationNeverInstallsUpdatesItself()
+    {
+        var machineWide = ManagedUpdatePolicy.From(Build(enforced: [Number(ManagedPolicyKeys.UpdateMode, 2)]), machineWide: true);
+        Assert.Equal(AppUpdateMode.CheckOnly, machineWide.Mode);
+        Assert.Null(machineWide.CheckRefusal(AppUpdateChannel.Stable));
+        Assert.Contains("only checks", machineWide.InstallRefusal(AppUpdateChannel.Stable));
+
+        var perUser = ManagedUpdatePolicy.From(Build(enforced: [Number(ManagedPolicyKeys.UpdateMode, 2)]));
+        Assert.Equal(AppUpdateMode.UserInitiated, perUser.Mode);
+        Assert.Null(perUser.InstallRefusal(AppUpdateChannel.Stable));
     }
 
     [Theory]

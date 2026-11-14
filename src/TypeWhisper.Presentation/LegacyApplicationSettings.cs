@@ -76,6 +76,33 @@ public static class LegacyApplicationSettings
             RequireAuthentication = settings.ApiServerRequiresAuthentication
         });
         Check(new SetupPreferencesStore(PathFor("setup.json")).Save(settings.HasCompletedOnboarding ? 4 : 0, settings.HasCompletedOnboarding));
-        Json("updates.json", "Daily");
+        // No update channel is written: 1.0 reached this version through the feed of its own channel, so the installed
+        // track already matches it, and an inferred track leaves room for an administrator's recommendation.
+    }
+
+    /// <summary>The update channel that profile upgrades before this release wrote for every profile.</summary>
+    internal const string MigratedUpdateChannel = "\"Daily\"";
+
+    /// <summary>
+    /// Removes the Daily channel that earlier profile upgrades saved for every profile, so the installed track applies
+    /// again. Only a value written during the upgrade counts: it is not newer than the upgrade report, which the upgrade
+    /// writes last, while any choice saved in the app afterwards is. A Daily installation keeps its value, as it
+    /// resolves to the same track. Returns whether the value was removed.
+    /// </summary>
+    public static bool RepairMigratedUpdateChannel(string updatesPath, string migrationReportPath, string installedVersion)
+    {
+        try
+        {
+            var updates = new FileInfo(updatesPath);
+            var report = new FileInfo(migrationReportPath);
+            if (!updates.Exists || !report.Exists || updates.Length > 64) return false;
+            if (new AppUpdatePreferences(updatesPath, installedVersion).InstalledChannel == AppUpdateChannel.Daily) return false;
+            // Two seconds cover the coarsest timestamp resolution of the file systems a profile can live on.
+            if (updates.LastWriteTimeUtc > report.LastWriteTimeUtc + TimeSpan.FromSeconds(2)) return false;
+            if (File.ReadAllText(updatesPath) != MigratedUpdateChannel) return false;
+            File.Delete(updatesPath);
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
     }
 }

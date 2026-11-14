@@ -23,6 +23,12 @@ try {
             Where-Object { $_.Name -match '^(?:TypeWhisper.*|Squirrel|Update)\.exe$' })
         if ($executables.Count -lt 4) { throw "Missing application, CLI, launcher or updater in $($archives[0].Name)." }
         $files += $executables.FullName
+        # The TypeWhisper assemblies are signed as well, in the application folder and in the CLI folder.
+        $assemblies = @(Get-ChildItem -LiteralPath $destination -Recurse -File | Where-Object { $_.Name -match '^TypeWhisper.*\.dll$' })
+        foreach ($required in @('TypeWhisper.dll', 'TypeWhisper.Core.dll', 'TypeWhisper.Cli.dll')) {
+            if (-not ($assemblies | Where-Object Name -eq $required)) { throw "Missing $required in $($archives[0].Name)." }
+        }
+        $files += $assemblies.FullName
     }
     $manifest = Join-Path $temporary 'files.json'
     ConvertTo-Json -InputObject @($files) | Set-Content -LiteralPath $manifest

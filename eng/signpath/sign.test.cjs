@@ -55,13 +55,15 @@ test('defer only the MSI while Velopack packs', () => {
   assert.deepEqual(submitted(files, {}), files);
 });
 
-test('allow application, CLI and generated helpers without signing unrelated binaries', () => {
+test('allow application, CLI, own assemblies and generated helpers without signing unrelated binaries', () => {
   for (const name of ['TypeWhisper.exe', 'typewhisper.exe', 'TypeWhisper_ExecutionStub.exe',
     'TypeWhisperDaily-win-x64-winui-daily-Setup.exe', 'Squirrel.exe', 'Update.exe', 'TypeWhisper-win-x64.msi',
-    'TypeWhisperDaily-win-x64-winui-daily.msi']) {
+    'TypeWhisperDaily-win-x64-winui-daily.msi', 'TypeWhisper.dll', 'TypeWhisper.Core.dll', 'TypeWhisper.Cli.dll',
+    'Cli/TypeWhisper.PluginSDK.dll']) {
     assert.equal(allowedExecutable(name), true, name);
   }
-  for (const name of ['Microsoft.UI.Xaml.dll', 'TypeWhisper.dll', 'unrelated.exe', 'TypeWhisper.exe.ps1', 'unrelated.msi', 'Update.msi']) {
+  for (const name of ['Microsoft.UI.Xaml.dll', 'Velopack.dll', 'Squirrel.dll', 'unrelated.exe', 'TypeWhisper.exe.ps1',
+    'TypeWhisper.dll.config', 'unrelated.msi', 'Update.msi']) {
     assert.equal(allowedExecutable(name), false, name);
   }
 });

@@ -29,7 +29,7 @@ public partial class OpenRouterPluginTests
             var entry = new PortableCatalogEntry
             {
                 Id = "com.typewhisper.openrouter", Name = "OpenAI", Version = "1.2.0", MinHostVersion = "1.1.2",
-                DownloadUrl = "https://fixture.invalid/openrouter.zip", Size = bytes.Length, Sha256 = Convert.ToHexString(SHA256.HashData(bytes)),
+                DownloadUrl = "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-fixture-v1.0.0/openrouter.zip", Size = bytes.Length, Sha256 = Convert.ToHexString(SHA256.HashData(bytes)),
                 SupportedArchitectures = [PortablePluginCatalog.Architecture]
             };
             var store = Store(); await store.InitializeAsync(); await store.InstallAsync(entry);
