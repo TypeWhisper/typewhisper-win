@@ -793,23 +793,23 @@
     {
       "id": "com.typewhisper.whisper-cpp",
       "name": "Whisper (Local)",
-      "version": "1.2.24",
+      "version": "1.2.25",
       "minHostVersion": "1.1.6",
       "author": "TypeWhisper",
       "description": "Local transcription with whisper.cpp",
       "categories": [
         "transcription"
       ],
-      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-whisper-cpp-v1.2.24/com.typewhisper.whisper-cpp-1.2.24-win-x64.zip",
-      "sha256": "230f2f7486c7773c0f3b720416e0c06693aa79452c84a294702673418069bb55",
-      "size": 82530788,
+      "locality": "local",
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-whisper-cpp-v1.2.25/com.typewhisper.whisper-cpp-1.2.25-win-x64.zip",
+      "sha256": "673f841fc40f125078f2f4276eb1e03c504b858825535c20f7e7eca975807d44",
+      "size": 82532961,
       "platforms": [
         "windows"
       ],
       "supportedArchitectures": [
         "x64"
-      ],
-      "locality": "local"
+      ]
     },
     {
       "id": "com.typewhisper.xai",
