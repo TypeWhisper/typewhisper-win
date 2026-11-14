@@ -26,7 +26,7 @@ public class SherpaOnnxPluginTests
         var sut = new SherpaOnnxPlugin();
 
         Assert.NotNull(manifest);
-        Assert.Equal("1.4.0", manifest.Version);
+        Assert.Equal("1.4.1", manifest.Version);
         Assert.Equal(manifest.Version, sut.PluginVersion);
     }
 
@@ -146,6 +146,25 @@ public class SherpaOnnxPluginTests
         // The vocabulary is Parakeet TDT 0.6B v3's, byte for byte.
         var parakeet = Assert.Single(SherpaOnnxPlugin.DefaultModels, model => model.Id == "parakeet-tdt-0.6b");
         Assert.Equal(parakeet.Files.Single(file => file.FileName == "tokens.txt").Sha256, model.Files.Single(file => file.FileName == "tokens.txt").Sha256);
+    }
+
+    [Fact]
+    public void ParakeetUltraDownloadsTheExportWithOnlyTheEncoderMatMulsQuantized()
+    {
+        var model = Assert.Single(SherpaOnnxPlugin.DefaultModels, model => model.Id == "parakeet-ultra-0.6b");
+
+        Assert.All(model.Files, file => Assert.StartsWith(
+            "https://github.com/TypeWhisper/typewhisper-win/releases/download/model-parakeet-ultra-int8-v2/", file.DownloadUrl));
+        Assert.Equal(
+            [
+                ("encoder.int8.onnx", "04f2c974fddac63b39620d4c834d3a99c4270aec7d16725e9a4081a70b105bc9"),
+                // Byte-identical to model-parakeet-ultra-int8-v1; only the encoder's quantization changed (#781).
+                ("decoder.int8.onnx", "1fab98fe6c12aded87d2da66272cc9e148d0a0044ce3850a12fe56302ec4a922"),
+                ("joiner.int8.onnx", "8a71aaccfdba3d451775507a889afd2257d2e754463fd81095a8c8f290f924c2"),
+                ("tokens.txt", "d58544679ea4bc6ac563d1f545eb7d474bd6cfa467f0a6e2c1dc1c7d37e3c35d")
+            ],
+            model.Files.Select(file => (file.FileName, file.Sha256)));
+        Assert.Equal(("~900 MB", 900), (model.SizeDescription, model.EstimatedSizeMB));
     }
 
     [Theory]

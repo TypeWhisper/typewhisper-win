@@ -1,19 +1,31 @@
 #!/usr/bin/env python3
-"""Export a Parakeet TDT 0.6B v3 NeMo checkpoint to the sherpa-onnx transducer layout.
+r"""Export a Parakeet TDT 0.6B v3 NeMo checkpoint to the sherpa-onnx transducer layout.
 
 Produces encoder.int8.onnx, decoder.int8.onnx, joiner.int8.onnx and tokens.txt, the
-files the NVIDIA Parakeet plugin downloads. Used for Parakeet Ultra (#576):
+files the NVIDIA Parakeet plugin downloads. Used for Parakeet Ultra (#576, #781):
 
-    pip install torch "nemo_toolkit[asr]" onnx onnxruntime
-    python eng/export_parakeet_sherpa.py parakeet-tdt-0.6b-v3-ultra.nemo         "https://huggingface.co/moondream/parakeet-ultra (retrained nvidia/parakeet-tdt-0.6b-v3)" out
+    pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cpu
+    pip install "nemo_toolkit[asr]==3.0.0" onnx==1.18.0 onnxruntime==1.22.1
+    hf download Olicorne/parakeet-tdt-0.6b-v3-ultra-onnx parakeet-tdt-0.6b-v3-ultra.nemo \
+        --revision b27f93c2238aa35e138996c005a62f1e8430f801 --local-dir .
+    python eng/export_parakeet_sherpa.py parakeet-tdt-0.6b-v3-ultra.nemo \
+        "https://huggingface.co/moondream/parakeet-ultra (retrained nvidia/parakeet-tdt-0.6b-v3)" out
 
 The .nemo checkpoint with Moondream's weights comes from
-Olicorne/parakeet-tdt-0.6b-v3-ultra-onnx. sherpa-onnx recognizes a TDT model by
-"tdt" in the encoder's url metadata, so the URL argument must contain it.
+Olicorne/parakeet-tdt-0.6b-v3-ultra-onnx (SHA-256 91b81b3c09a335baa53208c6c70c97aed1c1165df71a51057f26232de33135da).
+sherpa-onnx recognizes a TDT model by "tdt" in the encoder's url metadata, so the URL
+argument must contain it.
 
 Adapted from k2-fsa/sherpa-onnx scripts/nemo/parakeet-tdt-0.6b-v3/export_onnx.py
 (Copyright 2025 Xiaomi Corp., authors: Fangjun Kuang, Apache-2.0), so the result has
-the same layout and quantization as csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8.
+the same layout as csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8. The
+quantization differs in one place: k2-fsa's build quantizes the whole encoder, while
+this script leaves the encoder's convolutions in float and quantizes only its MatMuls
+(#781). The decoder and joiner are quantized as in k2-fsa's build.
+
+With these versions on Linux the output matches the hashes pinned in SherpaOnnxPlugin.cs.
+Quantizing the whole encoder of the same export instead reproduces the files of the
+earlier release model-parakeet-ultra-int8-v1 byte for byte.
 """
 import os
 import sys
@@ -78,10 +90,13 @@ def main():
     }
 
     for m in ["encoder", "decoder", "joiner"]:
+        encoder = m == "encoder"
         quantize_dynamic(
             model_input=f"./{m}.onnx",
             model_output=f"./{m}.int8.onnx",
-            weight_type=QuantType.QUInt8 if m == "encoder" else QuantType.QInt8,
+            weight_type=QuantType.QUInt8 if encoder else QuantType.QInt8,
+            # Quantizing the encoder's convolutions too cost accuracy (#780, #781).
+            op_types_to_quantize=["MatMul"] if encoder else None,
         )
 
     add_meta_data("encoder.int8.onnx", meta_data)

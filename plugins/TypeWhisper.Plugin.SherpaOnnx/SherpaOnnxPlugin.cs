@@ -37,8 +37,11 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
     // tokens.txt, which is not stored in LFS, was hashed from a download of that commit.
     // Commit 2bda32ec of 2025-08-16.
     private const string ParakeetRepo = "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/resolve/2bda32ec70b097a55adaa07d9a7173915b43cc78";
-    // Our own export of moondream/parakeet-ultra with the sherpa-onnx v3 script; the files are pinned by hash.
-    private const string ParakeetUltraRepo = "https://github.com/TypeWhisper/typewhisper-win/releases/download/model-parakeet-ultra-int8-v1";
+    // Our own export of moondream/parakeet-ultra with eng/export_parakeet_sherpa.py; the files are pinned by hash. v2
+    // quantizes only the encoder's MatMuls and keeps its convolutions in float, which lowered the word error rate on
+    // FLEURS from 14.2 % to 10.6 % (#781). Its decoder, joiner and tokens.txt are v1's. Installs that downloaded v1 keep
+    // its encoder, because a file already at its final name is not downloaded again.
+    private const string ParakeetUltraRepo = "https://github.com/TypeWhisper/typewhisper-win/releases/download/model-parakeet-ultra-int8-v2";
     // FluidVoice-Labs/fluid-speech-pro-onnx at commit fa588e9f of 2026-11-13, quantized by TypeWhisper with
     // eng/quantize_fluid_speech_pro.py (its convolutions stay in float, so it is larger); the files are pinned by hash.
     private const string FluidSpeechProRepo = "https://github.com/TypeWhisper/typewhisper-win/releases/download/model-fluid-speech-pro-int8-v1";
@@ -57,9 +60,9 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
 
     internal static readonly IReadOnlyList<ModelDefinition> DefaultModels =
     [
-        new("parakeet-ultra-0.6b", "Parakeet Ultra 0.6B", "Moondream", "~670 MB", 670, 25, true, false,
+        new("parakeet-ultra-0.6b", "Parakeet Ultra 0.6B", "Moondream", "~900 MB", 900, 25, true, false,
         [
-            new("encoder.int8.onnx", $"{ParakeetUltraRepo}/encoder.int8.onnx", 652, "b42621d3c0f40fe0236a629fd6c3fad13575e5f9d22ed1a5addba14091931211"),
+            new("encoder.int8.onnx", $"{ParakeetUltraRepo}/encoder.int8.onnx", 880, "04f2c974fddac63b39620d4c834d3a99c4270aec7d16725e9a4081a70b105bc9"),
             new("decoder.int8.onnx", $"{ParakeetUltraRepo}/decoder.int8.onnx", 12, "1fab98fe6c12aded87d2da66272cc9e148d0a0044ce3850a12fe56302ec4a922"),
             new("joiner.int8.onnx", $"{ParakeetUltraRepo}/joiner.int8.onnx", 6, "8a71aaccfdba3d451775507a889afd2257d2e754463fd81095a8c8f290f924c2"),
             new("tokens.txt", $"{ParakeetUltraRepo}/tokens.txt", 1, "d58544679ea4bc6ac563d1f545eb7d474bd6cfa467f0a6e2c1dc1c7d37e3c35d")
@@ -155,7 +158,7 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.4.0";
+    public string PluginVersion => "1.4.1";
 
     // ITranscriptionEnginePlugin
     /// <summary>
