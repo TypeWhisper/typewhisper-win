@@ -308,6 +308,22 @@ public sealed class TranscribeCppTests : IDisposable
         Assert.Equal(SherpaOnnxPlugin.ParakeetMaximumChunkSeconds + 60, result.DurationSeconds, 3);
     }
 
+    [GpuPlatformFact]
+    public async Task UnknownTokensFromTheGpuDoNotReachTheTextOrTheTokenTimings()
+    {
+        using var http = Server(out _);
+        using var plugin = CreatePlugin(http, path => new FakeGpu(path, "an M<unk>A <unk>deal",
+            [new("▁an", .1, .2), new("▁M", .2, .3), new("<unk>", .3, .4), new("A", .4, .5), new("▁<unk>", .5, .6), new("▁deal", .6, .7)]));
+        await plugin.ActivateAsync(new TestHost(_root));
+        plugin.SetAccelerationPreference(TranscriptionAccelerationPreference.AmdVulkan);
+        await plugin.LoadModelAsync(ModelId, default);
+
+        var result = await plugin.TranscribePcmAsync(new float[16000], null, false, default);
+
+        Assert.Equal("an M&A deal", result.Text);
+        Assert.Equal(["▁an", "▁M", "A", "▁deal"], result.TokenTimings.Select(t => t.Text));
+    }
+
     /// <summary>
     /// Loads the real runtime and model through the plugin's GPU path and transcribes on the machine's graphics card.
     /// Opt-in because it needs about 760 MB of files and a Vulkan driver.
@@ -415,17 +431,18 @@ public sealed class TranscribeCppTests : IDisposable
         public void Report(double value) => report(value);
     }
 
-    private sealed class FakeGpu(string path) : IGpuRecognizer
+    private sealed class FakeGpu(string path, string text = "Hallo Welt", TranscribeCppToken[]? tokens = null) : IGpuRecognizer
     {
         internal string Path { get; } = path;
         internal List<int> Lengths { get; } = [];
         internal bool Disposed { get; private set; }
         public TranscriptionAccelerationStatus Status { get; } = new(TranscriptionAccelerationBackend.AmdVulkan, "Test GPU");
 
-        public TranscribeCppResult Transcribe(float[] samples, bool tokens, CancellationToken cancellationToken)
+        public TranscribeCppResult Transcribe(float[] samples, bool withTokens, CancellationToken cancellationToken)
         {
             Lengths.Add(samples.Length);
-            return new("Hallo Welt", tokens ? [new("Hal", .1, .2), new("lo", .2, .3), new(" Welt", .4, .6)] : []);
+            TranscribeCppToken[] all = tokens ?? [new("Hal", .1, .2), new("lo", .2, .3), new(" Welt", .4, .6)];
+            return new(text, withTokens ? all : []);
         }
 
         public void Dispose() => Disposed = true;

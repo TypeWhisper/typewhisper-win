@@ -422,6 +422,7 @@ public sealed class FileLexiconTests : IDisposable
     [Theory]
     [InlineData(TranscriptionTask.Transcribe, false, "parakeet-tdt-0.6b", true, 1, true)]
     [InlineData(TranscriptionTask.Transcribe, false, "parakeet-ultra-0.6b", true, 1, true)]
+    [InlineData(TranscriptionTask.Transcribe, false, "fluid-speech-pro", true, 1, true)]
     [InlineData(TranscriptionTask.Translate, false, "parakeet-tdt-0.6b", true, 1, false)]
     [InlineData(TranscriptionTask.Transcribe, true, "parakeet-tdt-0.6b", true, 1, false)]
     [InlineData(TranscriptionTask.Transcribe, false, "canary-180m", true, 1, false)]

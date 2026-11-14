@@ -23,6 +23,7 @@ public class SpokenFormattingStrategyResolverTests : IDisposable
     [Theory]
     [InlineData("parakeet-tdt-0.6b")]
     [InlineData("parakeet-ultra-0.6b")]
+    [InlineData("fluid-speech-pro")]
     public void Resolve_MissingProfile_DefaultsToNative(string modelId)
     {
         var result = _sut.Resolve("sherpa-onnx", modelId, ["de"], null);

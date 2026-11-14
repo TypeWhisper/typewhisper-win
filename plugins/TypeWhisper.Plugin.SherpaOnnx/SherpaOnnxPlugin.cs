@@ -39,6 +39,9 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
     private const string ParakeetRepo = "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/resolve/2bda32ec70b097a55adaa07d9a7173915b43cc78";
     // Our own export of moondream/parakeet-ultra with the sherpa-onnx v3 script; the files are pinned by hash.
     private const string ParakeetUltraRepo = "https://github.com/TypeWhisper/typewhisper-win/releases/download/model-parakeet-ultra-int8-v1";
+    // FluidVoice-Labs/fluid-speech-pro-onnx at commit fa588e9f of 2026-11-13, quantized by TypeWhisper with
+    // eng/quantize_fluid_speech_pro.py (its convolutions stay in float, so it is larger); the files are pinned by hash.
+    private const string FluidSpeechProRepo = "https://github.com/TypeWhisper/typewhisper-win/releases/download/model-fluid-speech-pro-int8-v1";
     // Commit 9077164e of 2025-07-07.
     private const string CanaryRepo = "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-canary-180m-flash-en-es-de-fr-int8/resolve/9077164e0d3dd1d5353743e89ceaa1d3a770838c";
     // A download is verified under this suffix and only renamed to its final name once its hash matches.
@@ -61,6 +64,14 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
             new("joiner.int8.onnx", $"{ParakeetUltraRepo}/joiner.int8.onnx", 6, "8a71aaccfdba3d451775507a889afd2257d2e754463fd81095a8c8f290f924c2"),
             new("tokens.txt", $"{ParakeetUltraRepo}/tokens.txt", 1, "d58544679ea4bc6ac563d1f545eb7d474bd6cfa467f0a6e2c1dc1c7d37e3c35d")
         ], ParakeetGguf.ParakeetUltraQ8),
+        // transcribe.cpp has no GGUF of it, so it runs on the CPU only.
+        new("fluid-speech-pro", "Fluid Speech Pro", "FluidVoice", "~900 MB", 900, 25, false, false,
+        [
+            new("encoder.int8.onnx", $"{FluidSpeechProRepo}/encoder.int8.onnx", 882, "44a0312c54cc9b337ec72f78216df26720c107a9f14d41bd6062255fcde35a0a"),
+            new("decoder.int8.onnx", $"{FluidSpeechProRepo}/decoder.int8.onnx", 12, "ce5cb0576d3c072d12188944a29737d7b81f329a29d1c9f636669e9b9d4672bf"),
+            new("joiner.int8.onnx", $"{FluidSpeechProRepo}/joiner.int8.onnx", 6, "231442707e1850d53a7d66dea6a4b5264ae9f38d2468980cfe8ee8b7847097ab"),
+            new("tokens.txt", $"{FluidSpeechProRepo}/tokens.txt", 1, "d58544679ea4bc6ac563d1f545eb7d474bd6cfa467f0a6e2c1dc1c7d37e3c35d")
+        ]),
         new("parakeet-tdt-0.6b", "Parakeet TDT 0.6B", "NVIDIA", "~670 MB", 670, 25, false, false,
         [
             new("encoder.int8.onnx", $"{ParakeetRepo}/encoder.int8.onnx", 652, "acfc2b4456377e15d04f0243af540b7fe7c992f8d898d751cf134c3a55fd2247"),
@@ -144,7 +155,7 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.3.4";
+    public string PluginVersion => "1.4.0";
 
     // ITranscriptionEnginePlugin
     /// <summary>
@@ -529,7 +540,7 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
                 if (audioSamples.Length > ParakeetMaximumChunkSeconds * SampleRate)
                 {
                     var recognizer = _recognizer;
-                    return new PluginTranscriptionResult(TranscribeParakeetSamples(chunk => RecognizeSamples(recognizer, chunk), audioSamples,
+                    return new PluginTranscriptionResult(TranscribeParakeetSamples(chunk => UnknownTokens.Remove(RecognizeSamples(recognizer, chunk)), audioSamples,
                         cancellationToken), null, audioDuration, NoSpeechProbability: null);
                 }
 
@@ -538,10 +549,10 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
                 _recognizer.Decode(stream);
                 var result = stream.Result;
 
-                return new PluginTranscriptionResult(result.Text.Trim(), null, audioDuration, NoSpeechProbability: null)
+                return new PluginTranscriptionResult(UnknownTokens.Remove(result.Text.Trim()), null, audioDuration, NoSpeechProbability: null)
                 {
                     TokenTimings = result.Tokens is not null && result.Timestamps is not null
-                        ? TypeWhisper.PluginSDK.Helpers.TranscriptionTokenTimings.Create(result.Tokens, result.Timestamps, result.Durations, audioDuration) : []
+                        ? UnknownTokens.Remove(TranscriptionTokenTimings.Create(result.Tokens, result.Timestamps, result.Durations, audioDuration)) : []
                 };
             }
         }, cancellationToken);
@@ -554,10 +565,13 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
         var duration = audioSamples.Length / (double)SampleRate;
         if (audioSamples.Length == 0) return new(string.Empty, null, 0, NoSpeechProbability: null);
         if (audioSamples.Length > ParakeetMaximumChunkSeconds * SampleRate)
-            return new(TranscribeParakeetSamples(chunk => gpu.Transcribe(chunk, tokens: false, ct).Text, audioSamples, ct),
+            return new(TranscribeParakeetSamples(chunk => UnknownTokens.Remove(gpu.Transcribe(chunk, tokens: false, ct).Text), audioSamples, ct),
                 null, duration, NoSpeechProbability: null);
         var result = gpu.Transcribe(audioSamples, tokens: true, ct);
-        return new(result.Text, null, duration, NoSpeechProbability: null) { TokenTimings = TokenTimings(result.Tokens, duration) };
+        return new(UnknownTokens.Remove(result.Text), null, duration, NoSpeechProbability: null)
+        {
+            TokenTimings = UnknownTokens.Remove(TokenTimings(result.Tokens, duration))
+        };
     }
 
     internal static VocabularyTokenTiming[] TokenTimings(IReadOnlyList<TranscribeCppToken> tokens, double duration) =>
@@ -607,7 +621,8 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
         {
             ct.ThrowIfCancellationRequested();
             var samples = chunks.Count == 1 ? audioSamples : audioSamples[chunk.Offset..(chunk.Offset + chunk.Count)];
-            var (text, language) = ParseCanaryResult(RecognizeSamples(recognizer, samples));
+            var (rawText, language) = ParseCanaryResult(RecognizeSamples(recognizer, samples));
+            var text = UnknownTokens.Remove(rawText);
             // Chunks do not overlap, so joining must not drop words that repeat across a boundary.
             transcript = transcript.Length == 0 ? text : AppendTranscript(transcript, text);
             detectedLanguage ??= language;

@@ -8,6 +8,10 @@
 - The ONNX models are downloaded on demand, pinned to a revision and a SHA-256 each:
   - Parakeet TDT 0.6B v3: NVIDIA Corporation, CC-BY-4.0, in csukuangfj's sherpa-onnx int8 export.
   - Parakeet Ultra 0.6B: Moondream's retrain of nvidia/parakeet-tdt-0.6b-v3 (https://huggingface.co/moondream/parakeet-ultra), CC-BY-4.0, exported by TypeWhisper with `eng/export_parakeet_sherpa.py`.
+  - Fluid Speech Pro: Fluid Speech Pro by FluidVoice. Built on NVIDIA Parakeet TDT 0.6B v3 and Moondream Parakeet
+    Ultra. CC-BY-4.0 (https://huggingface.co/FluidVoice-Labs/fluid-speech-pro-onnx, revision
+    fa588e9f87f1b9ad0ca2e2d8f7eaf84dc3803581). TypeWhisper quantized FluidVoice's fp32 ONNX files to int8 with
+    `eng/quantize_fluid_speech_pro.py`.
   - Canary 180M Flash: NVIDIA Corporation, CC-BY-4.0, in csukuangfj's sherpa-onnx int8 export.
 
 ## GPU (Vulkan)
@@ -27,4 +31,4 @@ device, the plugin downloads them and verifies each against a pinned SHA-256 bef
   as the ONNX export with transcribe.cpp 0.3.1's `scripts/convert-parakeet.py` and quantized to Q8_0 with its
   `transcribe-quantize`.
 
-TypeWhisper does not otherwise modify the model weights.
+Apart from the conversions and quantizations named above, TypeWhisper does not modify the model weights.
