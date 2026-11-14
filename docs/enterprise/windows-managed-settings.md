@@ -320,9 +320,12 @@ if (Test-Path -LiteralPath $dir) { throw "$dir already exists; choose a new fold
 New-Item -ItemType Directory -Path $dir | Out-Null
 icacls $dir /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' '*S-1-5-32-545:(OI)(CI)RX'
 icacls $dir   # must list only SYSTEM, Administrators (F) and Users (RX)
+if (Get-ChildItem -LiteralPath $dir -Force) { throw "$dir is not empty; remove it and start again." }
 ```
 
-If `icacls` lists any other entry, remove it before you install.
+If `icacls` lists any other entry, remove it before you install. The folder must still
+be empty after the permissions are set: until then it inherits the parent's permissions,
+so anything a user created in it meanwhile could keep that user's write access.
 
 `S-1-5-18`, `S-1-5-32-544` and `S-1-5-32-545` are `SYSTEM`, `Administrators` and
 `Users` in every Windows language. Also check that no parent folder grants users the
