@@ -771,7 +771,7 @@
     {
       "id": "com.typewhisper.webhook",
       "name": "Webhook",
-      "version": "1.3.3",
+      "version": "1.3.4",
       "minHostVersion": "1.1.2",
       "author": "TypeWhisper",
       "description": "Send dictation as JSON to your automations. Test destinations before enabling delivery.",
@@ -779,16 +779,16 @@
         "post-processing",
         "integrations"
       ],
-      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-webhook-v1.3.3/com.typewhisper.webhook-1.3.3-win-x64.zip",
-      "sha256": "8a0ecb4bc63ffee077920314dd5e94b63d326b02261917a97b816f03c304dd7a",
-      "size": 21147,
+      "locality": "configurable",
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-webhook-v1.3.4/com.typewhisper.webhook-1.3.4-win-x64.zip",
+      "sha256": "392d6f29f4c1441989c1fa7abf1ad8af8b6ec6f285f169dd0f350e3d6e037b52",
+      "size": 23365,
       "platforms": [
         "windows"
       ],
       "supportedArchitectures": [
         "x64"
-      ],
-      "locality": "configurable"
+      ]
     },
     {
       "id": "com.typewhisper.whisper-cpp",
