@@ -494,7 +494,7 @@
     {
       "id": "com.typewhisper.sherpa-onnx",
       "name": "NVIDIA Parakeet",
-      "version": "1.4.0",
+      "version": "1.4.1",
       "minHostVersion": "1.1.6",
       "author": "TypeWhisper",
       "description": "Offline transcription with NVIDIA Parakeet, Parakeet Ultra, Fluid Speech Pro and Canary on the CPU or, for Parakeet, any graphics card with Vulkan. Audio is processed on your device.",
@@ -502,9 +502,9 @@
         "transcription"
       ],
       "locality": "local",
-      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-sherpa-onnx-v1.4.0/com.typewhisper.sherpa-onnx-1.4.0-win-x64.zip",
-      "sha256": "93a23220ea4fec837cbe640d9102714a07d7b379a5b2028706720116e081c896",
-      "size": 68069787,
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-sherpa-onnx-v1.4.1/com.typewhisper.sherpa-onnx-1.4.1-win-x64.zip",
+      "sha256": "c8e71acca25f3a2ac0723382b5a991b61e7e6becd95f6d5804d7a8a6fd2c75d4",
+      "size": 68069816,
       "platforms": [
         "windows"
       ],
