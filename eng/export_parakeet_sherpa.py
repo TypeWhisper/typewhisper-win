@@ -4,7 +4,8 @@ r"""Export a Parakeet TDT 0.6B v3 NeMo checkpoint to the sherpa-onnx transducer 
 Produces encoder.int8.onnx, decoder.int8.onnx, joiner.int8.onnx and tokens.txt, the
 files the NVIDIA Parakeet plugin downloads. Used for Parakeet Ultra (#576, #781):
 
-    pip install torch "nemo_toolkit[asr]" onnx==1.18.0 onnxruntime==1.22.1
+    pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cpu
+    pip install "nemo_toolkit[asr]==3.0.0" onnx==1.18.0 onnxruntime==1.22.1
     hf download Olicorne/parakeet-tdt-0.6b-v3-ultra-onnx parakeet-tdt-0.6b-v3-ultra.nemo \
         --revision b27f93c2238aa35e138996c005a62f1e8430f801 --local-dir .
     python eng/export_parakeet_sherpa.py parakeet-tdt-0.6b-v3-ultra.nemo \
@@ -21,6 +22,10 @@ the same layout as csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8. The
 quantization differs in one place: k2-fsa's build quantizes the whole encoder, while
 this script leaves the encoder's convolutions in float and quantizes only its MatMuls
 (#781). The decoder and joiner are quantized as in k2-fsa's build.
+
+With these versions on Linux the output matches the hashes pinned in SherpaOnnxPlugin.cs.
+Quantizing the whole encoder of the same export instead reproduces the files of the
+earlier release model-parakeet-ultra-int8-v1 byte for byte.
 """
 import os
 import sys

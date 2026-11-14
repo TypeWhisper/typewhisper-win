@@ -7,7 +7,8 @@
 - Dictionary boosting (`Dependencies/com.typewhisper.parakeet-ctc`): see that folder's THIRD-PARTY-NOTICES.md for its ONNX Runtime, the bundled Microsoft Visual C++ runtime files and the model references.
 - The ONNX models are downloaded on demand, pinned to a revision and a SHA-256 each:
   - Parakeet TDT 0.6B v3: NVIDIA Corporation, CC-BY-4.0, in csukuangfj's sherpa-onnx int8 export.
-  - Parakeet Ultra 0.6B: Moondream's retrain of nvidia/parakeet-tdt-0.6b-v3 (https://huggingface.co/moondream/parakeet-ultra), CC-BY-4.0, exported by TypeWhisper with `eng/export_parakeet_sherpa.py`.
+  - Parakeet Ultra 0.6B: Moondream's retrain of nvidia/parakeet-tdt-0.6b-v3 (https://huggingface.co/moondream/parakeet-ultra), CC-BY-4.0, exported by TypeWhisper with `eng/export_parakeet_sherpa.py`, which quantizes the
+    encoder's MatMuls to int8 and keeps its convolutions in float.
   - Fluid Speech Pro: Fluid Speech Pro by FluidVoice. Built on NVIDIA Parakeet TDT 0.6B v3 and Moondream Parakeet
     Ultra. CC-BY-4.0 (https://huggingface.co/FluidVoice-Labs/fluid-speech-pro-onnx, revision
     fa588e9f87f1b9ad0ca2e2d8f7eaf84dc3803581). TypeWhisper quantized FluidVoice's fp32 ONNX files to int8 with
