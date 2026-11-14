@@ -52,6 +52,11 @@ def long_paths_enabled():
         return False
 
 
+def windows_path_length(path):
+    """Length in UTF-16 code units, which Windows counts: characters outside the BMP take two."""
+    return len(path.encode("utf-16-le")) // 2
+
+
 def path_length_error(directory, filenames):
     """Explains a model folder whose files Windows cannot open, or returns None.
 
@@ -60,7 +65,7 @@ def path_length_error(directory, filenames):
     """
     if not filenames or long_paths_enabled():
         return None
-    longest = len(os.path.abspath(directory)) + 1 + max(len(name) for name in filenames)
+    longest = max(windows_path_length(os.path.join(os.path.abspath(directory), name)) for name in filenames)
     if longest < MAX_PATH:
         return None
     return (

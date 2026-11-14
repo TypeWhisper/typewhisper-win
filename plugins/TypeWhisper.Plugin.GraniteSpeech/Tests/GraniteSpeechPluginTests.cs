@@ -183,7 +183,7 @@ public sealed class GraniteSpeechPluginTests
     [Fact]
     public async Task OldCacheIsRemovedOnlyOnceTheModelFolderIsComplete()
     {
-        var dataDir = Path.Combine(Path.GetTempPath(), "granite-legacy-" + Guid.NewGuid().ToString("N"));
+        var dataDir = Path.Join(Path.GetTempPath(), "granite-legacy-" + Guid.NewGuid().ToString("N"));
         try
         {
             var legacy = Path.Join(dataDir, "hf-cache", "hub");
@@ -206,7 +206,7 @@ public sealed class GraniteSpeechPluginTests
     [Fact]
     public async Task SetupFailureIsShownInSettingsAndLoggedUntilTheModelIsRemoved()
     {
-        var root = Path.Combine(Path.GetTempPath(), "granite-setup-error-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Join(Path.GetTempPath(), "granite-setup-error-" + Guid.NewGuid().ToString("N"));
         try
         {
             var host = new FakePluginHostServices(root);

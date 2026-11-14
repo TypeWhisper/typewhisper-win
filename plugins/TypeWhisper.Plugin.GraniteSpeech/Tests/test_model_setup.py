@@ -106,6 +106,8 @@ class SetupTests(unittest.TestCase):
             error = server.path_length_error(deep, names)
             self.assertIn(f"{server.MAX_PATH} characters", error)
             self.assertIn(deep, error)
+            # A character outside the BMP takes two UTF-16 units, so the same number of characters is too long.
+            self.assertIsNotNone(server.path_length_error(deep[:-2] + "\U0001F600", names))
         with patch.object(server, "long_paths_enabled", lambda: True):
             self.assertIsNone(server.path_length_error(deep, names))
 
