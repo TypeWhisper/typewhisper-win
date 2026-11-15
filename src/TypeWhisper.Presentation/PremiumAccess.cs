@@ -13,12 +13,28 @@ public sealed record PremiumAccess(bool Commercial = false, bool PremiumAccount 
     /// <summary>Returns the access step required by a feature.</summary>
     public PremiumRequirement Requirement(PremiumFeature feature) => feature switch
     {
-        PremiumFeature.CalendarMeetings => Any ? PremiumRequirement.Available : PremiumRequirement.CommercialOrPremium,
-        PremiumFeature.CorrectionLearning => Commercial ? PremiumRequirement.Available : PremiumRequirement.Commercial,
-        PremiumFeature.CloudSync when !PremiumAccount => Commercial && SignedIn
-            ? PremiumRequirement.LinkCommercialLicense : PremiumRequirement.PremiumAccount,
+        PremiumFeature.CalendarMeetings => Requirement(PremiumRequirement.CommercialOrPremium),
+        PremiumFeature.CorrectionLearning => Requirement(PremiumRequirement.Commercial),
+        PremiumFeature.CloudSync when !PremiumAccount => Requirement(PremiumRequirement.PremiumAccount),
         PremiumFeature.CloudSync => SignedIn ? PremiumRequirement.Available : PremiumRequirement.SignIn,
         _ => throw new ArgumentOutOfRangeException(nameof(feature))
+    };
+
+    /// <summary>
+    /// Returns the access step for a feature that is not listed in <see cref="PremiumFeature"/>, such as one from an
+    /// optional module, given the kind of access it needs.
+    /// </summary>
+    /// <param name="needed"><see cref="PremiumRequirement.CommercialOrPremium"/>, <see cref="PremiumRequirement.Commercial"/>
+    /// or <see cref="PremiumRequirement.PremiumAccount"/>.</param>
+    public PremiumRequirement Requirement(PremiumRequirement needed) => needed switch
+    {
+        PremiumRequirement.CommercialOrPremium => Any ? PremiumRequirement.Available : PremiumRequirement.CommercialOrPremium,
+        PremiumRequirement.Commercial => Commercial ? PremiumRequirement.Available : PremiumRequirement.Commercial,
+        // A signed-in commercial license holder gets Premium account access by linking the license.
+        PremiumRequirement.PremiumAccount when !PremiumAccount => Commercial && SignedIn
+            ? PremiumRequirement.LinkCommercialLicense : PremiumRequirement.PremiumAccount,
+        PremiumRequirement.PremiumAccount => PremiumRequirement.Available,
+        _ => throw new ArgumentOutOfRangeException(nameof(needed))
     };
 }
 

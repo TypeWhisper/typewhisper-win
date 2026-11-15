@@ -44,6 +44,32 @@ public sealed class PremiumAccessTests : IDisposable
     }
 
     [Fact]
+    public void RequirementByKindMatchesTheFeaturesThatNeedThatKind()
+    {
+        foreach (var commercial in new[] { false, true })
+        foreach (var premium in new[] { false, true })
+        foreach (var signedIn in new[] { false, true })
+        foreach (var supporter in new[] { false, true })
+        {
+            var access = new PremiumAccess(commercial, premium, signedIn, supporter);
+            Assert.Equal(access.Requirement(PremiumFeature.CalendarMeetings), access.Requirement(PremiumRequirement.CommercialOrPremium));
+            Assert.Equal(access.Requirement(PremiumFeature.CorrectionLearning), access.Requirement(PremiumRequirement.Commercial));
+            // A Premium account entitlement is enough; only cloud sync also needs a session.
+            Assert.Equal(premium, access.Requirement(PremiumRequirement.PremiumAccount) == PremiumRequirement.Available);
+            if (!premium) Assert.Equal(access.Requirement(PremiumFeature.CloudSync), access.Requirement(PremiumRequirement.PremiumAccount));
+        }
+        Assert.Equal(PremiumRequirement.LinkCommercialLicense, new PremiumAccess(Commercial: true, SignedIn: true).Requirement(PremiumRequirement.PremiumAccount));
+        Assert.Equal(PremiumRequirement.Available, new PremiumAccess(PremiumAccount: true).Requirement(PremiumRequirement.PremiumAccount));
+    }
+
+    [Theory]
+    [InlineData(PremiumRequirement.Available)]
+    [InlineData(PremiumRequirement.SignIn)]
+    [InlineData(PremiumRequirement.LinkCommercialLicense)]
+    public void RequirementByKindRejectsStepsThatAreNotAccessKinds(PremiumRequirement step) =>
+        Assert.Throws<ArgumentOutOfRangeException>(() => new PremiumAccess(Commercial: true, PremiumAccount: true, SignedIn: true).Requirement(step));
+
+    [Fact]
     public void ResetRestoresActualAccessAndDeletesOnlyDevelopmentState()
     {
         Directory.CreateDirectory(_root);
