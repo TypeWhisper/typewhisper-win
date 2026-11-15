@@ -49,9 +49,8 @@ internal sealed partial class HostModules
 
         var accepted = new List<IHostModule>(created.Count);
         var combined = new ModuleContributions();
-        foreach (var module in created)
+        foreach (var module in created.Where(module => module is not null))
         {
-            if (module is null) continue;
             // Each module fills its own collection, so one that throws halfway leaves nothing behind.
             var own = new ModuleContributions();
             try

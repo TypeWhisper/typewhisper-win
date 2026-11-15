@@ -8,8 +8,8 @@ namespace TypeWhisper.Presentation.Tests;
 public sealed class ModulesBuildSwitchTests : IDisposable
 {
     private static readonly string RepoRoot = FindRepoRoot();
-    private static readonly string AppProject = Path.Combine(RepoRoot, "src", "TypeWhisper.WinUI", "TypeWhisper.WinUI.csproj");
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "modules-switch-" + Guid.NewGuid().ToString("N"));
+    private static readonly string AppProject = Path.Join(RepoRoot, "src", "TypeWhisper.WinUI", "TypeWhisper.WinUI.csproj");
+    private readonly string _root = Path.Join(Path.GetTempPath(), "modules-switch-" + Guid.NewGuid().ToString("N"));
 
     public ModulesBuildSwitchTests() => Directory.CreateDirectory(_root);
 
@@ -18,7 +18,7 @@ public sealed class ModulesBuildSwitchTests : IDisposable
     [Fact]
     public void RequiringModulesFailsWhenOnlyTheStubWouldBeLinked()
     {
-        var missing = Path.Combine(_root, "missing", "TypeWhisper.Modules.csproj");
+        var missing = Path.Join(_root, "missing", "TypeWhisper.Modules.csproj");
 
         var (exitCode, output) = MSBuild("-t:CheckTypeWhisperModules", "-p:TypeWhisperRequireModules=true", $"-p:TypeWhisperModulesProject={missing}");
 
@@ -39,7 +39,7 @@ public sealed class ModulesBuildSwitchTests : IDisposable
     [Fact]
     public void WithoutTheRequirementAMissingModulesProjectLinksTheStub()
     {
-        var missing = Path.Combine(_root, "missing", "TypeWhisper.Modules.csproj");
+        var missing = Path.Join(_root, "missing", "TypeWhisper.Modules.csproj");
 
         var (exitCode, output) = MSBuild("-t:CheckTypeWhisperModules", $"-p:TypeWhisperModulesProject={missing}");
         Assert.True(exitCode == 0, output);
@@ -69,14 +69,14 @@ public sealed class ModulesBuildSwitchTests : IDisposable
         var (exitCode, output) = MSBuild("-getProperty:TypeWhisperModulesProject");
 
         Assert.True(exitCode == 0, output);
-        var expected = Path.Combine(RepoRoot, "external", "typewhisper-premium-win", "src", "TypeWhisper.Modules", "TypeWhisper.Modules.csproj");
+        var expected = Path.Join(RepoRoot, "external", "typewhisper-premium-win", "src", "TypeWhisper.Modules", "TypeWhisper.Modules.csproj");
         Assert.Equal(Path.GetFullPath(expected), Path.GetFullPath(output.Trim()));
     }
 
     // Only its existence matters for the switch; evaluation does not read it.
     private string CreateModulesProjectFile()
     {
-        var path = Path.Combine(_root, "present", "TypeWhisper.Modules.csproj");
+        var path = Path.Join(_root, "present", "TypeWhisper.Modules.csproj");
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, "<Project Sdk=\"Microsoft.NET.Sdk\" />");
         return path;
@@ -103,16 +103,23 @@ public sealed class ModulesBuildSwitchTests : IDisposable
         foreach (var argument in new[] { "msbuild", AppProject, "-nologo", "-nodeReuse:false", "-p:Configuration=Release" }.Concat(arguments))
             start.ArgumentList.Add(argument);
         using var process = Process.Start(start)!;
+        // Both streams are read in the background so the deadline also covers an MSBuild that keeps them open.
+        var output = process.StandardOutput.ReadToEndAsync();
         var error = process.StandardError.ReadToEndAsync();
-        var output = process.StandardOutput.ReadToEnd();
-        Assert.True(process.WaitForExit(TimeSpan.FromMinutes(2)), "MSBuild did not finish.");
-        return (process.ExitCode, output + error.Result);
+        if (!process.WaitForExit(TimeSpan.FromMinutes(2)))
+        {
+            process.Kill(entireProcessTree: true);
+            process.WaitForExit();
+            Assert.Fail("MSBuild did not finish within two minutes.");
+        }
+        process.WaitForExit();
+        return (process.ExitCode, output.Result + error.Result);
     }
 
     private static string FindRepoRoot()
     {
         for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
-            if (File.Exists(Path.Combine(directory.FullName, "TypeWhisper.slnx"))) return directory.FullName;
+            if (File.Exists(Path.Join(directory.FullName, "TypeWhisper.slnx"))) return directory.FullName;
         throw new InvalidOperationException("The repository root was not found.");
     }
 }
