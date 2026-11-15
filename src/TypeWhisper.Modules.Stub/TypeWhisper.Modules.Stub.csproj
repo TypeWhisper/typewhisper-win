@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Linked when no optional modules project is present. It uses the same assembly name as the modules that official
+       builds can include, and marks itself with the assembly metadata TypeWhisperModules=stub. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>TypeWhisper.Modules</RootNamespace>
+    <AssemblyName>TypeWhisper.Modules</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../TypeWhisper.ModuleKit/TypeWhisper.ModuleKit.csproj" />
+  </ItemGroup>
+
+</Project>

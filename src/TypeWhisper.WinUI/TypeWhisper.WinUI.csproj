@@ -23,6 +23,24 @@
          on the UI thread, which also serves the global dictation keyboard hooks. -->
     <PublishReadyToRun Condition="'$(Configuration)' == 'Release'">true</PublishReadyToRun>
   </PropertyGroup>
+  <!-- Optional modules that official builds can include. When the modules project exists it is referenced,
+       otherwise the stub, which has the same assembly name and contributes nothing. Builds that must include the
+       modules pass -p:TypeWhisperRequireModules=true and fail instead of linking the stub. -->
+  <PropertyGroup>
+    <TypeWhisperRepoRoot>$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)', '..', '..'))</TypeWhisperRepoRoot>
+    <TypeWhisperModulesProject Condition="'$(TypeWhisperModulesProject)' == ''">$([MSBuild]::NormalizePath('$(TypeWhisperRepoRoot)', 'external', 'typewhisper-premium-win', 'src', 'TypeWhisper.Modules', 'TypeWhisper.Modules.csproj'))</TypeWhisperModulesProject>
+    <TypeWhisperModulesLinked>false</TypeWhisperModulesLinked>
+    <TypeWhisperModulesLinked Condition="Exists('$(TypeWhisperModulesProject)')">true</TypeWhisperModulesLinked>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../TypeWhisper.ModuleKit/TypeWhisper.ModuleKit.csproj" />
+    <ProjectReference Include="$(TypeWhisperModulesProject)" Condition="'$(TypeWhisperModulesLinked)' == 'true'" />
+    <ProjectReference Include="../TypeWhisper.Modules.Stub/TypeWhisper.Modules.Stub.csproj" Condition="'$(TypeWhisperModulesLinked)' != 'true'" />
+  </ItemGroup>
+  <Target Name="CheckTypeWhisperModules" BeforeTargets="BeforeBuild;ResolveProjectReferences"
+    Condition="'$(TypeWhisperRequireModules)' == 'true' and '$(TypeWhisperModulesLinked)' != 'true'">
+    <Error Code="TWMODULES001" Text="TypeWhisperRequireModules is true, but no modules project exists at '$(TypeWhisperModulesProject)'. This build would link the stub." />
+  </Target>
   <PropertyGroup Condition="'$(TypeWhisperStoreBuild)' == 'true'">
     <DefineConstants>$(DefineConstants);TYPEWHISPER_STORE</DefineConstants>
   </PropertyGroup>

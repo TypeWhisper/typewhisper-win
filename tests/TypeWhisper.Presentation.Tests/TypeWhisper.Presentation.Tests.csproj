@@ -26,6 +26,9 @@
     <Compile Include="../../src/TypeWhisper.WinUI/LearnedCorrectionStore.cs" Link="LearnedCorrectionStore.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/TargetAppCorrectionLearningService.cs" Link="TargetAppCorrectionLearningService.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/PremiumAccessState.cs" Link="PremiumAccessState.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/HostModules.cs" Link="HostModules.cs" />
+    <ProjectReference Include="../../src/TypeWhisper.ModuleKit/TypeWhisper.ModuleKit.csproj" />
+    <ProjectReference Include="../../src/TypeWhisper.Modules.Stub/TypeWhisper.Modules.Stub.csproj" />
     <Compile Include="../../src/TypeWhisper.WinUI/WinUIProfile.cs" Link="WinUIProfile.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/UserDataDeletion.cs" Link="UserDataDeletion.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/HybridHotkeyState.cs" Link="HybridHotkeyState.cs" />

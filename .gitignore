@@ -18,6 +18,8 @@ releases/
 !docs/releases/*.md
 publish/
 artifacts/
+# Optional module checkouts that official builds place beside the source.
+external/
 .agents/
 .claude/
 .venv

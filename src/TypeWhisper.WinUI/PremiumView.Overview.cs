@@ -73,7 +73,16 @@ internal sealed partial class PremiumView
         if (pitch) _overview.Children.Add(Hero(access.Supporter));
         else _overview.Children.Add(Heading(access.Any));
         _overview.Children.Add(FeatureList(access));
+        if (HostModules.StubLinked) _overview.Children.Add(StubBuildNotice());
         if (pitch) _overview.Children.Add(TrustLine());
+    }
+
+    // Builds without the optional modules say so in general terms and name no feature.
+    private static TextBlock StubBuildNotice()
+    {
+        var notice = Copy(Loc.T("Some Premium features are not included in this build."), 12, true);
+        notice.Margin = new Thickness(6, 0, 6, 0);
+        return notice;
     }
 
     private UIElement AccessStrip(bool active)
