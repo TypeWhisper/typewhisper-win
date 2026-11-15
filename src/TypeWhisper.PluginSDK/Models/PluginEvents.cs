@@ -7,9 +7,10 @@ public abstract record PluginEvent
 {
     /// <summary>Links the events of one recording to each other.</summary>
     /// <remarks>
-    /// The publisher picks the value when it raises <see cref="RecordingStartedEvent"/> and reuses it
-    /// for the partial, stopped, completed and failed events of that same recording.
-    /// It stays <see langword="null"/> on events that do not belong to a recording.
+    /// A publisher that correlates events picks the value when it raises <see cref="RecordingStartedEvent"/> and
+    /// reuses it for the partial, stopped, completed and failed events of that same recording. The value is
+    /// <see langword="null"/> when the publisher does not correlate events or the event does not belong to a
+    /// recording, so plugins have to handle a missing value.
     /// </remarks>
     public Guid? RecordingId { get; init; } = null;
 
