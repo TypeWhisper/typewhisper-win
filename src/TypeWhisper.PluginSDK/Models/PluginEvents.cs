@@ -5,16 +5,17 @@ namespace TypeWhisper.PluginSDK.Models;
 /// </summary>
 public abstract record PluginEvent
 {
+    /// <summary>Links the events of one recording to each other.</summary>
+    /// <remarks>
+    /// A publisher that correlates events picks the value when it raises <see cref="RecordingStartedEvent"/> and
+    /// reuses it for the partial, stopped, completed and failed events of that same recording. The value is
+    /// <see langword="null"/> when the publisher does not correlate events or the event does not belong to a
+    /// recording, so plugins have to handle a missing value.
+    /// </remarks>
+    public Guid? RecordingId { get; init; } = null;
+
     /// <summary>UTC timestamp when the event was created.</summary>
     public DateTimeOffset Timestamp { get; init; } = DateTimeOffset.UtcNow;
-
-    /// <summary>
-    /// Identifies the recording session this event belongs to.
-    /// Set by the publisher on <see cref="RecordingStartedEvent"/> and carried through
-    /// all related events (partial, stopped, completed, failed) for the same recording.
-    /// Null for events that are not tied to a specific recording.
-    /// </summary>
-    public Guid? RecordingId { get; init; }
 }
 
 /// <summary>Raised when audio recording starts.</summary>
