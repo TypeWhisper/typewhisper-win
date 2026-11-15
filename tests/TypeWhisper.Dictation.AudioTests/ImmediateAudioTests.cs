@@ -107,7 +107,7 @@ public sealed class ImmediateAudioTests(ITestOutputHelper output)
     {
         public int DeviceCount => 1;
         public string GetDeviceName(int index) => "Synthetic replay";
-        public string? GetDefaultDeviceName() => "Synthetic replay";
+        public string? GetDefaultCaptureDeviceName() => "Synthetic replay";
         public AudioInputDeviceInfo GetDeviceInfo(int index) => new(0, "replay", "Synthetic replay", true);
         public IReadOnlyList<AudioInputDeviceInfo> GetDeviceInfos() => [GetDeviceInfo(0)];
     }

@@ -257,7 +257,7 @@ public sealed class MicrophoneTestDiagnosticsTests
     {
         public int DeviceCount => 2;
         public string GetDeviceName(int index) => index == 0 ? "USB mic" : "Laptop mic";
-        public string? GetDefaultDeviceName() => "Laptop mic";
+        public string? GetDefaultCaptureDeviceName() => "Laptop mic";
         public IReadOnlyList<AudioInputDeviceInfo> GetDeviceInfos() => [new(0, "usb", "USB mic", false), new(1, "laptop", "Laptop mic", true)];
         public AudioInputDeviceInfo GetDeviceInfo(int index) => GetDeviceInfos()[index];
     }

@@ -240,24 +240,12 @@ public sealed class LicenseService
     /// <summary>
     /// Gets the commercial tier display name.
     /// </summary>
-    public string? CommercialTierDisplayName => CommercialTier switch
-    {
-        CommercialLicenseTier.Individual => Loc.Instance["License.TierIndividualName"],
-        CommercialLicenseTier.Team => Loc.Instance["License.TierTeamName"],
-        CommercialLicenseTier.Enterprise => Loc.Instance["License.TierEnterpriseName"],
-        _ => null
-    };
+    public string? CommercialTierDisplayName => DisplayNameFor(CommercialTier, CommercialTierNameKeys);
 
     /// <summary>
     /// Gets the supporter tier display name.
     /// </summary>
-    public string? SupporterTierDisplayName => EffectiveSupporterTier switch
-    {
-        global::TypeWhisper.WinUI.Platform.SupporterTier.Bronze => Loc.Instance["License.SupporterBronzeName"],
-        global::TypeWhisper.WinUI.Platform.SupporterTier.Silver => Loc.Instance["License.SupporterSilverName"],
-        global::TypeWhisper.WinUI.Platform.SupporterTier.Gold => Loc.Instance["License.SupporterGoldName"],
-        _ => null
-    };
+    public string? SupporterTierDisplayName => DisplayNameFor(EffectiveSupporterTier, SupporterTierNameKeys);
 
     /// <summary>
     /// Gets the supporter claim proof.
@@ -741,13 +729,13 @@ public sealed class LicenseService
     {
         var activation = await ActivateCoreAsync(key, ct);
         var activationId = activation.Id
-            ?? throw new InvalidOperationException(Loc.Instance["License.ActivationMissingId"]);
+            ?? throw LicenseFailure(LicenseFailureReason.MissingActivationId);
 
         try
         {
             var validation = await ValidateCoreAsync(key, activationId, ct);
             if (!string.Equals(validation.Status, "granted", StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException(Loc.Instance["License.EntitlementInactive"]);
+                throw LicenseFailure(LicenseFailureReason.InactiveEntitlement);
 
             var entitlement = ClassifyGrantedValidation(validation);
             EnsureExpectedEntitlement(entitlement, expectedEntitlement);
@@ -880,7 +868,7 @@ public sealed class LicenseService
         {
             MarkCommercialActivationExpired();
             if (reportErrors)
-                throw new InvalidOperationException(Loc.Instance["License.UnknownEntitlement"]);
+                throw LicenseFailure(LicenseFailureReason.UnrecognizedEntitlement);
             return;
         }
 
@@ -911,7 +899,7 @@ public sealed class LicenseService
         {
             MarkSupporterActivationExpired();
             if (reportErrors)
-                throw new InvalidOperationException(Loc.Instance["License.UnknownEntitlement"]);
+                throw LicenseFailure(LicenseFailureReason.UnrecognizedEntitlement);
             return;
         }
 
@@ -956,7 +944,7 @@ public sealed class LicenseService
 
     private static ActivatedLicenseEntitlement ClassifyGrantedValidation(PolarValidationResponse validation) =>
         TryClassifyGrantedValidation(validation)
-        ?? throw new InvalidOperationException(Loc.Instance["License.UnknownEntitlement"]);
+        ?? throw LicenseFailure(LicenseFailureReason.UnrecognizedEntitlement);
 
     private static ActivatedLicenseEntitlement? TryClassifyGrantedValidation(PolarValidationResponse validation)
     {
@@ -979,13 +967,13 @@ public sealed class LicenseService
         if (expectedEntitlement == ExpectedLicenseEntitlementKind.Commercial &&
             entitlement.Kind != ActivatedLicenseEntitlementKind.Commercial)
         {
-            throw new InvalidOperationException(Loc.Instance["License.SupporterKeyForCommercial"]);
+            throw LicenseFailure(LicenseFailureReason.SupporterKeyWhereCommercialExpected);
         }
 
         if (expectedEntitlement == ExpectedLicenseEntitlementKind.Supporter &&
             entitlement.Kind != ActivatedLicenseEntitlementKind.Supporter)
         {
-            throw new InvalidOperationException(Loc.Instance["License.CommercialKeyForSupporter"]);
+            throw LicenseFailure(LicenseFailureReason.CommercialKeyWhereSupporterExpected);
         }
     }
 
@@ -1026,7 +1014,7 @@ public sealed class LicenseService
             throw CreatePolarException(json, global::TypeWhisper.Core.Loc.T("Activation failed (HTTP {0})", (int)response.StatusCode), response);
 
         return JsonSerializer.Deserialize<PolarActivationResponse>(json)
-            ?? throw new InvalidOperationException(Loc.Instance["License.ActivationEmptyResponse"]);
+            ?? throw LicenseFailure(LicenseFailureReason.EmptyActivationResponse);
     }
 
     private async Task<PolarValidationResponse> ValidateCoreAsync(string key, string activationId, CancellationToken ct)
@@ -1039,7 +1027,7 @@ public sealed class LicenseService
             throw CreatePolarException(json, global::TypeWhisper.Core.Loc.T("Validation failed (HTTP {0})", (int)response.StatusCode), response);
 
         return JsonSerializer.Deserialize<PolarValidationResponse>(json)
-            ?? throw new InvalidOperationException(Loc.Instance["License.ValidationEmptyResponse"]);
+            ?? throw LicenseFailure(LicenseFailureReason.EmptyValidationResponse);
     }
 
     private static string GetAppVersion()
@@ -1543,6 +1531,52 @@ public sealed class LicenseService
         Any,
         Commercial,
         Supporter,
+    }
+
+    // Every user-facing license string lives in LicenseStrings.json; these tables keep the keys in one place.
+    private static readonly Dictionary<CommercialLicenseTier, string> CommercialTierNameKeys = new()
+    {
+        [CommercialLicenseTier.Individual] = "License.TierIndividualName",
+        [CommercialLicenseTier.Team] = "License.TierTeamName",
+        [CommercialLicenseTier.Enterprise] = "License.TierEnterpriseName",
+    };
+
+    private static readonly Dictionary<SupporterTier, string> SupporterTierNameKeys = new()
+    {
+        [global::TypeWhisper.WinUI.Platform.SupporterTier.Bronze] = "License.SupporterBronzeName",
+        [global::TypeWhisper.WinUI.Platform.SupporterTier.Silver] = "License.SupporterSilverName",
+        [global::TypeWhisper.WinUI.Platform.SupporterTier.Gold] = "License.SupporterGoldName",
+    };
+
+    private static string? DisplayNameFor<TTier>(TTier? tier, Dictionary<TTier, string> nameKeys)
+        where TTier : struct, Enum =>
+        tier is { } value && nameKeys.TryGetValue(value, out var textKey) ? Loc.Instance[textKey] : null;
+
+    private enum LicenseFailureReason
+    {
+        MissingActivationId,
+        InactiveEntitlement,
+        UnrecognizedEntitlement,
+        SupporterKeyWhereCommercialExpected,
+        CommercialKeyWhereSupporterExpected,
+        EmptyActivationResponse,
+        EmptyValidationResponse,
+    }
+
+    private static InvalidOperationException LicenseFailure(LicenseFailureReason reason)
+    {
+        var textKey = reason switch
+        {
+            LicenseFailureReason.MissingActivationId => "License.ActivationMissingId",
+            LicenseFailureReason.InactiveEntitlement => "License.EntitlementInactive",
+            LicenseFailureReason.UnrecognizedEntitlement => "License.UnknownEntitlement",
+            LicenseFailureReason.SupporterKeyWhereCommercialExpected => "License.SupporterKeyForCommercial",
+            LicenseFailureReason.CommercialKeyWhereSupporterExpected => "License.CommercialKeyForSupporter",
+            LicenseFailureReason.EmptyActivationResponse => "License.ActivationEmptyResponse",
+            LicenseFailureReason.EmptyValidationResponse => "License.ValidationEmptyResponse",
+            _ => throw new ArgumentOutOfRangeException(nameof(reason), reason, null),
+        };
+        return new InvalidOperationException(Loc.Instance[textKey]);
     }
 
     private sealed class PolarApiException : InvalidOperationException

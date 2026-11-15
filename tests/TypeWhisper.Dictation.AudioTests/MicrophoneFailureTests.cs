@@ -256,7 +256,7 @@ public sealed class MicrophoneFailureTests
         public AudioInputDeviceInfo[] List = [new(0, "usb", "USB Mic", false), new(1, "laptop", "Laptop Mic", true)];
         public int DeviceCount => List.Length;
         public string GetDeviceName(int index) => List[index].Name;
-        public string? GetDefaultDeviceName() => List.FirstOrDefault(device => device.IsDefault)?.Name;
+        public string? GetDefaultCaptureDeviceName() => List.FirstOrDefault(device => device.IsDefault)?.Name;
         public AudioInputDeviceInfo GetDeviceInfo(int index) => List[index];
         public IReadOnlyList<AudioInputDeviceInfo> GetDeviceInfos() => List;
     }
