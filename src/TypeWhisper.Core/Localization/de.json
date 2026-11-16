@@ -3290,5 +3290,8 @@
   "For games and apps without accessibility support. TypeWhisper cannot check there where Enter lands, so it presses it 100 ms after pasting.": "Für Spiele und Apps ohne Bedienungshilfen-Unterstützung. TypeWhisper kann dort nicht prüfen, wo Enter ankommt, und drückt es 100 ms nach dem Einfügen.",
   "The sync folder contains a linked folder. Remove the link or choose another sync folder.": "Der Sync-Ordner enthält einen verknüpften Ordner. Entferne die Verknüpfung oder wähle einen anderen Sync-Ordner.",
   "{0} received entries use a regular expression, line breaks or the clipboard and were turned off. Review them in Dictionary or Snippets and turn them on if you trust them.": "{0} empfangene Einträge verwenden einen regulären Ausdruck, Zeilenumbrüche oder die Zwischenablage und wurden ausgeschaltet. Prüfe sie unter Wörterbuch oder Snippets und schalte sie ein, wenn du ihnen vertraust.",
-  "Some Premium features are not included in this build.": "Einige Premium-Funktionen sind in diesem Build nicht enthalten."
+  "Some Premium features are not included in this build.": "Einige Premium-Funktionen sind in diesem Build nicht enthalten.",
+  "Select only one entry.": "Wähle nur einen Eintrag aus.",
+  "Select at most {0} entries.": "Wähle höchstens {0} Einträge aus.",
+  "{0} shortcuts": "{0}-Tastenkürzel"
 }

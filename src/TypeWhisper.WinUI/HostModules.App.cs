@@ -11,10 +11,16 @@ internal sealed partial class HostModules
     // Known without loading the modules, so views can read it at any time.
     internal static bool StubLinked { get; } = BuildKindOf(typeof(ModuleEntry).Assembly) == StubBuildKind;
 
+    // The validated contributions of the running app. Empty until the modules have loaded, and in the stub build.
+    internal static ModuleContributionCatalog ActiveCatalog { get; private set; } = ModuleContributionCatalog.Empty;
+
     internal static HostModules Load(WinUIModuleHost host)
     {
-        var modules = Load(host, typeof(ModuleEntry).Assembly, ModuleEntry.RequiredModuleKitVersion, ModuleEntry.Create, AppDiagnostics.WriteFailure);
+        var modules = Load(host, typeof(ModuleEntry).Assembly, ModuleEntry.RequiredModuleKitVersion, ModuleEntry.Create, AppDiagnostics.WriteFailure,
+            stage => AppDiagnostics.Write(stage));
         host.UseManagedPolicyKeys(modules.Contributions.ManagedPolicyKeys);
+        host.UsePanels(modules.Catalog.Panels);
+        ActiveCatalog = modules.Catalog;
         return modules;
     }
 }
@@ -24,6 +30,7 @@ internal sealed partial class HostModules
 internal sealed class WinUIModuleHost : IModuleHost
 {
     private readonly ModuleManagedPolicyReading _managedPolicy;
+    private ModulePanels? _panels;
 
     internal WinUIModuleHost(HistoryService history, DispatcherQueue dispatcher)
     {
@@ -49,6 +56,15 @@ internal sealed class WinUIModuleHost : IModuleHost
     internal Action<string>? ShowHistoryRecord { get; set; }
     internal Action? ShowPremiumAccess { get; set; }
 
+    // Panels exist once every module has contributed; requests made while modules contribute do nothing.
+    public void ShowPanel(string id) => Panels("show")?.Show(id);
+    public void HidePanel(string id) => Panels("hide")?.Hide(id);
+    public void TogglePanel(string id) => Panels("toggle")?.Toggle(id);
+    public bool IsPanelVisible(string id) => _panels?.IsVisible(id) == true;
+
+    // At shutdown, before the app's windows close.
+    internal void ClosePanels() => _panels?.CloseAll();
+
     // Called once every module has contributed: the declared keys become readable and are validated with the host's.
     internal void UseManagedPolicyKeys(IEnumerable<ModuleManagedPolicyKey> keys)
     {
@@ -56,5 +72,14 @@ internal sealed class WinUIModuleHost : IModuleHost
             name is null ? $"{ModulePolicyKeys.RejectedStage} reason={reason}" : $"{ModulePolicyKeys.RejectedStage} key={name} reason={reason}"));
         _managedPolicy.UseDeclaredNames(resolution.DeclaredNames);
         if (resolution.Definitions.Count > 0) WinUIManagedPolicy.UseAdditionalDefinitions(resolution.Definitions);
+    }
+
+    internal void UsePanels(IReadOnlyList<ModulePanel> panels) =>
+        _panels = new ModulePanels(panels, ModulePanelWindow.Open, stage => AppDiagnostics.Write(stage), AppDiagnostics.WriteFailure);
+
+    private ModulePanels? Panels(string request)
+    {
+        if (_panels is null) AppDiagnostics.Write("modules.panel.unavailable request=" + request);
+        return _panels;
     }
 }

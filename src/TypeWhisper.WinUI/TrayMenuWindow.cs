@@ -20,6 +20,8 @@ internal sealed class TrayMenuWindow : Window
     private PointInt32 _anchor;
     private double _scale;
 
+    internal const string ShortcutTag = "shows-shortcut";
+
     internal TrayMenuWindow(MenuFlyout menu)
     {
         NativeWindowAppearance.ApplyAppTitleBar(this);
@@ -30,7 +32,12 @@ internal sealed class TrayMenuWindow : Window
             RequestedTheme = TrayIconService.Light ? ElementTheme.Light : ElementTheme.Dark,
         };
         var (hover, pressed) = TrayIconService.Light ? ("#E8E8E8", "#DEDEDE") : ("#414141", "#363636");
-        var itemTemplate = (ControlTemplate)XamlReader.Load($$"""
+        // Entries tagged with ShortcutTag show their KeyboardAcceleratorTextOverride on the right; the others keep their width.
+        const string ShortcutText = """
+            <TextBlock Grid.Column="2" Text="{TemplateBinding KeyboardAcceleratorTextOverride}" Foreground="{TemplateBinding Foreground}"
+                       FontFamily="{TemplateBinding FontFamily}" FontSize="12" Opacity="0.6" Margin="24,0,0,0" VerticalAlignment="Center" />
+            """;
+        ControlTemplate Template(bool shortcut) => (ControlTemplate)XamlReader.Load($$"""
             <ControlTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                              TargetType="MenuFlyoutItem">
@@ -49,13 +56,16 @@ internal sealed class TrayMenuWindow : Window
                             </VisualState>
                         </VisualStateGroup>
                     </VisualStateManager.VisualStateGroups>
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="24" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="24" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                     <ContentPresenter Content="{TemplateBinding Icon}" VerticalAlignment="Center" HorizontalAlignment="Left" />
                     <TextBlock x:Name="Label" Grid.Column="1" Text="{TemplateBinding Text}" Foreground="{TemplateBinding Foreground}"
                                FontFamily="{TemplateBinding FontFamily}" FontSize="{TemplateBinding FontSize}" VerticalAlignment="Center" />
+                    {{(shortcut ? ShortcutText : "")}}
                 </Grid>
             </ControlTemplate>
             """);
+        var itemTemplate = Template(shortcut: false);
+        ControlTemplate? shortcutTemplate = null;
         foreach (var item in menu.Items.ToArray())
         {
             menu.Items.Remove(item);
@@ -69,7 +79,7 @@ internal sealed class TrayMenuWindow : Window
             }
             if (item is MenuFlyoutItem action)
             {
-                action.Template = itemTemplate;
+                action.Template = Equals(action.Tag, ShortcutTag) ? shortcutTemplate ??= Template(shortcut: true) : itemTemplate;
                 action.UseSystemFocusVisuals = true;
                 action.RegisterPropertyChangedCallback(MenuFlyoutItem.TextProperty, (_, _) => QueueLayout());
                 action.Click += (_, _) => Hide();

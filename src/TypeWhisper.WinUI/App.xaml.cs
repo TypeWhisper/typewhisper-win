@@ -246,7 +246,8 @@ public partial class App : Application
             () => _window.DispatcherQueue.TryEnqueue(_window.PasteLastTranscriptionFromTray),
             () => _window.DispatcherQueue.TryEnqueue(_window.CopyLastTranscriptionFromTray),
             () => _window.DispatcherQueue.TryEnqueue(_window.ReadLastTranscriptionFromTray),
-            () => _window.DispatcherQueue.TryEnqueue(_window.ShowDiagnosticsFromTray));
+            () => _window.DispatcherQueue.TryEnqueue(_window.ShowDiagnosticsFromTray),
+            _window.ModuleTrayItems());
         _window.TrayMenuHandle = _tray.WindowHandle;
         _window.ShowTrayNotification = (title, message, clicked) => _tray?.ShowNotification(title, message, clicked);
         void UpdateTrayActions() => _tray?.UpdateHotkeyPause(_window.DictationHotkeysPaused,

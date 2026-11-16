@@ -24,6 +24,8 @@ internal sealed partial class PremiumView : UserControl
     {
         var body = new StackPanel { Spacing = 20 }; Content = body;
         body.Children.Add(_overview);
+        foreach (var card in SettingsCard.ModuleSections(TypeWhisper.ModuleKit.ModuleSettingsPage.Premium)) _moduleSections.Children.Add(card);
+        body.Children.Add(_moduleSections);
         body.Children.Add(_details);
         var back = new HandCursorButton { Style = (Style)Application.Current.Resources["SecondaryButtonStyle"], Content = Loc.T("← Back to Premium") };
         back.Click += (_, _) => ShowOverview();

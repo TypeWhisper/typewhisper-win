@@ -74,10 +74,18 @@ public static class GlobalShortcuts
     /// Returns why canonical <paramref name="value"/> cannot be assigned to <paramref name="key"/>, or null.
     /// <paramref name="registered"/> reads the canonical chords currently registered for a key ("" when none).
     /// </summary>
-    public static string? FindConflict(string key, string value, Func<string, string> registered)
+    public static string? FindConflict(string key, string value, Func<string, string> registered) =>
+        FindConflict(key, value, registered, []);
+
+    /// <summary>
+    /// Like the other overload, with <paramref name="additional"/> shortcuts, such as those of modules, checked after
+    /// <see cref="All"/>.
+    /// </summary>
+    public static string? FindConflict(string key, string value, Func<string, string> registered, IReadOnlyList<GlobalShortcut> additional)
     {
-        var candidate = All.Single(shortcut => shortcut.Key == key);
-        foreach (var other in All)
+        IReadOnlyList<GlobalShortcut> shortcuts = additional.Count == 0 ? All : [.. All, .. additional];
+        var candidate = shortcuts.Single(shortcut => shortcut.Key == key);
+        foreach (var other in shortcuts)
             if (other.Key != key && Overlap(value, candidate.AllowsModifierOnly, registered(other.Key), other.AllowsModifierOnly))
                 return Message(candidate, other);
         return null;

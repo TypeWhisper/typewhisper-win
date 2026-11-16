@@ -118,6 +118,7 @@ public sealed partial class MainWindow : Window
             InitializeWorkflowPaletteShortcut();
             InitializeRecordingShortcuts();
             InitializeRecorderShortcut();
+            InitializeModuleShortcuts();
             MoveDictationKeyHookToFront();
             InitializeHotkeyRecovery();
             // License and account checks can wait up to 30 s on the network. They run side by side
@@ -227,6 +228,7 @@ public sealed partial class MainWindow : Window
         var session = _dictation.ShutdownAsync();
         var files = _fileTranscription?.ShutdownAsync() ?? Task.CompletedTask;
         _historyWindow?.CloseForShutdown();
+        _services.ModuleHost.ClosePanels();
         var workflows = WorkflowsView.ShutdownAsync();
         var lexicon = _lexicon?.ShutdownAsync() ?? Task.CompletedTask;
         var setupImport = ShutdownSettingsImportsAsync();
@@ -377,6 +379,7 @@ public sealed partial class MainWindow : Window
         _services = new(WinRT.Interop.WindowNative.GetWindowHandle(this), DispatcherQueue);
         _services.ModuleHost.ShowHistoryRecord = id => OpenHistory(id);
         _services.ModuleHost.ShowPremiumAccess = () => OpenSettingsPage("Premium");
+        PrepareModuleShortcuts();
         _dictation.DictationRequested += () => SuppressStartupWhatsNew();
         _dictation.Changed += ObserveWhatsNewActivity;
         _httpApi.DataChanged += () =>

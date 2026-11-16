@@ -1,6 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net11.0</TargetFramework>
+    <TargetFramework>net11.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <!-- The Windows target brings the CsWinRT analyzer, which flags collection expressions for trimming and AOT; the
+         tests, like the app, are neither trimmed nor AOT-compiled. -->
+    <NoWarn>$(NoWarn);CsWinRT1032</NoWarn>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
@@ -32,6 +36,12 @@
     <Compile Include="../../src/TypeWhisper.WinUI/ModuleHistoryReading.cs" Link="ModuleHistoryReading.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/ModulePremiumAccessReading.cs" Link="ModulePremiumAccessReading.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/ModuleUserDataLifecycle.cs" Link="ModuleUserDataLifecycle.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/ModuleContributionCatalog.cs" Link="ModuleContributionCatalog.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/ModuleCalls.cs" Link="ModuleCalls.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/ModuleHotkeys.cs" Link="ModuleHotkeys.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/ModuleRecordActions.cs" Link="ModuleRecordActions.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/ModuleFileTranscriptions.cs" Link="ModuleFileTranscriptions.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/ModulePanels.cs" Link="ModulePanels.cs" />
     <ProjectReference Include="../../src/TypeWhisper.ModuleKit/TypeWhisper.ModuleKit.csproj" />
     <ProjectReference Include="../../src/TypeWhisper.Modules.Stub/TypeWhisper.Modules.Stub.csproj" />
     <Compile Include="../../src/TypeWhisper.WinUI/WinUIProfile.cs" Link="WinUIProfile.cs" />

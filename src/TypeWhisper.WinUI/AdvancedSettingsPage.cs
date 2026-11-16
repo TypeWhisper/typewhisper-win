@@ -26,6 +26,7 @@ internal static class AdvancedSettingsPage
         Section(content, Loc.T("Integrations"), new IntegrationsSettingsView());
         Section(content, Loc.T("Managed settings"), new ManagedPolicyView());
         Section(content, Loc.T("Support diagnostics"), new DiagnosticsSettingsView(session, api));
+        foreach (var card in SettingsCard.ModuleSections(TypeWhisper.ModuleKit.ModuleSettingsPage.Advanced)) content.Children.Add(card);
     }
 
     // Rows are filled by their live settings.

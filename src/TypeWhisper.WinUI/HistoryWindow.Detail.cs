@@ -182,6 +182,7 @@ public sealed partial class HistoryWindow
         if (SelectedRecords().Any(record => record.InboxState == HistoryWorkspace.InboxOpen))
             actions.Children.Add(ActionButton(Loc.T("Mark Complete"), () => _ = SetInboxAsync(true)));
         actions.Children.Add(ActionButton(Loc.T("Export…"), () => _ = ExportAsync(".md")));
+        if (ModuleActionMenu.For(SelectedRecords().Select(record => record.Id).ToArray()) is { } moduleActions) actions.Children.Add(moduleActions);
         var delete = ActionButton(Loc.T("Delete…"), () => _ = DeleteSelectionAsync());
         delete.Style = (Style)Application.Current.Resources["DestructiveButtonStyle"];
         actions.Children.Add(delete);
@@ -199,6 +200,7 @@ public sealed partial class HistoryWindow
         else if (records.Length == 1 && records[0].InboxState == HistoryWorkspace.InboxCompleted)
             _toolbarActions.Children.Add(ActionButton(Loc.T("Reopen"), () => _ = SetInboxAsync(false)));
         _toolbarActions.Children.Add(ActionButton(Loc.T("Copy"), CopySelection));
+        if (ModuleActionMenu.For(records.Select(record => record.Id).ToArray()) is { } moduleActions) _toolbarActions.Children.Add(moduleActions);
         if (!Dirty) return;
         _toolbarActions.Children.Add(ActionButton(Loc.T("Discard"), DiscardEdit));
         var save = ActionButton(Loc.T("Save"), () => _ = SaveAsync());

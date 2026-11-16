@@ -134,7 +134,13 @@ internal static partial class SettingsCatalog
     };
 
     internal static IEnumerable<(string Key, string Label, string Value)> ShortcutBindings(Dictionary<string, string> values) =>
-        Fields.Where(field => field.Category == "Shortcuts").Select(field => (field.Key, field.Label, values.GetValueOrDefault(field.Key, field.Value)));
+        ShortcutFields().Select(field => (field.Key, field.Label, values.GetValueOrDefault(field.Key, field.Value)));
+
+    // The host's shortcut rows and one per module hotkey action, unassigned by default.
+    private static IEnumerable<Field> ShortcutFields() => Fields.Where(field => field.Category == "Shortcuts").Concat(ModuleShortcutFields());
+
+    private static IEnumerable<Field> ModuleShortcutFields() => HostModules.ActiveCatalog.HotkeyActions
+        .Select(action => new Field("Shortcuts", ModuleHotkeys.SettingsKey(action.Id), action.Title, "", action.Subtitle ?? ""));
 
     internal static void Render(string category, StackPanel target, Dictionary<string, string> values, List<ChoicePicker> pickers, Action? refresh = null, Func<string, string, string?>? commitShortcut = null)
     {
@@ -163,13 +169,17 @@ internal static partial class SettingsCatalog
             ToolTipService.SetToolTip(guide, Loc.T("Main dictation and cancel processing shortcuts are global and saved automatically. Cancel processing requires a main key and cancels final dictation processing or an active selected-text workflow. Configure selected-text shortcuts in Workflows. Disabled actions here are unavailable."));
             target.Children.Add(guide);
             var list = new StackPanel { Spacing = 24 };
-            (string Title, string[] Keys)[] groups =
+            List<(string Title, string[] Keys)> groups =
             [
                 (Loc.T("Dictation"), ["MainDictationHotkeys", "CancelProcessingHotkeys", "PushToTalkHotkey", "ToggleOnlyHotkeys", "HoldOnlyHotkeys"]),
                 (Loc.T("Recent transcriptions"), ["RecentTranscriptionsHotkeys", "CopyLastTranscriptionHotkeys", "PasteLastTranscriptionHotkeys", "ReadLastTranscriptionHotkeys"]),
                 (Loc.T("Workflow palette"), ["WorkflowPaletteHotkeys"]),
                 (Loc.T("Recorder"), ["RecorderToggleHotkeys"])
             ];
+            // Module actions follow, grouped by their group in the order they first appear.
+            foreach (var group in HostModules.ActiveCatalog.HotkeyActions.GroupBy(action => string.IsNullOrWhiteSpace(action.Group) ? Loc.T("More actions") : action.Group!))
+                groups.Add((group.Key, group.Select(action => ModuleHotkeys.SettingsKey(action.Id)).ToArray()));
+            var shortcutFields = ShortcutFields().ToArray();
             foreach (var group in groups)
             {
                 var section = new StackPanel { Spacing = 10 };
@@ -185,13 +195,12 @@ internal static partial class SettingsCatalog
                         Height = 1, Margin = new Thickness(16, 0, 16, 0),
                         Background = (Brush)Application.Current.Resources["HairlineBrush"]
                     });
-                    var field = Fields.Single(f => f.Key == key);
+                    var field = shortcutFields.Single(f => f.Key == key);
                     // Preserve field tags so search results still scroll to the exact action.
                     var item = new StackPanel { Tag = field.Key };
                     Func<string, string?>? commit = commitShortcut is null ? null : value => commitShortcut(field.Key, value);
                     item.Children.Add(new ShortcutRecorder(field.Key, field.Label, field.Value, values,
-                        () => Fields.Where(f => f.Category == "Shortcuts").Select(f =>
-                            (f.Key, f.Label, values.GetValueOrDefault(f.Key, f.Value))), commit) { IsEnabled = commit is not null });
+                        () => shortcutFields.Select(f => (f.Key, f.Label, values.GetValueOrDefault(f.Key, f.Value))), commit, field.Hint) { IsEnabled = commit is not null });
                     rows.Children.Add(item);
                 }
                 section.Children.Add(new Border

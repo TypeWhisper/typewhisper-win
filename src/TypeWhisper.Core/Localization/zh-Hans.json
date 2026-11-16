@@ -3290,5 +3290,8 @@
   "For games and apps without accessibility support. TypeWhisper cannot check there where Enter lands, so it presses it 100 ms after pasting.": "适用于不支持辅助功能的游戏和应用。TypeWhisper 无法确认 Enter 会落在哪里，因此会在粘贴 100 毫秒后按下它。",
   "The sync folder contains a linked folder. Remove the link or choose another sync folder.": "同步文件夹中包含链接的文件夹。请移除该链接或选择其他同步文件夹。",
   "{0} received entries use a regular expression, line breaks or the clipboard and were turned off. Review them in Dictionary or Snippets and turn them on if you trust them.": "收到的 {0} 个条目使用了正则表达式、换行或剪贴板，已被关闭。请在“词典”或“快捷短语”中检查，如果信任它们，再将其打开。",
-  "Some Premium features are not included in this build.": "此版本未包含部分 Premium 功能。"
+  "Some Premium features are not included in this build.": "此版本未包含部分 Premium 功能。",
+  "Select only one entry.": "请只选择一个条目。",
+  "Select at most {0} entries.": "最多选择 {0} 个条目。",
+  "{0} shortcuts": "{0}快捷键"
 }

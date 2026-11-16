@@ -2,7 +2,9 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Media;
 using TypeWhisper.Core.Models;
+using TypeWhisper.ModuleKit;
 using TypeWhisper.Presentation;
 using global::Windows.ApplicationModel.DataTransfer;
 using global::Windows.Media.Core;
@@ -65,11 +67,23 @@ public sealed partial class HistoryWindow
             menu.Items.Add(export);
             if (records.Any(item => item.InboxState == HistoryWorkspace.InboxOpen)) Add(Loc.T("Mark Complete"), () => _ = SetInboxAsync(true, records));
             if (records.Any(item => item.InboxState == HistoryWorkspace.InboxCompleted)) Add(Loc.T("Reopen"), () => _ = SetInboxAsync(false, records));
+            foreach (var action in HostModules.ActiveCatalog.RecordActions)
+            {
+                var state = ModuleRecordActionState.For(action, records.Length);
+                if (!state.Visible) continue;
+                var item = new MenuFlyoutItem { Text = state.Title, IsEnabled = state.Enabled, Icon = new FontIcon { Glyph = action.Glyph } };
+                if (state.Help is { } help) { ToolTipService.SetToolTip(item, help); AutomationProperties.SetHelpText(item, help); }
+                item.Click += (_, _) => RunModuleAction(action, records);
+                menu.Items.Add(item);
+            }
             menu.Items.Add(new MenuFlyoutSeparator());
             Add(records.Length > 1 ? Loc.T("Delete {0} Entries…", records.Length) : Loc.T("Delete…"), () => _ = DeleteSelectionAsync(records));
         };
         return menu;
     }
+
+    private static void RunModuleAction(ModuleRecordAction action, TranscriptionRecord[] records) =>
+        ModuleRecordActionState.Perform(action, records.Select(record => record.Id).ToArray(), AppDiagnostics.WriteFailure);
 
     private void CopySelection() => CopySelection(SelectedRecords());
 

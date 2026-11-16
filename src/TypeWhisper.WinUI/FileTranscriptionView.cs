@@ -30,6 +30,11 @@ public sealed partial class FileTranscriptionView : UserControl
     private ContentDialog? _recoveryDialog;
     private Task _recoveryOperation = Task.CompletedTask;
     private Task _exportOperation = Task.CompletedTask;
+    // History records saved for results of this session, by job. Module record actions act on them. Results are
+    // accepted on the queue's thread and shown on the UI thread.
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, string> _savedRecords = new();
+    // Module option content, created once when the queue first shows it. Content that failed is left out.
+    private List<UIElement>? _moduleOptions;
     internal event Action? ExitRequested;
 
     public FileTranscriptionView()
@@ -162,6 +167,7 @@ public sealed partial class FileTranscriptionView : UserControl
         recoveryRow.Children.Add(SettingsHelp.Button(Loc.T("Queue recovery"), Loc.T("Recovery saves file paths and transcripts locally, including when History is off. Original media files are not copied. Turn recovery off to remove its saved data.")));
         recoveryContent.Children.Add(recoveryRow);
         _body.Children.Add(new Expander { Header = _queue.RecoveryEnabled ? Loc.T("Queue recovery is on") : Loc.T("Queue recovery"), Content = recoveryContent, HorizontalAlignment = HorizontalAlignment.Stretch });
+        foreach (var option in ModuleOptions()) _body.Children.Add(option);
         if (_queue.RecoveryError is { } recoveryError) _body.Children.Add(Text(recoveryError, 12, true));
         if (_queue.RecoveryError is not null)
         {
@@ -239,13 +245,42 @@ public sealed partial class FileTranscriptionView : UserControl
     {
         if (_session is null || !_session.CanTranscribeFile || _queue.Running) return;
         _notice.Text = Loc.T("Transcribing with the model selected in Dictation…");
-        try { await _queue.RunAsync(_session.TranscribeFileAsync, _session.AcceptFileResult, onlyJob); }
+        try { await _queue.RunAsync(_session.TranscribeFileAsync, AcceptResult, onlyJob); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { _notice.Text = Loc.T("File processing failed: {0}", ex.Message); return; }
         _notice.Text = Loc.T("{0} completed · {1} failed · {2} canceled", _queue.Jobs.Count(j => j.Status == FileTranscriptionStatus.Ready), _queue.Jobs.Count(j => j.Status == FileTranscriptionStatus.Failed), _queue.Jobs.Count(j => j.Status == FileTranscriptionStatus.Canceled));
         if (onlyJob?.Status == FileTranscriptionStatus.Ready) { _selectedJob = onlyJob; _result = onlyJob; }
         if (!_watchTab && (_result is null || onlyJob?.Status == FileTranscriptionStatus.Ready)) Render();
         if (onlyJob?.Status == FileTranscriptionStatus.Ready && !_watchTab) FocusPrimaryAction();
     }
+    // Commits the result like before, then tells module hooks about it once the queue has finished its bookkeeping.
+    private string? AcceptResult(FileTranscriptionOutput result)
+    {
+        var warning = _session!.AcceptFileResult(result, out var recordId);
+        // The queue sets the job's result before it accepts it.
+        if (_queue.Jobs.FirstOrDefault(job => ReferenceEquals(job.Result, result)) is not { } job) return warning;
+        // A retried job replaces the record of its earlier result.
+        if (recordId is not null) _savedRecords[job.Id] = recordId;
+        else _savedRecords.TryRemove(job.Id, out _);
+        var hooks = HostModules.ActiveCatalog.FileTranscriptionHooks;
+        if (hooks.Count > 0)
+        {
+            var transcription = ModuleFileTranscriptions.Map(result, job.Path, recordId);
+            DispatcherQueue.TryEnqueue(() => ModuleFileTranscriptions.Notify(hooks, transcription, AppDiagnostics.WriteFailure));
+        }
+        return warning;
+    }
+
+    private List<UIElement> ModuleOptions()
+    {
+        if (_moduleOptions is not null) return _moduleOptions;
+        // An option whose content cannot be created is left out; ModuleCalls has reported it.
+        _moduleOptions = HostModules.ActiveCatalog.FileTranscriptionOptions
+            .Select(option => ModuleCalls.Get("file-transcription-option", option.Id, option.CreateContent, AppDiagnostics.WriteFailure))
+            .OfType<UIElement>()
+            .ToList();
+        return _moduleOptions;
+    }
+
     private async Task DiscardRecoveryAsync()
     {
         if (_queue.Running || _picking || _queue.IsShutdown) return;
@@ -325,6 +360,9 @@ public sealed partial class FileTranscriptionView : UserControl
         else { _format = "txt"; _body.Children.Add(Text(Loc.T("Subtitle export is unavailable because this provider did not return usable timing."), 12, true)); }
         _formatPicker.SetOptions(formats, _format);
         _formatPicker.SelectionChanged += selected => _format = selected; _body.Children.Add(_formatPicker);
+        // Module actions act on the History record saved for this result.
+        if (_savedRecords.TryGetValue(job.Id, out var recordId) && ModuleActionMenu.For([recordId]) is { } moduleActions)
+            _actions.Children.Add(moduleActions);
         _actions.Children.Add(Button(Loc.T("Export… · X"), async () => await Export(job)));
         _primaryAction = () => CopyResult(job.Result.Text);
         _actions.Children.Add(Button(Loc.T("Copy text · Enter"), _primaryAction, primary: true));

@@ -1,13 +1,21 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Interfaces and data types between the host and optional modules. No host implementation lives here. -->
+  <!-- Interfaces and data types between the host and optional modules. No host implementation lives here.
+       Contributions with content use WinUI elements, so the kit targets the app's Windows platform. -->
   <PropertyGroup>
-    <TargetFramework>net11.0</TargetFramework>
+    <TargetFramework>net11.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <RootNamespace>TypeWhisper.ModuleKit</RootNamespace>
     <AssemblyName>TypeWhisper.ModuleKit</AssemblyName>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Only the WinUI reference assemblies and their managed runtime: no XAML compiler, native runtime or bootstrapper
+         reaches the kit or projects that reference it, such as tests. The app references WinUI fully itself. -->
+    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" IncludeAssets="compile;runtime" />
+  </ItemGroup>
 
 </Project>

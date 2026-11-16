@@ -27,4 +27,24 @@ public interface IModuleHost
 
     /// <summary>Keeps module data with the user's data, so it is exported and erased with it.</summary>
     IUserDataLifecycle? UserDataLifecycle { get; }
+
+    /// <summary>
+    /// Shows the <see cref="ModulePanel"/> with this identifier, creating its content on the first show. A panel that
+    /// is already visible comes to the front. Before startup has finished, and for an unknown identifier, nothing
+    /// happens.
+    /// </summary>
+    /// <param name="id">The panel's <see cref="ModulePanel.Id"/>.</param>
+    void ShowPanel(string id);
+
+    /// <summary>Hides the panel with this identifier if it is visible.</summary>
+    /// <param name="id">The panel's <see cref="ModulePanel.Id"/>.</param>
+    void HidePanel(string id);
+
+    /// <summary>Hides the panel with this identifier if it is visible, and shows it otherwise.</summary>
+    /// <param name="id">The panel's <see cref="ModulePanel.Id"/>.</param>
+    void TogglePanel(string id);
+
+    /// <summary>Whether the panel with this identifier is visible.</summary>
+    /// <param name="id">The panel's <see cref="ModulePanel.Id"/>.</param>
+    bool IsPanelVisible(string id);
 }
