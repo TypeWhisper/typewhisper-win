@@ -347,15 +347,30 @@ public sealed class ModuleHistoryTests
     {
         var record = Record("a", "raw") with
         {
-            FinalText = "", SourceKind = null, Language = "de", DurationSeconds = 2.5, AppName = "Editor", AudioFileName = "a.wav"
+            FinalText = "", SourceKind = null, Language = "de", DurationSeconds = 2.5, AppName = "Editor", AppProcessName = "editor", AudioFileName = "a.wav"
         };
 
         var mapped = ModuleHistoryReading.ToModuleRecord(record, name => name == "a.wav" ? @"C:\audio\a.wav" : null);
 
         Assert.Equal(new ModuleHistoryRecord("a", new DateTimeOffset(2026, 11, 2, 9, 30, 0, TimeSpan.Zero), "dictation", "raw", "de", 2.5, "Editor", @"C:\audio\a.wav"), mapped);
+        Assert.Null(mapped.Title);
         Assert.Null(ModuleHistoryReading.ToModuleRecord(record with { AudioFileName = "gone.wav", SourceKind = "file" }, _ => null).AudioFilePath);
         Assert.Equal("file", ModuleHistoryReading.ToModuleRecord(record with { SourceKind = "file" }, _ => null).Source);
         Assert.Null(ModuleHistoryReading.ToModuleRecord(record with { AudioFileName = null }, _ => throw new InvalidOperationException()).AudioFilePath);
+    }
+
+    [Fact]
+    public void ARecordWithoutAnAppProcessCarriesItsNameAsTitle()
+    {
+        // As a recording from another device arrives: its name where a dictation keeps the app.
+        var record = Record("a") with { AppName = "Team meeting", AppProcessName = null, OriginDeviceId = "mac" };
+
+        var mapped = ModuleHistoryReading.ToModuleRecord(record, _ => null);
+
+        Assert.Equal("Team meeting", mapped.Title);
+        Assert.Null(mapped.AppName);
+        Assert.Null(ModuleHistoryReading.ToModuleRecord(record with { AppName = " " }, _ => null).Title);
+        Assert.Null(ModuleHistoryReading.ToModuleRecord(Record("b"), _ => null).Title);
     }
 
     [Fact]
@@ -377,7 +392,7 @@ public sealed class ModuleHistoryTests
             Record("failed") with { Status = TranscriptionRecordStatus.WorkflowPostProcessingFailed },
             Record("importing") with { ProcessingState = "importing" },
             Record("synced") with { ProcessingState = "ready", SourceKind = "recording" });
-        var reading = new ModuleHistoryReading(history, _ => null, _ => { }, action => action(), (stage, _) => Assert.Fail(stage));
+        var reading = new ModuleHistoryReading(history, _ => null, (_, _) => { }, action => action(), (stage, _) => Assert.Fail(stage));
         string[] ids = ["done", "failed", "importing", "synced", "missing"];
 
         var records = await reading.RecordsAsync(ids);
@@ -395,7 +410,7 @@ public sealed class ModuleHistoryTests
         var first = Record("a");
         var history = new FakeHistory(first);
         var posted = new Queue<Action>();
-        var reading = new ModuleHistoryReading(history, _ => null, _ => { }, posted.Enqueue, (stage, _) => Assert.Fail(stage));
+        var reading = new ModuleHistoryReading(history, _ => null, (_, _) => { }, posted.Enqueue, (stage, _) => Assert.Fail(stage));
         var received = new List<ModuleHistoryChange>();
         void RunPosted() { while (posted.TryDequeue(out var action)) action(); }
 
@@ -425,7 +440,7 @@ public sealed class ModuleHistoryTests
         var first = Record("a");
         var history = new FakeHistory(first);
         var posted = new Queue<Action>();
-        var reading = new ModuleHistoryReading(history, _ => null, _ => { }, posted.Enqueue, (stage, _) => Assert.Fail(stage));
+        var reading = new ModuleHistoryReading(history, _ => null, (_, _) => { }, posted.Enqueue, (stage, _) => Assert.Fail(stage));
         var received = new List<ModuleHistoryChange>();
 
         reading.ObserveChanges(received.Add);
@@ -443,7 +458,7 @@ public sealed class ModuleHistoryTests
         var first = Record("a");
         var history = new FakeHistory(first);
         var posted = new Queue<Action>();
-        var reading = new ModuleHistoryReading(history, _ => null, _ => { }, posted.Enqueue, (stage, _) => Assert.Fail(stage));
+        var reading = new ModuleHistoryReading(history, _ => null, (_, _) => { }, posted.Enqueue, (stage, _) => Assert.Fail(stage));
         var received = new List<ModuleHistoryChange>();
         // The save lands after loading but before the baseline is read, so the baseline already holds it.
         history.DuringLoad = () => history.Replace(first, Record("b"));
@@ -460,7 +475,7 @@ public sealed class ModuleHistoryTests
     {
         var history = new FakeHistory(Record("a"));
         var posted = new Queue<Action>();
-        var reading = new ModuleHistoryReading(history, _ => null, _ => { }, posted.Enqueue, (stage, _) => Assert.Fail(stage));
+        var reading = new ModuleHistoryReading(history, _ => null, (_, _) => { }, posted.Enqueue, (stage, _) => Assert.Fail(stage));
         var received = new List<ModuleHistoryChange>();
         history.DuringLoad = () => history.Replace();
 
@@ -477,7 +492,7 @@ public sealed class ModuleHistoryTests
         var first = Record("a");
         var history = new FakeHistory(first);
         var posted = new Queue<Action>();
-        var reading = new ModuleHistoryReading(history, _ => null, _ => { }, posted.Enqueue, (stage, _) => Assert.Fail(stage));
+        var reading = new ModuleHistoryReading(history, _ => null, (_, _) => { }, posted.Enqueue, (stage, _) => Assert.Fail(stage));
         void RunPosted() { while (posted.TryDequeue(out var action)) action(); }
         reading.ObserveChanges(_ => { });
         await Task.Yield();
@@ -500,7 +515,7 @@ public sealed class ModuleHistoryTests
     {
         var history = new FakeHistory(Record("a"));
         var posted = new Queue<Action>();
-        var reading = new ModuleHistoryReading(history, _ => null, _ => { }, posted.Enqueue, (stage, _) => Assert.Fail(stage));
+        var reading = new ModuleHistoryReading(history, _ => null, (_, _) => { }, posted.Enqueue, (stage, _) => Assert.Fail(stage));
         var early = new List<ModuleHistoryChange>();
         var late = new List<ModuleHistoryChange>();
         void RunPosted() { while (posted.TryDequeue(out var action)) action(); }
@@ -520,15 +535,45 @@ public sealed class ModuleHistoryTests
     }
 
     [Fact]
-    public void ShowRecordPassesTheIdentifierOn()
+    public void ShowRecordPassesTheIdentifierAndAUsableTimeOn()
     {
-        var shown = new List<string>();
-        var reading = new ModuleHistoryReading(new FakeHistory(), _ => null, shown.Add, action => action(), (stage, _) => Assert.Fail(stage));
+        var shown = new List<(string Id, double? AtSeconds)>();
+        IHistoryReading reading = new ModuleHistoryReading(new FakeHistory(), _ => null, (id, atSeconds) => shown.Add((id, atSeconds)), action => action(),
+            (stage, _) => Assert.Fail(stage));
 
         reading.ShowRecord("a");
         reading.ShowRecord("");
+        reading.ShowRecord("b", 12.5);
+        reading.ShowRecord("c", 0);
+        reading.ShowRecord("d", null);
+        reading.ShowRecord("e", -1);
+        reading.ShowRecord("f", double.NaN);
+        reading.ShowRecord("g", double.PositiveInfinity);
+        reading.ShowRecord("", 3);
+
+        Assert.Equal([("a", null), ("b", 12.5), ("c", 0), ("d", null), ("e", null), ("f", null), ("g", null)], shown);
+    }
+
+    [Fact]
+    public void AHistoryReadingWithoutTimesOpensTheRecordForATime()
+    {
+        var shown = new List<string>();
+        IHistoryReading reading = new OpenOnlyReading(shown.Add);
+
+        reading.ShowRecord("a", 4);
 
         Assert.Equal(["a"], shown);
+    }
+
+    // Implements only the members without a default, as a host written before times were added would.
+    private sealed class OpenOnlyReading(Action<string> show) : IHistoryReading
+    {
+        public Task<IReadOnlyList<ModuleHistoryRecord>> RecordsAsync(IReadOnlyCollection<string> ids, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+        public Task<IReadOnlySet<string>> ExistingRecordIdsAsync(IReadOnlyCollection<string> ids, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+        public IDisposable ObserveChanges(Action<ModuleHistoryChange> handler) => throw new NotSupportedException();
+        public void ShowRecord(string id) => show(id);
     }
 
     // Raises RecordsChanged like History: once per saved change, without comparing on its own.

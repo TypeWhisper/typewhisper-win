@@ -32,7 +32,7 @@ public sealed partial class FileTranscriptionView : UserControl
     private Task _exportOperation = Task.CompletedTask;
     // History records saved for results of this session, by job. Module record actions act on them. Results are
     // accepted on the queue's thread and shown on the UI thread.
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, string> _savedRecords = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, TypeWhisper.ModuleKit.ModuleRecordInfo> _savedRecords = new();
     // Module option content, created once when the queue first shows it. Content that failed is left out.
     private List<UIElement>? _moduleOptions;
     internal event Action? ExitRequested;
@@ -259,7 +259,7 @@ public sealed partial class FileTranscriptionView : UserControl
         // The queue sets the job's result before it accepts it.
         if (_queue.Jobs.FirstOrDefault(job => ReferenceEquals(job.Result, result)) is not { } job) return warning;
         // A retried job replaces the record of its earlier result.
-        if (recordId is not null) _savedRecords[job.Id] = recordId;
+        if (recordId is not null && result.PendingHistory is { } saved) _savedRecords[job.Id] = ModuleHistoryReading.ToRecordInfo(saved);
         else _savedRecords.TryRemove(job.Id, out _);
         var hooks = HostModules.ActiveCatalog.FileTranscriptionHooks;
         if (hooks.Count > 0)
@@ -361,7 +361,7 @@ public sealed partial class FileTranscriptionView : UserControl
         _formatPicker.SetOptions(formats, _format);
         _formatPicker.SelectionChanged += selected => _format = selected; _body.Children.Add(_formatPicker);
         // Module actions act on the History record saved for this result.
-        if (_savedRecords.TryGetValue(job.Id, out var recordId) && ModuleActionMenu.For([recordId]) is { } moduleActions)
+        if (_savedRecords.TryGetValue(job.Id, out var savedRecord) && ModuleActionMenu.For([savedRecord]) is { } moduleActions)
             _actions.Children.Add(moduleActions);
         _actions.Children.Add(Button(Loc.T("Export… · X"), async () => await Export(job)));
         _primaryAction = () => CopyResult(job.Result.Text);

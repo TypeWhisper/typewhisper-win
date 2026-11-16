@@ -14,8 +14,8 @@ public sealed partial class MainWindow
 
     internal void ShowHistoryFromTray() => OpenHistory();
 
-    // With a record id, History opens on that entry.
-    private void OpenHistory(string? recordId = null)
+    // With a record id, History opens on that entry; with a time too, its audio player is set to that time.
+    private void OpenHistory(string? recordId = null, double? atSeconds = null)
     {
         if (_closing || _profileRestoreClosing || _historyService is null) return;
         SuppressStartupWhatsNewForNavigation();
@@ -40,6 +40,6 @@ public sealed partial class MainWindow
             window.ShowOn(ResolveInvocationDisplayArea());
         }
         else _historyWindow.BringToFront();
-        if (recordId is not null) _historyWindow?.Reveal(recordId);
+        if (recordId is not null) _historyWindow?.Reveal(recordId, atSeconds);
     }
 }

@@ -548,26 +548,24 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
         // Checked before queuing and again once the lease is held, so a policy that arrived meanwhile still wins.
         // Under the lease the engine's selected model is known, so an enforced pair is checked completely.
         DenyTranscriptionIfRefused(selectionId, owner, null);
-        return UseAsync(owner, async token =>
+        string? model = null;
+        return RefusedWhenPolicyCancelsAsync(UseAsync(owner, async token =>
         {
             if (!_index.Transcription.TryGetValue(selectionId, out var current) || current.Owner != owner)
                 throw new InvalidOperationException("Transcription provider changed.");
-            var model = current.Engine.SelectedModelId;
+            model = current.Engine.SelectedModelId;
             lock (_sync) owner.RunningTranscription = (selectionId, model);
             try
             {
                 DenyTranscriptionIfRefused(selectionId, owner, model);
                 return await use(current.Engine, token).ConfigureAwait(false);
             }
-            // A cancellation the policy pass caused is reported as the refusal, not as a plain cancellation.
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-            {
-                DenyTranscriptionIfRefused(selectionId, owner, model);
-                // The text rule cancels a transcription that may carry a prompt, so its reason is reported as well.
-                DenyTextTransferIfRefused(owner, "transcription-prompt");
-                throw;
-            }
             finally { lock (_sync) owner.RunningTranscription = null; }
+        }, cancellationToken), () =>
+        {
+            DenyTranscriptionIfRefused(selectionId, owner, model);
+            // The text rule cancels a transcription that may carry a prompt, so its reason is reported as well.
+            DenyTextTransferIfRefused(owner, "transcription-prompt");
         }, cancellationToken);
     }
 
@@ -612,7 +610,7 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             owner = role.Owner;
         }
         DenyLlmIfRefused(selectionId, owner, modelId);
-        return UseAsync(owner, async token =>
+        return RefusedWhenPolicyCancelsAsync(UseAsync(owner, async token =>
         {
             if (!_index.Llm.TryGetValue(selectionId, out var current) || current.Owner != owner)
                 throw new InvalidOperationException("LLM provider changed.");
@@ -625,14 +623,12 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
                 await RestoreLocalLlmAsync(owner, current.Provider, token).ConfigureAwait(false);
                 return await use(current.Provider, token).ConfigureAwait(false);
             }
-            // A cancellation the policy pass caused is reported as the refusal, not as a plain cancellation.
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) { DenyLlmIfRefused(selectionId, owner, modelId); throw; }
             finally
             {
                 lock (_sync) owner.RunningLlm = null;
                 if (owner.Package?.Plugin is ILocalLlmModelManagement local) TouchLocalLlm(owner, local);
             }
-        }, cancellationToken);
+        }, cancellationToken), () => DenyLlmIfRefused(selectionId, owner, modelId), cancellationToken);
     }
 
     /// <summary>Processes text only with the exact activation captured at operation start.</summary>
@@ -761,6 +757,15 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             _gate.Release();
             if (refreshCapabilities) QueueRefresh();
         }
+    }
+
+    // A cancellation the policy pass caused is reported as the refusal, not as a plain cancellation. Wraps the whole
+    // lease, so the lease's own check after the callback returned is covered as well; a cancellation by the caller
+    // passes through unchanged.
+    private static async Task<T> RefusedWhenPolicyCancelsAsync<T>(Task<T> lease, Action denyIfRefused, CancellationToken cancellationToken)
+    {
+        try { return await lease.ConfigureAwait(false); }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) { denyIfRefused(); throw; }
     }
 
     /// <summary>What a plugin's transcription worker last reported about how it runs, or null before a worker ran.</summary>

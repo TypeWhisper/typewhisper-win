@@ -20,6 +20,15 @@ public interface IHistoryReading
 
     /// <summary>Opens the record in the History window.</summary>
     void ShowRecord(string id);
+
+    /// <summary>
+    /// Opens the record in the History window and, when History keeps its audio, sets the player to
+    /// <paramref name="atSeconds"/> without starting playback. A time that is null, negative or not a number only
+    /// opens the record. A host that cannot set the player only opens the record.
+    /// </summary>
+    /// <param name="id">The record's identifier.</param>
+    /// <param name="atSeconds">The position in the record's audio, in seconds from its start.</param>
+    void ShowRecord(string id, double? atSeconds) => ShowRecord(id);
 }
 
 /// <summary>A saved change to History's records.</summary>
@@ -60,4 +69,11 @@ public sealed record ModuleHistoryRecord(
     string? Language = null,
     double DurationSeconds = 0,
     string? AppName = null,
-    string? AudioFilePath = null);
+    string? AudioFilePath = null)
+{
+    /// <summary>
+    /// The record's title, such as the name of a recording from another device, or null. A record with a title has
+    /// no <see cref="AppName"/>.
+    /// </summary>
+    public string? Title { get; init; }
+}

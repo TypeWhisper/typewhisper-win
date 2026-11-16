@@ -17,6 +17,7 @@ public sealed partial class HistoryWindow
 {
     private MediaPlayer? _player;
     private string? _playerId;
+    private readonly HistoryAudioLoads _audioLoads = new();
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _playerTimer;
     private HandCursorButton? _playButton;
     private Slider? _timeline;
@@ -67,10 +68,9 @@ public sealed partial class HistoryWindow
             menu.Items.Add(export);
             if (records.Any(item => item.InboxState == HistoryWorkspace.InboxOpen)) Add(Loc.T("Mark Complete"), () => _ = SetInboxAsync(true, records));
             if (records.Any(item => item.InboxState == HistoryWorkspace.InboxCompleted)) Add(Loc.T("Reopen"), () => _ = SetInboxAsync(false, records));
-            foreach (var action in HostModules.ActiveCatalog.RecordActions)
+            foreach (var (action, state) in ModuleRecordActionState.Offered(HostModules.ActiveCatalog.RecordActions, ModuleRecordInfos(records),
+                AppDiagnostics.WriteFailure))
             {
-                var state = ModuleRecordActionState.For(action, records.Length);
-                if (!state.Visible) continue;
                 var item = new MenuFlyoutItem { Text = state.Title, IsEnabled = state.Enabled, Icon = new FontIcon { Glyph = action.Glyph } };
                 if (state.Help is { } help) { ToolTipService.SetToolTip(item, help); AutomationProperties.SetHelpText(item, help); }
                 item.Click += (_, _) => RunModuleAction(action, records);
@@ -81,6 +81,9 @@ public sealed partial class HistoryWindow
         };
         return menu;
     }
+
+    private static ModuleRecordInfo[] ModuleRecordInfos(IEnumerable<TranscriptionRecord> records) =>
+        records.Select(ModuleHistoryReading.ToRecordInfo).ToArray();
 
     private static void RunModuleAction(ModuleRecordAction action, TranscriptionRecord[] records) =>
         ModuleRecordActionState.Perform(action, records.Select(record => record.Id).ToArray(), AppDiagnostics.WriteFailure);
@@ -230,18 +233,64 @@ public sealed partial class HistoryWindow
             UpdatePosition();
             return;
         }
+        await LoadAudioAsync(id, null, play: true);
+    }
+
+    // Sets the open entry's player to a time, as a module asks when it opens an entry. Audio that is not loaded yet
+    // is loaded paused at that time, so nothing plays until the user starts it.
+    private void SeekAudio(string id, double? atSeconds)
+    {
+        if (_closing || atSeconds is not { } seconds || !double.IsFinite(seconds) || seconds < 0) return;
+        if (Opened is not { } record || record.Id != id || string.IsNullOrWhiteSpace(record.AudioFileName)) return;
+        if (double.IsFinite(record.DurationSeconds) && record.DurationSeconds > 0) seconds = Math.Min(seconds, record.DurationSeconds);
+        var position = TimeSpan.FromSeconds(Math.Min(seconds, int.MaxValue));
+        // While this entry's audio still loads or opens, only the latest time is applied once it has opened.
+        if (_audioLoads.TrySeekPending(id, position)) return;
+        if (_player is { } player && _playerId == id)
+        {
+            SetPosition(player, position);
+            return;
+        }
+        _ = LoadAudioAsync(id, position, play: false);
+    }
+
+    private void SetPosition(MediaPlayer player, TimeSpan position)
+    {
+        try { player.PlaybackSession.Position = position; }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { _notice.Text = Loc.T("Could not seek in this recording."); }
+        UpdatePosition();
+    }
+
+    // Loads the open entry's audio and plays it, or with play false waits at start for the user to play it.
+    private async Task LoadAudioAsync(string id, TimeSpan? start, bool play)
+    {
         if (CanPlayAudio?.Invoke() == false) { _notice.Text = Loc.T("Finish the current recording or operation before playing audio."); return; }
         StopAudioPlayback();
+        // Only the latest load may install its player; an earlier one that finishes later is dropped.
+        var load = _audioLoads.Begin(id, start);
+        // A current load that gives up, because the window closed or another entry opened, leaves no time pending.
+        bool Stale()
+        {
+            if (!_audioLoads.IsCurrent(load)) return true;
+            if (!_closing && Opened?.Id == id) return false;
+            _audioLoads.Reset();
+            return true;
+        }
         try
         {
             if (PrepareAudioPlayback is { } prepare) await prepare();
             var path = await Task.Run(() => AudioPath(id));
-            if (_closing || Opened?.Id != id) return;
-            if (path is null) { _notice.Text = Loc.T("The saved audio is missing. The transcript is still available."); return; }
+            if (Stale()) return;
+            if (path is null) { _audioLoads.Reset(); _notice.Text = Loc.T("The saved audio is missing. The transcript is still available."); return; }
             var file = await StorageFile.GetFileFromPathAsync(path);
-            if (_closing || Opened?.Id != id) return;
-            var player = _player = new MediaPlayer { AutoPlay = true, Source = MediaSource.CreateFromStorageFile(file) };
+            if (Stale()) return;
+            var player = _player = new MediaPlayer { AutoPlay = play, Source = MediaSource.CreateFromStorageFile(file) };
             _playerId = id;
+            // The position can only be set once the media has opened; seeks until then leave only the latest time.
+            player.MediaOpened += (_, _) => DispatcherQueue.TryEnqueue(() =>
+            {
+                if (ReferenceEquals(_player, player) && _audioLoads.Opened(load) is { } position) SetPosition(player, position);
+            });
             player.MediaEnded += (_, _) => DispatcherQueue.TryEnqueue(() =>
             {
                 if (!ReferenceEquals(_player, player)) return;
@@ -265,6 +314,8 @@ public sealed partial class HistoryWindow
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             AppDiagnostics.Write("history.playback.failed", ex);
+            // A newer load owns the player by now; a stale failure must not stop it.
+            if (!_audioLoads.IsCurrent(load)) return;
             StopAudioPlayback();
             _notice.Text = Loc.T("The saved audio could not be played. Check the file and audio output.");
         }
@@ -297,6 +348,8 @@ public sealed partial class HistoryWindow
 
     internal void StopAudioPlayback()
     {
+        // Loads still running become stale, so none of them installs a player afterwards.
+        _audioLoads.Reset();
         _playerTimer?.Stop();
         var player = _player;
         _player = null;

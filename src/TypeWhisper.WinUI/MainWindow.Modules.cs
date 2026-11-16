@@ -13,6 +13,9 @@ public sealed partial class MainWindow
 
     private static ModuleContributionCatalog ModuleCatalog => HostModules.ActiveCatalog;
 
+    // Completes IModuleHost.WhenStarted on the UI thread.
+    internal void CompleteModuleStartup() => _services.ModuleHost.CompleteStartup();
+
     // Builds the conflict list before any module shortcut registers, so Settings can check against all of them.
     private void PrepareModuleShortcuts() => _moduleGlobalShortcuts = ModuleCatalog.HotkeyActions
         .Select(action => new GlobalShortcut(ModuleHotkeys.SettingsKey(action.Id), GlobalShortcutRole.Action, action.Title)).ToArray();

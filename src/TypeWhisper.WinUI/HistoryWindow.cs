@@ -41,7 +41,7 @@ public sealed partial class HistoryWindow : Window
     private readonly HashSet<HistoryDateGroup> _collapsed = [];
     private readonly List<string> _selection = [];
     private string? _anchor;
-    private string? _pendingReveal;
+    private (string Id, double? AtSeconds)? _pendingReveal;
     private string? _filteredSearch;
     // Position of each entry in the list's rows, for scrolling an entry into view.
     private readonly Dictionary<string, int> _rowIndex = new(StringComparer.Ordinal);
@@ -212,23 +212,31 @@ public sealed partial class HistoryWindow : Window
         _selection.RemoveAll(id => !existing.Contains(id));
         BuildMenus();
         Render();
-        if (_pendingReveal is { } reveal) { _pendingReveal = null; ApplyReveal(reveal); }
+        if (_pendingReveal is { } reveal)
+        {
+            _pendingReveal = null;
+            ApplyReveal(reveal.Id);
+            SeekAudio(reveal.Id, reveal.AtSeconds);
+        }
     }
 
-    // Opens one entry, as when it is clicked on the start page.
-    internal async void Reveal(string id)
+    // Opens one entry, as when it is clicked on the start page. With a time, the entry's audio player is set to it.
+    internal async void Reveal(string id, double? atSeconds = null)
     {
         if (_closing) return;
-        if (_loading) { _pendingReveal = id; return; }
+        if (_loading) { _pendingReveal = (id, atSeconds); return; }
         if (_selection is [var only] && only == id)
         {
             // The open entry keeps its edits; it only needs to be shown again if search, filters or a collapsed section hide it.
             if (_rowIndex.ContainsKey(id)) BringIntoView(id); else ApplyReveal(id);
+            SeekAudio(id, atSeconds);
             return;
         }
         if (!await ConfirmLeaveEditAsync()) return;
         if (_records.All(record => record.Id != id)) await RefreshAsync();
-        if (!_closing) ApplyReveal(id);
+        if (_closing) return;
+        ApplyReveal(id);
+        SeekAudio(id, atSeconds);
     }
 
     private void ApplyReveal(string id)

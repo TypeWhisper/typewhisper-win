@@ -157,7 +157,7 @@ public sealed partial class PortablePluginRuntimeRegistry
                 throw new InvalidOperationException("The captured model provider is no longer available.");
             owner = role.Owner;
         }
-        return UseAsync(owner, async token =>
+        return RefusedWhenPolicyCancelsAsync(UseAsync(owner, async token =>
         {
             if (!_index.Transcription.TryGetValue(expected.SelectionId, out var role)
                 || role.Owner != owner || !MatchesModelOwner(role, expected))
@@ -180,14 +180,16 @@ public sealed partial class PortablePluginRuntimeRegistry
                 if (!engine.IsModelDownloaded(expected.ModelId))
                     await engine.DownloadModelAsync(expected.ModelId, reports, token).ConfigureAwait(false);
             }
-            // A cancellation the policy pass caused is reported as the refusal, not as a cancelled download.
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && Policy.ModelDownloadRefusal() is { } refusedMeanwhile)
-            { throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("model-download", refusedMeanwhile); }
             finally { lock (_sync) owner.Downloading = false; }
             token.ThrowIfCancellationRequested();
             if (!engine.IsModelDownloaded(expected.ModelId))
                 throw new InvalidOperationException("The plugin did not confirm that the model was downloaded.");
             return true;
+        }, cancellationToken), () =>
+        {
+            // A cancellation the policy pass caused is reported as the refusal, not as a cancelled download.
+            if (Policy.ModelDownloadRefusal() is { } refusedMeanwhile)
+                throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("model-download", refusedMeanwhile);
         }, cancellationToken);
     }
 

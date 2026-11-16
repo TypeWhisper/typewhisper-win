@@ -1,3 +1,4 @@
+using TypeWhisper.Core.Models;
 using TypeWhisper.PluginHost;
 using TypeWhisper.PluginSDK.PortableFixture;
 using TypeWhisper.Presentation;
@@ -78,6 +79,57 @@ public sealed partial class PortablePluginRuntimeRegistryTests
         Assert.Null(await registry.SetEnabledAsync(Id, true));
         Host(Id).SetSetting("CompletedSpeech", true); Host(Id).SetSetting("FailedSpeech", true);
         await Assert.ThrowsAsync<InvalidOperationException>(() => registry.SpeakAsync(Id, new("hello"), default).WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.Equal(1, Host(Id).GetSetting<int>("stops"));
+    }
+
+    // The playback finishes normally after the policy pass cancelled its request, so the lease's own cancellation
+    // check fails the call: that is reported as the refusal as well.
+    [Fact]
+    public async Task SpeechPolicyCancellationAfterPlaybackFinishedIsReportedAsTheRefusal()
+    {
+        var store = await SpeechStore();
+        var policy = Policy();
+        await using var registry = PolicyRegistry(store, () => policy);
+        Assert.Null(await registry.SetEnabledAsync(Id, true));
+        // Playback has finished at once; its stop holds the request until released.
+        Host(Id).SetSetting("CompletedSpeech", true); Host(Id).SetSetting("Hold", true);
+
+        // Off the test thread, since the held stop blocks its thread.
+        var speech = Task.Run(() => registry.SpeakAsync(Id, new("hello"), default));
+        Task reapplied;
+        // Released in any case, so a failed wait cannot leave the stop held while the registry is disposed.
+        try
+        {
+            await Host(Id).Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            policy = Policy(cloudText: false);
+            reapplied = registry.ReapplyPolicyAsync();
+        }
+        finally { Host(Id).Release.TrySetResult(null); }
+
+        var refused = await Assert.ThrowsAsync<ManagedPolicyDeniedException>(() => speech.WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.Equal("tts", refused.PolicyKey);
+        Assert.Equal(1, Host(Id).GetSetting<int>("stops"));
+        await reapplied.WaitAsync(TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
+    public async Task CallerCancellationOfSpeechStaysACancellationWhileThePolicyRefusesIt()
+    {
+        var store = await SpeechStore();
+        var policy = Policy();
+        await using var registry = PolicyRegistry(store, () => policy);
+        Assert.Null(await registry.SetEnabledAsync(Id, true));
+        using var cancellation = new CancellationTokenSource();
+
+        var speech = registry.SpeakAsync(Id, new("hello"), cancellation.Token);
+        try
+        {
+            await Host(Id).Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            policy = Policy(cloudText: false);
+        }
+        finally { await cancellation.CancelAsync(); }
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => speech.WaitAsync(TimeSpan.FromSeconds(5)));
         Assert.Equal(1, Host(Id).GetSetting<int>("stops"));
     }
 }

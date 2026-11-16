@@ -143,14 +143,6 @@ public sealed partial class PortablePluginRuntimeRegistry
         return current.Provider;
     }
 
-    // A cancellation the policy pass caused is reported as the refusal, not as a plain cancellation. Covers the whole
-    // lease, including the check after the callback returned; a cancellation by the caller passes through unchanged.
-    private static async Task<T> RefusedWhenPolicyCancelsAsync<T>(Task<T> lease, Action denyIfRefused, CancellationToken cancellationToken)
-    {
-        try { return await lease.ConfigureAwait(false); }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) { denyIfRefused(); throw; }
-    }
-
     // The lease only queues a refresh when it ends; a completed operation waits for the refreshed snapshot instead.
     private async Task PublishedAfterAsync(Task operation)
     {

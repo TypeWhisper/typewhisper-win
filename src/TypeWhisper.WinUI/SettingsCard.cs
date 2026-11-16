@@ -52,11 +52,12 @@ internal sealed class SettingsCard : SettingsRows
     internal static IEnumerable<SettingsCard> ModuleSections(TypeWhisper.ModuleKit.ModuleSettingsPage page)
     {
         var sections = HostModules.ActiveCatalog.SectionsFor(page)
-            .Select(section => (section.Title, Content: ModuleCalls.Get("settings-section", section.Id, section.CreateContent, AppDiagnostics.WriteFailure)))
+            .Select(section => (section.Id, section.Title, Content: ModuleCalls.Get("settings-section", section.Id, section.CreateContent, AppDiagnostics.WriteFailure)))
             .Where(section => section.Content is not null);
-        foreach (var (title, content) in sections)
+        foreach (var (id, title, content) in sections)
         {
-            var card = new SettingsCard(title);
+            // The key lets IModuleHost.ShowSettingsSection bring the card into view.
+            var card = new SettingsCard(title) { Tag = ModuleContributionCatalog.SettingsSectionKey(id) };
             card.Add(content!);
             yield return card;
         }

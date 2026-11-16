@@ -39,7 +39,8 @@ internal sealed partial class HostModules
         ModuleKitVersion requiredVersion,
         Func<IReadOnlyList<IHostModule>> createModules,
         Action<string, Exception> reportFailure,
-        Action<string>? reportRejection = null)
+        Action<string>? reportRejection = null,
+        Func<string?, IModuleDiagnostics?>? diagnosticsFor = null)
     {
         var buildKind = BuildKindOf(modulesAssembly);
         // Modules written against an interface this host does not provide could fail anywhere, so none are created.
@@ -71,7 +72,8 @@ internal sealed partial class HostModules
             var own = new ModuleContributions();
             try
             {
-                module.Contribute(host, own);
+                // With diagnostics, each module sees the host with its own, named after the module's identifier.
+                module.Contribute(diagnosticsFor is null ? host : new ModuleScopedHost(host, diagnosticsFor(module.Id)), own);
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
