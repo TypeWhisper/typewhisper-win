@@ -24,6 +24,7 @@ public sealed class ManagedPolicyService : IDisposable
     private readonly Action<string, Exception?>? _reportFailure;
     private readonly object _lock = new();
     private ManagedPolicySnapshot _current = ManagedPolicySnapshot.Empty;
+    private IReadOnlyList<ManagedPolicyDefinition> _additionalDefinitions = [];
     private Timer? _fallbackTimer;
     private Timer? _debounceTimer;
     private bool _started;
@@ -79,7 +80,7 @@ public sealed class ManagedPolicyService : IDisposable
             if (_disposed) return _current;
             var previous = _current;
             var reading = ReadSource();
-            var candidate = ManagedPolicyValidator.Validate(reading, previous.Revision + 1, DateTimeOffset.UtcNow);
+            var candidate = ManagedPolicyValidator.Validate(reading, previous.Revision + 1, DateTimeOffset.UtcNow, _additionalDefinitions);
             if (candidate.Status == ManagedPolicyReadStatus.Unreadable)
                 candidate = candidate.RetainingValuesFrom(previous);
             // The first read is always published so ReadAt and Revision show that policy was consulted.
@@ -88,6 +89,21 @@ public sealed class ManagedPolicyService : IDisposable
             try { Changed?.Invoke(candidate); }
             catch (Exception ex) when (ex is not OutOfMemoryException) { _reportFailure?.Invoke("policy.changed-handler-failed", ex); }
             return candidate;
+        }
+    }
+
+    /// <summary>
+    /// Validates <paramref name="definitions"/> with the host's own keys from now on, replacing earlier ones. When the
+    /// source has been read before, it is read again right away so the current snapshot includes them.
+    /// </summary>
+    /// <param name="definitions">Keys beyond <see cref="ManagedPolicyKeys.All"/>, such as those of optional modules.</param>
+    public ManagedPolicySnapshot UseAdditionalDefinitions(IReadOnlyList<ManagedPolicyDefinition> definitions)
+    {
+        ArgumentNullException.ThrowIfNull(definitions);
+        lock (_lock)
+        {
+            _additionalDefinitions = definitions.ToArray();
+            return _current.Revision > 0 ? Refresh() : _current;
         }
     }
 

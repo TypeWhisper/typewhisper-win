@@ -204,7 +204,17 @@ public sealed class ManagedPolicySnapshot
             System.Collections.ObjectModel.ReadOnlyDictionary<string, ManagedPolicyValue>.Empty,
             System.Collections.Frozen.FrozenSet<string>.Empty, []);
 
+    private readonly Dictionary<string, ManagedPolicyDefinition> _additionalByName;
+
     /// <summary>Creates a snapshot. The validator and the service are the intended callers.</summary>
+    /// <param name="revision">Increases whenever published content changes.</param>
+    /// <param name="status">Whether the source was readable and held any policy keys.</param>
+    /// <param name="readAt">When the source was read.</param>
+    /// <param name="enforcedValues">Valid enforced values by canonical key name.</param>
+    /// <param name="recommendedValues">Valid recommended values by canonical key name.</param>
+    /// <param name="invalidEnforcedKeys">Keys whose enforced value is present but invalid.</param>
+    /// <param name="issues">Validation findings for diagnostics.</param>
+    /// <param name="additionalDefinitions">Keys beyond <see cref="ManagedPolicyKeys.All"/> that were validated, such as those of optional modules.</param>
     public ManagedPolicySnapshot(
         long revision,
         ManagedPolicyReadStatus status,
@@ -212,7 +222,8 @@ public sealed class ManagedPolicySnapshot
         IReadOnlyDictionary<string, ManagedPolicyValue> enforcedValues,
         IReadOnlyDictionary<string, ManagedPolicyValue> recommendedValues,
         IReadOnlySet<string> invalidEnforcedKeys,
-        IReadOnlyList<ManagedPolicyIssue> issues)
+        IReadOnlyList<ManagedPolicyIssue> issues,
+        IReadOnlyList<ManagedPolicyDefinition>? additionalDefinitions = null)
     {
         Revision = revision;
         Status = status;
@@ -221,6 +232,9 @@ public sealed class ManagedPolicySnapshot
         RecommendedValues = recommendedValues;
         InvalidEnforcedKeys = invalidEnforcedKeys;
         Issues = issues;
+        AdditionalDefinitions = additionalDefinitions ?? [];
+        _additionalByName = new(StringComparer.Ordinal);
+        foreach (var definition in AdditionalDefinitions) _additionalByName.TryAdd(definition.Name, definition);
     }
 
     /// <summary>Increases whenever published content changes.</summary>
@@ -243,6 +257,16 @@ public sealed class ManagedPolicySnapshot
 
     /// <summary>Validation findings for diagnostics.</summary>
     public IReadOnlyList<ManagedPolicyIssue> Issues { get; }
+
+    /// <summary>Keys beyond <see cref="ManagedPolicyKeys.All"/> that this snapshot was validated with.</summary>
+    public IReadOnlyList<ManagedPolicyDefinition> AdditionalDefinitions { get; }
+
+    /// <summary>Every key this snapshot was validated with: the host's keys, then the additional ones.</summary>
+    public IEnumerable<ManagedPolicyDefinition> Definitions => ManagedPolicyKeys.All.Concat(AdditionalDefinitions);
+
+    /// <summary>Finds a definition this snapshot was validated with by its exact name, or null for an unknown key.</summary>
+    public ManagedPolicyDefinition? Definition(string name) =>
+        ManagedPolicyKeys.Find(name) ?? _additionalByName.GetValueOrDefault(name);
 
     /// <summary>Whether any policy applies, including invalid enforced keys.</summary>
     public bool IsManaged => EnforcedValues.Count > 0 || RecommendedValues.Count > 0 || InvalidEnforcedKeys.Count > 0;
@@ -290,21 +314,24 @@ public sealed class ManagedPolicySnapshot
     }
 
     /// <summary>Keeps this snapshot's status, revision and issues but the values of an earlier readable snapshot.</summary>
+    /// <remarks>The earlier definitions stay with those values, so their sensitivity still applies to them.</remarks>
     public ManagedPolicySnapshot RetainingValuesFrom(ManagedPolicySnapshot previous) =>
-        new(Revision, Status, ReadAt, previous.EnforcedValues, previous.RecommendedValues, previous.InvalidEnforcedKeys, Issues);
+        new(Revision, Status, ReadAt, previous.EnforcedValues, previous.RecommendedValues, previous.InvalidEnforcedKeys, Issues,
+            previous.AdditionalDefinitions);
 
     /// <summary>Compares everything except <see cref="Revision"/> and <see cref="ReadAt"/>.</summary>
     public bool ContentEquals(ManagedPolicySnapshot? other) =>
         other is not null && Status == other.Status &&
         SameValues(EnforcedValues, other.EnforcedValues) && SameValues(RecommendedValues, other.RecommendedValues) &&
-        InvalidEnforcedKeys.SetEquals(other.InvalidEnforcedKeys) && Issues.SequenceEqual(other.Issues);
+        InvalidEnforcedKeys.SetEquals(other.InvalidEnforcedKeys) && Issues.SequenceEqual(other.Issues) &&
+        AdditionalDefinitions.SequenceEqual(other.AdditionalDefinitions);
 
     private static bool SameValues(IReadOnlyDictionary<string, ManagedPolicyValue> left, IReadOnlyDictionary<string, ManagedPolicyValue> right) =>
         left.Count == right.Count && left.All(entry => right.TryGetValue(entry.Key, out var value) && entry.Value.Equals(value));
 
-    private static void Expect(string key, ManagedPolicyValueKind kind)
+    private void Expect(string key, ManagedPolicyValueKind kind)
     {
-        var definition = ManagedPolicyKeys.Find(key) ?? throw new ArgumentException($"Unknown managed policy key {key}.", nameof(key));
+        var definition = Definition(key) ?? throw new ArgumentException($"Unknown managed policy key {key}.", nameof(key));
         if (definition.Kind != kind)
             throw new ArgumentException($"{key} is a {definition.Kind} key, not {kind}.", nameof(key));
     }

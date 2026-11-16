@@ -531,4 +531,112 @@ public class ManagedPolicyValidatorTests
         Assert.All(ManagedPolicyKeys.All.Where(definition => definition.PairedWith is not null),
             definition => Assert.Equal(definition.Name, ManagedPolicyKeys.Find(definition.PairedWith!)!.PairedWith));
     }
+
+    private static readonly ManagedPolicyDefinition[] ModuleKeys =
+    [
+        new("AllowExampleFeature", ManagedPolicyValueKind.Boolean, AllowsRecommendation: true),
+        new("ExampleMode", ManagedPolicyValueKind.Enumeration, EnumerationMaximum: 3),
+        new("ExampleTargets", ManagedPolicyValueKind.List),
+        new("ExampleToken", ManagedPolicyValueKind.Text, Sensitive: true)
+    ];
+
+    private static ManagedPolicySnapshot ValidateWithModuleKeys(ManagedPolicyRawSection? enforced = null, ManagedPolicyRawSection? recommended = null) =>
+        ManagedPolicyValidator.Validate(
+            new(true, null, enforced ?? ManagedPolicyRawSection.Missing, recommended ?? ManagedPolicyRawSection.Missing), 1, ReadAt, ModuleKeys);
+
+    [Fact]
+    public void AdditionalKeys_AreValidatedLikeTheHostsOwn()
+    {
+        var snapshot = ValidateWithModuleKeys(Section(
+            [
+                ("AllowExampleFeature", Number(0)), ("ExampleMode", Number(3)), ("ExampleToken", Text(" secret ")),
+                ("ExampleTargetsConfigured", Number(1)), (ManagedPolicyKeys.AllowCloudTranscription, Number(1))
+            ],
+            [("ExampleTargets", new ManagedPolicyRawList(["b", "a", "b"]))]));
+
+        Assert.Empty(snapshot.Issues);
+        Assert.False(snapshot.Enforced("AllowExampleFeature")!.IsTrue);
+        Assert.Equal(3, snapshot.Enforced("ExampleMode")!.Number);
+        Assert.Equal("secret", snapshot.Enforced("ExampleToken")!.Text);
+        Assert.Equal(["b", "a"], snapshot.Enforced("ExampleTargets")!.Items);
+        Assert.True(snapshot.Enforced(ManagedPolicyKeys.AllowCloudTranscription)!.IsTrue);
+        Assert.Equal(ModuleKeys, snapshot.AdditionalDefinitions);
+        Assert.Same(ModuleKeys[3], snapshot.Definition("ExampleToken"));
+        Assert.NotNull(snapshot.Definition(ManagedPolicyKeys.ManagedLicenseKey));
+        Assert.Null(snapshot.Definition("exampletoken"));
+        Assert.Equal(ManagedPolicyKeys.All.Count + ModuleKeys.Length, snapshot.Definitions.Count());
+        Assert.False(snapshot.ResolveBoolean("AllowExampleFeature", true).Value);
+    }
+
+    [Fact]
+    public void AdditionalKeys_InvalidValuesBlockAndRestrictionsCannotBeRecommended()
+    {
+        var snapshot = ValidateWithModuleKeys(
+            Section(("AllowExampleFeature", Number(2)), ("ExampleMode", Number(4)), ("ExampleTargetsConfigured", Number(1))),
+            Section(("AllowExampleFeature", Number(1)), ("ExampleMode", Number(1)), ("ExampleTargetsConfigured", Number(1))));
+
+        Assert.True(snapshot.IsBlocked("AllowExampleFeature"));
+        Assert.True(snapshot.IsBlocked("ExampleMode"));
+        // A marker without a list is an empty allowlist.
+        Assert.Equal([], snapshot.Enforced("ExampleTargets")!.Items!);
+        Assert.True(snapshot.Recommended("AllowExampleFeature")!.IsTrue);
+        Assert.Null(snapshot.Recommended("ExampleMode"));
+        Assert.Null(snapshot.Recommended("ExampleTargets"));
+        Assert.Contains(snapshot.Issues, issue => issue.Key == "ExampleMode" && issue.Scope == ManagedPolicyScope.Recommended
+            && issue.Message.Contains("cannot be recommended"));
+        Assert.Contains(snapshot.Issues, issue => issue.Key == "ExampleTargets" && issue.Scope == ManagedPolicyScope.Recommended);
+        Assert.Contains(snapshot.Issues, issue => issue.Key == "ExampleMode" && issue.Scope == ManagedPolicyScope.Enforced
+            && issue.Message.Contains("between 0 and 3"));
+    }
+
+    [Fact]
+    public void AdditionalKeys_AreUnknownWithoutTheirDefinitions()
+    {
+        var section = Section([("AllowExampleFeature", Number(1)), ("ExampleTargetsConfigured", Number(1))],
+            [("ExampleTargets", new ManagedPolicyRawList(["a"]))]);
+
+        var without = Validate(section);
+        var with = ValidateWithModuleKeys(section);
+
+        Assert.Contains(without.Issues, issue => issue.Message == "Unknown value AllowExampleFeature is ignored.");
+        Assert.Contains(without.Issues, issue => issue.Message == "Unknown value ExampleTargetsConfigured is ignored.");
+        Assert.Contains(without.Issues, issue => issue.Message == "Unknown subkey ExampleTargets is ignored.");
+        Assert.Empty(without.EnforcedValues);
+        Assert.Empty(with.Issues);
+        Assert.Equal(2, with.EnforcedValues.Count);
+    }
+
+    [Fact]
+    public void AdditionalKeys_ThatClashWithTakenNamesArePassedOver()
+    {
+        ManagedPolicyDefinition[] clashing =
+        [
+            new(ManagedPolicyKeys.AllowCloudTranscription, ManagedPolicyValueKind.Boolean),
+            new("allowcloudtextprocessing", ManagedPolicyValueKind.Boolean),
+            new(ManagedPolicyKeys.AllowedPlugins + "Configured", ManagedPolicyValueKind.Boolean),
+            new("Recommended", ManagedPolicyValueKind.List),
+            new("Example", ManagedPolicyValueKind.List),
+            new("ExampleConfigured", ManagedPolicyValueKind.Boolean),
+            new("Paired", ManagedPolicyValueKind.Text, PairedWith: "Example"),
+            new("Example", ManagedPolicyValueKind.Text)
+        ];
+
+        var snapshot = ManagedPolicyValidator.Validate(ManagedPolicyReading.Absent, 1, ReadAt, clashing);
+
+        Assert.Equal(["Example"], snapshot.AdditionalDefinitions.Select(definition => definition.Name));
+        Assert.Equal(ManagedPolicyValueKind.List, snapshot.Definition("Example")!.Kind);
+    }
+
+    [Fact]
+    public void AdditionalKeys_ArePartOfTheContent()
+    {
+        var without = ManagedPolicyValidator.Validate(ManagedPolicyReading.Absent, 1, ReadAt);
+        var with = ManagedPolicyValidator.Validate(ManagedPolicyReading.Absent, 1, ReadAt, ModuleKeys);
+        var unreadable = ManagedPolicyValidator.Validate(ManagedPolicyReading.Unreadable("IOException"), 2, ReadAt, ModuleKeys);
+
+        Assert.False(without.ContentEquals(with));
+        Assert.True(with.ContentEquals(ManagedPolicyValidator.Validate(ManagedPolicyReading.Absent, 2, ReadAt, [.. ModuleKeys])));
+        Assert.Equal(ModuleKeys, unreadable.RetainingValuesFrom(with).AdditionalDefinitions);
+        Assert.True(unreadable.IsBlocked("ExampleMode"));
+    }
 }

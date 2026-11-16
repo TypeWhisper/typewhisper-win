@@ -375,6 +375,8 @@ public sealed partial class MainWindow : Window
         LoadOverlayPreferences();
         RemoveRetiredQuickLaunchFiles();
         _services = new(WinRT.Interop.WindowNative.GetWindowHandle(this), DispatcherQueue);
+        _services.ModuleHost.ShowHistoryRecord = id => OpenHistory(id);
+        _services.ModuleHost.ShowPremiumAccess = () => OpenSettingsPage("Premium");
         _dictation.DictationRequested += () => SuppressStartupWhatsNew();
         _dictation.Changed += ObserveWhatsNewActivity;
         _httpApi.DataChanged += () =>

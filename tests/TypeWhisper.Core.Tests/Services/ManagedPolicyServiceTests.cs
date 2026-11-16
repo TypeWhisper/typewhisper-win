@@ -223,4 +223,30 @@ public class ManagedPolicyServiceTests
         Assert.Same(snapshot, service.Current);
         Assert.Equal(["policy.changed-handler-failed"], reported);
     }
+
+    [Fact]
+    public void AdditionalDefinitions_ApplyFromTheFirstReadOrRereadAtOnce()
+    {
+        ManagedPolicyDefinition[] moduleKeys = [new("AllowExampleFeature", ManagedPolicyValueKind.Boolean)];
+        var source = new FakeSource { Next = () => Enforcing("AllowExampleFeature", 0) };
+        using var service = Create(source);
+
+        var beforeRead = service.UseAdditionalDefinitions(moduleKeys);
+        Assert.Equal(0, source.Reads);
+        Assert.Same(ManagedPolicySnapshot.Empty, beforeRead);
+
+        var first = service.Start();
+        Assert.False(first.Enforced("AllowExampleFeature")!.IsTrue);
+        Assert.Empty(first.Issues);
+
+        var published = new List<ManagedPolicySnapshot>();
+        service.Changed += published.Add;
+        var cleared = service.UseAdditionalDefinitions([]);
+
+        Assert.Equal(2, source.Reads);
+        Assert.Equal(2, cleared.Revision);
+        Assert.Null(cleared.Enforced("AllowExampleFeature"));
+        Assert.Contains(cleared.Issues, issue => issue.Key == "AllowExampleFeature");
+        Assert.Equal([cleared], published);
+    }
 }
