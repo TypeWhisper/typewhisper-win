@@ -454,7 +454,9 @@ public partial class App : Application
             _mainInstance?.UnregisterKey();
             // On success this API ends the process; returning means the restart failed.
             var reason = AppInstance.Restart("");
-            ShowProfileFailure(Loc.T("Your data was deleted. Reopen TypeWhisper to finish removing files that were still in use."), reason.ToString());
+            ShowProfileFailure(report.Complete
+                ? Loc.T("Your data was deleted. Reopen TypeWhisper to finish removing files that were still in use.")
+                : Loc.T("Not all data could be deleted yet. Reopen TypeWhisper to finish deleting it."), reason.ToString());
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
