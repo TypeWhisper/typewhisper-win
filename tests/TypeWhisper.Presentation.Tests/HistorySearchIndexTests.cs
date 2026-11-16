@@ -547,6 +547,8 @@ public sealed class HistorySearchIndexerTests : IDisposable
     [Fact]
     public async Task AnIndexThatCannotBeDeletedStopsTheIndexerUntilTheNextChange()
     {
+        // The test keeps the file open to block its deletion, which only Windows refuses.
+        if (!OperatingSystem.IsWindows()) return;
         _history.Replace(HistorySearchTestData.Record("a", "budget"));
         var indexer = Indexer();
         await indexer.PrepareAsync();
