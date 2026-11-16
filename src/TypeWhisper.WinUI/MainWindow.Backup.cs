@@ -34,6 +34,8 @@ public sealed partial class MainWindow
             ShutdownSettingsImportsAsync(),
             _fileTranscription?.ShutdownAsync() ?? Task.CompletedTask,
             _dictation.HistoryRetention.CloseAndDrainAsync(),
+            // The search index file closes before a restore replaces History or the deletion removes the profile.
+            _services.HistorySearch.StopAsync(),
             _dictationInput?.Completion ?? Task.CompletedTask);
         _settingsWindow?.Close();
         _overlay?.Close();

@@ -31,6 +31,12 @@ public interface IModuleHost
     /// <summary>Tells who spoke when in an audio file, with the diarization providers of enabled plugins.</summary>
     IAudioDiarization? AudioDiarization { get; }
 
+    /// <summary>Searches the host's full-text index of History.</summary>
+    IHistorySearching? HistorySearching => null;
+
+    /// <summary>Sends prompts to the host's text model providers under the managed policy.</summary>
+    ILanguageModelAnswering? LanguageModelAnswering => null;
+
     /// <summary>
     /// Shows the <see cref="ModulePanel"/> with this identifier, creating its content on the first show. A panel that
     /// is already visible comes to the front. Before startup has finished, and for an unknown identifier, nothing

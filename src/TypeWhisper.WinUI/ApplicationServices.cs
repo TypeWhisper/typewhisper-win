@@ -12,6 +12,7 @@ internal sealed class ApplicationServices
     internal WinUIHttpApi HttpApi { get; }
     internal HostModules Modules { get; }
     internal WinUIModuleHost ModuleHost { get; }
+    internal TypeWhisper.Presentation.HistorySearchIndexer HistorySearch { get; }
 
     internal ApplicationServices(IntPtr owner, DispatcherQueue dispatcher)
     {
@@ -57,8 +58,15 @@ internal sealed class ApplicationServices
         WinUICloudSync.History = historyService;
         Dictation = new LocalDictationSession(historyService, owner);
         HttpApi = new WinUIHttpApi(Dictation, dispatcher);
+        // Derived data beside History, so "Delete all data" removes it with History. It is built only once a module
+        // asks for it; an index from an earlier run is kept in step in the background.
+        var searchIndex = new TypeWhisper.Presentation.HistorySearchIndex(
+            Path.Combine(Path.GetDirectoryName(historyPath)!, TypeWhisper.Presentation.HistorySearchIndex.DirectoryName));
+        HistorySearch = new TypeWhisper.Presentation.HistorySearchIndexer(historyService, searchIndex, AppDiagnostics.WriteFailure,
+            () => Dictation.HasActiveUserWork);
         // A failing module is logged and left out; it never stops startup.
-        ModuleHost = new WinUIModuleHost(historyService, Dictation.PluginRuntime, dispatcher);
+        ModuleHost = new WinUIModuleHost(historyService, Dictation, HistorySearch, searchIndex, dispatcher);
         Modules = HostModules.Load(ModuleHost);
+        HistorySearch.Start();
     }
 }
