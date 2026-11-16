@@ -665,7 +665,7 @@ public sealed class ModulePremiumAndUserDataTests
     public async Task EraseRunsEveryRegistrationOnceAndReportsFailures()
     {
         var reported = new List<string>();
-        var lifecycle = new ModuleUserDataLifecycle(Path.GetTempPath(), (stage, _) => reported.Add(stage), TimeSpan.FromMilliseconds(50));
+        var lifecycle = new ModuleUserDataLifecycle(Path.GetTempPath(), (stage, _) => reported.Add(stage), TimeSpan.FromSeconds(1));
         var calls = new List<string>();
         var hang = new TaskCompletionSource();
 

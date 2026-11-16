@@ -51,11 +51,13 @@ internal sealed class SettingsCard : SettingsRows
     // created is left out.
     internal static IEnumerable<SettingsCard> ModuleSections(TypeWhisper.ModuleKit.ModuleSettingsPage page)
     {
-        foreach (var section in HostModules.ActiveCatalog.SectionsFor(page))
+        var sections = HostModules.ActiveCatalog.SectionsFor(page)
+            .Select(section => (section.Title, Content: ModuleCalls.Get("settings-section", section.Id, section.CreateContent, AppDiagnostics.WriteFailure)))
+            .Where(section => section.Content is not null);
+        foreach (var (title, content) in sections)
         {
-            if (ModuleCalls.Get("settings-section", section.Id, section.CreateContent, AppDiagnostics.WriteFailure) is not { } content) continue;
-            var card = new SettingsCard(section.Title);
-            card.Add(content);
+            var card = new SettingsCard(title);
+            card.Add(content!);
             yield return card;
         }
     }

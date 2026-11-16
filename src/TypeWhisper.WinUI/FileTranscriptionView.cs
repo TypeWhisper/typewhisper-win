@@ -273,10 +273,11 @@ public sealed partial class FileTranscriptionView : UserControl
     private List<UIElement> ModuleOptions()
     {
         if (_moduleOptions is not null) return _moduleOptions;
-        _moduleOptions = [];
-        foreach (var option in HostModules.ActiveCatalog.FileTranscriptionOptions)
-            if (ModuleCalls.Get("file-transcription-option", option.Id, option.CreateContent, AppDiagnostics.WriteFailure) is { } content)
-                _moduleOptions.Add(content);
+        // An option whose content cannot be created is left out; ModuleCalls has reported it.
+        _moduleOptions = HostModules.ActiveCatalog.FileTranscriptionOptions
+            .Select(option => ModuleCalls.Get("file-transcription-option", option.Id, option.CreateContent, AppDiagnostics.WriteFailure))
+            .OfType<UIElement>()
+            .ToList();
         return _moduleOptions;
     }
 

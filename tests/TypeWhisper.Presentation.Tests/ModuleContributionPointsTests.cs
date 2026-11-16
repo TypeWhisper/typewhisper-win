@@ -13,7 +13,7 @@ namespace TypeWhisper.Presentation.Tests;
 public sealed class ModuleContributionPointsTests : IDisposable
 {
     private static readonly Assembly StubAssembly = typeof(ModuleEntry).Assembly;
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "module-points-" + Guid.NewGuid().ToString("N"));
+    private readonly string _root = Path.Join(Path.GetTempPath(), "module-points-" + Guid.NewGuid().ToString("N"));
     private readonly List<string> _reports = [];
     private readonly List<(string Stage, Exception Error)> _failures = [];
 
@@ -187,7 +187,7 @@ public sealed class ModuleContributionPointsTests : IDisposable
     [Fact]
     public void AModuleShortcutIsSavedUnderItsOwnFileAndLoadedAgain()
     {
-        var path = Path.Combine(_root, ModuleHotkeys.FileName("example.open"));
+        var path = Path.Join(_root, ModuleHotkeys.FileName("example.open"));
         var backend = new FakeBackend();
         Assert.Null(new PersistedShortcut(path, backend, _ => null, "Example shortcuts").Save("CTRL+ALT+K"));
         Assert.Equal("CTRL+ALT+K", File.ReadAllText(path));
@@ -214,7 +214,7 @@ public sealed class ModuleContributionPointsTests : IDisposable
     [Fact]
     public async Task AFileResultSavedToHistoryReachesHooksWithItsRecordSourceAndSegments()
     {
-        var history = new HistoryService(Path.Combine(_root, "history.json"));
+        var history = new HistoryService(Path.Join(_root, "history.json"));
         await history.EnsureLoadedAsync();
         var record = new TranscriptionRecord
         {
@@ -239,7 +239,7 @@ public sealed class ModuleContributionPointsTests : IDisposable
     [Fact]
     public async Task AFileResultWithoutHistoryHasNoRecordId()
     {
-        var history = new HistoryService(Path.Combine(_root, "history.json"));
+        var history = new HistoryService(Path.Join(_root, "history.json"));
         await history.EnsureLoadedAsync();
         var output = new FileTranscriptionOutput("Text", "provider", "model", 1, []) { Language = " " };
 
