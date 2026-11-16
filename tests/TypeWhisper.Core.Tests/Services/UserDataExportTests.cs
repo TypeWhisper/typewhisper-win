@@ -312,6 +312,9 @@ public sealed class UserDataExportTests : IDisposable
     [InlineData(".data-deletion-pending", false, true)]
     [InlineData(".backup-preview-0123", true, true)]
     [InlineData("recordings/.partial.lock", false, true)]
+    [InlineData("HistorySearch", true, true)]
+    [InlineData("HistorySearch/index.sqlite", false, true)]
+    [InlineData("historysearch/index.sqlite-journal", false, true)]
     public void ExclusionRules(string relative, bool isDirectory, bool excluded)
     {
         Assert.Equal(excluded, UserDataExport.IsExcluded(relative, isDirectory));
