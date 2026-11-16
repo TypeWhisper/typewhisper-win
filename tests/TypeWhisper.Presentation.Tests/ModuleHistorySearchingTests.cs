@@ -133,6 +133,10 @@ public sealed class ModuleHistorySearchingTests : IDisposable
         // Requested domains are compared as the index stores them.
         Assert.True(new ModuleHistorySearchScope { Domains = new HashSet<string> { " WWW.Example.com. " } }.Includes(hit));
         Assert.False(new ModuleHistorySearchScope { Domains = new HashSet<string> { "www.", " " } }.Includes(hit));
+        // The index strips one leading www., so www.www.example.com is stored as www.example.com.
+        var nested = hit with { Domain = "www.example.com" };
+        Assert.True(new ModuleHistorySearchScope { Domains = new HashSet<string> { "www.www.example.com" } }.Includes(nested));
+        Assert.False(new ModuleHistorySearchScope { Domains = new HashSet<string> { "example.com" } }.Includes(nested));
     }
 }
 

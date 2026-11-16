@@ -154,8 +154,9 @@ public sealed record ModuleHistorySearchScope
         return (Period?.Contains(hit.RecordedAt) ?? true)
             && (Sources.Count == 0 || Sources.Contains(hit.Source))
             && AppProcessNames.Count == 0
+            // A hit carries the domain as the index stored it, so only the requested domain is normalized.
             && (Domains.Count == 0 || hit.Domain is { } domain && Domains.Any(item => NormalizedDomain(item) is { } requested
-                && string.Equals(requested, NormalizedDomain(domain), StringComparison.Ordinal)))
+                && string.Equals(requested, domain, StringComparison.OrdinalIgnoreCase)))
             && (RecordIds?.Contains(hit.RecordId) ?? true);
     }
 
