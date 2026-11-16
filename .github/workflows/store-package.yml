@@ -33,8 +33,14 @@ permissions:
   contents: read
 
 jobs:
+  # Store packages always link the optional modules. The premium-modules environment releases the read-only deploy key
+  # of the private modules repository only to main, release/* and tags; pull requests never reach this job.
   package:
     name: Build Store MSIX
+    if: >-
+      github.event_name != 'pull_request' && github.event_name != 'pull_request_target' &&
+      (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/tags/'))
+    environment: premium-modules
     runs-on: windows-latest
     timeout-minutes: 30
     strategy:
@@ -64,6 +70,21 @@ jobs:
           "version=$version" >> $env:GITHUB_OUTPUT
           "product=$product" >> $env:GITHUB_OUTPUT
 
+      - name: Read the modules pin
+        id: modules
+        shell: pwsh
+        run: |
+          "ref=$(./eng/Get-ModulesRef.ps1)" >> $env:GITHUB_OUTPUT
+
+      - name: Check out the optional modules
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: TypeWhisper/typewhisper-premium-win
+          ref: ${{ steps.modules.outputs.ref }}
+          path: external/typewhisper-premium-win
+          ssh-key: ${{ secrets.PREMIUM_WIN_DEPLOY_KEY }}
+          persist-credentials: false
+
       - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: "11.0.x"
@@ -78,11 +99,11 @@ jobs:
 
       - name: Build solution
         shell: pwsh
-        run: dotnet build TypeWhisper.slnx -c Release -p:Version=${{ steps.meta.outputs.version }} -p:TypeWhisperStoreBuild=true -p:TypeWhisperStoreProduct=${{ steps.meta.outputs.product }} --no-restore
+        run: dotnet build TypeWhisper.slnx -c Release -p:Version=${{ steps.meta.outputs.version }} -p:TypeWhisperStoreBuild=true -p:TypeWhisperStoreProduct=${{ steps.meta.outputs.product }} -p:TypeWhisperRequireModules=true --no-restore
 
       - name: Build MSIX package
         shell: pwsh
-        run: ./eng/Build-StorePackage.ps1 -Version ${{ steps.meta.outputs.version }} -StoreProduct ${{ steps.meta.outputs.product }} -RuntimeIdentifier ${{ matrix.rid }}
+        run: ./eng/Build-StorePackage.ps1 -Version ${{ steps.meta.outputs.version }} -StoreProduct ${{ steps.meta.outputs.product }} -RuntimeIdentifier ${{ matrix.rid }} -ExpectedModules premium
 
       - name: Record package provenance and submission destination
         shell: pwsh
@@ -103,6 +124,7 @@ jobs:
             version = $env:PACKAGE_VERSION
             runtimeIdentifier = $env:PACKAGE_RID
             sourceRevision = $sourceRevision
+            modulesRevision = '${{ steps.modules.outputs.ref }}'
             identity = $identity
             package = $package.Name
             sha256 = $sha256
