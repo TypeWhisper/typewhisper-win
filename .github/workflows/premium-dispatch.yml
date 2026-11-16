@@ -1,0 +1,31 @@
+name: Modules dispatch
+
+# Tells the private modules repository that public main moved, so it can test against the new commit.
+on:
+  push:
+    branches:
+      - main
+
+permissions: {}
+
+jobs:
+  notify:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'TypeWhisper/typewhisper-win'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # The dispatch token lives only in this environment, which permits main, release/* and tags.
+    environment: premium-modules
+    steps:
+      - name: Send public-main-updated
+        env:
+          GH_TOKEN: ${{ secrets.PREMIUM_WIN_DISPATCH_TOKEN }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ -z "$GH_TOKEN" ]; then
+            echo '::notice::PREMIUM_WIN_DISPATCH_TOKEN is not set; the private modules repository was not notified.'
+            exit 0
+          fi
+          gh api --method POST repos/TypeWhisper/typewhisper-premium-win/dispatches \
+            -f event_type=public-main-updated -f "client_payload[sha]=$SHA"
+          echo "Sent public-main-updated for $SHA."

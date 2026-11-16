@@ -3,11 +3,19 @@ $ErrorActionPreference = 'Stop'
 $fixture = Join-Path ([IO.Path]::GetTempPath()) ('winui-package-test-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $fixture | Out-Null
 $checks = 0
-function Expect-Rejection([string]$Version, [string]$Message, [string]$Channel = 'daily') {
+function Expect-Rejection([string]$Version, [string]$Message, [string]$Channel = 'daily', [string]$Modules = 'premium') {
     $failure = $null
-    try { & "$PSScriptRoot/Test-WinUIDailyCandidate.ps1" -PublishDirectory $fixture -ExpectedVersion $Version -RuntimeIdentifier win-x64 -Channel $Channel }
+    try { & "$PSScriptRoot/Test-WinUIDailyCandidate.ps1" -PublishDirectory $fixture -ExpectedVersion $Version -RuntimeIdentifier win-x64 -Channel $Channel -ExpectedModules $Modules }
     catch { $failure = $_.Exception.Message }
     if ($null -eq $failure -or $failure -notlike "*$Message*") { throw "Expected '$Message'; received '$failure'" }
+}
+# Compiles a stand-in TypeWhisper.Modules.dll carrying the given assembly metadata.
+function Set-ModulesAssembly([string]$Key, [string]$Value) {
+    $path = Join-Path $fixture 'TypeWhisper.Modules.dll'
+    Remove-Item -LiteralPath $path -ErrorAction SilentlyContinue
+    $attribute = if ($Key) { "[assembly: System.Reflection.AssemblyMetadata(""$Key"", ""$Value"")]" } else { '' }
+    Add-Type -TypeDefinition "$attribute`nnamespace TypeWhisper.Modules { public static class Fixture { } }" `
+        -OutputAssembly $path -OutputType Library
 }
 try {
     Expect-Rejection '1.1.0' 'such as 1.2.0-daily.20261013.1'; $checks++
@@ -25,7 +33,8 @@ try {
     Expect-Rejection '1.1.0' 'missing TypeWhisper.exe' 'stable'; $checks++
     $required = @('TypeWhisper.exe', 'TypeWhisper.dll', 'TypeWhisper.runtimeconfig.json',
         'TypeWhisper.pri', 'App.xbf', 'Microsoft.UI.Xaml.dll', 'Cli/typewhisper.exe',
-        'Cli/TypeWhisper.Cli.dll', 'Cli/TypeWhisper.Cli.runtimeconfig.json', 'Cli/.typewhisper-shared-runtime.json')
+        'Cli/TypeWhisper.Cli.dll', 'Cli/TypeWhisper.Cli.runtimeconfig.json', 'Cli/.typewhisper-shared-runtime.json',
+        'TypeWhisper.Modules.dll')
     foreach ($name in $required) {
         $file = Join-Path $fixture $name
         New-Item -ItemType Directory -Path (Split-Path -Parent $file) -Force | Out-Null
@@ -50,6 +59,23 @@ try {
     Set-Content -LiteralPath (Join-Path $fixture 'Cli/TypeWhisper.Cli.runtimeconfig.json') -Value '{"runtimeOptions":{"includedFrameworks":[]}}'
     Expect-Rejection '1.1.0-daily.20260910.1' 'Invalid shared .NET 11'; $checks++
     Set-Content -LiteralPath (Join-Path $fixture 'Cli/TypeWhisper.Cli.runtimeconfig.json') -Value '{"runtimeOptions":{"framework":{"name":"Microsoft.NETCore.App","version":"11.0.0"}}}'
+    Expect-Rejection '1.1.0-daily.20260910.1' 'TypeWhisper.Modules.dll is not a .NET assembly'; $checks++
+    # Official builds must ship the optional modules, and every other build the stub.
+    Set-ModulesAssembly 'TypeWhisperModules' 'stub'
+    Expect-Rejection '1.1.0-daily.20260910.1' "links modules 'stub'; expected 'premium'"; $checks++
+    Set-ModulesAssembly 'TypeWhisperModules' 'premium'
+    Expect-Rejection '1.1.0-daily.20260910.1' "links modules 'premium'; expected 'stub'" -Modules stub; $checks++
+    Expect-Rejection '1.1.0-rc.1' "links modules 'premium'; expected 'stub'" 'rc' 'stub'; $checks++
+    Set-ModulesAssembly 'TypeWhisperModules' 'Premium'
+    Expect-Rejection '1.1.0-daily.20260910.1' "links modules 'Premium'; expected 'premium'"; $checks++
+    Set-ModulesAssembly 'OtherModules' 'premium'
+    Expect-Rejection '1.1.0-daily.20260910.1' "links modules ''; expected 'premium'"; $checks++
+    Set-ModulesAssembly
+    Expect-Rejection '1.1.0-daily.20260910.1' "links modules ''; expected 'stub'" -Modules stub; $checks++
+    # Accepted modules lead on to the version check.
+    Set-ModulesAssembly 'TypeWhisperModules' 'stub'
+    Expect-Rejection '1.1.0-daily.20260910.1' 'unexpected version' -Modules stub; $checks++
+    Set-ModulesAssembly 'TypeWhisperModules' 'premium'
     Expect-Rejection '1.1.0-daily.20260910.1' 'unexpected version'; $checks++
     foreach ($name in @('.typewhisper-cli.json', '.typewhisper-shared-runtime.json', 'cli-profile.json', 'CLI-PROFILE.JSON', '', ' ')) {
         $manifest = @{ }

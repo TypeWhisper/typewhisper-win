@@ -3,7 +3,9 @@ param(
     [Parameter(Mandatory)][string]$PublishDirectory,
     [Parameter(Mandatory)][string]$ExpectedVersion,
     [Parameter(Mandatory)][ValidateSet('win-x64')][string]$RuntimeIdentifier,
-    [ValidateSet('daily', 'rc', 'stable')][string]$Channel = 'daily'
+    [ValidateSet('daily', 'rc', 'stable')][string]$Channel = 'daily',
+    # Official builds link the optional modules (premium); every other build links the public stub.
+    [Parameter(Mandatory)][ValidateSet('premium', 'stub')][string]$ExpectedModules
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -17,7 +19,8 @@ if ([version]($ExpectedVersion -replace '-.*$', '') -lt [version]'1.1.0') { thro
 $root = (Resolve-Path -LiteralPath $PublishDirectory).Path
 $required = @('TypeWhisper.exe', 'TypeWhisper.dll', 'TypeWhisper.runtimeconfig.json',
     'TypeWhisper.pri', 'App.xbf', 'Microsoft.UI.Xaml.dll', 'Cli/typewhisper.exe',
-    'Cli/TypeWhisper.Cli.dll', 'Cli/TypeWhisper.Cli.runtimeconfig.json', 'Cli/.typewhisper-shared-runtime.json')
+    'Cli/TypeWhisper.Cli.dll', 'Cli/TypeWhisper.Cli.runtimeconfig.json', 'Cli/.typewhisper-shared-runtime.json',
+    'TypeWhisper.Modules.dll')
 foreach ($relative in $required) {
     if (-not (Test-Path -LiteralPath (Join-Path $root $relative) -PathType Leaf)) {
         throw "Candidate is missing $relative"
@@ -50,6 +53,9 @@ foreach ($name in $shared.Keys) {
         (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash -ne $shared[$name]) { throw "Shared CLI runtime is missing or changed: $name" }
     if (Test-Path -LiteralPath (Join-Path (Join-Path $root 'Cli') $name)) { throw "CLI runtime is duplicated: $name" }
 }
+# Each build states which modules assembly it ships, so a build that must not ship the modules never passes with them.
+$modules = & "$PSScriptRoot/Get-ModulesKind.ps1" -AssemblyPath (Join-Path $root 'TypeWhisper.Modules.dll')
+if ($modules -cne $ExpectedModules) { throw "Candidate links modules '$modules'; expected '$ExpectedModules'." }
 foreach ($relative in @('TypeWhisper.dll', 'Cli/TypeWhisper.Cli.dll')) {
     $version = [Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $root $relative)).ProductVersion
     if (($version -split '\+')[0] -ne $ExpectedVersion) { throw "$relative has unexpected version $version" }

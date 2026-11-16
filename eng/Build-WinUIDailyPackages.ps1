@@ -5,7 +5,9 @@ param(
     [Parameter(Mandatory)][string]$Framework,
     # Daily also builds the separate early 1.1 Daily installation. RC and Stable ship only the
     # original installation, on the feeds its 1.0 updater already reads.
-    [ValidateSet('daily', 'rc', 'stable')][string]$Channel = 'daily'
+    [ValidateSet('daily', 'rc', 'stable')][string]$Channel = 'daily',
+    # The modules assembly the candidate must carry: premium for official builds, stub for all others.
+    [Parameter(Mandatory)][ValidateSet('premium', 'stub')][string]$ExpectedModules
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -21,7 +23,7 @@ if ($signing) {
     # The CLI manifest recorded the hashes of the shared assemblies before they were signed.
     ./eng/Optimize-CliBundle.ps1 -PublishDirectory candidate -RefreshSharedHashes
     ./eng/Test-WinUIDailyCandidate.ps1 -PublishDirectory candidate -ExpectedVersion $Version `
-        -RuntimeIdentifier $RuntimeIdentifier -Channel $Channel
+        -RuntimeIdentifier $RuntimeIdentifier -Channel $Channel -ExpectedModules $ExpectedModules
 }
 
 $packages = @(switch ($Channel) {

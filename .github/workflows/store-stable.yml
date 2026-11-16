@@ -115,6 +115,8 @@ jobs:
       destination: stable
       version: ${{ needs.plan.outputs.version }}
       source_revision: ${{ needs.plan.outputs.source }}
+    secrets:
+      PREMIUM_WIN_DEPLOY_KEY: ${{ secrets.PREMIUM_WIN_DEPLOY_KEY }}
 
   submit:
     needs: [plan, approve, package]

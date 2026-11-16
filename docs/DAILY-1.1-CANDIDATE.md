@@ -25,6 +25,23 @@ These releases contain only the original `TypeWhisper` installation: `TypeWhispe
 
 As on macOS, `main` carries the next minor version and each released line has its own branch. `release/1.2` starts at the 1.2.0-rc.1 commit and takes only fixes for 1.2: open hotfix pull requests against `release/1.2`, publish the next RC or `1.2.x` from that branch, and then bring each fix to `main` with its own pull request. `main` carries 1.3, and its Dailies are `1.3.0-daily.*`; Store betas allocate 1.3 Store versions from them. The previous line's branch is deleted once the next Stable is published; its release tags keep the published sources. CI runs for pull requests against any branch and for pushes to `release/**`, and the `main` ruleset also protects `release/**`. Store betas keep following the Dailies from `main`; RC and Stable runs from a release branch do not reach them. Signing on a release branch also needs the branch in the `signpath` environment's deployment rules.
 
+## Optional modules
+
+Official builds link the optional modules from the private modules repository `TypeWhisper/typewhisper-premium-win`; every other build links the public stub (`src/TypeWhisper.Modules.Stub`). Both produce `TypeWhisper.Modules.dll`, marked with the assembly metadata `TypeWhisperModules` = `premium` or `stub`.
+
+| Workflow | Modules |
+| --- | --- |
+| CI, Packaging, and Candidate on pull requests | Stub; no environment and no secret |
+| Candidate, scheduled or manual, on `main` or `release/*` | Optional modules |
+| Store (also when called by Store Beta Daily and Store Stable) | Optional modules |
+
+- **Pin.** `.github/premium-win.ref` holds exactly one full, lowercase commit SHA of the private repository and nothing else. Module builds check out that commit at `external/typewhisper-premium-win`. A missing file, any other content, or the all-zero placeholder fails the build. To update it, take the commit from the private repository's `main` (`git rev-parse origin/main` there), write it as the only line, and merge that change like any other; release branches keep their own pin.
+- **Environment.** Module jobs request the environment `premium-modules`. Restrict its deployment branches and tags to `main`, `release/*` and tags; GitHub enforces that rule before releasing its secrets, even when a pull request edits a workflow. Pull request jobs never request it. The Candidate build runs in its own `publish` job, so the deploy key and the signing token never share a runner.
+- **Secrets**, both only in that environment, never as repository or organization secrets:
+  - `PREMIUM_WIN_DEPLOY_KEY`: the private key of a read-only deploy key on the private repository.
+  - `PREMIUM_WIN_DISPATCH_TOKEN`: a fine-grained token with Contents read and write on the private repository only. After every push to public `main`, **Modules dispatch** sends it the `repository_dispatch` event `public-main-updated` with `client_payload.sha`. Without the token the job only records a notice.
+- **Checks.** Module builds pass `-p:TypeWhisperRequireModules=true`, which fails with `TWMODULES001` instead of linking the stub. Candidate validation (`eng/Test-WinUIDailyCandidate.ps1 -ExpectedModules premium|stub`) and the Store packaging script read the assembly metadata and reject the wrong assembly, so a pull request build cannot ship the optional modules and an official build cannot ship the stub. Signing is unchanged: `TypeWhisper.Modules.dll` matches the existing `TypeWhisper*.dll` rules.
+
 ## Profile migration
 
 Release profiles remain under `%LOCALAPPDATA%/TypeWhisper-WinUI`. Development profiles remain separate. Before opening profile stores, an absent release profile imports from the first of `%LOCALAPPDATA%/TypeWhisper-UserData` and `%LOCALAPPDATA%/TypeWhisper` that holds importable content: `settings.json`, `Data/` dictionary, snippets, workflows, history or license files, or a non-empty `PluginData/<id>` or `Plugins/<id>` folder. Empty folders left by an interrupted 1.0.4 migration (#318) are skipped. Existing 1.1 profiles are never merged or overwritten automatically.

@@ -5,7 +5,10 @@ param(
     [ValidateSet("win-x64")]
     [string]$RuntimeIdentifier = "win-x64",
     [string]$Configuration = "Release",
-    [string]$OutputRoot = "artifacts/store"
+    [string]$OutputRoot = "artifacts/store",
+    # premium: link the optional modules and fail instead of falling back to the stub. any: link what the checkout provides.
+    [ValidateSet('any', 'premium', 'stub')]
+    [string]$ExpectedModules = 'any'
 )
 
 $ErrorActionPreference = "Stop"
@@ -32,6 +35,7 @@ $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $msixVersion = & (Join-Path $PSScriptRoot 'Get-StorePackageVersion.ps1') -Version $Version
 $manifest = & (Join-Path $PSScriptRoot 'New-StorePackageManifest.ps1') -Version $msixVersion -StoreProduct $StoreProduct -RuntimeIdentifier $RuntimeIdentifier
 $platform = 'x64'
+$modulesArguments = @(if ($ExpectedModules -eq 'premium') { '-p:TypeWhisperRequireModules=true' })
 
 $outputRootPath = [IO.Path]::GetFullPath((Join-Path $repoRoot "$OutputRoot/$StoreProduct"))
 $repoPrefix = [IO.Path]::GetFullPath($repoRoot).TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
@@ -57,9 +61,17 @@ dotnet publish (Join-Path $repoRoot "src/TypeWhisper.WinUI/TypeWhisper.WinUI.csp
     -p:Version=$msixVersion `
     -p:TypeWhisperStoreBuild=true `
     -p:TypeWhisperStoreProduct=$StoreProduct `
+    @modulesArguments `
     -o $publishDir
 if ($LASTEXITCODE -ne 0) {
     throw "dotnet publish failed."
+}
+
+if ($ExpectedModules -ne 'any') {
+    $modules = & (Join-Path $PSScriptRoot 'Get-ModulesKind.ps1') -AssemblyPath (Join-Path $publishDir 'TypeWhisper.Modules.dll')
+    if ($modules -cne $ExpectedModules) {
+        throw "Store package links modules '$modules'; expected '$ExpectedModules'."
+    }
 }
 
 Copy-Item -Path (Join-Path $publishDir "*") -Destination $layoutDir -Recurse -Force

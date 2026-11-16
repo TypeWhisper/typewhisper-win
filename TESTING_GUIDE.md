@@ -64,6 +64,7 @@ For changed release tooling or the retained experiment:
 ./eng/Get-ChangedPluginProjects.Tests.ps1
 ./eng/Test-WinUIHeadless.Tests.ps1
 ./eng/Test-WinUIDailyCandidate.Tests.ps1
+./eng/Get-ModulesRef.Tests.ps1
 ./eng/Test-DailyUpgradePackage.Tests.ps1
 ./eng/Test-WinUILocalAudio.Tests.ps1
 python -m unittest discover -s eng/tests -p 'test_*.py' -v

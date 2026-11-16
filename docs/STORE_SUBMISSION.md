@@ -39,7 +39,9 @@ Both use publisher `CN=C90DFED3-0D3C-493E-8620-903C9B1A1D75` and publisher displ
 
 Open GitHub Actions -> **Store** -> **Run workflow**. Choose the source branch/tag, destination, and a new numeric version. Build both beta products from the same revision and verify their `sourceRevision` receipts match.
 
-Each x64 artifact includes its MSIX and a `package-info-<rid>.json` receipt with the source commit, destination, Store identity, and SHA-256. The workflow does not upload to Partner Center, enroll testers, or publish.
+Store packages link the optional modules at the commit pinned in `.github/premium-win.ref` and run in the `premium-modules` environment, so the workflow only runs from `main`, `release/*` or a tag; see [optional modules](DAILY-1.1-CANDIDATE.md#optional-modules).
+
+Each x64 artifact includes its MSIX and a `package-info-<rid>.json` receipt with the source commit, modules commit, destination, Store identity, and SHA-256. The workflow does not upload to Partner Center, enroll testers, or publish.
 
 ## Automatic beta updates after Daily
 
