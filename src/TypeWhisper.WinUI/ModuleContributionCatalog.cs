@@ -24,6 +24,22 @@ internal sealed partial class ModuleContributionCatalog
 
     internal IEnumerable<ModuleSettingsSection> SectionsFor(ModuleSettingsPage page) => SettingsSections.Where(section => section.Page == page);
 
+    // The settings key a section's card carries, so Settings can bring it into view like one of its own rows.
+    internal static string SettingsSectionKey(string sectionId) => "module-section." + sectionId;
+
+    // The settings category of the page a section is appended to.
+    internal static string SettingsCategory(ModuleSettingsPage page) => page switch
+    {
+        ModuleSettingsPage.Advanced => "Advanced",
+        _ => "Premium"
+    };
+
+    // Where the section with this identifier is shown, or null for an unknown one.
+    internal (string Category, string Key)? SettingsSectionTarget(string? sectionId) =>
+        sectionId is null ? null
+        : SettingsSections.FirstOrDefault(section => string.Equals(section.Id, sectionId, StringComparison.OrdinalIgnoreCase)) is { } found
+            ? (SettingsCategory(found.Page), SettingsSectionKey(found.Id)) : null;
+
     // Letters, digits, dots, hyphens and underscores, as on macOS. Shortcut files are named after these identifiers.
     internal static bool IsValidId(string? id) => id is not null && IdPattern().IsMatch(id);
 

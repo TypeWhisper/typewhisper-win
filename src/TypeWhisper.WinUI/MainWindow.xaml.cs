@@ -378,7 +378,8 @@ public sealed partial class MainWindow : Window
         LoadOverlayPreferences();
         RemoveRetiredQuickLaunchFiles();
         _services = new(WinRT.Interop.WindowNative.GetWindowHandle(this), DispatcherQueue);
-        _services.ModuleHost.ShowHistoryRecord = id => OpenHistory(id);
+        _services.ModuleHost.ShowHistoryRecord = (id, atSeconds) => OpenHistory(id, atSeconds);
+        _services.ModuleHost.ShowSettings = (category, key) => OpenSettingsPage(category, rowKey: key);
         _services.ModuleHost.ShowPremiumAccess = () => OpenSettingsPage("Premium");
         _services.ModuleHost.ShowLanguageModelSettings = () => OpenSettingsPage("Workflows");
         PrepareModuleShortcuts();

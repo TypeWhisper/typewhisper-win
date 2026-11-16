@@ -45,7 +45,7 @@ internal sealed class ModuleHistoryReading : IHistoryReading
 {
     private readonly IHistoryService _history;
     private readonly Func<string?, string?> _resolveAudioPath;
-    private readonly Action<string> _showRecord;
+    private readonly Action<string, double?> _showRecord;
     private readonly Action<Action> _post;
     private readonly Action<string, Exception> _report;
     private readonly ModuleHistoryChanges _changes = new();
@@ -55,7 +55,7 @@ internal sealed class ModuleHistoryReading : IHistoryReading
     // UI thread only: whether _changes holds the records of an earlier read.
     private bool _tracking;
 
-    internal ModuleHistoryReading(IHistoryService history, Func<string?, string?> resolveAudioPath, Action<string> showRecord,
+    internal ModuleHistoryReading(IHistoryService history, Func<string?, string?> resolveAudioPath, Action<string, double?> showRecord,
         Action<Action> post, Action<string, Exception> report)
     {
         _history = history;
@@ -119,23 +119,45 @@ internal sealed class ModuleHistoryReading : IHistoryReading
         return observation;
     }
 
-    public void ShowRecord(string id)
+    public void ShowRecord(string id) => ShowRecord(id, null);
+
+    public void ShowRecord(string id, double? atSeconds)
     {
-        if (!string.IsNullOrEmpty(id)) _showRecord(id);
+        if (!string.IsNullOrEmpty(id)) _showRecord(id, AudioPosition(atSeconds));
     }
+
+    // A time History can set its player to, or null to only open the record.
+    internal static double? AudioPosition(double? seconds) => seconds is { } value && double.IsFinite(value) && value >= 0 ? value : null;
 
     // A record a module may read: complete, not failed and not still arriving from another device.
     internal static bool IsComplete(TranscriptionRecord record) => TypeWhisper.Presentation.HistorySearchRecord.Indexes(record);
 
-    internal static ModuleHistoryRecord ToModuleRecord(TranscriptionRecord record, Func<string?, string?> resolveAudioPath) => new(
+    internal static ModuleHistoryRecord ToModuleRecord(TranscriptionRecord record, Func<string?, string?> resolveAudioPath)
+    {
+        // As in the search index: a record from another device keeps a recording's name where a dictation keeps the
+        // app it was made in, and only a dictation has the app's process.
+        var name = string.IsNullOrWhiteSpace(record.AppName) ? null : record.AppName;
+        var titled = TypeWhisper.Presentation.HistorySearchRecord.NormalizedProcessName(record.AppProcessName) is null;
+        return new(
+            record.Id,
+            RecordedAt(record.Timestamp),
+            TypeWhisper.Presentation.HistorySearchRecord.SourceOf(record),
+            record.DisplayText,
+            string.IsNullOrWhiteSpace(record.Language) ? null : record.Language,
+            record.DurationSeconds,
+            titled ? null : name,
+            string.IsNullOrEmpty(record.AudioFileName) ? null : resolveAudioPath(record.AudioFileName))
+        {
+            Title = titled ? name : null
+        };
+    }
+
+    // What a record action's visibility can depend on.
+    internal static ModuleRecordInfo ToRecordInfo(TranscriptionRecord record) => new(
         record.Id,
-        RecordedAt(record.Timestamp),
         TypeWhisper.Presentation.HistorySearchRecord.SourceOf(record),
-        record.DisplayText,
-        string.IsNullOrWhiteSpace(record.Language) ? null : record.Language,
-        record.DurationSeconds,
-        string.IsNullOrWhiteSpace(record.AppName) ? null : record.AppName,
-        string.IsNullOrEmpty(record.AudioFileName) ? null : resolveAudioPath(record.AudioFileName));
+        !string.IsNullOrEmpty(record.AudioFileName),
+        double.IsFinite(record.DurationSeconds) ? Math.Max(0, record.DurationSeconds) : 0);
 
     // History stores UTC; a timestamp read back without a kind is UTC too.
     internal static DateTimeOffset RecordedAt(DateTime timestamp) => TypeWhisper.Presentation.HistorySearchRecord.RecordedAtOf(timestamp);

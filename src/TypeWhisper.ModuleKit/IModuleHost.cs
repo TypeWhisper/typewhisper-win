@@ -37,6 +37,23 @@ public interface IModuleHost
     /// <summary>Sends prompts to the host's text model providers under the managed policy.</summary>
     ILanguageModelAnswering? LanguageModelAnswering => null;
 
+    /// <summary>Writes events to the app's diagnostic log under this module's identifier.</summary>
+    IModuleDiagnostics? Diagnostics => null;
+
+    /// <summary>
+    /// Completes once the app has started: its windows can be shown and the managed policy keys that modules declare
+    /// are readable. A module that awaits it on the UI thread continues there. It never fails or is cancelled, and it
+    /// does not wait for models or plugins to load. A host without a startup returns a completed task.
+    /// </summary>
+    Task WhenStarted => Task.CompletedTask;
+
+    /// <summary>
+    /// Opens the settings page that holds the <see cref="ModuleSettingsSection"/> with this identifier and scrolls the
+    /// section into view. Before startup has finished, and for an unknown identifier, nothing happens.
+    /// </summary>
+    /// <param name="sectionId">The section's <see cref="ModuleSettingsSection.Id"/>.</param>
+    void ShowSettingsSection(string sectionId) { }
+
     /// <summary>
     /// Shows the <see cref="ModulePanel"/> with this identifier, creating its content on the first show. A panel that
     /// is already visible comes to the front. Before startup has finished, and for an unknown identifier, nothing

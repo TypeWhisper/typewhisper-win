@@ -19,11 +19,19 @@ internal sealed partial class HostModules
     internal static HostModules Load(WinUIModuleHost host)
     {
         var modules = Load(host, typeof(ModuleEntry).Assembly, ModuleEntry.RequiredModuleKitVersion, ModuleEntry.Create, AppDiagnostics.WriteFailure,
-            stage => AppDiagnostics.Write(stage));
+            stage => AppDiagnostics.Write(stage), DiagnosticsFor);
         host.UseManagedPolicyKeys(modules.Contributions.ManagedPolicyKeys);
         host.UsePanels(modules.Catalog.Panels);
         ActiveCatalog = modules.Catalog;
         return modules;
+    }
+
+    // A module whose identifier cannot name log events writes none; that is reported once, when it contributes.
+    private static ModuleDiagnostics? DiagnosticsFor(string? moduleId)
+    {
+        var diagnostics = ModuleDiagnostics.For(moduleId, stage => AppDiagnostics.Write(stage), AppDiagnostics.WriteFailure);
+        if (diagnostics is null) AppDiagnostics.Write("modules.diagnostics.invalid-module-id");
+        return diagnostics;
     }
 }
 
@@ -32,6 +40,9 @@ internal sealed partial class HostModules
 internal sealed class WinUIModuleHost : IModuleHost
 {
     private readonly ModuleManagedPolicyReading _managedPolicy;
+    private readonly Action<Action> _post;
+    // Completed on the UI thread. Modules that await it there continue there afterwards, not inside the app's startup.
+    private readonly TaskCompletionSource _started = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private ModulePanels? _panels;
 
     internal WinUIModuleHost(HistoryService history, LocalDictationSession dictation, HistorySearchIndexer searchIndexer,
@@ -42,7 +53,9 @@ internal sealed class WinUIModuleHost : IModuleHost
         {
             if (!dispatcher.TryEnqueue(() => action())) AppDiagnostics.Write("modules.dispatch-unavailable");
         }
-        HistoryReading = new ModuleHistoryReading(history, history.ResolveAudioPath, id => ShowHistoryRecord?.Invoke(id), Post, AppDiagnostics.WriteFailure);
+        _post = Post;
+        HistoryReading = new ModuleHistoryReading(history, history.ResolveAudioPath, (id, atSeconds) => ShowHistoryRecord?.Invoke(id, atSeconds), Post,
+            AppDiagnostics.WriteFailure);
         _managedPolicy = new ModuleManagedPolicyReading(() => WinUIManagedPolicy.Current, WinUIManagedPolicy.RequestRefresh,
             listener => WinUIManagedPolicy.Changed += listener, listener => WinUIManagedPolicy.Changed -= listener, Post, AppDiagnostics.WriteFailure);
         PremiumAccessReading = new ModulePremiumAccessReading(PremiumView.Access, () => ShowPremiumAccess?.Invoke(), Post, AppDiagnostics.WriteFailure);
@@ -96,7 +109,11 @@ internal sealed class WinUIModuleHost : IModuleHost
     public ILanguageModelAnswering LanguageModelAnswering { get; }
 
     internal ModuleUserDataLifecycle UserData { get; }
-    internal Action<string>? ShowHistoryRecord { get; set; }
+    public Task WhenStarted => _started.Task;
+
+    internal Action<string, double?>? ShowHistoryRecord { get; set; }
+    // Opens a settings page by its category and brings the element with this key into view.
+    internal Action<string, string>? ShowSettings { get; set; }
     internal Action? ShowPremiumAccess { get; set; }
     internal Action? ShowLanguageModelSettings { get; set; }
 
@@ -105,6 +122,17 @@ internal sealed class WinUIModuleHost : IModuleHost
     public void HidePanel(string id) => Panels("hide")?.Hide(id);
     public void TogglePanel(string id) => Panels("toggle")?.Toggle(id);
     public bool IsPanelVisible(string id) => _panels?.IsVisible(id) == true;
+
+    public void ShowSettingsSection(string sectionId)
+    {
+        // Until every module has contributed, the catalog is empty and every section is unknown.
+        if (HostModules.ActiveCatalog.SettingsSectionTarget(sectionId) is not { } target) { AppDiagnostics.Write("modules.settings-section.unknown"); return; }
+        if (ShowSettings is not { } show) { AppDiagnostics.Write("modules.settings-section.unavailable"); return; }
+        _post(() => show(target.Category, target.Key));
+    }
+
+    // Called on the UI thread once the main window can show the app's windows and the declared policy keys are read.
+    internal void CompleteStartup() => _started.TrySetResult();
 
     // At shutdown, before the app's windows close.
     internal void ClosePanels() => _panels?.CloseAll();

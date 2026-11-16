@@ -69,7 +69,7 @@ public sealed partial class HistoryWindow
             if (records.Any(item => item.InboxState == HistoryWorkspace.InboxCompleted)) Add(Loc.T("Reopen"), () => _ = SetInboxAsync(false, records));
             foreach (var action in HostModules.ActiveCatalog.RecordActions)
             {
-                var state = ModuleRecordActionState.For(action, records.Length);
+                var state = ModuleRecordActionState.For(action, ModuleRecordInfos(records), AppDiagnostics.WriteFailure);
                 if (!state.Visible) continue;
                 var item = new MenuFlyoutItem { Text = state.Title, IsEnabled = state.Enabled, Icon = new FontIcon { Glyph = action.Glyph } };
                 if (state.Help is { } help) { ToolTipService.SetToolTip(item, help); AutomationProperties.SetHelpText(item, help); }
@@ -81,6 +81,9 @@ public sealed partial class HistoryWindow
         };
         return menu;
     }
+
+    private static ModuleRecordInfo[] ModuleRecordInfos(IEnumerable<TranscriptionRecord> records) =>
+        records.Select(ModuleHistoryReading.ToRecordInfo).ToArray();
 
     private static void RunModuleAction(ModuleRecordAction action, TranscriptionRecord[] records) =>
         ModuleRecordActionState.Perform(action, records.Select(record => record.Id).ToArray(), AppDiagnostics.WriteFailure);
@@ -230,6 +233,35 @@ public sealed partial class HistoryWindow
             UpdatePosition();
             return;
         }
+        await LoadAudioAsync(id, null, play: true);
+    }
+
+    // Sets the open entry's player to a time, as a module asks when it opens an entry. Audio that is not loaded yet
+    // is loaded paused at that time, so nothing plays until the user starts it.
+    private void SeekAudio(string id, double? atSeconds)
+    {
+        if (_closing || atSeconds is not { } seconds || !double.IsFinite(seconds) || seconds < 0) return;
+        if (Opened is not { } record || record.Id != id || string.IsNullOrWhiteSpace(record.AudioFileName)) return;
+        if (double.IsFinite(record.DurationSeconds) && record.DurationSeconds > 0) seconds = Math.Min(seconds, record.DurationSeconds);
+        var position = TimeSpan.FromSeconds(Math.Min(seconds, int.MaxValue));
+        if (_player is { } player && _playerId == id)
+        {
+            SetPosition(player, position);
+            return;
+        }
+        _ = LoadAudioAsync(id, position, play: false);
+    }
+
+    private void SetPosition(MediaPlayer player, TimeSpan position)
+    {
+        try { player.PlaybackSession.Position = position; }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { _notice.Text = Loc.T("Could not seek in this recording."); }
+        UpdatePosition();
+    }
+
+    // Loads the open entry's audio and plays it, or with play false waits at start for the user to play it.
+    private async Task LoadAudioAsync(string id, TimeSpan? start, bool play)
+    {
         if (CanPlayAudio?.Invoke() == false) { _notice.Text = Loc.T("Finish the current recording or operation before playing audio."); return; }
         StopAudioPlayback();
         try
@@ -240,8 +272,13 @@ public sealed partial class HistoryWindow
             if (path is null) { _notice.Text = Loc.T("The saved audio is missing. The transcript is still available."); return; }
             var file = await StorageFile.GetFileFromPathAsync(path);
             if (_closing || Opened?.Id != id) return;
-            var player = _player = new MediaPlayer { AutoPlay = true, Source = MediaSource.CreateFromStorageFile(file) };
+            var player = _player = new MediaPlayer { AutoPlay = play, Source = MediaSource.CreateFromStorageFile(file) };
             _playerId = id;
+            // The position can only be set once the media has opened.
+            if (start is { } position) player.MediaOpened += (_, _) => DispatcherQueue.TryEnqueue(() =>
+            {
+                if (ReferenceEquals(_player, player)) SetPosition(player, position);
+            });
             player.MediaEnded += (_, _) => DispatcherQueue.TryEnqueue(() =>
             {
                 if (!ReferenceEquals(_player, player)) return;

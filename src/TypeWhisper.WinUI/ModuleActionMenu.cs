@@ -9,13 +9,14 @@ namespace TypeWhisper.WinUI;
 // Module record actions behind one "More actions" button, so any number of them leaves the host's own buttons in place.
 internal static class ModuleActionMenu
 {
-    // Null when no module offers an action for this many records.
-    internal static Button? For(IReadOnlyList<string> recordIds)
+    // Null when no module offers an action for these records.
+    internal static Button? For(IReadOnlyList<ModuleRecordInfo> records)
     {
         var menu = new MenuFlyout();
+        var recordIds = records.Select(record => record.Id).ToArray();
         foreach (var action in HostModules.ActiveCatalog.RecordActions)
         {
-            var state = ModuleRecordActionState.For(action, recordIds.Count);
+            var state = ModuleRecordActionState.For(action, records, AppDiagnostics.WriteFailure);
             if (!state.Visible) continue;
             var item = new MenuFlyoutItem { Text = state.Title, IsEnabled = state.Enabled, Icon = new FontIcon { Glyph = action.Glyph } };
             if (state.Help is { } help)

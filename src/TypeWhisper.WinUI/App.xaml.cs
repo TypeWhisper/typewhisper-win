@@ -276,6 +276,8 @@ public partial class App : Application
         // account callbacks and errors wait for the initialized session, and so does any request queued behind them.
         _navigationReady = true;
         DrainActivations();
+        // Modules can now show windows and read the policy keys they declared; dictation may still be loading.
+        _window.CompleteModuleStartup();
         if (skipWhenReady)
         {
             // The bounded wait covers initialization itself: a slow or hanging plugin or model load must not leave

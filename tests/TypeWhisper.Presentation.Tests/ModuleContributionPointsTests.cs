@@ -165,6 +165,85 @@ public sealed class ModuleContributionPointsTests : IDisposable
     }
 
     [Fact]
+    public void ARecordActionIsShownOnlyWhenItIsVisibleForEveryChosenRecord()
+    {
+        var asked = new List<string>();
+        var action = RecordAction("act") with
+        {
+            SelectionTitle = "Several", MaximumRecordCount = 5,
+            IsVisible = record => { asked.Add(record.Id); return record.HasKeptAudio; }
+        };
+        ModuleRecordInfo Info(string id, bool audio) => new(id, "dictation", audio, 1);
+
+        Assert.True(ModuleRecordActionState.For(action, [Info("a", true)], Report).Visible);
+        Assert.False(ModuleRecordActionState.For(action, [Info("b", false)], Report).Visible);
+        var mixed = ModuleRecordActionState.For(action, [Info("c", true), Info("d", false), Info("e", true)], Report);
+        Assert.False(mixed.Visible);
+        Assert.False(mixed.Enabled);
+        var all = ModuleRecordActionState.For(action, [Info("f", true), Info("g", true)], Report);
+        Assert.Equal((true, true, "Several"), (all.Visible, all.Enabled, all.Title));
+        // The first hidden record decides; the rest are not asked.
+        Assert.Equal(["a", "b", "c", "d", "f", "g"], asked);
+
+        // An action the number of records already hides is not asked; one without a rule follows the number alone.
+        asked.Clear();
+        Assert.False(ModuleRecordActionState.For(action with { SelectionTitle = null }, [Info("h", true), Info("i", true)], Report).Visible);
+        Assert.Empty(asked);
+        Assert.True(ModuleRecordActionState.For(action with { IsVisible = null }, [Info("j", false)], Report).Visible);
+        // Over the limit, a visible action stays visible and disabled.
+        var over = ModuleRecordActionState.For(action with { MaximumRecordCount = 1 }, [Info("k", true), Info("l", true)], Report);
+        Assert.Equal((true, false), (over.Visible, over.Enabled));
+        Assert.Empty(_failures);
+    }
+
+    [Fact]
+    public void ARecordActionWhoseVisibilityThrowsIsHiddenAndReported()
+    {
+        var action = RecordAction("act") with { IsVisible = _ => throw new InvalidOperationException("module failure") };
+
+        var state = ModuleRecordActionState.For(action, [new ModuleRecordInfo("a", "file", false, 0)], Report);
+
+        Assert.False(state.Visible);
+        var failure = Assert.Single(_failures);
+        Assert.Equal("modules.record-action.visibility.failed id=act", failure.Stage);
+        Assert.IsType<InvalidOperationException>(failure.Error);
+    }
+
+    [Fact]
+    public void RecordsBecomeWhatVisibilityRulesSee()
+    {
+        var record = new TranscriptionRecord
+        {
+            Id = "a", Timestamp = DateTime.UtcNow, RawText = "raw", FinalText = "final", SourceKind = "recording", DurationSeconds = 4.5,
+            AudioFileName = "a.wav"
+        };
+
+        Assert.Equal(new ModuleRecordInfo("a", "recording", true, 4.5), ModuleHistoryReading.ToRecordInfo(record));
+        Assert.Equal(new ModuleRecordInfo("a", "dictation", false, 0),
+            ModuleHistoryReading.ToRecordInfo(record with { SourceKind = null, AudioFileName = null, DurationSeconds = double.NaN }));
+        Assert.Equal(0, ModuleHistoryReading.ToRecordInfo(record with { DurationSeconds = -3 }).DurationSeconds);
+    }
+
+    [Fact]
+    public void ASettingsSectionIsFoundOnItsPageByItsCardKey()
+    {
+        var contributions = new ModuleContributions();
+        contributions.SettingsSections.Add(Section("Overview", ModuleSettingsPage.Premium));
+        contributions.SettingsSections.Add(Section("tools", ModuleSettingsPage.Advanced));
+        var catalog = ModuleContributionCatalog.Resolve(contributions, _reports.Add);
+
+        Assert.Equal(("Premium", "module-section.Overview"), catalog.SettingsSectionTarget("overview"));
+        Assert.Equal(("Advanced", "module-section.tools"), catalog.SettingsSectionTarget("tools"));
+        Assert.Null(catalog.SettingsSectionTarget("missing"));
+        Assert.Null(catalog.SettingsSectionTarget(null));
+        Assert.Null(ModuleContributionCatalog.Empty.SettingsSectionTarget("tools"));
+        Assert.Empty(_reports);
+    }
+
+    private static ModuleSettingsSection Section(string id, ModuleSettingsPage page) =>
+        new(id, page, "Section", () => throw new InvalidOperationException("never created"));
+
+    [Fact]
     public void RecordActionsRunWithTheChosenIdsAndReportFailures()
     {
         IReadOnlyList<string>? received = null;
@@ -431,6 +510,11 @@ public sealed class ModuleContributionPointsTests : IDisposable
         public IPremiumAccessReading? PremiumAccessReading => null;
         public IUserDataLifecycle? UserDataLifecycle => null;
         public IAudioDiarization? AudioDiarization => null;
+        public IHistorySearching? HistorySearching => null;
+        public ILanguageModelAnswering? LanguageModelAnswering => null;
+        public IModuleDiagnostics? Diagnostics => null;
+        public Task WhenStarted => Task.CompletedTask;
+        public void ShowSettingsSection(string sectionId) { }
         public void ShowPanel(string id) { }
         public void HidePanel(string id) { }
         public void TogglePanel(string id) { }
