@@ -31,43 +31,40 @@ internal sealed class NemotronOnnxSession : INemotronStep, IDisposable
     /// <param name="adapter">The DirectML adapter, or null for the CPU.</param>
     internal static NemotronOnnxSession Open(string cpuModel, string directMlModel, NemotronProfile profile, DirectMlAdapter? adapter)
     {
-        var options = new SessionOptions { GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL };
-        try
+        // The session keeps what it needs from the options, so they go when this method returns.
+        using var options = new SessionOptions { GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL };
+        string model, device;
+        var fixedShapes = adapter is not null;
+        if (adapter is { } gpu)
         {
-            string model, device;
-            var fixedShapes = adapter is not null;
-            if (adapter is { } gpu)
-            {
-                LoadDirectMl();
-                // DirectML needs sequential execution without memory pattern optimization.
-                options.EnableMemoryPattern = false;
-                options.ExecutionMode = ExecutionMode.ORT_SEQUENTIAL;
-                // With fixed shapes DirectML fuses the whole graph, and the fused graph of this export returns
-                // probabilities as if there were no speaker cache. Unfused, the results match the CPU provider and
-                // the fixed shapes still save most of the per-step overhead.
-                options.AddSessionConfigEntry("ep.dml.disable_graph_fusion", "1");
-                options.AppendExecutionProvider_DML(gpu.Index);
-                // Fixed input shapes let DirectML compile the graph once; with free dimensions it runs every operator
-                // on its own.
-                var cachedFrames = profile.SpeakerCacheLength + profile.FifoLength;
-                var stepFrames = profile.ChunkLength + profile.RightContext;
-                options.AddFreeDimensionOverrideByName("batch_size", 1);
-                options.AddFreeDimensionOverrideByName("num_mel_frames", stepFrames * NemotronStreamingDiarizer.Subsampling);
-                options.AddFreeDimensionOverrideByName("num_cached_frames", cachedFrames);
-                options.AddFreeDimensionOverrideByName("num_frames", cachedFrames + stepFrames);
-                model = directMlModel;
-                device = gpu.Name;
-            }
-            else
-            {
-                model = cpuModel;
-                device = "CPU";
-            }
-
-            var session = new InferenceSession(model, options);
-            return new(session, profile, fixedShapes, device);
+            LoadDirectMl();
+            // DirectML needs sequential execution without memory pattern optimization.
+            options.EnableMemoryPattern = false;
+            options.ExecutionMode = ExecutionMode.ORT_SEQUENTIAL;
+            // With fixed shapes DirectML fuses the whole graph, and the fused graph of this export returns
+            // probabilities as if there were no speaker cache. Unfused, the results match the CPU provider and
+            // the fixed shapes still save most of the per-step overhead.
+            options.AddSessionConfigEntry("ep.dml.disable_graph_fusion", "1");
+            options.AppendExecutionProvider_DML(gpu.Index);
+            // Fixed input shapes let DirectML compile the graph once; with free dimensions it runs every operator
+            // on its own.
+            var cachedFrames = profile.SpeakerCacheLength + profile.FifoLength;
+            var stepFrames = profile.ChunkLength + profile.RightContext;
+            options.AddFreeDimensionOverrideByName("batch_size", 1);
+            options.AddFreeDimensionOverrideByName("num_mel_frames", stepFrames * NemotronStreamingDiarizer.Subsampling);
+            options.AddFreeDimensionOverrideByName("num_cached_frames", cachedFrames);
+            options.AddFreeDimensionOverrideByName("num_frames", cachedFrames + stepFrames);
+            model = directMlModel;
+            device = gpu.Name;
         }
-        finally { options.Dispose(); }
+        else
+        {
+            model = cpuModel;
+            device = "CPU";
+        }
+
+        var session = new InferenceSession(model, options);
+        return new(session, profile, fixedShapes, device);
     }
 
     public NemotronStepOutput Run(float[] features, int melFrames, float[] cached, int cachedFrames, long[] mask, CancellationToken cancellationToken)

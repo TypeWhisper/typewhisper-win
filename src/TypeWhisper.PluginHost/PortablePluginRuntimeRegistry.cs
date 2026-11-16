@@ -481,9 +481,8 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             if (policy.LlmRefusal(selectionId, role.Owner.Id, role.Owner.Locality, RunningModel(role.Owner.RunningLlm, selectionId)) is not null)
                 CancelRequest(role.Owner);
         // Diarization receives audio, so the audio rule cancels a running one.
-        foreach (var role in _index.Diarization.Values)
-            if (policy.DiarizationRefusal(role.Owner.Id, role.Owner.Locality) is not null)
-                CancelRequest(role.Owner);
+        foreach (var role in _index.Diarization.Values.Where(role => policy.DiarizationRefusal(role.Owner.Id, role.Owner.Locality) is not null))
+            CancelRequest(role.Owner);
         // A running model download stops once the download policy refuses it.
         if (policy.ModelDownloadRefusal() is not null)
             foreach (var slot in _slots.Values.Where(slot => slot.Downloading)) CancelRequest(slot);

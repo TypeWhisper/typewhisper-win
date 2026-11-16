@@ -85,9 +85,9 @@ internal static class OnnxGeluRewrite
 
         using var output = new MemoryStream(node.ValueEnd - node.ValueStart + 16);
         var domainWritten = false;
-        foreach (var field in fields)
+        // Attributes of the ONNX Gelu are dropped: the Microsoft Gelu takes none.
+        foreach (var field in fields.Where(field => field.Number != NodeAttribute))
         {
-            if (field.Number == NodeAttribute) continue;
             if (field.Number == NodeDomain)
             {
                 if (!domainWritten) WriteText(output, NodeDomain, MicrosoftDomain);

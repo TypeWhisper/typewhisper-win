@@ -14,7 +14,7 @@ public sealed class ModuleAudioDiarizationTests
 
     private sealed class Fake
     {
-        internal List<ModuleDiarizationProvider> Providers = [Local, Counted];
+        internal readonly List<ModuleDiarizationProvider> Providers = [Local, Counted];
         internal Func<PluginDiarizationRequest, Task<PluginDiarizationResult>> Result =
             _ => Task.FromResult(new PluginDiarizationResult([], "fake"));
         internal Func<Task> Prepared = () => Task.CompletedTask;
