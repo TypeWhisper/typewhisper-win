@@ -70,11 +70,12 @@ internal sealed partial class ModuleContributionCatalog
         var accepted = new List<T>();
         foreach (var item in items)
         {
+            // Only a contribution that would be accepted takes its identifier, so a broken one cannot block a later one.
             var reason = item is null ? "missing"
                 : !IsValidId(id(item)) ? "invalid-id"
-                : !seen.Add(id(item)!) ? "duplicate"
                 : !complete(item) ? "incomplete"
                 : accepted.Count >= maximum ? "limit"
+                : !seen.Add(id(item)!) ? "duplicate"
                 : null;
             if (reason is null) accepted.Add(item!);
             else report(RejectionStage(kind, item is null ? null : id(item), reason));

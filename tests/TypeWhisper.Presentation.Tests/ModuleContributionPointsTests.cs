@@ -82,6 +82,19 @@ public sealed class ModuleContributionPointsTests : IDisposable
     }
 
     [Fact]
+    public void AnIncompleteContributionDoesNotTakeItsIdentifier()
+    {
+        var contributions = new ModuleContributions();
+        contributions.RecordActions.Add(RecordAction("open") with { Title = " " });
+        contributions.RecordActions.Add(RecordAction("OPEN"));
+
+        var catalog = ModuleContributionCatalog.Resolve(contributions, _reports.Add);
+
+        Assert.Equal(["OPEN"], catalog.RecordActions.Select(item => item.Id));
+        Assert.Equal(["modules.contribution.rejected kind=record-action id=open reason=incomplete"], _reports);
+    }
+
+    [Fact]
     public void InvalidDuplicateAndIncompleteContributionsAreLeftOutAndReported()
     {
         var contributions = new ModuleContributions();

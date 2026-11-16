@@ -361,13 +361,8 @@ public sealed partial class FileTranscriptionView : UserControl
         _formatPicker.SetOptions(formats, _format);
         _formatPicker.SelectionChanged += selected => _format = selected; _body.Children.Add(_formatPicker);
         // Module actions act on the History record saved for this result.
-        if (_savedRecords.TryGetValue(job.Id, out var recordId))
-            foreach (var action in HostModules.ActiveCatalog.RecordActions)
-            {
-                var state = ModuleRecordActionState.For(action, 1);
-                if (!state.Visible) continue;
-                _actions.Children.Add(Button(state.Title, () => ModuleRecordActionState.Perform(action, [recordId], AppDiagnostics.WriteFailure)));
-            }
+        if (_savedRecords.TryGetValue(job.Id, out var recordId) && ModuleActionMenu.For([recordId]) is { } moduleActions)
+            _actions.Children.Add(moduleActions);
         _actions.Children.Add(Button(Loc.T("Export… · X"), async () => await Export(job)));
         _primaryAction = () => CopyResult(job.Result.Text);
         _actions.Children.Add(Button(Loc.T("Copy text · Enter"), _primaryAction, primary: true));
