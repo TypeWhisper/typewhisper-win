@@ -34,9 +34,8 @@ internal static class ModulePolicyKeys
         }
         var definitions = new List<ManagedPolicyDefinition>();
         var declared = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var key in keys)
+        foreach (var key in keys.Where(key => key is not null))
         {
-            if (key is null) continue;
             if (!IsValidName(key.Name)) { reject(null, "invalid-name"); continue; }
             var name = key.Name;
             if (!Enum.IsDefined(key.Kind)) { reject(name, "unknown-kind"); continue; }

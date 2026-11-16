@@ -165,7 +165,7 @@ public sealed record SupportDiagnosticsReport(
                 ManagedPolicyValueKind.Text => new PolicyValueInfo(entry.Key, sensitive ? "[set]" : Identifier(entry.Value.Text), null),
                 ManagedPolicyValueKind.List => new PolicyValueInfo(entry.Key, null,
                     sensitive ? ["[set]"] : entry.Value.Items!.Select(item => Identifier(item) ?? "[omitted]").ToArray()),
-                _ => new PolicyValueInfo(entry.Key, entry.Value.Number.ToString(CultureInfo.InvariantCulture), null)
+                _ => new PolicyValueInfo(entry.Key, sensitive ? "[set]" : entry.Value.Number.ToString(CultureInfo.InvariantCulture), null)
             };
         }).ToArray();
 

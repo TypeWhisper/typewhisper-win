@@ -261,6 +261,25 @@ public sealed class ModulePolicyKeysTests
         Assert.DoesNotContain("example-secret-value", json);
         Assert.DoesNotContain("hidden-entry", json);
     }
+
+    [Fact]
+    public void DiagnosticsKeepSensitiveNumbersOut()
+    {
+        var reading = new ManagedPolicyReading(true, null, ManagedPolicyRawSection.Of(
+            [
+                KeyValuePair.Create("ExampleSwitch", ManagedPolicyRawValue.FromNumber(1)),
+                KeyValuePair.Create("ExampleLevel", ManagedPolicyRawValue.FromNumber(2))
+            ], []),
+            ManagedPolicyRawSection.Missing);
+        var (resolution, _) = Resolve(
+            new("ExampleSwitch", ModuleManagedPolicyKind.Boolean, Sensitive: true),
+            new("ExampleLevel", ModuleManagedPolicyKind.Enumeration, EnumerationMaximum: 3, Sensitive: true));
+
+        var policy = Report.SummarizePolicy(ManagedPolicyValidator.Validate(reading, 1, DateTimeOffset.UtcNow, resolution.Definitions), watching: true);
+
+        Assert.Equal(["ExampleLevel", "ExampleSwitch"], policy.Enforced.Select(value => value.Name));
+        Assert.All(policy.Enforced, value => Assert.Equal("[set]", value.Value));
+    }
 }
 
 public sealed class ModuleHistoryTests
@@ -386,6 +405,24 @@ public sealed class ModuleHistoryTests
     }
 
     [Fact]
+    public async Task ASaveBeforeTheBaselineCallbackRunsIsStillDelivered()
+    {
+        var first = Record("a");
+        var history = new FakeHistory(first);
+        var posted = new Queue<Action>();
+        var reading = new ModuleHistoryReading(history, _ => null, _ => { }, posted.Enqueue, (stage, _) => Assert.Fail(stage));
+        var received = new List<ModuleHistoryChange>();
+
+        reading.ObserveChanges(received.Add);
+        await Task.Yield();
+        // History is saved while the baseline callback still waits on the UI thread.
+        history.Replace(first, Record("b"));
+        while (posted.TryDequeue(out var action)) action();
+
+        Assert.Equal(["b"], Assert.IsType<ModuleHistoryChange.Upserted>(Assert.Single(received)).Ids.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
     public void ShowRecordPassesTheIdentifierOn()
     {
         var shown = new List<string>();
@@ -437,7 +474,7 @@ public sealed class ModulePremiumAndUserDataTests
     public void PremiumRequirementsFollowTheHostsRules(bool commercial, bool premium, bool signedIn,
         bool any, bool meetsCommercial, bool meetsPremiumAccount)
     {
-        var access = new PremiumAccessState(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "absent.txt"),
+        var access = new PremiumAccessState(Path.Join(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "absent.txt"),
             () => new PremiumAccess(commercial, premium, signedIn));
         var reading = new ModulePremiumAccessReading(access, () => { }, action => action(), (stage, _) => Assert.Fail(stage));
 
@@ -451,7 +488,7 @@ public sealed class ModulePremiumAndUserDataTests
     [Fact]
     public void PremiumChangesReachObserversUntilDisposed()
     {
-        var access = new PremiumAccessState(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "absent.txt"), () => new PremiumAccess());
+        var access = new PremiumAccessState(Path.Join(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "absent.txt"), () => new PremiumAccess());
         var shown = 0;
         var reading = new ModulePremiumAccessReading(access, () => shown++, action => action(), (stage, _) => Assert.Fail(stage));
         var calls = 0;
@@ -489,14 +526,14 @@ public sealed class ModulePremiumAndUserDataTests
     [Fact]
     public void DataFoldersAreCreatedInsideTheRoot()
     {
-        var root = Path.Combine(Path.GetTempPath(), "tw-mod-" + Guid.NewGuid().ToString("N")[..8]);
+        var root = Path.Join(Path.GetTempPath(), "tw-mod-" + Guid.NewGuid().ToString("N")[..8]);
         try
         {
             var lifecycle = new ModuleUserDataLifecycle(root, (stage, _) => Assert.Fail(stage));
 
             var folder = lifecycle.DataFolder("example");
 
-            Assert.Equal(Path.Combine(root, "example"), folder);
+            Assert.Equal(Path.Join(root, "example"), folder);
             Assert.True(Directory.Exists(folder));
             Assert.Equal(folder, lifecycle.DataFolder("example"));
             Assert.Throws<ArgumentException>(() => lifecycle.DataFolder(".."));

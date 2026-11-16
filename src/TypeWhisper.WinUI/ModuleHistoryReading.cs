@@ -136,7 +136,17 @@ internal sealed class ModuleHistoryReading : IHistoryReading
         _history.RecordsChanged += OnRecordsChanged;
         try { await _history.EnsureLoadedAsync(); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { _report("modules.history.load-failed", ex); }
-        _post(() => Compare(deliver: false));
+        // The loaded records are the baseline. They are read here, not in the queued callback, so a save that lands
+        // before the callback runs is compared against them and delivered instead of becoming part of the baseline.
+        IReadOnlyList<TranscriptionRecord> baseline;
+        try { baseline = _history.Records; }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { _report("modules.history.read-failed", ex); baseline = []; }
+        _post(() =>
+        {
+            _changes.Reset(baseline);
+            _tracking = true;
+            Compare();
+        });
     }
 
     // Raised on the saving thread, possibly in bursts: one comparison on the UI thread covers them all.
@@ -146,22 +156,16 @@ internal sealed class ModuleHistoryReading : IHistoryReading
         _post(() =>
         {
             Volatile.Write(ref _comparePending, 0);
-            Compare(deliver: _tracking);
+            // Before the baseline exists, the queued baseline callback compares and delivers instead.
+            if (_tracking) Compare();
         });
     }
 
-    private void Compare(bool deliver)
+    private void Compare()
     {
         IReadOnlyList<TranscriptionRecord> records;
         try { records = _history.Records; }
         catch (Exception ex) when (ex is not OutOfMemoryException) { _report("modules.history.read-failed", ex); return; }
-        if (!deliver)
-        {
-            // The first read only sets what later changes are compared with.
-            if (!_tracking) _changes.Reset(records);
-            _tracking = true;
-            return;
-        }
         var changes = _changes.Update(records);
         if (changes.Count == 0) return;
         (ModuleObservation Observation, Action<ModuleHistoryChange> Handler)[] observers;

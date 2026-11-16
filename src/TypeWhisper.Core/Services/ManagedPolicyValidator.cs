@@ -64,9 +64,9 @@ public static class ManagedPolicyValidator
         var taken = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { RecommendedSubkey };
         foreach (var definition in ManagedPolicyKeys.All) Take(taken, definition);
         var accepted = new List<ManagedPolicyDefinition>(additionalKeys.Count);
-        foreach (var definition in additionalKeys)
+        foreach (var definition in additionalKeys.Where(definition =>
+            definition is not null && !string.IsNullOrEmpty(definition.Name) && definition.PairedWith is null))
         {
-            if (definition is null || string.IsNullOrEmpty(definition.Name) || definition.PairedWith is not null) continue;
             if (taken.Contains(definition.Name)) continue;
             if (definition.Kind == ManagedPolicyValueKind.List && taken.Contains(definition.ConfiguredMarkerName)) continue;
             Take(taken, definition);

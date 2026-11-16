@@ -36,7 +36,7 @@ internal sealed class ModuleUserDataLifecycle : IUserDataLifecycle
     public string DataFolder(string moduleId)
     {
         RequireValidId(moduleId, nameof(moduleId));
-        var folder = Path.Combine(_root, moduleId);
+        var folder = Path.Join(_root, moduleId);
         Directory.CreateDirectory(folder);
         return folder;
     }
