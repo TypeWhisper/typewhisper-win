@@ -3,7 +3,7 @@
   "locality": "cloud",
   "name": "Google Gemini",
   "version": "1.4.0",
-  "minHostVersion": "1.1.5",
+  "minHostVersion": "1.3.0",
   "author": "TypeWhisper",
   "description": "Gemini transcription, live text and LLM processing with model discovery and dictionary support.",
   "descriptions": { "de": "Gemini-Transkription, Live-Text und LLM-Nachbearbeitung mit Modellabfrage und Wörterbuchunterstützung." },

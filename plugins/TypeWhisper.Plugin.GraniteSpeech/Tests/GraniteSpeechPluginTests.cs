@@ -15,7 +15,7 @@ public sealed class GraniteSpeechPluginTests
 
         Assert.NotNull(manifest);
         Assert.Equal("com.typewhisper.granite-speech", manifest.Id);
-        Assert.Equal("1.1.2", manifest.MinHostVersion);
+        Assert.Equal("1.3.0", manifest.MinHostVersion);
         Assert.True(manifest.IsLocal);
         Assert.Contains("transcription", manifest.Categories!);
     }

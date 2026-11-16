@@ -30,14 +30,14 @@ foreach ($relative in @('Plugins', 'typewhisper-dev-publication.json', 'cli-prof
 foreach ($relative in @('PresentationFramework.dll', 'PresentationCore.dll', 'System.Xaml.dll', 'DirectML.dll', 'onnxruntime.dll', 'coreclr.dll', 'System.Private.CoreLib.dll', 'Cli/coreclr.dll', 'Cli/System.Private.CoreLib.dll')) {
     if (Test-Path -LiteralPath (Join-Path $root $relative)) { throw "Candidate contains an unused host dependency: $relative" }
 }
-# Both executables must use the installed .NET 10 runtime, without a desktop dependency.
+# Both executables must use the installed .NET 11 runtime, without a desktop dependency.
 foreach ($relative in @('TypeWhisper.runtimeconfig.json', 'Cli/TypeWhisper.Cli.runtimeconfig.json')) {
     $config = Get-Content -LiteralPath (Join-Path $root $relative) -Raw | ConvertFrom-Json -AsHashtable
     $options = $config['runtimeOptions']
     $framework = $options['framework']
     if ($null -eq $framework -or $framework['name'] -ne 'Microsoft.NETCore.App' -or
-        $framework['version'] -ne '10.0.0' -or $options.ContainsKey('includedFrameworks') -or
-        $options.ContainsKey('frameworks')) { throw "Invalid shared .NET 10 runtime configuration: $relative" }
+        $framework['version'] -ne '11.0.0' -or $options.ContainsKey('includedFrameworks') -or
+        $options.ContainsKey('frameworks')) { throw "Invalid shared .NET 11 runtime configuration: $relative" }
 }
 $shared = Get-Content -LiteralPath (Join-Path $root 'Cli/.typewhisper-shared-runtime.json') -Raw | ConvertFrom-Json -AsHashtable
 if ($null -eq $shared) { throw 'Missing shared CLI runtime metadata.' }

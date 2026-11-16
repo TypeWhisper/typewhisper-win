@@ -1,6 +1,6 @@
 # OpenRouter for the portable host
 
-Portable .NET 10 implementation of `com.typewhisper.openrouter`, version `1.2.0`, requiring host `1.1.2` or later.
+Portable .NET 11 implementation of `com.typewhisper.openrouter`, version `1.2.0`, requiring host `1.3.0` or later.
 
 The plugin provides text processing through `/api/v1/chat/completions` and recorded-audio transcription through `/api/v1/audio/transcriptions`. Audio is sent as base64 WAV in JSON. Translation, streaming and dictionary prompts are not advertised. Following the macOS provider, requests to OpenAI, Groq and Together models request verbose JSON with segment timestamps. Returned valid segments are preserved; unavailable timestamps are not synthesized.
 

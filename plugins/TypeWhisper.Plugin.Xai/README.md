@@ -2,7 +2,7 @@
 
 xAI batch/realtime transcription, Responses LLM completion and TTS with voice/output-device selection.
 
-Version `1.4.0`; plugin ID `com.typewhisper.xai`; minimum host `1.1.5`.
+Version `1.4.0`; plugin ID `com.typewhisper.xai`; minimum host `1.3.0`.
 
 ## Setup
 

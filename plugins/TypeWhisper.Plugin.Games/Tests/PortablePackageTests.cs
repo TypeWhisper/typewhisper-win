@@ -9,7 +9,7 @@ using TypeWhisper.PluginSDK.Models;
 public sealed class PortablePackageTests : IDisposable
 {
     // The plugin API version that brought dictation targets; 1.2.2 offers 1.1.6.
-    private static readonly Version TargetHost = new(1, 1, 7);
+    private static readonly Version TargetHost = new(1, 3, 0);
     private readonly string _root = Path.Join(Path.GetTempPath(), "portable-games-" + Guid.NewGuid().ToString("N"));
 
     [Fact]

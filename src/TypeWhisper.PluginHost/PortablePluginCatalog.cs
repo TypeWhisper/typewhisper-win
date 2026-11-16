@@ -71,7 +71,9 @@ public sealed record PortableCatalogEntry
 
 public sealed class PortablePluginCatalog(HttpClient http, Uri? feed = null)
 {
-    public const string FeedUrl = "https://typewhisper.github.io/typewhisper-win/plugins-v2.json";
+    // Hosts from 1.3 (plugin API 1.3.0, .NET 11) read plugins-v3.json. plugins-v2.json stays frozen for 1.1 and 1.2
+    // hosts, which run on .NET 10 and cannot load packages built for .NET 11.
+    public const string FeedUrl = "https://typewhisper.github.io/typewhisper-win/plugins-v3.json";
     public Uri Feed { get; } = feed ?? new(FeedUrl);
     internal static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true };
     public async Task<IReadOnlyList<PortableCatalogEntry>> FetchAsync(CancellationToken ct = default)

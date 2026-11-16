@@ -1,6 +1,6 @@
 # OpenAI Compatible for the portable host
 
-Portable .NET 10 provider for OpenAI-compatible servers. Plugin ID `com.typewhisper.openai-compatible`; package version `1.1.4`.
+Portable .NET 11 provider for OpenAI-compatible servers. Plugin ID `com.typewhisper.openai-compatible`; package version `1.1.4`.
 
 Each server profile has its own URL, encrypted key, model catalog, transcription model, text model, thinking preference and text request timeout. A key is optional for local servers. Model discovery is explicit, preserves manual model IDs and retains the saved catalog when the server returns no models. Additional profiles expose stable selection IDs to the host and workflows.
 

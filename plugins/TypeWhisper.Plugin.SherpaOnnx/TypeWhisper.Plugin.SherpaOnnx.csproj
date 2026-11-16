@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net11.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
@@ -180,7 +180,7 @@ foreach (var item in SherpaNativeLibraries)
   </Target>
   <Target Name="BundleDictionaryBoosting" AfterTargets="CopyToAppPlugins">
     <PropertyGroup>
-      <_CtcBuildDir>../TypeWhisper.Plugin.ParakeetCtc/bin/$(Configuration)/net10.0/</_CtcBuildDir>
+      <_CtcBuildDir>../TypeWhisper.Plugin.ParakeetCtc/bin/$(Configuration)/net11.0/</_CtcBuildDir>
       <_CtcPackageDir>$(PluginOutputDir)Dependencies/com.typewhisper.parakeet-ctc/</_CtcPackageDir>
     </PropertyGroup>
     <!-- The package only runs on Windows. Built without a runtime identifier, the ONNX Runtime package also brings its

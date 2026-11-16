@@ -15,7 +15,7 @@ Use this for a real speaker → microphone → provider → pasted-document test
 
 ## Prepare and run
 
-Requires Windows, .NET 10 SDK, an installed English Windows speech voice, an enabled/configured provider, and the local HTTP API in the dev profile. The script never prints or saves its discovery token and does not alter API keys.
+Requires Windows, .NET 11 SDK, an installed English Windows speech voice, an enabled/configured provider, and the local HTTP API in the dev profile. The script never prints or saves its discovery token and does not alter API keys.
 
 ```powershell
 # Lists active capture/render endpoints and the Windows default.

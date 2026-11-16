@@ -45,11 +45,11 @@ try {
         Remove-Item -LiteralPath $file
     }
     foreach ($name in @('TypeWhisper.runtimeconfig.json', 'Cli/TypeWhisper.Cli.runtimeconfig.json')) {
-        Set-Content -LiteralPath (Join-Path $fixture $name) -Value '{"runtimeOptions":{"framework":{"name":"Microsoft.NETCore.App","version":"10.0.0"}}}'
+        Set-Content -LiteralPath (Join-Path $fixture $name) -Value '{"runtimeOptions":{"framework":{"name":"Microsoft.NETCore.App","version":"11.0.0"}}}'
     }
     Set-Content -LiteralPath (Join-Path $fixture 'Cli/TypeWhisper.Cli.runtimeconfig.json') -Value '{"runtimeOptions":{"includedFrameworks":[]}}'
-    Expect-Rejection '1.1.0-daily.20260910.1' 'Invalid shared .NET 10'; $checks++
-    Set-Content -LiteralPath (Join-Path $fixture 'Cli/TypeWhisper.Cli.runtimeconfig.json') -Value '{"runtimeOptions":{"framework":{"name":"Microsoft.NETCore.App","version":"10.0.0"}}}'
+    Expect-Rejection '1.1.0-daily.20260910.1' 'Invalid shared .NET 11'; $checks++
+    Set-Content -LiteralPath (Join-Path $fixture 'Cli/TypeWhisper.Cli.runtimeconfig.json') -Value '{"runtimeOptions":{"framework":{"name":"Microsoft.NETCore.App","version":"11.0.0"}}}'
     Expect-Rejection '1.1.0-daily.20260910.1' 'unexpected version'; $checks++
     foreach ($name in @('.typewhisper-cli.json', '.typewhisper-shared-runtime.json', 'cli-profile.json', 'CLI-PROFILE.JSON', '', ' ')) {
         $manifest = @{ }

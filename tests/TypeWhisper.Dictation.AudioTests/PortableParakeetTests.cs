@@ -34,7 +34,7 @@ public sealed class PortableParakeetTests(ITestOutputHelper output)
             Assert.Contains("de", metadata.LanguageCodes);
             await engine.LoadModelAsync(modelId, CancellationToken.None);
             using var synth = new SpeechSynthesizer();
-            synth.SelectVoice(synth.GetInstalledVoices().First(v => v.Enabled && v.VoiceInfo.Culture.TwoLetterISOLanguageName == "en").VoiceInfo.Name);
+            synth.SelectVoice(synth.GetInstalledVoices().First(v => v.Enabled && v.VoiceInfo.Culture?.TwoLetterISOLanguageName == "en" && v.VoiceInfo.Name is not null).VoiceInfo.Name!);
             using var audio = new MemoryStream();
             synth.SetOutputToAudioStream(audio, new SpeechAudioFormatInfo(16000, AudioBitsPerSample.Sixteen, AudioChannel.Mono));
             synth.Speak("Bananas are yellow. This is a test of local transcription.");
@@ -78,7 +78,7 @@ public sealed class PortableParakeetTests(ITestOutputHelper output)
             engine.SetAccelerationPreference(TranscriptionAccelerationPreference.Cpu);
             await engine.LoadModelAsync(modelId, CancellationToken.None);
             using var synth = new SpeechSynthesizer();
-            synth.SelectVoice(synth.GetInstalledVoices().First(v => v.Enabled && v.VoiceInfo.Culture.TwoLetterISOLanguageName == "en").VoiceInfo.Name);
+            synth.SelectVoice(synth.GetInstalledVoices().First(v => v.Enabled && v.VoiceInfo.Culture?.TwoLetterISOLanguageName == "en" && v.VoiceInfo.Name is not null).VoiceInfo.Name!);
             using var audio = new MemoryStream();
             synth.SetOutputToAudioStream(audio, new SpeechAudioFormatInfo(16000, AudioBitsPerSample.Sixteen, AudioChannel.Mono));
             string[] sections =

@@ -11,7 +11,7 @@ Portable transcription, text-processing and speech plugin `com.typewhisper.opena
 - Cloud speech synthesis with 13 voices, instructions and request-specific voice/output-device selection. The WinUI spoken-feedback consumer holds the plugin lease through playback and cancellation. Selecting a cloud voice is explicit.
 - Connection method and credentials appear first, followed by the transcription model selectbox and context, speech settings, then text model selection and generation settings. Transcription model selection activates the chosen dictation model. Local providers retain their download and removal controls.
 
-Dictation and speech require an OpenAI API key even when ChatGPT login is selected for text processing. This package requires host contract `1.1.5`; that contract revision is separate from the application's release version. The macOS buffered preview for file-based GPT Transcribe is not implemented here; live preview uses the realtime models.
+Dictation and speech require an OpenAI API key even when ChatGPT login is selected for text processing. This package requires host contract `1.3.0`; that contract revision is separate from the application's release version. The macOS buffered preview for file-based GPT Transcribe is not implemented here; live preview uses the realtime models.
 
 ## Validation
 

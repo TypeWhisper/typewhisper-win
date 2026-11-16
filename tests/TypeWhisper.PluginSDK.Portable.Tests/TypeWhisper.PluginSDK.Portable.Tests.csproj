@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net11.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsTestProject>true</IsTestProject>
@@ -28,7 +28,7 @@
     <Compile Include="../../src/TypeWhisper.WinUI/CloudTranscriptionPlugin.cs" Link="CloudTranscriptionPlugin.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/PluginSpokenFeedbackBackend.cs" Link="PluginSpokenFeedbackBackend.cs" />
     <Using Include="Xunit" />
-    <ProjectReference Include="../../plugins/TypeWhisper.Plugin.Groq/TypeWhisper.Plugin.Groq.csproj" SetTargetFramework="TargetFramework=net10.0" SkipGetTargetFrameworkProperties="true" />
+    <ProjectReference Include="../../plugins/TypeWhisper.Plugin.Groq/TypeWhisper.Plugin.Groq.csproj" SetTargetFramework="TargetFramework=net11.0" SkipGetTargetFrameworkProperties="true" />
     <ProjectReference Include="../../plugins/TypeWhisper.Plugin.ParakeetCtc/TypeWhisper.Plugin.ParakeetCtc.csproj" />
   </ItemGroup>
   <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">

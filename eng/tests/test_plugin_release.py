@@ -103,6 +103,109 @@ class CatalogTests(unittest.TestCase):
                 publish.update_feed([entry()])
             self.assertEqual(api.call_count, 1)
 
+
+def pages_file(document, sha):
+    return {"sha": sha, "content": publish.base64.b64encode(json.dumps(document).encode()).decode()}
+
+
+class FeedGenerationTests(unittest.TestCase):
+    """Hosts from 1.3 read plugins-v3.json; plugins-v2.json stays frozen for 1.1 and 1.2 hosts."""
+
+    def setUp(self):
+        validation = patch.object(publish, 'validate_catalog')
+        validation.start()
+        self.addCleanup(validation.stop)
+        self.legacy = {"schema": 1, "plugins": [
+            entry() | {"minHostVersion": "1.1.5"},
+            entry("com.typewhisper.unversioned"),
+            entry("com.typewhisper.current", "2.0.0") | {"minHostVersion": "1.3.0"},
+            entry("com.typewhisper.future", "3.0.0") | {"minHostVersion": "1.4"}]}
+
+    def fake_pages(self, files, calls):
+        def api(path, payload=None, method=None):
+            calls.append((path, method))
+            if path == "contents?ref=gh-pages":
+                return [{"name": name} for name in files]
+            name = path.removeprefix("contents/").removesuffix("?ref=gh-pages")
+            if method == "PUT":
+                return {}
+            return pages_file(files[name], "sha-" + name)
+        return api
+
+    def test_feed_names(self):
+        self.assertEqual("plugins-v3.json", publish.FEED_PATH)
+        self.assertEqual("plugins-v2.json", publish.LEGACY_FEED_PATH)
+        self.assertEqual("https://typewhisper.github.io/typewhisper-win/plugins-v3.json", publish.FEED_URL)
+        self.assertEqual(publish.FEED_PATH, prepare.publisher.FEED_PATH)
+
+    def test_existing_feed_is_read_without_the_legacy_feed(self):
+        calls = []
+        files = {"plugins-v2.json": self.legacy, "plugins-v3.json": {"plugins": [entry(version="1.2.0")]}}
+        with patch.object(publish, "api", side_effect=self.fake_pages(files, calls)):
+            self.assertEqual(("sha-plugins-v3.json", {"plugins": [entry(version="1.2.0")]}), publish.snapshot())
+        self.assertNotIn(("contents/plugins-v2.json?ref=gh-pages", None), calls)
+
+    def test_missing_feed_is_seeded_with_the_legacy_entries_this_host_accepts(self):
+        calls = []
+        with patch.object(publish, "api", side_effect=self.fake_pages({"plugins-v2.json": self.legacy}, calls)):
+            sha, seeded = publish.snapshot()
+        self.assertIsNone(sha)
+        self.assertEqual(1, seeded["schema"])
+        self.assertEqual(["com.typewhisper.current", "com.typewhisper.example", "com.typewhisper.unversioned"],
+                         [item["id"] for item in seeded["plugins"]])
+        self.assertEqual(4, len(self.legacy["plugins"]))
+        self.assertEqual([entry()], publish.seed_feed([entry()]))
+
+    def test_missing_feeds_and_listing_failures_are_errors(self):
+        with patch.object(publish, "api", side_effect=self.fake_pages({"index.html": None}, [])):
+            with self.assertRaises(RuntimeError):
+                publish.snapshot()
+        with patch.object(publish, "api", side_effect=RuntimeError("HTTP 403")):
+            with self.assertRaises(RuntimeError):
+                publish.snapshot()
+
+    def test_first_publication_creates_the_feed_and_leaves_the_legacy_feed_alone(self):
+        calls = []
+        with patch.object(publish, "api", side_effect=self.fake_pages({"plugins-v2.json": self.legacy}, calls)) as api:
+            self.assertTrue(publish.update_feed([entry(version="1.1.0") | {"minHostVersion": "1.3.0"}]))
+        writes = [call for call in api.call_args_list if call.args[2:] == ("PUT",)]
+        self.assertEqual(["contents/plugins-v3.json"], [call.args[0] for call in writes])
+        payload = writes[0].args[1]
+        self.assertNotIn("sha", payload)
+        created = json.loads(publish.base64.b64decode(payload["content"]))
+        self.assertEqual("1.1.0", {item["id"]: item for item in created["plugins"]}["com.typewhisper.example"]["version"])
+        self.assertIn("com.typewhisper.unversioned", [item["id"] for item in created["plugins"]])
+        self.assertNotIn("com.typewhisper.future", [item["id"] for item in created["plugins"]])
+        self.assertFalse(any(path.startswith("contents/plugins-v2.json") and method for path, method in calls))
+
+    def test_seed_is_written_without_changes_and_retries_a_concurrent_creation(self):
+        seeded = publish.seed_feed(self.legacy)
+        with patch.object(publish, "snapshot", side_effect=[(None, seeded), ("created", seeded)]), \
+             patch.object(publish, "api", side_effect=[RuntimeError("HTTP 422"), {}]) as api, \
+             patch.object(publish.time, "sleep"):
+            # The concurrent run created the same seed, so nothing is left to write.
+            self.assertFalse(publish.update_feed([]))
+        self.assertEqual(1, api.call_count)
+        with patch.object(publish, "snapshot", return_value=(None, seeded)), \
+             patch.object(publish, "api", return_value={}) as api:
+            self.assertTrue(publish.update_feed([]))
+        self.assertEqual("contents/plugins-v3.json", api.call_args.args[0])
+
+    def test_builder_requires_the_feed_host_minimum(self):
+        for declared in ("1.3.0", "1.3", "1.4.0", "2.0.0.1"):
+            with self.subTest(declared=declared):
+                builder.check_host_minimum({"id": "com.typewhisper.example", "minHostVersion": declared})
+        for manifest in ({"id": "x"}, {"id": "x", "minHostVersion": "1.2.9"}, {"id": "x", "minHostVersion": "1.1.5"}):
+            with self.subTest(manifest=manifest), self.assertRaises(ValueError):
+                builder.check_host_minimum(manifest)
+        with self.assertRaises(ValueError):
+            builder.host_version("1.3.0-beta")
+
+    def test_every_committed_manifest_meets_the_feed_host_minimum(self):
+        for _, manifest in builder.discover_projects(pathlib.Path(__file__).parents[2], set()):
+            with self.subTest(plugin=manifest["id"]):
+                builder.check_host_minimum(manifest)
+
     def test_unknown_or_duplicate_project_selection_fails(self):
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)

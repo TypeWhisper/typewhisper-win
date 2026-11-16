@@ -30,8 +30,8 @@ public sealed class ImmediateAudioTests(ITestOutputHelper output)
     {
         var model = Environment.GetEnvironmentVariable("TYPEWHISPER_TEST_PARAKEET_MODEL");
         using var synth = new SpeechSynthesizer();
-        var voice = synth.GetInstalledVoices().First(v => v.Enabled && v.VoiceInfo.Culture.TwoLetterISOLanguageName == "en");
-        synth.SelectVoice(voice.VoiceInfo.Name);
+        var voice = synth.GetInstalledVoices().First(v => v.Enabled && v.VoiceInfo.Culture?.TwoLetterISOLanguageName == "en" && v.VoiceInfo.Name is not null);
+        synth.SelectVoice(voice.VoiceInfo.Name!);
         using var wave = new MemoryStream();
         synth.SetOutputToAudioStream(wave, new SpeechAudioFormatInfo(16000, AudioBitsPerSample.Sixteen, AudioChannel.Mono));
         synth.Speak("Bananas are yellow. This is a test of immediate recording.");
@@ -115,7 +115,7 @@ public sealed class ImmediateAudioTests(ITestOutputHelper output)
     {
         public bool Running;
         public bool CanRestartAfterStop => true;
-        public WaveFormat WaveFormat => new(16000, 16, 1);
+        public WaveFormat WaveFormat { get; } = new(16000, 16, 1);
         public event EventHandler<AudioInputDataAvailableEventArgs>? DataAvailable;
         public event EventHandler<AudioInputRecordingStoppedEventArgs>? RecordingStopped;
         public IAudioInputCapture Create(AudioInputDeviceSelection device, WaveFormat format, int bufferMilliseconds) => this;

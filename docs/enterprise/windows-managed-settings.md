@@ -223,7 +223,7 @@ configuration, including WPAD and PAC scripts.
 | `api.polar.sh` | Activation and validation of commercial license keys, including `ManagedLicenseKey`. |
 | `app.typewhisper.com` | Premium account sign-in and account status. |
 | `api.github.com`, `github.com`, `release-assets.githubusercontent.com` | App update checks and downloads (unless `UpdateMode` is 0), plugin package downloads, and the transcribe.cpp runtime that Parakeet on the graphics card and Voxtral (Local) download. |
-| `typewhisper.github.io` | The plugin catalog (`plugins-v2.json`). |
+| `typewhisper.github.io` | The plugin catalog (`plugins-v3.json` from TypeWhisper 1.3, `plugins-v2.json` before). |
 | `huggingface.co` and the `*.hf.co` content hosts it redirects to (the wildcard must cover several subdomain levels, such as `us.aws.cdn.hf.co` and `cas-server.xethub.hf.co`) | Model downloads of the local plugins: Parakeet (sherpa-onnx), dictionary boosting assets, whisper.cpp, GigaAM, Voxtral (Local), local text models, local speech output. |
 | `www.python.org`, `raw.githubusercontent.com`, `pypi.org`, `files.pythonhosted.org`, `download.pytorch.org`, `download-r2.pytorch.org` | The Python and PyTorch runtime Granite Speech installs as part of its model download: embedded Python, the pinned pip bootstrap script and the Python packages. The PyTorch package index on `download.pytorch.org` currently points to `download-r2.pytorch.org` for its wheel files. Covered by `AllowModelDownloads`. |
 | `developer.download.nvidia.com`, `api.nuget.org` | Runtime files some local plugins fetch while loading a model (whisper.cpp with CUDA, ONNX runtimes). Not covered by `AllowModelDownloads`; see the known limits above. |
@@ -333,7 +333,7 @@ right to rename or delete the folder.
 
 | Item | Value |
 | --- | --- |
-| Prerequisite | The .NET 10 Runtime (x64). An interactive MSI installation offers to install it; a silent installation does not. Deploy it first, for example as an Intune dependency with `dotnet-runtime-10.0.<patch>-win-x64.exe /install /quiet /norestart` from [dotnet.microsoft.com](https://dotnet.microsoft.com/download/dotnet/10.0), or with `winget install Microsoft.DotNet.Runtime.10`. |
+| Prerequisite | The .NET 11 Runtime (x64) for TypeWhisper 1.3 and later; 1.2.x needs the .NET 10 Runtime. An interactive MSI installation offers to install it; a silent installation does not. Deploy it first, for example as an Intune dependency with `dotnet-runtime-11.0.<patch>-win-x64.exe /install /quiet /norestart` from [dotnet.microsoft.com](https://dotnet.microsoft.com/download/dotnet/11.0), or with `winget install Microsoft.DotNet.Runtime.11`. |
 | Source | `TypeWhisper-win-x64.msi` from the [GitHub release](https://github.com/TypeWhisper/typewhisper-win/releases) (`https://github.com/TypeWhisper/typewhisper-win/releases/latest/download/TypeWhisper-win-x64.msi`). |
 | Package | `IntuneWinAppUtil.exe -c <folder> -s TypeWhisper-win-x64.msi -o <output>` |
 | Install command | `msiexec /i TypeWhisper-win-x64.msi /qn /norestart`, optionally with `VELOPACK_INSTALLDIR="D:\Apps\TypeWhisper"` |

@@ -22,7 +22,8 @@ SPEC = importlib.util.spec_from_file_location("catalog_builder", pathlib.Path(__
 builder = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(builder)
 REPO = "TypeWhisper/typewhisper-win"
-FEED_PATH = "plugins-v2.json"  # Existing clients depend on this URL.
+FEED_PATH = builder.FEED_PATH  # Read by hosts from 1.3.
+LEGACY_FEED_PATH = builder.LEGACY_FEED_PATH  # Frozen for 1.1 and 1.2 hosts: read once to seed FEED_PATH, never written.
 FEED_URL = f"https://typewhisper.github.io/typewhisper-win/{FEED_PATH}"
 
 
@@ -44,9 +45,37 @@ def api(path: str, payload: dict | None = None, method: str | None = None):
     return json.loads(gh(*args, payload=payload))
 
 
-def snapshot():
-    data = api(f"contents/{FEED_PATH}?ref=gh-pages")
+def read_pages_file(path):
+    data = api(f"contents/{path}?ref=gh-pages")
     return data["sha"], json.loads(base64.b64decode(data["content"]))
+
+
+def snapshot():
+    """Returns the current feed and its Git blob SHA.
+
+    Before the first publication to FEED_PATH the SHA is None and the feed is seeded from the frozen legacy feed.
+    Existence comes from the gh-pages listing, so an authentication or network failure is never taken for a
+    missing feed.
+    """
+    names = {item["name"] for item in api("contents?ref=gh-pages")}
+    if FEED_PATH in names:
+        return read_pages_file(FEED_PATH)
+    if LEGACY_FEED_PATH not in names:
+        raise RuntimeError(f"Neither {FEED_PATH} nor {LEGACY_FEED_PATH} exists on gh-pages")
+    _, legacy = read_pages_file(LEGACY_FEED_PATH)
+    return None, seed_feed(legacy)
+
+
+def seed_feed(legacy):
+    """The legacy entries that a host reading FEED_PATH accepts, in the legacy document's shape.
+
+    Packages published for .NET 10 hosts keep loading in .NET 11 hosts, so in practice every entry carries over.
+    """
+    minimum = builder.host_version(builder.FEED_MIN_HOST_VERSION)
+    entries = sorted((entry for entry in builder.catalog_entries(legacy).values()
+                      if builder.host_version(entry.get("minHostVersion", "1.1.0")) <= minimum),
+                     key=lambda e: (e["name"].casefold(), e["id"]))
+    return {**legacy, "plugins": entries} if isinstance(legacy, dict) else entries
 
 
 def validate_catalog(document):
@@ -260,11 +289,17 @@ def update_feed(changes, refreshed=()):
     for attempt in range(4):
         sha, current = snapshot()
         updated = refresh_feed(merge_feed(current, changes), refreshed)
-        if updated == current:
+        # A seeded feed does not exist yet, so it is written even without changes.
+        if updated == current and sha is not None:
             return False
         validate_catalog(updated)
-        payload = {"message": "Publish tested portable plugin packages", "branch": "gh-pages", "sha": sha,
+        payload = {"message": "Publish tested portable plugin packages", "branch": "gh-pages",
                    "content": base64.b64encode((json.dumps(updated, ensure_ascii=False, indent=2) + '\n').encode()).decode()}
+        if sha is None:
+            # Creating without a SHA fails with 422 once a concurrent run created the file; the retry then reads it.
+            payload["message"] += f"; seed {FEED_PATH} from {LEGACY_FEED_PATH}"
+        else:
+            payload["sha"] = sha
         try:
             api(f"contents/{FEED_PATH}", payload, "PUT")
             return True
@@ -301,7 +336,7 @@ def main():
         verify_live(expected)
         print("Public catalog verified.")
         return
-    _, current = snapshot()
+    sha, current = snapshot()
     validate_catalog(refresh_feed(merge_feed(current, changes), refreshed))  # Fail before creating a release on known conflicts.
     print(f"Validated {len(changes)} changed package(s) from {summary['sourceCommit']}", flush=True)
     if not args.publish:
@@ -333,7 +368,8 @@ def main():
         except (ValueError, urllib.error.URLError):
             # A previous run may have committed the feed before Pages failed.
             # Recover deployment even when no package needs rebuilding; refreshes ride along.
-            if refreshed:
+            # A feed that does not exist yet is created from its seed.
+            if refreshed or sha is None:
                 update_feed([], refreshed)
                 # Verified against the feed as committed, not the snapshot read before the commit.
                 _, committed_feed = snapshot()

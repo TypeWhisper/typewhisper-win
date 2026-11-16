@@ -1,9 +1,10 @@
 # Plugin packages for TypeWhisper 1.1
 
-The WinUI catalog is shown to users as **Plugins**. Its current feed URL remains
-`https://typewhisper.github.io/typewhisper-win/plugins-v2.json` so existing Daily builds
-continue to receive updates. The older `plugins.json` URL serves 1.0 clients and
-must not be overwritten with portable packages.
+The WinUI catalog is shown to users as **Plugins**. Hosts from 1.3 read
+`https://typewhisper.github.io/typewhisper-win/plugins-v3.json`, the only feed that
+publication writes. `plugins-v2.json` serves 1.1 and 1.2 hosts and stays frozen: those
+hosts run on .NET 10 and cannot load packages built for .NET 11. The older `plugins.json`
+URL serves 1.0 clients and must not be overwritten with portable packages.
 There is no community feed or fallback to the legacy catalog in the 1.1 host.
 Previously published 1.0 plugin packages and the legacy feed remain unchanged for 1.0 users.
 
@@ -151,6 +152,13 @@ uses these field names:
 IDs must be unique and match the package manifest. The manifest version must match
 the catalog version. The host rejects incompatible architecture/host versions,
 WPF assemblies, incomplete downloads, checksum mismatches and unsafe ZIP paths.
+Packages built from this repository target `net11.0` and declare `minHostVersion`
+`1.3.0`, the host contract of TypeWhisper 1.3. Hosts before 1.3 run on .NET 10 and
+cannot load a `net11.0` assembly; that minimum makes them refuse the package before
+loading it. Packages built for `net10.0` keep loading in 1.3 hosts. Staging refuses a
+package whose minimum is lower than `1.3.0`. Each feed holds one entry per ID; new
+versions go to `plugins-v3.json` only, so 1.2.x installations keep the last version
+`plugins-v2.json` lists.
 A checksum establishes consistency with this HTTPS feed; the UI does not present it
 as a publisher signature or a sandbox. Production publishing/attestation policy remains
 a separate release decision.
@@ -188,7 +196,7 @@ those historical release assets.
 
 Publishing portable plugins requires separate ZIP assets and entries containing their actual
 URLs, sizes and SHA-256 hashes. Do not replace existing release assets or edit `plugins.json`
-when publishing `plugins-v2.json`. Local development installation is not publication.
+or `plugins-v2.json` when publishing `plugins-v3.json`. Local development installation is not publication.
 
 ## Catalog publication and updates
 
@@ -212,8 +220,12 @@ option exists for local catalog experiments only; publication rejects staged out
 removes entries.
 
 Publication verifies every public download against its staged size and SHA-256, then
-updates only `plugins-v2.json` on `gh-pages` and requests the GitHub Pages build.
-Previous release assets and the legacy `plugins.json` stay intact.
+updates only `plugins-v3.json` on `gh-pages` and requests the GitHub Pages build.
+Previous release assets, the frozen `plugins-v2.json` and the legacy `plugins.json` stay
+intact. While `plugins-v3.json` does not exist yet, the first publication seeds it from
+`plugins-v2.json`: every entry whose `minHostVersion` a 1.3 host accepts (all published
+`net10.0` packages) carries over unchanged, so 1.3 hosts see the full catalog, and
+already published versions count as published. The entry schema is the same in both feeds.
 
 The 1.1 feed uses `categories`, an array of capability IDs. For example, Groq declares
 `["transcription", "llm"]`. The staging script normalizes older singular `category`

@@ -2,7 +2,7 @@
 
 Soniox live transcription over WebSocket, recorded-audio transcription with upload, Windows audio compression, polling, cleanup and region selection, translation to English, and text-to-speech.
 
-Version `1.5.0`; plugin ID `com.typewhisper.soniox`; minimum host `1.1.5`.
+Version `1.5.0`; plugin ID `com.typewhisper.soniox`; minimum host `1.3.0`.
 
 ## Setup
 

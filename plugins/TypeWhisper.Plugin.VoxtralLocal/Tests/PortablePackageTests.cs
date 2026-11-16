@@ -35,7 +35,7 @@ public sealed class PortablePackageTests(ITestOutputHelper output) : IDisposable
         Assert.False(Directory.Exists(Path.Combine(package, "runtimes")));
 
         var host = new VocabularyHostServices(Path.Combine(_root, "data"));
-        await using (var loaded = await PortablePluginPackage.LoadAsync(package, host, new(1, 1, 6)))
+        await using (var loaded = await PortablePluginPackage.LoadAsync(package, host, new(1, 3, 0)))
         {
             Assert.Equal(manifest.Id, loaded.Plugin.PluginId);
             var engine = Assert.IsAssignableFrom<IPcmTranscriptionEnginePlugin>(loaded.Plugin);

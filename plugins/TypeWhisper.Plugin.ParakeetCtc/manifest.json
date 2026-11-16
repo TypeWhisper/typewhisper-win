@@ -3,6 +3,7 @@
   "locality": "local",
   "name": "Parakeet CTC Vocabulary",
   "version": "0.1.2",
+  "minHostVersion": "1.3.0",
   "author": "TypeWhisper",
   "description": "Local acoustic vocabulary rescoring using the Parakeet 110M English CTC head.",
   "isLocal": true,

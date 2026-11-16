@@ -3,7 +3,7 @@
   <!-- Linked when no optional modules project is present. It uses the same assembly name as the modules that official
        builds can include, and marks itself with the assembly metadata TypeWhisperModules=stub. -->
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net11.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>

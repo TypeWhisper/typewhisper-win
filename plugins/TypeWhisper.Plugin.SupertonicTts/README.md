@@ -1,6 +1,6 @@
 # Supertonic TTS portable plugin
 
-Local Supertonic 3 speech synthesis with ONNX Runtime, 10 preset voices and 31 supported languages. Version `1.2.2`; plugin ID `com.typewhisper.supertonic-tts`; minimum host `1.1.4`.
+Local Supertonic 3 speech synthesis with ONNX Runtime, 10 preset voices and 31 supported languages. Version `1.2.2`; plugin ID `com.typewhisper.supertonic-tts`; minimum host `1.3.0`.
 
 ## Settings and model setup
 
@@ -25,6 +25,6 @@ dotnet msbuild plugins/TypeWhisper.Plugin.SupertonicTts/portable.proj /t:Build /
 dotnet test plugins/TypeWhisper.Plugin.SupertonicTts/Tests -c Release
 ```
 
-Plugin tests cover license persistence, download integrity failures and cleanup, completion progress, native-load cancellation cleanup, unload/reload state, saved voice/speed/quality, and package installation, restart and removal. The package loader rejects host `1.1.3` and accepts `1.1.4`.
+Plugin tests cover license persistence, download integrity failures and cleanup, completion progress, native-load cancellation cleanup, unload/reload state, saved voice/speed/quality, and package installation, restart and removal. The package loader rejects host `1.1.3` and accepts `1.3.0`.
 
 Validate audible playback through **Test voice**, interactive download cancellation, unload/reload and synthesis cancellation in the native host. See [settings screenshots](../../docs/screenshots/supertonic/).

@@ -179,7 +179,7 @@ public sealed class MicrophonePrerollTests
         {
             internal bool Running;
             public bool CanRestartAfterStop => true;
-            public WaveFormat WaveFormat => new(16000, 16, 1);
+            public WaveFormat WaveFormat { get; } = new(16000, 16, 1);
             public event EventHandler<AudioInputDataAvailableEventArgs>? DataAvailable;
             public event EventHandler<AudioInputRecordingStoppedEventArgs>? RecordingStopped;
             public void Prepare() { }

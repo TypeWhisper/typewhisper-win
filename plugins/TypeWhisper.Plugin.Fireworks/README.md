@@ -1,6 +1,6 @@
 # Fireworks AI for the portable host
 
-Portable .NET 10 package `com.typewhisper.fireworks`, version `1.2.0`, requiring host `1.1.5`.
+Portable .NET 11 package `com.typewhisper.fireworks`, version `1.2.0`, requiring host `1.3.0`.
 
 ## Behavior
 

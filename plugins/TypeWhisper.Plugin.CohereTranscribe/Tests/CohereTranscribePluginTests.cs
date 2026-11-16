@@ -64,7 +64,7 @@ public sealed class CohereTranscribePluginTests
         Assert.Equal("com.typewhisper.cohere-transcribe", manifest.Id);
         Assert.Contains("transcription", manifest.Categories!);
         Assert.True(manifest.IsLocal);
-        Assert.Equal("1.1.6", manifest.MinHostVersion);
+        Assert.Equal("1.3.0", manifest.MinHostVersion);
         Assert.Equal(manifest.Version, sut.PluginVersion);
         Assert.Equal(manifest.Id, sut.PluginId);
         Assert.Equal("cohere-transcribe", sut.ProviderId);

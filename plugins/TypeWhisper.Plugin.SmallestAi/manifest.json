@@ -14,5 +14,5 @@
   "requiresApiKey": true,
   "assemblyName": "TypeWhisper.Plugin.SmallestAi.dll",
   "pluginClass": "TypeWhisper.Plugin.SmallestAi.SmallestAiPlugin",
-  "minHostVersion": "1.1.4"
+  "minHostVersion": "1.3.0"
 }

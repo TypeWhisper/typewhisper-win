@@ -76,7 +76,7 @@ package tests. Successful packaging does not imply native model execution.
 
 ## Build and launch the native UI
 
-Use Windows with .NET 10 SDK and Windows SDK 26100 or newer for development.
+Use Windows with .NET 11 SDK and Windows SDK 26100 or newer for development.
 Build prerequisites differ from the configured minimum OS and the validated OS
 matrix. See [installation and migration](docs/DAILY-1.1-CANDIDATE.md).
 

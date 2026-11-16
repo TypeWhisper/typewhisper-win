@@ -11,7 +11,7 @@
   "bundledDependencies": [
     "com.typewhisper.parakeet-ctc"
   ],
-  "minHostVersion": "1.1.6",
+  "minHostVersion": "1.3.0",
   "categories": [
     "transcription"
   ]

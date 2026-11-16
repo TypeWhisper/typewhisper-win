@@ -1,6 +1,6 @@
 # Mistral for the portable host
 
-Portable .NET 10 package `com.typewhisper.voxtral`, version `1.5.0`, requiring host `1.1.2`. The visible provider is **Mistral**. Its existing package and provider IDs remain unchanged so encrypted credentials, enabled state and dictation selections survive the rename.
+Portable .NET 11 package `com.typewhisper.voxtral`, version `1.5.0`, requiring host `1.3.0`. The visible provider is **Mistral**. Its existing package and provider IDs remain unchanged so encrypted credentials, enabled state and dictation selections survive the rename.
 
 ## Models
 

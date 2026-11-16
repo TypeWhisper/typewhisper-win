@@ -1,6 +1,6 @@
 # Cohere for the portable host
 
-Portable .NET 10 package `com.typewhisper.cohere`, version `1.1.4`, requiring host `1.1.2`.
+Portable .NET 11 package `com.typewhisper.cohere`, version `1.1.4`, requiring host `1.3.0`.
 
 ## Behavior
 

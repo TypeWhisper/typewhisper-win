@@ -7,8 +7,8 @@ Choose the Windows installer for your architecture from
 Daily builds are prereleases. Application releases and plugin releases share the
 repository, so select an application installer rather than a plugin ZIP.
 
-Setup installs .NET 10 Runtime when needed. The portable ZIP requires that runtime
-separately. The current source and the Store packages configure Windows build
+Setup installs the .NET Runtime when needed: .NET 11 from TypeWhisper 1.3, .NET 10 for
+1.2.x. The portable ZIP requires that runtime separately. The current source and the Store packages configure Windows build
 19041 as their minimum; native acceptance on older Windows is still pending.
 TypeWhisper is built for x64 only; Windows 11 on Arm can
 run it through emulation, which is untested. Check the notes accompanying your actual package.

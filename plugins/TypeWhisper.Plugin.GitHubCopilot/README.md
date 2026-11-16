@@ -1,6 +1,6 @@
 # GitHub Copilot portable plugin
 
-Implements `ILlmProviderPlugin` for cleanup, translation and rewriting in WinUI workflows using the official `GitHub.Copilot.SDK` 1.0.13. Requires host 1.1.2 or newer.
+Implements `ILlmProviderPlugin` for cleanup, translation and rewriting in WinUI workflows using the official `GitHub.Copilot.SDK` 1.0.13. Requires host 1.3.0 or newer.
 
 ## Connect
 
