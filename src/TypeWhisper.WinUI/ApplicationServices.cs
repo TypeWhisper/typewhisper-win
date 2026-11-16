@@ -61,7 +61,7 @@ internal sealed class ApplicationServices
         // Derived data beside History, so "Delete all data" removes it with History. It is built only once a module
         // asks for it; an index from an earlier run is kept in step in the background.
         var searchIndex = new TypeWhisper.Presentation.HistorySearchIndex(
-            Path.Combine(Path.GetDirectoryName(historyPath)!, TypeWhisper.Presentation.HistorySearchIndex.DirectoryName));
+            Path.Join(Path.GetDirectoryName(historyPath), TypeWhisper.Presentation.HistorySearchIndex.DirectoryName));
         HistorySearch = new TypeWhisper.Presentation.HistorySearchIndexer(historyService, searchIndex, AppDiagnostics.WriteFailure,
             () => Dictation.HasActiveUserWork);
         // A failing module is logged and left out; it never stops startup.

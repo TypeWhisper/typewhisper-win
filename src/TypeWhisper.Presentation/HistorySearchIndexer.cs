@@ -100,6 +100,10 @@ public sealed class HistorySearchIndexer
     }
 
     /// <summary>Turns the index on and waits until it holds History as it is now, also records changed a moment ago.</summary>
+    /// <exception cref="InvalidOperationException">
+    /// The index could not catch up, because History could not be read or the index could not be written. It tries again
+    /// with the next History change.
+    /// </exception>
     public async Task PrepareAsync(CancellationToken cancellationToken = default)
     {
         if (_stopped) return;
@@ -122,15 +126,17 @@ public sealed class HistorySearchIndexer
 
     /// <summary>
     /// Waits until the queued records are written, also those changed a moment ago. Waits longer while a dictation
-    /// runs; returns when the indexer gives up on a failing write, stops, or the caller is canceled.
+    /// runs; returns when the indexer stops or the caller is canceled.
     /// </summary>
+    /// <exception cref="InvalidOperationException">The index could not catch up with History; see <see cref="PrepareAsync"/>.</exception>
     public async Task WaitForQueuedWorkAsync(CancellationToken cancellationToken = default)
     {
-        if (_worker is null || _stopped) return;
         var waiter = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         (TaskCompletionSource, long) entry;
         lock (_gate)
         {
+            // Checked with the lock StopAsync takes, so no waiter joins after its last completion.
+            if (_worker is null || _stopped) return;
             entry = (waiter, _passes);
             _waiters.Add(entry);
             _flushes++;
@@ -149,8 +155,11 @@ public sealed class HistorySearchIndexer
     /// <summary>Ends all index work for good, waits for the running step and closes the index file.</summary>
     public async Task StopAsync()
     {
-        if (_stopped) return;
-        _stopped = true;
+        lock (_gate)
+        {
+            if (_stopped) return;
+            _stopped = true;
+        }
         if (_subscribed) _history.RecordsChanged -= OnRecordsChanged;
         await _stopping.CancelAsync().ConfigureAwait(false);
         if (_worker is { } worker)
@@ -229,8 +238,8 @@ public sealed class HistorySearchIndexer
                 _stalled = true;
                 again = false;
             }
-            // Idle: nothing due, the index is off, or the indexer gave up until the next change.
-            if (!again) CompleteWaiters(pass);
+            // Idle: nothing due, the index is off, or the indexer gave up until the next change, which its waiters learn.
+            if (!again) CompleteWaiters(pass, _stalled ? new InvalidOperationException("The History search index could not catch up with History.") : null);
         }
         CompleteWaiters();
     }
@@ -253,8 +262,9 @@ public sealed class HistorySearchIndexer
             if (++_rebuilds > RebuildsAfterDamage)
             {
                 // No file is left that this run would no longer keep in step; the index stays off until a module
-                // turns it on again.
+                // turns it on again, and whoever waits for it learns that it failed.
                 _enabled = false;
+                _stalled = true;
                 if (!_index.Destroy()) _report("history-search.delete-failed", new IOException("The search index could not be deleted."));
                 return false;
             }
@@ -365,8 +375,8 @@ public sealed class HistorySearchIndexer
         if (!_index.Destroy()) _report("history-search.delete-failed", new IOException("The search index could not be deleted."));
     }
 
-    // Completes the waiters that registered before `pass` started, or every waiter.
-    private void CompleteWaiters(long pass = long.MaxValue)
+    // Completes the waiters that registered before `pass` started, or every waiter; with an error, they fail.
+    private void CompleteWaiters(long pass = long.MaxValue, Exception? error = null)
     {
         TaskCompletionSource[] waiters;
         lock (_gate)
@@ -375,6 +385,8 @@ public sealed class HistorySearchIndexer
             _waiters.RemoveAll(entry => entry.After < pass);
             _flushes = _waiters.Count;
         }
-        foreach (var waiter in waiters) waiter.TrySetResult();
+        foreach (var waiter in waiters)
+            if (error is null) waiter.TrySetResult();
+            else waiter.TrySetException(error);
     }
 }

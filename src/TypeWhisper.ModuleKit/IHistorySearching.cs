@@ -14,6 +14,10 @@ public interface IHistorySearching
 {
     /// <summary>Turns the index on and waits until it holds History as it is now.</summary>
     /// <param name="cancellationToken">Stops waiting; the index keeps catching up in the background.</param>
+    /// <exception cref="InvalidOperationException">
+    /// The index could not catch up, because History could not be read or the index could not be written. It tries again
+    /// with the next History change; reads meanwhile may miss records.
+    /// </exception>
     Task PrepareAsync(CancellationToken cancellationToken = default);
 
     /// <summary>Turns the index off and deletes it. Reads find nothing until <see cref="PrepareAsync"/>.</summary>

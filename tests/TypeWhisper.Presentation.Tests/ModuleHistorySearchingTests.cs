@@ -8,7 +8,7 @@ namespace TypeWhisper.Presentation.Tests;
 
 public sealed class ModuleHistorySearchingTests : IDisposable
 {
-    private readonly string _directory = Path.Combine(Path.GetTempPath(), "TypeWhisper-HistorySearchTests", Guid.NewGuid().ToString("N"), HistorySearchIndex.DirectoryName);
+    private readonly string _directory = Path.Join(Path.GetTempPath(), "TypeWhisper-HistorySearchTests", Guid.NewGuid().ToString("N"), HistorySearchIndex.DirectoryName);
     private readonly HistorySearchIndex _index;
     private readonly HistorySearchTestData.FakeHistory _history = new();
     private readonly HistorySearchIndexer _indexer;
@@ -25,7 +25,10 @@ public sealed class ModuleHistorySearchingTests : IDisposable
         _indexer.StopAsync().GetAwaiter().GetResult();
         _index.Dispose();
         try { Directory.Delete(Path.GetDirectoryName(_directory)!, recursive: true); }
-        catch (IOException) { }
+        catch (IOException)
+        {
+            // A file the test host still holds stays in the temporary folder.
+        }
     }
 
     private ModuleHistorySearching Searching() => new(_indexer, _index, _history);
@@ -120,7 +123,7 @@ public sealed class ModuleLanguageModelAnsweringTests
         internal WorkflowLlmSelection? Enforced;
         internal string? BlockedReason;
         internal WorkflowLlmSelection? Preferred = new("local-llm", "small");
-        internal List<ModuleLlmProviderState> Providers =
+        internal readonly List<ModuleLlmProviderState> Providers =
         [
             new("local-llm", "Local model", "com.example.local", IsLocal: true, Ready: true, ["small", "large"]),
             new("cloud-llm", "Cloud model", "com.example.cloud", IsLocal: false, Ready: true, ["fast"])
@@ -128,9 +131,9 @@ public sealed class ModuleLanguageModelAnsweringTests
         internal Func<string, string?, string?> Refusal = (_, _) => null;
         internal Func<CancellationToken, Task<string>> Reply = _ => Task.FromResult("  An answer.  ");
         internal (string Provider, string System, string Text, string Model)? Request;
-        internal List<(string Provider, string Model)> Prewarmed = [];
+        internal readonly List<(string Provider, string Model)> Prewarmed = [];
         internal int SettingsShown;
-        internal List<string> Failures = [];
+        internal readonly List<string> Failures = [];
 
         internal ModuleLanguageModelAnswering Create() => new(new(
             () => Enforced, () => BlockedReason, () => Preferred, () => Providers, (id, model) => Refusal(id, model),

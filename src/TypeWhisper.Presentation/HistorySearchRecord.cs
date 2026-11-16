@@ -148,7 +148,8 @@ public sealed record HistorySearchScope(DateTimeOffset? PeriodStart = null, Date
     /// <summary>The records a search is limited to, or null for no such limit. An empty set matches none.</summary>
     public IReadOnlySet<string>? RecordIds { get; init; }
 
-    internal bool LimitsRecords => Sources.Count > 0 || AppProcessNames.Count > 0 || Domains.Count > 0 || RecordIds is not null;
+    internal bool LimitsRecords => PeriodStart is not null || PeriodEnd is not null
+        || Sources.Count > 0 || AppProcessNames.Count > 0 || Domains.Count > 0 || RecordIds is not null;
 }
 
 /// <summary>A passage that a search found, with what a list of sources shows of its record.</summary>

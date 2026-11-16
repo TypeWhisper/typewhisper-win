@@ -85,7 +85,10 @@ internal sealed class ModuleLanguageModelAnswering : ILanguageModelAnswering
                 || Find(first.Id) is not { } state || _runtime.Refusal(state.SelectionId, model) is not null) return;
             _ = PrewarmAsync(state.SelectionId, model);
         }
-        catch (ModuleLanguageModelException) { }
+        catch (ModuleLanguageModelException)
+        {
+            // No usable provider, for example under a blocked policy: there is nothing to load.
+        }
         catch (Exception ex) when (ex is not OutOfMemoryException) { _report("modules.language-model.prewarm-failed", ex); }
     }
 

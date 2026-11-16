@@ -32,9 +32,11 @@ public sealed class HistorySearchIndex : IDisposable
     // Row IDs grow with the recording time, also for records that arrive late through sync. A period is then a range
     // of passage IDs, which full-text search filters far faster than a join on the records. A record's ID is its time
     // in seconds times RecordsPerSecond, plus its millisecond times RecordsPerMillisecond, plus a counter for records
-    // of the same millisecond; a passage's ID is its record's ID times PassagesPerRecord plus its position.
+    // of the same millisecond; records that do not fit their millisecond take the IDs after the last millisecond of
+    // their second. A passage's ID is its record's ID times PassagesPerRecord plus its position.
     internal const long RecordsPerSecond = 1L << 16;
     private const long RecordsPerMillisecond = 64;
+    private const long OverflowStart = 1000 * RecordsPerMillisecond;
     internal const long PassagesPerRecord = 1L << 14;
 
     // A word that more than this share of the passages holds is left out of a search: it matches so much that it costs
@@ -451,15 +453,18 @@ public sealed class HistorySearchIndex : IDisposable
         return rare.Count == 0 && keepingAll ? [.. words] : rare;
     }
 
-    // The IDs that records of the period have. Seconds are whole, so a period that does not start and end on a second
-    // is widened to the next ones.
-    // The IDs that records of the period have, to the millisecond. A period that ends before it starts holds none.
+    // The IDs that records of the period can have: whole seconds, which also cover records that did not fit their
+    // millisecond. RecordFilter then checks the recording time exactly. A period that ends before it starts holds none.
     private static (long Low, long High) RecordIds(HistorySearchScope scope)
     {
-        var low = scope.PeriodStart is { } start ? RowBase(start.ToUnixTimeMilliseconds()) : 0;
-        var high = scope.PeriodEnd is { } end ? RowBase(end.ToUnixTimeMilliseconds()) - 1 : (long)uint.MaxValue * RecordsPerSecond + RecordsPerSecond - 1;
+        var low = scope.PeriodStart is { } start ? Second(start.ToUnixTimeMilliseconds()) * RecordsPerSecond : 0;
+        var high = scope.PeriodEnd is { } end && end > (scope.PeriodStart ?? DateTimeOffset.MinValue)
+            ? (Second(end.ToUnixTimeMilliseconds() - 1) + 1) * RecordsPerSecond - 1
+            : scope.PeriodEnd is null ? (long)uint.MaxValue * RecordsPerSecond + RecordsPerSecond - 1 : low - 1;
         return (low, high);
     }
+
+    private static long Second(long milliseconds) => milliseconds <= 0 ? 0 : Math.Min(milliseconds / 1000, uint.MaxValue);
 
     // The first row ID of a moment's millisecond; times before 1970 share the first one.
     private static long RowBase(long milliseconds)
@@ -473,9 +478,12 @@ public sealed class HistorySearchIndex : IDisposable
         (records.Low * PassagesPerRecord, records.High * PassagesPerRecord + PassagesPerRecord - 1);
 
     // The records of a scope's sources, apps, domains and identifiers, as a subquery over FilterValues.
+    // The row-ID range narrows the records quickly; the recording time then decides the period exactly.
     private const string RecordFilter = """
         (SELECT id FROM records
-         WHERE (@sources IS NULL OR source IN (SELECT value FROM json_each(@sources)))
+         WHERE id BETWEEN @recordLow AND @recordHigh
+           AND (@from IS NULL OR recorded_at >= @from) AND (@until IS NULL OR recorded_at < @until)
+           AND (@sources IS NULL OR source IN (SELECT value FROM json_each(@sources)))
            AND (@apps IS NULL OR app_process IN (SELECT value FROM json_each(@apps)))
            AND (@domains IS NULL OR domain IN (SELECT value FROM json_each(@domains)))
            AND (@ids IS NULL OR record_id IN (SELECT value FROM json_each(@ids))))
@@ -492,7 +500,11 @@ public sealed class HistorySearchIndex : IDisposable
         // A limit whose every value normalizes away still limits: it matches none.
         string? Limit(IReadOnlySet<string> requested, HashSet<string> normalized) =>
             requested.Count == 0 ? null : Json(normalized.Count == 0 ? new HashSet<string> { "" } : normalized, true);
-        return [("@sources", Json(scope.Sources, false)), ("@apps", Limit(scope.AppProcessNames, apps)), ("@domains", Limit(scope.Domains, domains)),
+        var (recordLow, recordHigh) = RecordIds(scope);
+        // As the records store their time: whole milliseconds in seconds.
+        static object? Seconds(DateTimeOffset? moment) => moment is { } value ? value.ToUnixTimeMilliseconds() / 1000.0 : null;
+        return [("@recordLow", recordLow), ("@recordHigh", recordHigh), ("@from", Seconds(scope.PeriodStart)), ("@until", Seconds(scope.PeriodEnd)),
+            ("@sources", Json(scope.Sources, false)), ("@apps", Limit(scope.AppProcessNames, apps)), ("@domains", Limit(scope.Domains, domains)),
             // An empty set of records matches none.
             ("@ids", Json(scope.RecordIds, true))];
     }
@@ -549,14 +561,18 @@ public sealed class HistorySearchIndex : IDisposable
     private static long FreeRowId(SqliteConnection connection, DateTimeOffset recordedAt)
     {
         var first = RowBase(recordedAt.ToUnixTimeMilliseconds());
-        while (true)
+        var second = first - first % RecordsPerSecond;
+        // The record's millisecond, then the IDs its second keeps for full milliseconds, then the next seconds.
+        foreach (var (low, high) in new[] { (first, first + RecordsPerMillisecond - 1), (second + OverflowStart, second + RecordsPerSecond - 1) })
+            if (Next(low, high) is { } free) return free;
+        for (second += RecordsPerSecond; ; second += RecordsPerSecond)
+            if (Next(second + OverflowStart, second + RecordsPerSecond - 1) is { } free) return free;
+
+        long? Next(long low, long high)
         {
-            var last = first + RecordsPerMillisecond - 1;
             var next = Scalar(connection, "SELECT COALESCE(MAX(id) + 1, @first) FROM records WHERE id BETWEEN @first AND @last",
-                ("@first", first), ("@last", last));
-            if (next <= last) return next;
-            // More records in one millisecond than it has IDs: continue in the IDs after it, which stay in order.
-            first = last + 1;
+                ("@first", low), ("@last", high));
+            return next <= high ? next : null;
         }
     }
 

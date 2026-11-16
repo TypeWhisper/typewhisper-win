@@ -169,7 +169,7 @@ public sealed class HistorySearchRecordTests
 
 public sealed class HistorySearchIndexTests : IDisposable
 {
-    private readonly string _directory = Path.Combine(Path.GetTempPath(), "TypeWhisper-HistorySearchTests", Guid.NewGuid().ToString("N"), HistorySearchIndex.DirectoryName);
+    private readonly string _directory = Path.Join(Path.GetTempPath(), "TypeWhisper-HistorySearchTests", Guid.NewGuid().ToString("N"), HistorySearchIndex.DirectoryName);
     private readonly HistorySearchIndex _index;
 
     public HistorySearchIndexTests() => _index = new(_directory);
@@ -178,7 +178,10 @@ public sealed class HistorySearchIndexTests : IDisposable
     {
         _index.Dispose();
         try { Directory.Delete(Path.GetDirectoryName(_directory)!, recursive: true); }
-        catch (IOException) { }
+        catch (IOException)
+        {
+            // A file the test host still holds stays in the temporary folder.
+        }
     }
 
     private static HistorySearchRecord Indexed(string id, string text, long recordedAt = 1_000, string source = "dictation", string? url = null) =>
@@ -322,6 +325,21 @@ public sealed class HistorySearchIndexTests : IDisposable
     }
 
     [Fact]
+    public void APeriodIsExactAlsoForRecordsMovedToLaterRowIds()
+    {
+        // More records in one millisecond than it has row IDs: the last one takes an ID of the next millisecond.
+        _index.Upsert([.. Enumerable.Range(0, 65).Select(number => HistorySearchRecord.From(HistorySearchTestData.Record("r" + number, "budget") with
+            { Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(1_000_100).UtcDateTime, AppProcessName = "notes" })!)]);
+        var sameMillisecond = new HistorySearchScope(DateTimeOffset.FromUnixTimeMilliseconds(1_000_100), DateTimeOffset.FromUnixTimeMilliseconds(1_000_101));
+        var later = new HistorySearchScope(DateTimeOffset.FromUnixTimeMilliseconds(1_000_101), DateTimeOffset.FromUnixTimeMilliseconds(1_000_200));
+
+        Assert.Equal(65, _index.NewestRecords(sameMillisecond, 100).Total);
+        Assert.Equal(0, _index.NewestRecords(later, 100).Total);
+        Assert.Empty(_index.Search(["budget"], scope: later, limit: 100));
+        Assert.Equal(65, _index.Search(["budget"], scope: sameMillisecond, limit: 100).Count);
+    }
+
+    [Fact]
     public void RecordsOfOneSecondKeepTheirOrderToTheMillisecond()
     {
         static HistorySearchRecord At(string id, long milliseconds) => HistorySearchRecord.From(HistorySearchTestData.Record(id, "budget") with
@@ -400,7 +418,7 @@ public sealed class HistorySearchIndexTests : IDisposable
 
 public sealed class HistorySearchIndexerTests : IDisposable
 {
-    private readonly string _directory = Path.Combine(Path.GetTempPath(), "TypeWhisper-HistorySearchTests", Guid.NewGuid().ToString("N"), HistorySearchIndex.DirectoryName);
+    private readonly string _directory = Path.Join(Path.GetTempPath(), "TypeWhisper-HistorySearchTests", Guid.NewGuid().ToString("N"), HistorySearchIndex.DirectoryName);
     private readonly HistorySearchIndex _index;
     private readonly HistorySearchTestData.FakeHistory _history = new();
     private readonly List<string> _failures = [];
@@ -413,7 +431,10 @@ public sealed class HistorySearchIndexerTests : IDisposable
         _indexer?.StopAsync().GetAwaiter().GetResult();
         _index.Dispose();
         try { Directory.Delete(Path.GetDirectoryName(_directory)!, recursive: true); }
-        catch (IOException) { }
+        catch (IOException)
+        {
+            // A file the test host still holds stays in the temporary folder.
+        }
     }
 
     private HistorySearchIndexer Indexer(TimeSpan? upsertDelay = null, Func<bool>? isBusy = null) => _indexer = new(_history, _index,
@@ -508,6 +529,37 @@ public sealed class HistorySearchIndexerTests : IDisposable
     }
 
     [Fact]
+    public async Task PreparingFailsWhileHistoryCannotBeReadAndWorksOnceItCan()
+    {
+        _history.Replace(HistorySearchTestData.Record("a", "budget"));
+        _history.Load = () => Task.FromException(new IOException("History is unreadable."));
+        var indexer = Indexer();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => indexer.PrepareAsync());
+        Assert.Empty(Indexed());
+
+        _history.Load = () => Task.CompletedTask;
+        await indexer.PrepareAsync();
+        Assert.Equal(["a"], Indexed());
+        Assert.Contains("history-search.history-unavailable", _failures);
+    }
+
+    [Fact]
+    public async Task NothingWaitsForAnIndexerThatStopped()
+    {
+        _history.Replace(HistorySearchTestData.Record("a", "budget"));
+        var indexer = Indexer();
+        await indexer.PrepareAsync();
+
+        await indexer.StopAsync();
+
+        await indexer.PrepareAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        await indexer.WaitForQueuedWorkAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        await indexer.DisableAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.False(indexer.IsEnabled);
+    }
+
+    [Fact]
     public async Task ADamagedIndexIsBuiltAgainInFull()
     {
         _history.Replace([.. Enumerable.Range(0, 120).Select(number => HistorySearchTestData.Record("r" + number, "budget " + number))]);
@@ -539,7 +591,8 @@ internal static class HistorySearchTestData
             _records = records;
             RecordsChanged?.Invoke();
         }
-        public Task EnsureLoadedAsync() => Task.CompletedTask;
+        public Func<Task> Load { get; set; } = () => Task.CompletedTask;
+        public Task EnsureLoadedAsync() => Load();
         public void AddRecord(TranscriptionRecord record) => throw new NotSupportedException();
         public void UpdateRecord(string id, string finalText) => throw new NotSupportedException();
         public void DeleteRecord(string id) => throw new NotSupportedException();

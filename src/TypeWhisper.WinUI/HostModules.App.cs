@@ -74,7 +74,8 @@ internal sealed class WinUIModuleHost : IModuleHost
             dictation.ProcessLlmAsync,
             // Running nothing inside the provider's lease loads its remembered local model, as a request would.
             (id, model, ct) => plugins.UseLlmAsync(id, (_, _) => Task.FromResult(true), ct, model),
-            () => ShowLanguageModelSettings?.Invoke()), AppDiagnostics.WriteFailure);
+            // Opens a window, so it runs on the UI thread whichever thread the module calls from.
+            () => Post(() => ShowLanguageModelSettings?.Invoke())), AppDiagnostics.WriteFailure);
     }
 
     private static ModuleDiarizationProvider ToModuleProvider(PortableDiarizationProvider provider) =>
