@@ -70,13 +70,21 @@ jobs:
           "version=$version" >> $env:GITHUB_OUTPUT
           "product=$product" >> $env:GITHUB_OUTPUT
 
+      # A source from before the optional modules (an older release replayed) has no pin and builds as it did then.
       - name: Read the modules pin
         id: modules
         shell: pwsh
         run: |
-          "ref=$(./eng/Get-ModulesRef.ps1)" >> $env:GITHUB_OUTPUT
+          if (Test-Path -LiteralPath eng/Get-ModulesRef.ps1) {
+            "supported=true" >> $env:GITHUB_OUTPUT
+            "ref=$(./eng/Get-ModulesRef.ps1)" >> $env:GITHUB_OUTPUT
+          } else {
+            Write-Host '::notice::This source predates the optional modules; it is packaged without them.'
+            "supported=false" >> $env:GITHUB_OUTPUT
+          }
 
       - name: Check out the optional modules
+        if: steps.modules.outputs.supported == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: TypeWhisper/typewhisper-premium-win
@@ -99,11 +107,11 @@ jobs:
 
       - name: Build solution
         shell: pwsh
-        run: dotnet build TypeWhisper.slnx -c Release -p:Version=${{ steps.meta.outputs.version }} -p:TypeWhisperStoreBuild=true -p:TypeWhisperStoreProduct=${{ steps.meta.outputs.product }} -p:TypeWhisperRequireModules=true --no-restore
+        run: dotnet build TypeWhisper.slnx -c Release -p:Version=${{ steps.meta.outputs.version }} -p:TypeWhisperStoreBuild=true -p:TypeWhisperStoreProduct=${{ steps.meta.outputs.product }} ${{ steps.modules.outputs.supported == 'true' && '-p:TypeWhisperRequireModules=true' || '' }} --no-restore
 
       - name: Build MSIX package
         shell: pwsh
-        run: ./eng/Build-StorePackage.ps1 -Version ${{ steps.meta.outputs.version }} -StoreProduct ${{ steps.meta.outputs.product }} -RuntimeIdentifier ${{ matrix.rid }} -ExpectedModules premium
+        run: ./eng/Build-StorePackage.ps1 -Version ${{ steps.meta.outputs.version }} -StoreProduct ${{ steps.meta.outputs.product }} -RuntimeIdentifier ${{ matrix.rid }} ${{ steps.modules.outputs.supported == 'true' && '-ExpectedModules premium' || '' }}
 
       - name: Record package provenance and submission destination
         shell: pwsh
