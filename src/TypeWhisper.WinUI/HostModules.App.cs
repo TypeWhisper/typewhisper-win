@@ -125,7 +125,8 @@ internal sealed class WinUIModuleHost : IModuleHost
 
     public void ShowSettingsSection(string sectionId)
     {
-        // Until every module has contributed, the catalog is empty and every section is unknown.
+        // As documented, nothing opens before startup has finished, as WhenStarted reports it.
+        if (!_started.Task.IsCompleted) { AppDiagnostics.Write("modules.settings-section.not-started"); return; }
         if (HostModules.ActiveCatalog.SettingsSectionTarget(sectionId) is not { } target) { AppDiagnostics.Write("modules.settings-section.unknown"); return; }
         if (ShowSettings is not { } show) { AppDiagnostics.Write("modules.settings-section.unavailable"); return; }
         _post(() => show(target.Category, target.Key));
