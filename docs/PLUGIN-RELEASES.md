@@ -99,4 +99,4 @@ do not mutate GitHub. Model downloads and provider credentials are not required.
 Release tests cover selection, version conflicts, concurrent catalog updates,
 archive corruption, unsafe paths, failed downloads, draft recovery and Pages retry.
 Catalog metadata is validated through the actual .NET host client before staging and
-before publication; the publishing runner therefore also installs .NET 10.
+before publication; the publishing runner therefore also installs .NET 11.

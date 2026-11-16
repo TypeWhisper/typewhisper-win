@@ -3,7 +3,7 @@
     <OutputType>WinExe</OutputType>
     <AssemblyName>TypeWhisper</AssemblyName>
     <RootNamespace>TypeWhisper.WinUI</RootNamespace>
-    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetFramework>net11.0-windows10.0.26100.0</TargetFramework>
     <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
@@ -22,6 +22,10 @@
     <!-- Precompile release publishes. Otherwise startup JIT-compiles app and WinRT projection code
          on the UI thread, which also serves the global dictation keyboard hooks. -->
     <PublishReadyToRun Condition="'$(Configuration)' == 'Release'">true</PublishReadyToRun>
+    <!-- CsWinRT 2.3, which the .NET 11 Windows SDK projection brings, reports every collection expression that
+         targets a read-only interface, because a trimmed or native AOT app could not marshal the compiler's type to
+         WinRT. This app is neither trimmed nor AOT-compiled, so such marshalling keeps working at run time. -->
+    <NoWarn>$(NoWarn);CsWinRT1032</NoWarn>
   </PropertyGroup>
   <!-- Optional modules that official builds can include. When the modules project exists it is referenced,
        otherwise the stub, which has the same assembly name and contributes nothing. Builds that must include the

@@ -92,7 +92,7 @@ public sealed class StopRecordingThreadTests
         private bool _running;
         internal Action? OnStop;
         public bool CanRestartAfterStop => true;
-        public WaveFormat WaveFormat => new(16000, 16, 1);
+        public WaveFormat WaveFormat { get; } = new(16000, 16, 1);
         public event EventHandler<AudioInputDataAvailableEventArgs>? DataAvailable;
         public event EventHandler<AudioInputRecordingStoppedEventArgs>? RecordingStopped;
         public IAudioInputCapture Create(AudioInputDeviceSelection device, WaveFormat format, int bufferMilliseconds) => this;

@@ -5,7 +5,7 @@
     <Company>TypeWhisper</Company>
     <Product>TypeWhisper</Product>
     <EnableNETAnalyzers>true</EnableNETAnalyzers>
-    <AnalysisLevel>10.0</AnalysisLevel>
+    <AnalysisLevel>11.0</AnalysisLevel>
     <Copyright>Copyright © 2026 TypeWhisper</Copyright>
   </PropertyGroup>
 

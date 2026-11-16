@@ -333,7 +333,7 @@ right to rename or delete the folder.
 
 | Item | Value |
 | --- | --- |
-| Prerequisite | The .NET 10 Runtime (x64). An interactive MSI installation offers to install it; a silent installation does not. Deploy it first, for example as an Intune dependency with `dotnet-runtime-10.0.<patch>-win-x64.exe /install /quiet /norestart` from [dotnet.microsoft.com](https://dotnet.microsoft.com/download/dotnet/10.0), or with `winget install Microsoft.DotNet.Runtime.10`. |
+| Prerequisite | The .NET 11 Runtime (x64) for TypeWhisper 1.3 and later; 1.2.x needs the .NET 10 Runtime. An interactive MSI installation offers to install it; a silent installation does not. Deploy it first, for example as an Intune dependency with `dotnet-runtime-11.0.<patch>-win-x64.exe /install /quiet /norestart` from [dotnet.microsoft.com](https://dotnet.microsoft.com/download/dotnet/11.0), or with `winget install Microsoft.DotNet.Runtime.11`. |
 | Source | `TypeWhisper-win-x64.msi` from the [GitHub release](https://github.com/TypeWhisper/typewhisper-win/releases) (`https://github.com/TypeWhisper/typewhisper-win/releases/latest/download/TypeWhisper-win-x64.msi`). |
 | Package | `IntuneWinAppUtil.exe -c <folder> -s TypeWhisper-win-x64.msi -o <output>` |
 | Install command | `msiexec /i TypeWhisper-win-x64.msi /qn /norestart`, optionally with `VELOPACK_INSTALLDIR="D:\Apps\TypeWhisper"` |

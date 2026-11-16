@@ -45,7 +45,7 @@ public static class CliServerProcess
             {
                 using var identity = new WindowsIdentity(token);
                 using var current = WindowsIdentity.GetCurrent();
-                return identity.User is { } user && user.Equals(current.User);
+                return identity.User is { } user && current.User is { } currentUser && user.Equals(currentUser);
             }
             finally { CloseHandle(token); }
         }

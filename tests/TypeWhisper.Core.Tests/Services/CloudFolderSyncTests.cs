@@ -1616,7 +1616,7 @@ public sealed class CloudFolderSyncTests : IDisposable
 
         // Within the allowed clock difference, and once its time has come, the deletion applies.
         await CloudFolderSyncEngine.SyncAsync(_tempDir, store, state, entitlement, Date(30).AddMinutes(56));
-        Assert.Empty(store.DictionaryEntries.Where(entry => entry.Original == "TypeWhisper"));
+        Assert.DoesNotContain(store.DictionaryEntries, entry => entry.Original == "TypeWhisper");
     }
 
     [Fact]

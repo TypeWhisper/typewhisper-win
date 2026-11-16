@@ -17,7 +17,7 @@ class HostSchemaTests(unittest.TestCase):
             raise AssertionError('Catalog verifier build timed out after 300 seconds') from error
         if result.returncode:
             raise AssertionError(result.stdout + result.stderr)
-        cls.verifier = project.parent / 'bin/Release/net10.0/PluginCatalogVerifier.dll'
+        cls.verifier = project.parent / 'bin/Release/net11.0/PluginCatalogVerifier.dll'
 
     def run_verifier(self, document):
         with tempfile.TemporaryDirectory() as directory:

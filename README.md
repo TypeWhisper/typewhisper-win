@@ -34,9 +34,10 @@ See the [capability map](docs/WINUI-FUNCTIONAL-STATUS.md) for scope and limitati
 ## Install and upgrade
 
 Select an application installer for your architecture from GitHub Releases.
-Plugin ZIPs are separate downloads. Setup installs .NET 10 Runtime when missing;
-the portable ZIP requires it separately. First setup needs internet access to
-install a plugin and download model assets where applicable.
+Plugin ZIPs are separate downloads. Setup installs the .NET Runtime when missing
+(.NET 11 from TypeWhisper 1.3, .NET 10 for 1.2.x); the portable ZIP requires it
+separately. First setup needs internet access to install a plugin and download
+model assets where applicable.
 
 The source and the Store packages configure a minimum Windows build of 19041.
 Native acceptance on older Windows remains pending. TypeWhisper
@@ -49,7 +50,7 @@ for update-feed compatibility, imported data and rollout gates.
 
 ## Build
 
-Development requires Windows, the .NET 10 SDK and Windows SDK 10.0.26100 or later.
+Development requires Windows, the .NET 11 SDK and Windows SDK 10.0.26100 or later.
 The application project is `src/TypeWhisper.WinUI/TypeWhisper.WinUI.csproj`.
 
 ```powershell

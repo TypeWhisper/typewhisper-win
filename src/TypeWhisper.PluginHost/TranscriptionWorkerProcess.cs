@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO.Pipes;
-using System.Runtime.InteropServices;
 using System.Text.Json;
 using TypeWhisper.PluginSDK.Models;
 
@@ -82,7 +81,6 @@ internal sealed class TranscriptionWorkerProcess : ITranscriptionWorkerConnectio
     private const int DiagnosticLines = 60;
     private readonly Process _process;
     private readonly NamedPipeServerStream _pipe;
-    private readonly KillOnCloseJob? _job;
     private readonly TranscriptionWorkerLaunch _launch;
     private readonly Action<PluginLogLevel, string> _log;
     private readonly ConcurrentQueue<string> _output = new();
@@ -99,10 +97,10 @@ internal sealed class TranscriptionWorkerProcess : ITranscriptionWorkerConnectio
     public bool IsAlive => !_ended.Task.IsCompleted && !HasExited();
     public TranscriptionWorkerState? State { get; private set; }
 
-    private TranscriptionWorkerProcess(Process process, NamedPipeServerStream pipe, KillOnCloseJob? job, TranscriptionWorkerLaunch launch,
+    private TranscriptionWorkerProcess(Process process, NamedPipeServerStream pipe, TranscriptionWorkerLaunch launch,
         TranscriptionAccelerationPreference acceleration, Action<PluginLogLevel, string> log)
     {
-        _process = process; _pipe = pipe; _job = job; _launch = launch; _log = log;
+        _process = process; _pipe = pipe; _launch = launch; _log = log;
         Acceleration = acceleration;
         ProcessId = process.Id;
     }
@@ -125,11 +123,12 @@ internal sealed class TranscriptionWorkerProcess : ITranscriptionWorkerConnectio
             WorkingDirectory = Path.GetDirectoryName(launch.ExecutablePath) ?? Environment.CurrentDirectory
         };
         foreach (var argument in launch.PrefixArguments.Concat(arguments.ToArguments())) info.ArgumentList.Add(argument);
+        // Ends the worker with the host even if the host itself crashes (a kill-on-close job object on Windows).
+        if (OperatingSystem.IsWindows()) info.KillOnParentExit = true;
         Process process;
         try { process = Process.Start(info) ?? throw new InvalidOperationException("The transcription worker could not be started."); }
         catch { await pipe.DisposeAsync().ConfigureAwait(false); throw; }
-        var job = KillOnCloseJob.TryAssign(process);
-        var worker = new TranscriptionWorkerProcess(process, pipe, job, launch, acceleration, log);
+        var worker = new TranscriptionWorkerProcess(process, pipe, launch, acceleration, log);
         try
         {
             worker.CaptureOutput();
@@ -348,92 +347,18 @@ internal sealed class TranscriptionWorkerProcess : ITranscriptionWorkerConnectio
         catch (Exception ex) when (ex is TimeoutException or InvalidOperationException) { }
         await _pipe.DisposeAsync().ConfigureAwait(false);
         try { await _reader.ConfigureAwait(false); } catch (Exception ex) when (ex is not OutOfMemoryException) { }
-        _job?.Dispose();
         _process.Dispose();
         _write.Dispose();
     }
 
     // The answer and the time of the last frame the worker sent for this request.
+    // Since .NET 11, TickCount64 excludes Windows sleep time like WaitAsync's timer, so a resume
+    // does not make a live worker look silent for the whole sleep.
     private sealed class PendingRequest
     {
-        private long _lastFrame = ActiveMilliseconds();
+        private long _lastFrame = Environment.TickCount64;
         internal TaskCompletionSource<TranscriptionWorkerMessage> Answer { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        internal TimeSpan Silence => TimeSpan.FromMilliseconds(ActiveMilliseconds() - Volatile.Read(ref _lastFrame));
-        internal void Touch() => Volatile.Write(ref _lastFrame, ActiveMilliseconds());
-
-        // .NET 10 TickCount64 includes Windows sleep time, while WaitAsync's timer excludes it.
-        // Use the same awake-time basis so resume does not turn a live worker into a crash.
-        private static long ActiveMilliseconds()
-        {
-            if (!OperatingSystem.IsWindows()) return Environment.TickCount64;
-            QueryUnbiasedInterruptTime(out var ticks);
-            return (long)(ticks / TimeSpan.TicksPerMillisecond);
-        }
-
-        [DllImport("kernel32.dll", ExactSpelling = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool QueryUnbiasedInterruptTime(out ulong unbiasedTime);
+        internal TimeSpan Silence => TimeSpan.FromMilliseconds(Environment.TickCount64 - Volatile.Read(ref _lastFrame));
+        internal void Touch() => Volatile.Write(ref _lastFrame, Environment.TickCount64);
     }
-}
-
-// Ends the worker with the host even if the host itself crashes: closing the last job handle kills it.
-internal sealed class KillOnCloseJob : IDisposable
-{
-    private readonly IntPtr _handle;
-    private KillOnCloseJob(IntPtr handle) => _handle = handle;
-
-    internal static KillOnCloseJob? TryAssign(Process process)
-    {
-        if (!OperatingSystem.IsWindows()) return null;
-        var handle = CreateJobObjectW(IntPtr.Zero, null);
-        if (handle == IntPtr.Zero) return null;
-        var limits = new JobObjectExtendedLimitInformation { BasicLimitInformation = new() { LimitFlags = 0x2000 } };
-        var size = Marshal.SizeOf<JobObjectExtendedLimitInformation>();
-        if (SetInformationJobObject(handle, 9, ref limits, (uint)size) && AssignProcessToJobObject(handle, process.Handle))
-            return new(handle);
-        CloseHandle(handle);
-        return null;
-    }
-
-    public void Dispose() => CloseHandle(_handle);
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct JobObjectBasicLimitInformation
-    {
-        public long PerProcessUserTimeLimit;
-        public long PerJobUserTimeLimit;
-        public uint LimitFlags;
-        public UIntPtr MinimumWorkingSetSize;
-        public UIntPtr MaximumWorkingSetSize;
-        public uint ActiveProcessLimit;
-        public UIntPtr Affinity;
-        public uint PriorityClass;
-        public uint SchedulingClass;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct IoCounters
-    {
-        public ulong ReadOperationCount, WriteOperationCount, OtherOperationCount, ReadTransferCount, WriteTransferCount, OtherTransferCount;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct JobObjectExtendedLimitInformation
-    {
-        public JobObjectBasicLimitInformation BasicLimitInformation;
-        public IoCounters IoInfo;
-        public UIntPtr ProcessMemoryLimit;
-        public UIntPtr JobMemoryLimit;
-        public UIntPtr PeakProcessMemoryUsed;
-        public UIntPtr PeakJobMemoryUsed;
-    }
-
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern IntPtr CreateJobObjectW(IntPtr attributes, string? name);
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool SetInformationJobObject(IntPtr job, int infoClass, ref JobObjectExtendedLimitInformation info, uint length);
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool AssignProcessToJobObject(IntPtr job, IntPtr process);
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool CloseHandle(IntPtr handle);
 }

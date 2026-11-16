@@ -11,10 +11,13 @@ internal sealed class WindowsSystemVoiceBackend : ISpokenFeedbackBackend
     public IReadOnlyList<SpokenFeedbackVoice> GetVoices()
     {
         using var synthesizer = new SpeechSynthesizer();
-        return synthesizer.GetInstalledVoices().Where(voice => voice.Enabled)
-            .Select(voice => new SpokenFeedbackVoice(voice.VoiceInfo.Name, voice.VoiceInfo.Name, voice.VoiceInfo.Culture.Name))
-            .OrderBy(voice => voice.DisplayName, StringComparer.CurrentCultureIgnoreCase).ToArray();
+        return synthesizer.GetInstalledVoices().Where(voice => voice.Enabled).Select(voice => ToVoice(voice.VoiceInfo))
+            .OfType<SpokenFeedbackVoice>().OrderBy(voice => voice.DisplayName, StringComparer.CurrentCultureIgnoreCase).ToArray();
     }
+
+    // A voice without a name cannot be selected again, so it is not offered.
+    private static SpokenFeedbackVoice? ToVoice(VoiceInfo info) =>
+        string.IsNullOrEmpty(info.Name) ? null : new(info.Name, info.Name, info.Culture?.Name);
 
     public Task SpeakAsync(SpokenFeedbackRequest request, CancellationToken cancellationToken)
     {
