@@ -58,7 +58,7 @@ internal sealed class ApplicationServices
         Dictation = new LocalDictationSession(historyService, owner);
         HttpApi = new WinUIHttpApi(Dictation, dispatcher);
         // A failing module is logged and left out; it never stops startup.
-        ModuleHost = new WinUIModuleHost(historyService, dispatcher);
+        ModuleHost = new WinUIModuleHost(historyService, Dictation.PluginRuntime, dispatcher);
         Modules = HostModules.Load(ModuleHost);
     }
 }

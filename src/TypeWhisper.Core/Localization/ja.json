@@ -3293,5 +3293,8 @@
   "Some Premium features are not included in this build.": "このビルドには一部の Premium 機能が含まれていません。",
   "Select only one entry.": "項目を1つだけ選択してください。",
   "Select at most {0} entries.": "選択できる項目は最大{0}件です。",
-  "{0} shortcuts": "{0}のショートカット"
+  "{0} shortcuts": "{0}のショートカット",
+  "Sending audio to {0} is turned off by your organization.": "{0} への音声送信は組織によって無効化されています。",
+  "Tells who spoke when in a recording. Audio stays on this device.": "録音の中で誰がいつ話したかを判別します。音声はこのデバイスから送信されません。",
+  "Tells who spoke when in a recording. Audio is sent to this provider.": "録音の中で誰がいつ話したかを判別します。音声はこのプロバイダーに送信されます。"
 }

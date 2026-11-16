@@ -2,6 +2,7 @@ using Microsoft.UI.Dispatching;
 using TypeWhisper.Core.Services;
 using TypeWhisper.ModuleKit;
 using TypeWhisper.Modules;
+using TypeWhisper.PluginHost;
 
 namespace TypeWhisper.WinUI;
 
@@ -32,7 +33,7 @@ internal sealed class WinUIModuleHost : IModuleHost
     private readonly ModuleManagedPolicyReading _managedPolicy;
     private ModulePanels? _panels;
 
-    internal WinUIModuleHost(HistoryService history, DispatcherQueue dispatcher)
+    internal WinUIModuleHost(HistoryService history, PortablePluginRuntimeRegistry plugins, DispatcherQueue dispatcher)
     {
         void Post(Action action)
         {
@@ -43,7 +44,20 @@ internal sealed class WinUIModuleHost : IModuleHost
             listener => WinUIManagedPolicy.Changed += listener, listener => WinUIManagedPolicy.Changed -= listener, Post, AppDiagnostics.WriteFailure);
         PremiumAccessReading = new ModulePremiumAccessReading(PremiumView.Access, () => ShowPremiumAccess?.Invoke(), Post, AppDiagnostics.WriteFailure);
         UserData = new ModuleUserDataLifecycle(WinUIProfile.DataPath(ModuleUserDataLifecycle.FolderName), AppDiagnostics.WriteFailure);
+        AudioDiarization = new ModuleAudioDiarization(new(
+            () => plugins.DiarizationProviders.Select(ToModuleProvider).ToArray(),
+            listener => plugins.Changed += listener, listener => plugins.Changed -= listener,
+            (id, progress, ct) => plugins.PrepareDiarizationModelsAsync(id, progress, ct),
+            (id, request, progress, ct) => plugins.DiarizeAsync(id, request, progress, ct),
+            MediaFoundationFileDecoder.LoadAsync), Post, AppDiagnostics.WriteFailure);
     }
+
+    private static ModuleDiarizationProvider ToModuleProvider(PortableDiarizationProvider provider) =>
+        new(provider.ProviderId, provider.Name, provider.IsLocal, provider.Ready)
+        {
+            NeedsModels = !provider.ModelsInstalled, ModelSize = provider.Model?.SizeDescription,
+            MinimumSpeakerCount = provider.SpeakerCounts?.Minimum, MaximumSpeakerCount = provider.SpeakerCounts?.Maximum
+        };
 
     public string HostVersion => WindowsApplicationUpdates.CurrentVersion;
     public string InterfaceLanguage => Loc.Language;
@@ -51,6 +65,7 @@ internal sealed class WinUIModuleHost : IModuleHost
     public IManagedPolicyReading ManagedPolicyReading => _managedPolicy;
     public IPremiumAccessReading PremiumAccessReading { get; }
     public IUserDataLifecycle UserDataLifecycle => UserData;
+    public IAudioDiarization AudioDiarization { get; }
 
     internal ModuleUserDataLifecycle UserData { get; }
     internal Action<string>? ShowHistoryRecord { get; set; }

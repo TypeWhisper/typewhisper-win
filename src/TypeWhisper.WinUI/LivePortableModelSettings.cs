@@ -12,6 +12,7 @@ namespace TypeWhisper.WinUI;
 internal sealed class LivePortableModelSettings : UserControl
 {
     private readonly LiveLocalTtsModelSettings _localTts;
+    private readonly LiveDiarizationModelSettings _diarization;
     internal event Action? ConfigurationChanged;
     private readonly LocalDictationSession _session;
     private readonly string _pluginId;
@@ -60,6 +61,8 @@ internal sealed class LivePortableModelSettings : UserControl
         };
         _localTts = new(session, pluginId);
         content.Children.Add(_localTts);
+        _diarization = new(session, pluginId);
+        content.Children.Add(_diarization);
         _localLlm = new(session, pluginId) { Visibility = Visibility.Collapsed };
         content.Children.Add(_localLlm);
         // One card for all models, as on the NVIDIA Parakeet page; Refresh sits in its heading.
@@ -174,7 +177,8 @@ internal sealed class LivePortableModelSettings : UserControl
             finally { _settingCloudModel = false; }
             _llm.Visibility = ShowLlmSummary && !HasLocalLlmModels ? Visibility.Visible : Visibility.Collapsed;
             var llms = _session.LlmProviders.Where(p => p.PluginId == _pluginId).ToArray();
-            _llm.Text = models.Count == 0 && llms.Length == 0 && !localTts && !HasLocalLlmModels ? Loc.T("No model providers are currently enabled.") :
+            var diarization = _session.PluginRuntime.DiarizationProviders.Any(p => p.PluginId == _pluginId);
+            _llm.Text = models.Count == 0 && llms.Length == 0 && !localTts && !HasLocalLlmModels && !diarization ? Loc.T("No model providers are currently enabled.") :
                 string.Join("\n", llms.Select(p => Loc.T("{0} · Text processing: {1}", p.Name, string.Join(", ", p.Models.Select(m => m.DisplayName)))));
         }
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }

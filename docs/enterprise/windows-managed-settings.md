@@ -42,7 +42,7 @@ any problems; the support report contains the same section.
 | `LaunchAtLogin` | `REG_DWORD` 0/1 | enforced or recommended | Enforced sets the app-owned startup registration and locks the setting; the user's earlier choice is restored when the value is removed. Recommended applies only to a new profile that has not completed setup and has no explicit choice. Windows can still disable startup in Settings > Apps > Startup. |
 | `SkipOnboardingWhenReady` | `REG_DWORD` 0/1 | enforced | 1 keeps the initial setup closed when a dictation shortcut, a ready transcription model and a microphone are available. Otherwise setup opens as usual. Nothing is marked as completed. 0 follows the normal rules. |
 | `SuppressOptionalPrompts` | `REG_DWORD` 0/1 | enforced or recommended | 1 hides the Premium purchase prompt on the Premium page. Required setup, permission requests, policy problems, license errors and operational errors stay visible. |
-| `AllowCloudTranscription` | `REG_DWORD` 0/1 | enforced | 0 blocks audio from reaching any transcription plugin that is not local: cloud providers, user-configured endpoints and packages without a known locality. Dictation, file transcription, recovery, training and the HTTP API refuse with a message instead of switching providers. |
+| `AllowCloudTranscription` | `REG_DWORD` 0/1 | enforced | 0 blocks audio from reaching any transcription or speaker diarization plugin that is not local: cloud providers, user-configured endpoints and packages without a known locality. Dictation, file transcription, recovery, training and the HTTP API refuse with a message instead of switching providers. |
 | `AllowCloudTextProcessing` | `REG_DWORD` 0/1 | enforced | 0 blocks transcript, prompt and context text from reaching non-local plugins: LLM providers, text processors, actions, speech output and memory sources. Dictionary terms are not sent as prompts to cloud transcription providers either. Workflows report the refusal; the HTTP API answers 403. |
 | `AllowedTranscriptionProviders` | list | enforced | Stable transcription selection IDs (plugin IDs, or profile IDs such as `openai-compatible-<id>`) that may receive audio. Applies to every entry point including workflow and API overrides. The local Parakeet engine is `com.typewhisper.sherpa-onnx`. |
 | `AllowedLlmProviders` | list | enforced | Stable LLM selection IDs that may receive text, including workflows, translation and alias suggestions. |
@@ -259,7 +259,7 @@ whatever endpoint the user enters.
 | xAI | `api.x.ai` |
 | Authenticated CLI, Webhook, Script | the command, CLI or URL the user configures |
 | Granite Speech | `huggingface.co` and `*.hf.co` for the model; `www.python.org`, `raw.githubusercontent.com`, `pypi.org`, `files.pythonhosted.org`, `download.pytorch.org` and `download-r2.pytorch.org` for its runtime |
-| Other local plugins (Parakeet, whisper.cpp, local LLM, Gemma, Qwen, GigaAM, Voxtral (Local), Cohere Transcribe, Supertonic TTS) | `huggingface.co` and `*.hf.co` for models; see the runtime hosts above |
+| Other local plugins (Parakeet, whisper.cpp, local LLM, Gemma, Qwen, GigaAM, Voxtral (Local), Cohere Transcribe, Supertonic TTS, Nemotron Diarization) | `huggingface.co` and `*.hf.co` for models; see the runtime hosts above |
 
 ## Microphone and other permissions
 

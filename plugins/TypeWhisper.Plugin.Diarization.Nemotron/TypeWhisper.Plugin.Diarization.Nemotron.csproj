@@ -1,0 +1,52 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
+    <Version>1.0.0</Version><CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <!-- DxgiAdapters calls the DXGI COM interfaces through function pointers. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="Tests/**/*.cs" />
+    <Compile Include="../shared/PluginLocalization.cs" Link="Shared/PluginLocalization.cs" />
+    <Compile Include="../shared/ResumableModelDownloader.cs" Link="Shared/ResumableModelDownloader.cs" />
+    <Using Include="TypeWhisper.Plugin.Shared" />
+    <InternalsVisibleTo Include="TypeWhisper.Plugin.Diarization.Nemotron.Tests" />
+    <ProjectReference Include="../../src/TypeWhisper.PluginSDK/TypeWhisper.PluginSDK.csproj" />
+    <!-- One ONNX Runtime build for both devices: the DirectML package includes the CPU provider. -->
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.DirectML" />
+    <PackageReference Include="Microsoft.AI.DirectML" GeneratePathProperty="true" />
+    <Content Include="manifest.json;THIRD-PARTY-NOTICES.md;Licenses/*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <!-- ONNX Runtime needs this DirectML version; Windows' own copy in System32 is older. The package only copies it for a
+       fixed platform, so it is placed beside each architecture's onnxruntime.dll here. The path is resolved when the
+       target runs: a build that restores in the same invocation, such as portable.proj, has no package path properties. -->
+  <Target Name="AddDirectMlRuntime" BeforeTargets="AssignTargetPaths">
+    <ItemGroup>
+      <_DirectMlVersion Include="@(PackageVersion)" Condition="'%(Identity)' == 'Microsoft.AI.DirectML'" />
+    </ItemGroup>
+    <PropertyGroup>
+      <_DirectMlPackages>$(NuGetPackageRoot)</_DirectMlPackages>
+      <_DirectMlPackages Condition="'$(_DirectMlPackages)' == ''">$(NUGET_PACKAGES)</_DirectMlPackages>
+      <_DirectMlPackages Condition="'$(_DirectMlPackages)' == ''">$([System.Environment]::GetFolderPath(SpecialFolder.UserProfile))/.nuget/packages</_DirectMlPackages>
+      <_DirectMlRoot>$(PkgMicrosoft_AI_DirectML)</_DirectMlRoot>
+      <_DirectMlRoot Condition="'$(_DirectMlRoot)' == ''">$(_DirectMlPackages)/microsoft.ai.directml/@(_DirectMlVersion->'%(Version)')</_DirectMlRoot>
+    </PropertyGroup>
+    <Error Condition="!Exists('$(_DirectMlRoot)/bin/x64-win/DirectML.dll') Or !Exists('$(_DirectMlRoot)/bin/arm64-win/DirectML.dll')"
+           Text="DirectML.dll was not found in $(_DirectMlRoot). Restore the project first." />
+    <ItemGroup>
+      <Content Include="$(_DirectMlRoot)/bin/x64-win/DirectML.dll" Link="runtimes/win-x64/native/DirectML.dll" CopyToOutputDirectory="PreserveNewest" />
+      <Content Include="$(_DirectMlRoot)/bin/arm64-win/DirectML.dll" Link="runtimes/win-arm64/native/DirectML.dll" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+  </Target>
+  <Target Name="StagePortablePackage" AfterTargets="Build">
+    <PropertyGroup><PackageDirectory>$(MSBuildProjectDirectory)/bin/$(Configuration)/portable-host/Plugins/com.typewhisper.nemotron-diarization/</PackageDirectory></PropertyGroup>
+    <ItemGroup>
+      <PackageFile Include="$(TargetPath);$(TargetDir)$(TargetName).deps.json;$(ProjectDir)manifest.json;$(ProjectDir)THIRD-PARTY-NOTICES.md" />
+      <PackageDependency Include="$(TargetDir)*.dll" Exclude="$(TargetPath);$(TargetDir)TypeWhisper.PluginSDK.dll" />
+      <PackageTree Include="$(TargetDir)**/*" Exclude="$(TargetDir)*;$(TargetDir)**/*.pdb;$(TargetDir)**/*.xml;$(TargetDir)**/*.lib" />
+    </ItemGroup>
+    <MakeDir Directories="$(PackageDirectory)" />
+    <Copy SourceFiles="@(PackageFile);@(PackageDependency)" DestinationFolder="$(PackageDirectory)" />
+    <Copy SourceFiles="@(PackageTree)" DestinationFiles="@(PackageTree->'$(PackageDirectory)%(RecursiveDir)%(Filename)%(Extension)')" Condition="'@(PackageTree)' != ''" />
+  </Target>
+</Project>

@@ -28,6 +28,9 @@ public interface IModuleHost
     /// <summary>Keeps module data with the user's data, so it is exported and erased with it.</summary>
     IUserDataLifecycle? UserDataLifecycle { get; }
 
+    /// <summary>Tells who spoke when in an audio file, with the diarization providers of enabled plugins.</summary>
+    IAudioDiarization? AudioDiarization { get; }
+
     /// <summary>
     /// Shows the <see cref="ModulePanel"/> with this identifier, creating its content on the first show. A panel that
     /// is already visible comes to the front. Before startup has finished, and for an unknown identifier, nothing
