@@ -23,33 +23,66 @@ public static class ManagedPolicyValidator
     /// <param name="reading">The raw content.</param>
     /// <param name="revision">The revision to stamp on the result.</param>
     /// <param name="readAt">When the source was read.</param>
-    public static ManagedPolicySnapshot Validate(ManagedPolicyReading reading, long revision, DateTimeOffset readAt)
+    /// <param name="additionalKeys">
+    /// Keys beyond <see cref="ManagedPolicyKeys.All"/>, such as those of optional modules, validated like the host's own.
+    /// One whose name or list marker another key already uses (ignoring case), or that names a pair, is left out.
+    /// </param>
+    public static ManagedPolicySnapshot Validate(ManagedPolicyReading reading, long revision, DateTimeOffset readAt,
+        IReadOnlyList<ManagedPolicyDefinition>? additionalKeys = null)
     {
+        var additional = Accepted(additionalKeys);
         var issues = new List<ManagedPolicyIssue>();
         if (!reading.Readable)
         {
             issues.Add(new(null, null, $"The policy source could not be read ({reading.Error ?? "unknown error"})."));
             return new(revision, ManagedPolicyReadStatus.Unreadable, readAt,
                 ReadOnlyDictionary<string, ManagedPolicyValue>.Empty, ReadOnlyDictionary<string, ManagedPolicyValue>.Empty,
-                FrozenSet<string>.Empty, issues.AsReadOnly());
+                FrozenSet<string>.Empty, issues.AsReadOnly(), additional);
         }
 
+        IReadOnlyList<ManagedPolicyDefinition> definitions = [.. ManagedPolicyKeys.All, .. additional];
         var enforced = new Dictionary<string, ManagedPolicyValue>(StringComparer.Ordinal);
         var invalidEnforced = new HashSet<string>(StringComparer.Ordinal);
-        ValidateScope(reading.Enforced, ManagedPolicyScope.Enforced, enforced, invalidEnforced, issues);
+        ValidateScope(definitions, reading.Enforced, ManagedPolicyScope.Enforced, enforced, invalidEnforced, issues);
 
         var recommended = new Dictionary<string, ManagedPolicyValue>(StringComparer.Ordinal);
-        ValidateScope(reading.Recommended, ManagedPolicyScope.Recommended, recommended, null, issues);
+        ValidateScope(definitions, reading.Recommended, ManagedPolicyScope.Recommended, recommended, null, issues);
 
         var status = reading.Enforced.Exists || reading.Recommended.Exists
             ? ManagedPolicyReadStatus.Present
             : ManagedPolicyReadStatus.Absent;
         // The snapshot is shared process-wide and documented as immutable: publish frozen copies, not the working sets.
         return new(revision, status, readAt, enforced.AsReadOnly(), recommended.AsReadOnly(),
-            invalidEnforced.ToFrozenSet(StringComparer.Ordinal), issues.AsReadOnly());
+            invalidEnforced.ToFrozenSet(StringComparer.Ordinal), issues.AsReadOnly(), additional);
+    }
+
+    // Registry names ignore case, so a second key with a taken name or marker would read the same registry entry.
+    // Callers check their keys first and report what they leave out; this only keeps the snapshot consistent.
+    private static IReadOnlyList<ManagedPolicyDefinition> Accepted(IReadOnlyList<ManagedPolicyDefinition>? additionalKeys)
+    {
+        if (additionalKeys is not { Count: > 0 }) return [];
+        var taken = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { RecommendedSubkey };
+        foreach (var definition in ManagedPolicyKeys.All) Take(taken, definition);
+        var accepted = new List<ManagedPolicyDefinition>(additionalKeys.Count);
+        foreach (var definition in additionalKeys)
+        {
+            if (definition is null || string.IsNullOrEmpty(definition.Name) || definition.PairedWith is not null) continue;
+            if (taken.Contains(definition.Name)) continue;
+            if (definition.Kind == ManagedPolicyValueKind.List && taken.Contains(definition.ConfiguredMarkerName)) continue;
+            Take(taken, definition);
+            accepted.Add(definition);
+        }
+        return accepted.AsReadOnly();
+    }
+
+    private static void Take(HashSet<string> taken, ManagedPolicyDefinition definition)
+    {
+        taken.Add(definition.Name);
+        if (definition.Kind == ManagedPolicyValueKind.List) taken.Add(definition.ConfiguredMarkerName);
     }
 
     private static void ValidateScope(
+        IReadOnlyList<ManagedPolicyDefinition> definitions,
         ManagedPolicyRawSection section,
         ManagedPolicyScope scope,
         Dictionary<string, ManagedPolicyValue> values,
@@ -65,7 +98,7 @@ public static class ManagedPolicyValidator
         // The Recommended scope is read separately; it is never a list of the root.
         if (scope == ManagedPolicyScope.Enforced) consumedLists.Add(RecommendedSubkey);
 
-        foreach (var definition in ManagedPolicyKeys.All)
+        foreach (var definition in definitions)
         {
             var name = definition.Name;
             string? problem;

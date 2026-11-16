@@ -11,6 +11,7 @@ internal sealed class ApplicationServices
     internal LocalDictationSession Dictation { get; }
     internal WinUIHttpApi HttpApi { get; }
     internal HostModules Modules { get; }
+    internal WinUIModuleHost ModuleHost { get; }
 
     internal ApplicationServices(IntPtr owner, DispatcherQueue dispatcher)
     {
@@ -57,6 +58,7 @@ internal sealed class ApplicationServices
         Dictation = new LocalDictationSession(historyService, owner);
         HttpApi = new WinUIHttpApi(Dictation, dispatcher);
         // A failing module is logged and left out; it never stops startup.
-        Modules = HostModules.Load(new WinUIModuleHost());
+        ModuleHost = new WinUIModuleHost(historyService, dispatcher);
+        Modules = HostModules.Load(ModuleHost);
     }
 }

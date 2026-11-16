@@ -10,6 +10,7 @@ internal sealed partial class HostModules
     // Assembly metadata that tells a stub build apart from one with modules.
     internal const string BuildKindKey = "TypeWhisperModules";
     internal const string StubBuildKind = "stub";
+    internal const string UnsupportedVersionStage = "modules.version.unsupported";
 
     private HostModules(string? buildKind, IReadOnlyList<IHostModule> modules, ModuleContributions contributions)
     {
@@ -32,10 +33,21 @@ internal sealed partial class HostModules
     internal static HostModules Load(
         IModuleHost host,
         Assembly modulesAssembly,
+        ModuleKitVersion requiredVersion,
         Func<IReadOnlyList<IHostModule>> createModules,
         Action<string, Exception> reportFailure)
     {
         var buildKind = BuildKindOf(modulesAssembly);
+        // Modules written against an interface this host does not provide could fail anywhere, so none are created.
+        // The log keeps only the stage and its data, not exception messages, so both versions go into the stage too.
+        var supported = ModuleKitVersion.Current;
+        if (!supported.Supports(requiredVersion))
+        {
+            reportFailure($"{UnsupportedVersionStage} required={requiredVersion} supported={supported}",
+                new NotSupportedException($"The modules require ModuleKit {requiredVersion}, but this host provides {supported}."));
+            return new(buildKind, [], new());
+        }
+
         IReadOnlyList<IHostModule> created;
         try
         {

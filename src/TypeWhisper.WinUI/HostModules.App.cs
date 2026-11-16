@@ -1,3 +1,5 @@
+using Microsoft.UI.Dispatching;
+using TypeWhisper.Core.Services;
 using TypeWhisper.ModuleKit;
 using TypeWhisper.Modules;
 
@@ -9,11 +11,50 @@ internal sealed partial class HostModules
     // Known without loading the modules, so views can read it at any time.
     internal static bool StubLinked { get; } = BuildKindOf(typeof(ModuleEntry).Assembly) == StubBuildKind;
 
-    internal static HostModules Load(IModuleHost host) =>
-        Load(host, typeof(ModuleEntry).Assembly, ModuleEntry.Create, AppDiagnostics.WriteFailure);
+    internal static HostModules Load(WinUIModuleHost host)
+    {
+        var modules = Load(host, typeof(ModuleEntry).Assembly, ModuleEntry.RequiredModuleKitVersion, ModuleEntry.Create, AppDiagnostics.WriteFailure);
+        host.UseManagedPolicyKeys(modules.Contributions.ManagedPolicyKeys);
+        return modules;
+    }
 }
 
+// Created on the UI thread with the window's services, before any module. Navigation is connected by the main
+// window afterwards; until then it does nothing.
 internal sealed class WinUIModuleHost : IModuleHost
 {
+    private readonly ModuleManagedPolicyReading _managedPolicy;
+
+    internal WinUIModuleHost(HistoryService history, DispatcherQueue dispatcher)
+    {
+        void Post(Action action)
+        {
+            if (!dispatcher.TryEnqueue(() => action())) AppDiagnostics.Write("modules.dispatch-unavailable");
+        }
+        HistoryReading = new ModuleHistoryReading(history, history.ResolveAudioPath, id => ShowHistoryRecord?.Invoke(id), Post, AppDiagnostics.WriteFailure);
+        _managedPolicy = new ModuleManagedPolicyReading(() => WinUIManagedPolicy.Current, WinUIManagedPolicy.RequestRefresh,
+            listener => WinUIManagedPolicy.Changed += listener, listener => WinUIManagedPolicy.Changed -= listener, Post, AppDiagnostics.WriteFailure);
+        PremiumAccessReading = new ModulePremiumAccessReading(PremiumView.Access, () => ShowPremiumAccess?.Invoke(), Post, AppDiagnostics.WriteFailure);
+        UserData = new ModuleUserDataLifecycle(WinUIProfile.DataPath(ModuleUserDataLifecycle.FolderName), AppDiagnostics.WriteFailure);
+    }
+
     public string HostVersion => WindowsApplicationUpdates.CurrentVersion;
+    public string InterfaceLanguage => Loc.Language;
+    public IHistoryReading HistoryReading { get; }
+    public IManagedPolicyReading ManagedPolicyReading => _managedPolicy;
+    public IPremiumAccessReading PremiumAccessReading { get; }
+    public IUserDataLifecycle UserDataLifecycle => UserData;
+
+    internal ModuleUserDataLifecycle UserData { get; }
+    internal Action<string>? ShowHistoryRecord { get; set; }
+    internal Action? ShowPremiumAccess { get; set; }
+
+    // Called once every module has contributed: the declared keys become readable and are validated with the host's.
+    internal void UseManagedPolicyKeys(IEnumerable<ModuleManagedPolicyKey> keys)
+    {
+        var resolution = ModulePolicyKeys.Resolve(keys, (name, reason) => AppDiagnostics.Write(
+            name is null ? $"{ModulePolicyKeys.RejectedStage} reason={reason}" : $"{ModulePolicyKeys.RejectedStage} key={name} reason={reason}"));
+        _managedPolicy.DeclaredNames = resolution.DeclaredNames;
+        if (resolution.Definitions.Count > 0) WinUIManagedPolicy.UseAdditionalDefinitions(resolution.Definitions);
+    }
 }

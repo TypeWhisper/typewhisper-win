@@ -51,7 +51,8 @@ internal sealed class ManagedPolicyView : UserControl
             _ => Loc.T("Managed settings on this device:")
         };
         var rows = new List<(string Key, string Scope, string Value)>();
-        foreach (var definition in ManagedPolicyKeys.All)
+        // Includes the keys of optional modules, with the same placeholder for sensitive values.
+        foreach (var definition in snapshot.Definitions)
         {
             if (snapshot.InvalidEnforcedKeys.Contains(definition.Name))
                 rows.Add((definition.Name, Loc.T("Enforced"), Loc.T("Invalid value, the setting stays blocked")));

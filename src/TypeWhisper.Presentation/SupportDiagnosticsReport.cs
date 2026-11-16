@@ -140,24 +140,26 @@ public sealed record SupportDiagnosticsReport(
     /// <summary>Projects a policy snapshot without exposing sensitive values.</summary>
     public static PolicyInfo SummarizePolicy(ManagedPolicySnapshot snapshot, bool watching) => new(
         snapshot.Status.ToString(), snapshot.Revision, watching,
-        PolicyValues(snapshot.EnforcedValues), PolicyValues(snapshot.RecommendedValues),
+        PolicyValues(snapshot, snapshot.EnforcedValues), PolicyValues(snapshot, snapshot.RecommendedValues),
         snapshot.InvalidEnforcedKeys.Order(StringComparer.Ordinal).ToArray(),
-        snapshot.Issues.Select(ExportIssue).ToArray());
+        snapshot.Issues.Select(issue => ExportIssue(snapshot, issue)).ToArray());
 
     // Findings name keys, never values. A finding about an unknown registry name carries that name, which comes from
     // outside the schema and may be private text: only a technical identifier survives, in the key and the message.
-    private static PolicyIssueInfo ExportIssue(ManagedPolicyIssue issue)
+    // Keys of optional modules count as known, like the host's own.
+    private static PolicyIssueInfo ExportIssue(ManagedPolicySnapshot snapshot, ManagedPolicyIssue issue)
     {
-        if (issue.Key is null || ManagedPolicyKeys.Find(issue.Key) is not null)
+        if (issue.Key is null || snapshot.Definition(issue.Key) is not null)
             return new(issue.Key, issue.Scope?.ToString(), issue.Message);
         var key = Identifier(issue.Key)!;
         return new(key, issue.Scope?.ToString(), issue.Message.Replace(issue.Key, key, StringComparison.Ordinal));
     }
 
-    private static PolicyValueInfo[] PolicyValues(IReadOnlyDictionary<string, ManagedPolicyValue> values) =>
+    private static PolicyValueInfo[] PolicyValues(ManagedPolicySnapshot snapshot, IReadOnlyDictionary<string, ManagedPolicyValue> values) =>
         values.OrderBy(entry => entry.Key, StringComparer.Ordinal).Select(entry =>
         {
-            var sensitive = ManagedPolicyKeys.Find(entry.Key)?.Sensitive == true;
+            // A value without a definition is kept out like a sensitive one.
+            var sensitive = snapshot.Definition(entry.Key)?.Sensitive != false;
             return entry.Value.Kind switch
             {
                 ManagedPolicyValueKind.Text => new PolicyValueInfo(entry.Key, sensitive ? "[set]" : Identifier(entry.Value.Text), null),

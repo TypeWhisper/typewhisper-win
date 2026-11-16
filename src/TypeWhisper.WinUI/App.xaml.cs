@@ -430,6 +430,8 @@ public partial class App : Application
         try
         {
             _profileOperation.SetMessage(Loc.T("Deleting your TypeWhisper data…"), true);
+            // Modules stop what writes to their folders first; each one that fails is reported and the deletion goes on.
+            await _window.EraseModuleDataAsync();
             // Recorded first, so the deletion resumes on the next launch if the app ends during the cleanup below.
             ProfileDataEraser.RequestErasure(WinUIProfile.Root);
             // Start with Windows lives in the registration, not the profile; a new installation starts with it off.

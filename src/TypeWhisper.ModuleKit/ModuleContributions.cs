@@ -6,6 +6,6 @@ namespace TypeWhisper.ModuleKit;
 /// </summary>
 public sealed class ModuleContributions
 {
-    /// <summary>Names of the managed policy values (MDM) that a module reads.</summary>
-    public IList<string> ManagedPolicyKeys { get; } = new List<string>();
+    /// <summary>The managed policy keys that modules read through <see cref="IManagedPolicyReading"/>.</summary>
+    public IList<ModuleManagedPolicyKey> ManagedPolicyKeys { get; } = new List<ModuleManagedPolicyKey>();
 }
