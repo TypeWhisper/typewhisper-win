@@ -308,6 +308,114 @@ public sealed partial class PortablePluginRuntimeRegistryTests
         Assert.Contains("requires the text model model-b", denied.Message);
     }
 
+    // The callback returns normally after the policy pass cancelled its request, so the lease's own cancellation
+    // check fails the call: that is reported as the refusal as well. The text rule cancels a transcription that may
+    // carry a prompt, so it reports its own key.
+    [Theory]
+    [InlineData("transcription")]
+    [InlineData("transcription-prompt")]
+    public async Task TranscriptionPolicyCancellationAfterTheCallbackReturnedIsReportedAsTheRefusal(string policyKey)
+    {
+        var store = await LocalityStore("cloud");
+        var policy = Policy();
+        await using var registry = PolicyRegistry(store, () => policy);
+        Assert.Null(await registry.SetEnabledAsync(Id, true));
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var running = registry.UseTranscriptionAsync(Id, async (engine, _) =>
+        {
+            started.SetResult();
+            await release.Task;
+            return engine.PluginId;
+        });
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        policy = policyKey == "transcription" ? Policy(cloudTranscription: false) : Policy(cloudText: false);
+        var reapplied = registry.ReapplyPolicyAsync();
+        release.SetResult();
+
+        var denied = await Assert.ThrowsAsync<ManagedPolicyDeniedException>(() => running.WaitAsync(TimeSpan.FromSeconds(10)));
+        Assert.Equal(policyKey, denied.PolicyKey);
+        await reapplied.WaitAsync(TimeSpan.FromSeconds(10));
+    }
+
+    [Fact]
+    public async Task CallerCancellationOfATranscriptionStaysACancellationWhileThePolicyRefusesIt()
+    {
+        var store = await LocalityStore("cloud");
+        var policy = Policy();
+        await using var registry = PolicyRegistry(store, () => policy);
+        Assert.Null(await registry.SetEnabledAsync(Id, true));
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var cancellation = new CancellationTokenSource();
+
+        var running = registry.UseTranscriptionAsync(Id, async (engine, token) =>
+        {
+            started.SetResult();
+            await Task.Delay(Timeout.Infinite, token);
+            return engine.PluginId;
+        }, cancellation.Token);
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        // The policy would refuse the call now, but the caller cancelled it.
+        policy = Policy(cloudTranscription: false);
+        await cancellation.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => running.WaitAsync(TimeSpan.FromSeconds(10)));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task LlmPolicyCancellationAfterTheCallbackReturnedIsReportedAsTheRefusal(bool localOnly)
+    {
+        var store = await LocalityStore("local");
+        var policy = Policy(llm: new(Id, "model-a"));
+        await using var registry = PolicyRegistry(store, () => policy);
+        Assert.Null(await registry.SetEnabledAsync(Id, true));
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        async Task<string> Use(TypeWhisper.PluginSDK.ILlmProviderPlugin provider, CancellationToken _)
+        {
+            started.SetResult();
+            await release.Task;
+            return provider.PluginId;
+        }
+
+        var running = localOnly ? registry.UseLocalLlmAsync(Id, Use, modelId: "model-a") : registry.UseLlmAsync(Id, Use, modelId: "model-a");
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        policy = Policy(llm: new(Id, "model-b"));
+        var reapplied = registry.ReapplyPolicyAsync();
+        release.SetResult();
+
+        var denied = await Assert.ThrowsAsync<ManagedPolicyDeniedException>(() => running.WaitAsync(TimeSpan.FromSeconds(10)));
+        Assert.Equal("llm", denied.PolicyKey);
+        Assert.Contains("requires the text model model-b", denied.Message);
+        await reapplied.WaitAsync(TimeSpan.FromSeconds(10));
+    }
+
+    [Fact]
+    public async Task CallerCancellationOfAnLlmRequestStaysACancellationWhileThePolicyRefusesIt()
+    {
+        var store = await LocalityStore("local");
+        var policy = Policy(llm: new(Id, "model-a"));
+        await using var registry = PolicyRegistry(store, () => policy);
+        Assert.Null(await registry.SetEnabledAsync(Id, true));
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var cancellation = new CancellationTokenSource();
+
+        var running = registry.UseLlmAsync(Id, async (provider, token) =>
+        {
+            started.SetResult();
+            await Task.Delay(Timeout.Infinite, token);
+            return provider.PluginId;
+        }, cancellation.Token, modelId: "model-a");
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        policy = Policy(llm: new(Id, "model-b"));
+        await cancellation.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => running.WaitAsync(TimeSpan.FromSeconds(10)));
+    }
+
     [Fact]
     public async Task CloudTextPolicyRefusesLlmProcessorAndActionOfACloudPackage()
     {
@@ -397,6 +505,51 @@ public sealed partial class PortablePluginRuntimeRegistryTests
 
         Assert.Equal("model-download", denied.PolicyKey);
         Assert.Contains("Model downloads are turned off", denied.Message);
+    }
+
+    // The plugin finishes the download after the policy pass cancelled it, so the check after the download fails the
+    // call: that is reported as the refusal as well.
+    [Fact]
+    public async Task ModelDownloadPolicyCancellationAfterTheRegistryDownloadReturnedIsReportedAsTheRefusal()
+    {
+        var store = await Store();
+        Host(Id).SetSetting("LocalModels", true);
+        var policy = Policy();
+        await using var registry = PolicyRegistry(store, () => policy);
+        Assert.Null(await registry.SetEnabledAsync(Id, true));
+        var model = Assert.Single(registry.TranscriptionProviders).ModelStates.First();
+        Host(Id).SetSetting("Hold", true);
+
+        var download = registry.DownloadModelAsync(model);
+        await Host(Id).Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        policy = Policy(modelDownloads: false);
+        var reapplied = registry.ReapplyPolicyAsync();
+        Host(Id).Release.TrySetResult(null);
+
+        var denied = await Assert.ThrowsAsync<ManagedPolicyDeniedException>(() => download.WaitAsync(TimeSpan.FromSeconds(10)));
+        Assert.Equal("model-download", denied.PolicyKey);
+        await reapplied.WaitAsync(TimeSpan.FromSeconds(10));
+    }
+
+    [Fact]
+    public async Task CallerCancellationOfARegistryDownloadStaysACancellationWhileThePolicyRefusesIt()
+    {
+        var store = await Store();
+        Host(Id).SetSetting("LocalModels", true);
+        var policy = Policy();
+        await using var registry = PolicyRegistry(store, () => policy);
+        Assert.Null(await registry.SetEnabledAsync(Id, true));
+        var model = Assert.Single(registry.TranscriptionProviders).ModelStates.First();
+        Host(Id).SetSetting("Hold", true);
+        using var cancellation = new CancellationTokenSource();
+
+        var download = registry.DownloadModelAsync(model, cancellationToken: cancellation.Token);
+        await Host(Id).Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        policy = Policy(modelDownloads: false);
+        await cancellation.CancelAsync();
+        Host(Id).Release.TrySetResult(null);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => download.WaitAsync(TimeSpan.FromSeconds(10)));
     }
 
     private sealed class CountingHandler(Action onRequest) : HttpMessageHandler

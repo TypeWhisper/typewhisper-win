@@ -23,17 +23,13 @@ public sealed partial class PortablePluginRuntimeRegistry
     {
         // Spoken feedback carries transcript text, so remote synthesis follows the text-processing policy.
         if (TextTransferRefusal(pluginId) is { } refused) throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("tts", refused);
-        return UseConfigurationAsync(pluginId, async (plugin, token) =>
+        return RefusedWhenPolicyCancelsAsync(UseConfigurationAsync(pluginId, async (plugin, token) =>
         {
             // The policy may have changed while this request waited for the runtime gate.
             if (TextTransferRefusal(pluginId) is { } refusedNow) throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("tts", refusedNow);
             if (plugin is not ITtsProviderPlugin { IsConfigured: true, SupportsPlaybackSelection: true } provider)
                 throw new InvalidOperationException("The selected speech provider is unavailable.");
-            ITtsPlaybackSession playback;
-            try { playback = await provider.SpeakAsync(request, token); }
-            // A cancellation the policy pass caused while the playback was created is reported as the refusal.
-            catch (OperationCanceledException) when (!ct.IsCancellationRequested && TextTransferRefusal(pluginId) is { } refusedDuringSetup)
-            { throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("tts", refusedDuringSetup); }
+            var playback = await provider.SpeakAsync(request, token);
             var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             void Completed(object? sender, EventArgs args) => completion.TrySetResult();
             try
@@ -41,10 +37,7 @@ public sealed partial class PortablePluginRuntimeRegistry
                 playback.Completed += Completed;
                 if (!playback.IsActive) completion.TrySetResult();
                 using var registration = token.Register(() => completion.TrySetCanceled(token));
-                try { await completion.Task; }
-                // A cancellation the policy pass caused is reported as the refusal, not as a playback failure.
-                catch (OperationCanceledException) when (!ct.IsCancellationRequested && TextTransferRefusal(pluginId) is { } refusedMeanwhile)
-                { throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("tts", refusedMeanwhile); }
+                await completion.Task;
                 if (playback.Error is not null) throw new InvalidOperationException(playback.Error);
                 return true;
             }
@@ -54,6 +47,10 @@ public sealed partial class PortablePluginRuntimeRegistry
                 try { playback.Stop(); }
                 finally { (playback as IDisposable)?.Dispose(); }
             }
+        }, ct), () =>
+        {
+            // A cancellation the policy pass caused is reported as the refusal, not as a playback failure.
+            if (TextTransferRefusal(pluginId) is { } refusedMeanwhile) throw new TypeWhisper.Core.Models.ManagedPolicyDeniedException("tts", refusedMeanwhile);
         }, ct);
     }
 }
