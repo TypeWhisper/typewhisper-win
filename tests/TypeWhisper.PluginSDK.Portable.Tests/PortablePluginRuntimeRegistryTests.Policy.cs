@@ -329,10 +329,15 @@ public sealed partial class PortablePluginRuntimeRegistryTests
             await release.Task;
             return engine.PluginId;
         });
-        await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
-        policy = policyKey == "transcription" ? Policy(cloudTranscription: false) : Policy(cloudText: false);
-        var reapplied = registry.ReapplyPolicyAsync();
-        release.SetResult();
+        Task reapplied;
+        // Released in any case, so a failed wait cannot leave the lease held while the registry is disposed.
+        try
+        {
+            await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            policy = policyKey == "transcription" ? Policy(cloudTranscription: false) : Policy(cloudText: false);
+            reapplied = registry.ReapplyPolicyAsync();
+        }
+        finally { release.TrySetResult(); }
 
         var denied = await Assert.ThrowsAsync<ManagedPolicyDeniedException>(() => running.WaitAsync(TimeSpan.FromSeconds(10)));
         Assert.Equal(policyKey, denied.PolicyKey);
@@ -355,10 +360,14 @@ public sealed partial class PortablePluginRuntimeRegistryTests
             await Task.Delay(Timeout.Infinite, token);
             return engine.PluginId;
         }, cancellation.Token);
-        await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
-        // The policy would refuse the call now, but the caller cancelled it.
-        policy = Policy(cloudTranscription: false);
-        await cancellation.CancelAsync();
+        // Cancelled in any case, so a failed wait cannot leave the lease held while the registry is disposed.
+        try
+        {
+            await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            // The policy would refuse the call now, but the caller cancelled it.
+            policy = Policy(cloudTranscription: false);
+        }
+        finally { await cancellation.CancelAsync(); }
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => running.WaitAsync(TimeSpan.FromSeconds(10)));
     }
@@ -382,10 +391,14 @@ public sealed partial class PortablePluginRuntimeRegistryTests
         }
 
         var running = localOnly ? registry.UseLocalLlmAsync(Id, Use, modelId: "model-a") : registry.UseLlmAsync(Id, Use, modelId: "model-a");
-        await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
-        policy = Policy(llm: new(Id, "model-b"));
-        var reapplied = registry.ReapplyPolicyAsync();
-        release.SetResult();
+        Task reapplied;
+        try
+        {
+            await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            policy = Policy(llm: new(Id, "model-b"));
+            reapplied = registry.ReapplyPolicyAsync();
+        }
+        finally { release.TrySetResult(); }
 
         var denied = await Assert.ThrowsAsync<ManagedPolicyDeniedException>(() => running.WaitAsync(TimeSpan.FromSeconds(10)));
         Assert.Equal("llm", denied.PolicyKey);
@@ -409,9 +422,12 @@ public sealed partial class PortablePluginRuntimeRegistryTests
             await Task.Delay(Timeout.Infinite, token);
             return provider.PluginId;
         }, cancellation.Token, modelId: "model-a");
-        await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
-        policy = Policy(llm: new(Id, "model-b"));
-        await cancellation.CancelAsync();
+        try
+        {
+            await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            policy = Policy(llm: new(Id, "model-b"));
+        }
+        finally { await cancellation.CancelAsync(); }
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => running.WaitAsync(TimeSpan.FromSeconds(10)));
     }
@@ -521,10 +537,14 @@ public sealed partial class PortablePluginRuntimeRegistryTests
         Host(Id).SetSetting("Hold", true);
 
         var download = registry.DownloadModelAsync(model);
-        await Host(Id).Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
-        policy = Policy(modelDownloads: false);
-        var reapplied = registry.ReapplyPolicyAsync();
-        Host(Id).Release.TrySetResult(null);
+        Task reapplied;
+        try
+        {
+            await Host(Id).Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            policy = Policy(modelDownloads: false);
+            reapplied = registry.ReapplyPolicyAsync();
+        }
+        finally { Host(Id).Release.TrySetResult(null); }
 
         var denied = await Assert.ThrowsAsync<ManagedPolicyDeniedException>(() => download.WaitAsync(TimeSpan.FromSeconds(10)));
         Assert.Equal("model-download", denied.PolicyKey);
@@ -544,10 +564,13 @@ public sealed partial class PortablePluginRuntimeRegistryTests
         using var cancellation = new CancellationTokenSource();
 
         var download = registry.DownloadModelAsync(model, cancellationToken: cancellation.Token);
-        await Host(Id).Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
-        policy = Policy(modelDownloads: false);
-        await cancellation.CancelAsync();
-        Host(Id).Release.TrySetResult(null);
+        try
+        {
+            await Host(Id).Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            policy = Policy(modelDownloads: false);
+            await cancellation.CancelAsync();
+        }
+        finally { Host(Id).Release.TrySetResult(null); }
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => download.WaitAsync(TimeSpan.FromSeconds(10)));
     }

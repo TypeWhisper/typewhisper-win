@@ -96,10 +96,15 @@ public sealed partial class PortablePluginRuntimeRegistryTests
 
         // Off the test thread, since the held stop blocks its thread.
         var speech = Task.Run(() => registry.SpeakAsync(Id, new("hello"), default));
-        await Host(Id).Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        policy = Policy(cloudText: false);
-        var reapplied = registry.ReapplyPolicyAsync();
-        Host(Id).Release.TrySetResult(null);
+        Task reapplied;
+        // Released in any case, so a failed wait cannot leave the stop held while the registry is disposed.
+        try
+        {
+            await Host(Id).Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            policy = Policy(cloudText: false);
+            reapplied = registry.ReapplyPolicyAsync();
+        }
+        finally { Host(Id).Release.TrySetResult(null); }
 
         var refused = await Assert.ThrowsAsync<ManagedPolicyDeniedException>(() => speech.WaitAsync(TimeSpan.FromSeconds(5)));
         Assert.Equal("tts", refused.PolicyKey);
@@ -117,9 +122,12 @@ public sealed partial class PortablePluginRuntimeRegistryTests
         using var cancellation = new CancellationTokenSource();
 
         var speech = registry.SpeakAsync(Id, new("hello"), cancellation.Token);
-        await Host(Id).Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        policy = Policy(cloudText: false);
-        await cancellation.CancelAsync();
+        try
+        {
+            await Host(Id).Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            policy = Policy(cloudText: false);
+        }
+        finally { await cancellation.CancelAsync(); }
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => speech.WaitAsync(TimeSpan.FromSeconds(5)));
         Assert.Equal(1, Host(Id).GetSetting<int>("stops"));
