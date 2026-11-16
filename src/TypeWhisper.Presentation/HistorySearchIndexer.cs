@@ -156,7 +156,10 @@ public sealed class HistorySearchIndexer
         if (_worker is { } worker)
         {
             try { await worker.ConfigureAwait(false); }
-            catch (OperationCanceledException) { }
+            catch (OperationCanceledException)
+            {
+                // The worker ends through the cancellation StopAsync just requested.
+            }
         }
         CompleteWaiters();
         try { _index.Close(); }
@@ -192,7 +195,10 @@ public sealed class HistorySearchIndexer
     private void Wake()
     {
         try { _wake.Release(); }
-        catch (SemaphoreFullException) { }
+        catch (SemaphoreFullException)
+        {
+            // A wake is already pending; the next pass covers this one too.
+        }
     }
 
     private async Task<bool> SleepAsync(TimeSpan delay)
@@ -290,8 +296,7 @@ public sealed class HistorySearchIndexer
         }
 
         var wanted = new Dictionary<string, TranscriptionRecord>(StringComparer.Ordinal);
-        foreach (var record in records)
-            if (HistorySearchRecord.Indexes(record)) wanted.TryAdd(record.Id, record);
+        foreach (var record in records.Where(HistorySearchRecord.Indexes)) wanted.TryAdd(record.Id, record);
 
         var removed = _known.Keys.Where(id => !wanted.ContainsKey(id)).ToArray();
         if (removed.Length > 0)

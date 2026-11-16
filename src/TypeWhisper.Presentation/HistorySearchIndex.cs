@@ -26,14 +26,15 @@ public sealed class HistorySearchIndex : IDisposable
     /// <summary>The index file in <see cref="DirectoryName"/>.</summary>
     public const string FileName = "index.sqlite";
 
-    /// <summary>Raise it when the tables change. An index with another format is built again.</summary>
-    public const string FormatVersion = "1";
+    /// <summary>Raise it when the tables or what they hold change. An index with another format is built again.</summary>
+    public const string FormatVersion = "2";
 
     // Row IDs grow with the recording time, also for records that arrive late through sync. A period is then a range
     // of passage IDs, which full-text search filters far faster than a join on the records. A record's ID is its time
-    // in seconds times RecordsPerSecond plus a counter for records of the same second; a passage's ID is its record's
-    // ID times PassagesPerRecord plus its position.
+    // in seconds times RecordsPerSecond, plus its millisecond times RecordsPerMillisecond, plus a counter for records
+    // of the same millisecond; a passage's ID is its record's ID times PassagesPerRecord plus its position.
     internal const long RecordsPerSecond = 1L << 16;
+    private const long RecordsPerMillisecond = 64;
     internal const long PassagesPerRecord = 1L << 14;
 
     // A word that more than this share of the passages holds is left out of a search: it matches so much that it costs
@@ -277,13 +278,13 @@ public sealed class HistorySearchIndex : IDisposable
                         SELECT id FROM (
                             SELECT id, row_number() OVER (PARTITION BY record_row ORDER BY id DESC) AS place
                             FROM passages
-                            WHERE text LIKE @pattern ESCAPE '\' AND id BETWEEN @low AND @high
+                            WHERE id BETWEEN @low AND @high AND instr(history_fold(text), @word) > 0
                             {(scope.LimitsRecords ? $"AND record_row IN {RecordFilter}" : "")}
                         )
                         WHERE place <= {CandidatesPerRecord}
                         ORDER BY id DESC LIMIT @limit
                         """, row => row.GetInt64(0),
-                        [("@pattern", "%" + EscapeLike(word) + "%"), ("@low", passages.Low), ("@high", passages.High),
+                        [("@word", HistoryFullTextQuery.Folded(word)), ("@low", passages.Low), ("@high", passages.High),
                          ("@limit", (long)SubstringLimit), .. filter]);
                     foreach (var passage in containing.Where(passage => !scores.ContainsKey(passage))) Add(passage, order.Count + 1);
                 }
@@ -311,7 +312,7 @@ public sealed class HistorySearchIndex : IDisposable
                 {(scope.LimitsRecords ? $"AND id IN {RecordFilter}" : "")}
                 AND EXISTS (SELECT 1 FROM passages WHERE passages.id = records.id * {PassagesPerRecord})
                 """;
-            var found = limit <= 0 ? new List<long>() : Rows(connection, $"SELECT id FROM records WHERE {scoped} ORDER BY id DESC LIMIT @limit",
+            var found = limit <= 0 ? new List<long>() : Rows(connection, $"SELECT id FROM records WHERE {scoped} ORDER BY recorded_at DESC, id DESC LIMIT @limit",
                 row => row.GetInt64(0), [("@low", records.Low), ("@high", records.High), ("@limit", (long)limit), .. filter]);
             var total = Scalar(connection, $"SELECT count(*) FROM records WHERE {scoped}", [("@low", records.Low), ("@high", records.High), .. filter]);
             return (found.Select(record => Hit(connection, record * PassagesPerRecord)).OfType<HistorySearchHit>().ToArray(), (int)total);
@@ -377,23 +378,31 @@ public sealed class HistorySearchIndex : IDisposable
     }
 
     /// <summary>The speakers, apps and domains of the indexed records.</summary>
-    public HistorySearchVocabulary Vocabulary()
+    /// <param name="recordIds">The records to take names from, or null for every indexed record.</param>
+    public HistorySearchVocabulary Vocabulary(IReadOnlySet<string>? recordIds = null)
     {
         lock (_gate)
         {
-            if (_vocabulary is { } cached) return cached;
+            if (recordIds is null && _vocabulary is { } cached) return cached;
+            var only = recordIds is null ? "" : "AND r.record_id IN (SELECT value FROM json_each(@ids))";
+            (string, object?)[] values = recordIds is null ? [] : [("@ids", JsonSerializer.Serialize(recordIds.Order(StringComparer.Ordinal)))];
             var vocabulary = Reading(HistorySearchVocabulary.Empty, connection =>
             {
-                var speakers = Rows(connection, "SELECT DISTINCT speaker FROM passages WHERE speaker IS NOT NULL", row => row.GetString(0))
+                var speakers = Rows(connection, $"""
+                    SELECT DISTINCT p.speaker FROM passages p JOIN records r ON r.id = p.record_row
+                    WHERE p.speaker IS NOT NULL {only}
+                    """, row => row.GetString(0), values)
                     .SelectMany(names => names.Split('\n')).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
-                var apps = Rows(connection, """
-                    SELECT DISTINCT app_name, app_process FROM records WHERE app_name IS NOT NULL AND app_process IS NOT NULL
-                    ORDER BY app_name, app_process
-                    """, row => new HistorySearchApp(row.GetString(0), row.GetString(1))).ToArray();
-                var domains = Rows(connection, "SELECT DISTINCT domain FROM records WHERE domain IS NOT NULL ORDER BY domain", row => row.GetString(0)).ToArray();
+                var apps = Rows(connection, $"""
+                    SELECT DISTINCT r.app_name, r.app_process FROM records r
+                    WHERE r.app_name IS NOT NULL AND r.app_process IS NOT NULL {only}
+                    ORDER BY r.app_name, r.app_process
+                    """, row => new HistorySearchApp(row.GetString(0), row.GetString(1)), values).ToArray();
+                var domains = Rows(connection, $"SELECT DISTINCT r.domain FROM records r WHERE r.domain IS NOT NULL {only} ORDER BY r.domain",
+                    row => row.GetString(0), values).ToArray();
                 return new HistorySearchVocabulary(speakers, apps, domains);
             });
-            if (_connection is not null) _vocabulary = vocabulary;
+            if (recordIds is null && _connection is not null) _vocabulary = vocabulary;
             return vocabulary;
         }
     }
@@ -444,18 +453,20 @@ public sealed class HistorySearchIndex : IDisposable
 
     // The IDs that records of the period have. Seconds are whole, so a period that does not start and end on a second
     // is widened to the next ones.
+    // The IDs that records of the period have, to the millisecond. A period that ends before it starts holds none.
     private static (long Low, long High) RecordIds(HistorySearchScope scope)
     {
-        if (scope.PeriodStart is null && scope.PeriodEnd is null) return (0, (long)uint.MaxValue * RecordsPerSecond + RecordsPerSecond - 1);
-        static long Second(DateTimeOffset? moment, bool roundingUp, long fallback)
-        {
-            if (moment is not { } value) return fallback;
-            var seconds = value.ToUnixTimeMilliseconds() / 1000.0;
-            return (long)Math.Clamp(roundingUp ? Math.Ceiling(seconds) : Math.Floor(seconds), 0, uint.MaxValue);
-        }
-        var first = Second(scope.PeriodStart, false, 0) * RecordsPerSecond;
-        var end = Second(scope.PeriodEnd, true, (long)uint.MaxValue + 1) * RecordsPerSecond;
-        return (first, Math.Max(first, end - 1));
+        var low = scope.PeriodStart is { } start ? RowBase(start.ToUnixTimeMilliseconds()) : 0;
+        var high = scope.PeriodEnd is { } end ? RowBase(end.ToUnixTimeMilliseconds()) - 1 : (long)uint.MaxValue * RecordsPerSecond + RecordsPerSecond - 1;
+        return (low, high);
+    }
+
+    // The first row ID of a moment's millisecond; times before 1970 share the first one.
+    private static long RowBase(long milliseconds)
+    {
+        if (milliseconds <= 0) return 0;
+        var second = Math.Min(milliseconds / 1000, uint.MaxValue);
+        return second * RecordsPerSecond + (second == uint.MaxValue ? 0 : milliseconds % 1000) * RecordsPerMillisecond;
     }
 
     private static (long Low, long High) PassageIds((long Low, long High) records) =>
@@ -475,9 +486,13 @@ public sealed class HistorySearchIndex : IDisposable
         if (!scope.LimitsRecords) return [];
         static string? Json(IReadOnlySet<string>? values, bool emptyLimits) =>
             values is null || values.Count == 0 && !emptyLimits ? null : JsonSerializer.Serialize(values.Order(StringComparer.Ordinal));
-        // Process names are compared as Windows reports them, ignoring case.
-        var apps = scope.AppProcessNames.Count == 0 ? null : new HashSet<string>(scope.AppProcessNames.SelectMany(name => new[] { name, name.ToLowerInvariant() }));
-        return [("@sources", Json(scope.Sources, false)), ("@apps", Json(apps, false)), ("@domains", Json(scope.Domains, false)),
+        // Process names and domains are stored in lowercase, so they compare without case.
+        var apps = scope.AppProcessNames.Select(HistorySearchRecord.NormalizedProcessName).OfType<string>().ToHashSet(StringComparer.Ordinal);
+        var domains = scope.Domains.Select(HistorySearchRecord.NormalizedHost).OfType<string>().ToHashSet(StringComparer.Ordinal);
+        // A limit whose every value normalizes away still limits: it matches none.
+        string? Limit(IReadOnlySet<string> requested, HashSet<string> normalized) =>
+            requested.Count == 0 ? null : Json(normalized.Count == 0 ? new HashSet<string> { "" } : normalized, true);
+        return [("@sources", Json(scope.Sources, false)), ("@apps", Limit(scope.AppProcessNames, apps)), ("@domains", Limit(scope.Domains, domains)),
             // An empty set of records matches none.
             ("@ids", Json(scope.RecordIds, true))];
     }
@@ -516,8 +531,6 @@ public sealed class HistorySearchIndex : IDisposable
         _ => null
     };
 
-    private static string EscapeLike(string text) => text.Replace("\\", "\\\\", StringComparison.Ordinal)
-        .Replace("%", "\\%", StringComparison.Ordinal).Replace("_", "\\_", StringComparison.Ordinal);
 
     // Rows
 
@@ -535,16 +548,15 @@ public sealed class HistorySearchIndex : IDisposable
 
     private static long FreeRowId(SqliteConnection connection, DateTimeOffset recordedAt)
     {
-        var second = Math.Clamp(recordedAt.ToUnixTimeSeconds(), 0, uint.MaxValue);
+        var first = RowBase(recordedAt.ToUnixTimeMilliseconds());
         while (true)
         {
-            var first = second * RecordsPerSecond;
-            var last = first + RecordsPerSecond - 1;
+            var last = first + RecordsPerMillisecond - 1;
             var next = Scalar(connection, "SELECT COALESCE(MAX(id) + 1, @first) FROM records WHERE id BETWEEN @first AND @last",
                 ("@first", first), ("@last", last));
             if (next <= last) return next;
-            // More records in one second than it has IDs: continue in the next one.
-            second++;
+            // More records in one millisecond than it has IDs: continue in the IDs after it, which stay in order.
+            first = last + 1;
         }
     }
 
@@ -563,7 +575,10 @@ public sealed class HistorySearchIndex : IDisposable
             catch
             {
                 try { Run(connection, "ROLLBACK"); }
-                catch (SqliteException) { }
+                catch (SqliteException)
+                {
+                    // SQLite already rolled back after the error that ended the transaction; the original error is the one to report.
+                }
                 throw;
             }
         }
@@ -602,6 +617,9 @@ public sealed class HistorySearchIndex : IDisposable
             connection.Open();
             // Deleted text is overwritten in the file, not only marked free.
             Run(connection, "PRAGMA secure_delete=ON; PRAGMA journal_mode=DELETE; PRAGMA synchronous=NORMAL; PRAGMA busy_timeout=5000;");
+            // Text as a word search compares it: lowercased, composed, without accents, as the tokenizer folds it.
+            connection.CreateFunction("history_fold", (string? text) => text is null ? null : HistoryFullTextQuery.Folded(text.ToLowerInvariant()),
+                isDeterministic: true);
             string? format;
             var hasMeta = true;
             try { format = Rows(connection, "SELECT value FROM index_meta WHERE key = 'format'", row => row.GetString(0)).FirstOrDefault(); }
@@ -644,7 +662,10 @@ public sealed class HistorySearchIndex : IDisposable
         CloseConnection();
         try { System.IO.Directory.Delete(_directory, recursive: true); }
         catch (DirectoryNotFoundException) { return true; }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // A file still in use or protected stays; it is emptied below instead.
+        }
         if (!System.IO.Directory.Exists(_directory)) return true;
         // Emptying a file needs no right to change its folder.
         try

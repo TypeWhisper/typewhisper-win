@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 
 namespace TypeWhisper.ModuleKit;
@@ -78,18 +79,33 @@ public sealed record ModuleHistorySearchQuery(IReadOnlyList<string> Words)
     /// <summary>Also the newest matching passages, which may rank too low to be among the best.</summary>
     public bool IncludeNewest { get; init; }
 
-    /// <summary>The words of a text as the index splits them, lowercased.</summary>
+    /// <summary>
+    /// The words of a text as the index splits them, lowercased and composed: letters and digits, with the accents and
+    /// other combining marks that follow them.
+    /// </summary>
     public static IReadOnlyList<string> WordsIn(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
+        string normalized;
+        try { normalized = text.Normalize(NormalizationForm.FormC).ToLowerInvariant(); }
+        // A lone surrogate cannot be normalized; the index reads such text as it is too.
+        catch (ArgumentException) { normalized = text.ToLowerInvariant(); }
         var words = new List<string>();
-        var word = new StringBuilder();
-        foreach (var rune in text.EnumerateRunes())
+        var start = -1;
+        var index = 0;
+        foreach (var rune in normalized.EnumerateRunes())
         {
-            if (Rune.IsLetter(rune) || Rune.IsNumber(rune)) word.Append(Rune.ToLowerInvariant(rune).ToString());
-            else if (word.Length > 0) { words.Add(word.ToString()); word.Clear(); }
+            var inWord = Rune.IsLetter(rune) || Rune.IsNumber(rune) || start >= 0 && Rune.GetUnicodeCategory(rune)
+                is UnicodeCategory.NonSpacingMark or UnicodeCategory.SpacingCombiningMark or UnicodeCategory.EnclosingMark;
+            if (inWord && start < 0) start = index;
+            else if (!inWord && start >= 0)
+            {
+                words.Add(normalized[start..index]);
+                start = -1;
+            }
+            index += rune.Utf16SequenceLength;
         }
-        if (word.Length > 0) words.Add(word.ToString());
+        if (start >= 0) words.Add(normalized[start..]);
         return words;
     }
 }
@@ -112,10 +128,10 @@ public sealed record ModuleHistorySearchScope
     /// <summary>Record sources such as <c>"dictation"</c> or <c>"file"</c>, as <see cref="ModuleHistoryRecord.Source"/> names them.</summary>
     public IReadOnlySet<string> Sources { get; init; } = new HashSet<string>();
 
-    /// <summary>The process names of apps, as <see cref="ModuleHistoryApp.ProcessName"/> names them.</summary>
+    /// <summary>The process names of apps, as <see cref="ModuleHistoryApp.ProcessName"/> names them, compared without case.</summary>
     public IReadOnlySet<string> AppProcessNames { get; init; } = new HashSet<string>();
 
-    /// <summary>Website domains such as <c>"example.com"</c>.</summary>
+    /// <summary>Website domains such as <c>"example.com"</c>, compared without case.</summary>
     public IReadOnlySet<string> Domains { get; init; } = new HashSet<string>();
 
     /// <summary>The records the search is limited to, or null for no such limit. An empty set matches none.</summary>
@@ -130,7 +146,7 @@ public sealed record ModuleHistorySearchScope
         return (Period?.Contains(hit.RecordedAt) ?? true)
             && (Sources.Count == 0 || Sources.Contains(hit.Source))
             && AppProcessNames.Count == 0
-            && (Domains.Count == 0 || hit.Domain is { } domain && Domains.Contains(domain))
+            && (Domains.Count == 0 || hit.Domain is { } domain && Domains.Any(item => string.Equals(item, domain, StringComparison.OrdinalIgnoreCase)))
             && (RecordIds?.Contains(hit.RecordId) ?? true);
     }
 }
@@ -226,7 +242,7 @@ public sealed record ModuleHistorySummary(string Text, string ProviderId);
 
 /// <summary>An app records were made in.</summary>
 /// <param name="Name">The app's display name.</param>
-/// <param name="ProcessName">The app's process name, such as <c>"winword"</c>.</param>
+/// <param name="ProcessName">The app's process name in lowercase, such as <c>"winword"</c>.</param>
 public sealed record ModuleHistoryApp(string Name, string ProcessName);
 
 /// <summary>The names in the index that a search can refer to.</summary>

@@ -18,19 +18,41 @@ public static class HistoryFullTextQuery
 
     private static readonly (string Letter, string Spelling)[] GermanSpellings = [("ä", "ae"), ("ö", "oe"), ("ü", "ue"), ("ß", "ss")];
 
-    /// <summary>The words of a text as the index splits them, lowercased.</summary>
+    /// <summary>
+    /// The words of a text as the index splits them, lowercased and composed: letters and digits, with the accents and
+    /// other combining marks that follow them.
+    /// </summary>
     public static IReadOnlyList<string> Words(string text)
     {
+        var normalized = Composed(text).ToLowerInvariant();
         var words = new List<string>();
-        var word = new StringBuilder();
-        foreach (var rune in text.EnumerateRunes())
+        var start = -1;
+        var index = 0;
+        foreach (var rune in normalized.EnumerateRunes())
         {
-            if (Rune.IsLetter(rune) || Rune.IsNumber(rune)) word.Append(Rune.ToLowerInvariant(rune).ToString());
-            else if (word.Length > 0) { words.Add(word.ToString()); word.Clear(); }
+            var inWord = Rune.IsLetter(rune) || Rune.IsNumber(rune) || start >= 0 && IsMark(rune);
+            if (inWord && start < 0) start = index;
+            else if (!inWord && start >= 0)
+            {
+                words.Add(normalized[start..index]);
+                start = -1;
+            }
+            index += rune.Utf16SequenceLength;
         }
-        if (word.Length > 0) words.Add(word.ToString());
+        if (start >= 0) words.Add(normalized[start..]);
         return words;
     }
+
+    /// <summary>A text in composed form, so "a" with a separate accent is one character as in most text. Text that cannot be normalized stays as it is.</summary>
+    public static string Composed(string text)
+    {
+        try { return text.Normalize(NormalizationForm.FormC); }
+        // A lone surrogate cannot be normalized; the tokenizer reads such text as it is too.
+        catch (ArgumentException) { return text; }
+    }
+
+    private static bool IsMark(Rune rune) => Rune.GetUnicodeCategory(rune)
+        is UnicodeCategory.NonSpacingMark or UnicodeCategory.SpacingCombiningMark or UnicodeCategory.EnclosingMark;
 
     /// <summary>
     /// The other spelling of a German word: "mueller" for "müller", "strasse" for "straße", and back. The index folds
@@ -56,12 +78,8 @@ public static class HistoryFullTextQuery
         foreach (var word in words.SelectMany(Words).Take(MaximumWords))
             foreach (var form in Forms(word))
                 terms.Add('"' + form + '"' + (new StringInfo(form).LengthInTextElements >= PrefixLength ? "*" : ""));
-        foreach (var name in (names ?? []).Take(MaximumWords))
-        {
-            var phrase = string.Join(' ', Words(name));
-            if (phrase.Length == 0) continue;
-            foreach (var form in Forms(phrase)) terms.Add('"' + form + '"');
-        }
+        var phrases = (names ?? []).Take(MaximumWords).Select(name => string.Join(' ', Words(name))).Where(phrase => phrase.Length > 0);
+        terms.AddRange(phrases.SelectMany(Forms).Select(form => '"' + form + '"'));
         var distinct = terms.Distinct(StringComparer.Ordinal).ToArray();
         return distinct.Length == 0 ? null : string.Join(" OR ", distinct);
     }
@@ -69,11 +87,11 @@ public static class HistoryFullTextQuery
     /// <summary>A word as the index stores it: lowercased, without accents.</summary>
     public static string Folded(string word)
     {
-        var decomposed = word.Normalize(NormalizationForm.FormD);
-        var folded = new StringBuilder(decomposed.Length);
-        foreach (var character in decomposed)
-            if (CharUnicodeInfo.GetUnicodeCategory(character) != UnicodeCategory.NonSpacingMark) folded.Append(character);
-        return folded.ToString().Normalize(NormalizationForm.FormC);
+        string decomposed;
+        try { decomposed = word.Normalize(NormalizationForm.FormD); }
+        // A lone surrogate cannot be normalized and has no accents to remove.
+        catch (ArgumentException) { return word; }
+        return Composed(string.Concat(decomposed.Where(character => CharUnicodeInfo.GetUnicodeCategory(character) != UnicodeCategory.NonSpacingMark)));
     }
 
     private static IEnumerable<string> Forms(string word) => Variant(word) is { } variant ? [word, variant] : [word];

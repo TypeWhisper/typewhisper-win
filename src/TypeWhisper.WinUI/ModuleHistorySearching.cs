@@ -5,8 +5,8 @@ using TypeWhisper.Presentation;
 
 namespace TypeWhisper.WinUI;
 
-// IHistorySearching over the History search index. Reads run off the UI thread and return only records History still
-// has, so text a user deleted is never returned while the indexer is still removing it.
+// IHistorySearching over the History search index. Reads run off the UI thread and are limited to the records History
+// still has, so text a user deleted is never returned while the indexer is still removing it.
 internal sealed class ModuleHistorySearching : IHistorySearching
 {
     private readonly HistorySearchIndexer _indexer;
@@ -29,7 +29,7 @@ internal sealed class ModuleHistorySearching : IHistorySearching
         ArgumentNullException.ThrowIfNull(query);
         ArgumentNullException.ThrowIfNull(query.Words);
         if (!_indexer.IsEnabled || query.Limit <= 0) return [];
-        return await ReadAsync(current => _index.Search(query.Words, query.Names ?? [], Scope(query.Scope), query.Limit, query.IncludeNewest)
+        return await ReadAsync(current => _index.Search(query.Words, query.Names ?? [], Scope(query.Scope, current), query.Limit, query.IncludeNewest)
             .Where(hit => current.Contains(hit.RecordId)).Select(ToModuleHit).ToArray(), [], cancellationToken);
     }
 
@@ -40,10 +40,8 @@ internal sealed class ModuleHistorySearching : IHistorySearching
         if (!_indexer.IsEnabled) return empty;
         return await ReadAsync(current =>
         {
-            var (hits, total) = _index.NewestRecords(Scope(scope), Math.Max(0, limit));
-            var kept = hits.Where(hit => current.Contains(hit.RecordId)).Select(ToModuleHit).ToArray();
-            // Records removed since the indexer's last step leave the count as far as this read sees them.
-            return new ModuleHistoryNewestRecords(kept, Math.Max(kept.Length, total - (hits.Count - kept.Length)));
+            var (hits, total) = _index.NewestRecords(Scope(scope, current), Math.Max(0, limit));
+            return new ModuleHistoryNewestRecords(hits.Where(hit => current.Contains(hit.RecordId)).Select(ToModuleHit).ToArray(), total);
         }, empty, cancellationToken);
     }
 
@@ -82,9 +80,9 @@ internal sealed class ModuleHistorySearching : IHistorySearching
     public async Task<ModuleHistoryVocabulary> VocabularyAsync(CancellationToken cancellationToken = default)
     {
         if (!_indexer.IsEnabled) return ModuleHistoryVocabulary.Empty;
-        return await ReadAsync(_ =>
+        return await ReadAsync(current =>
         {
-            var vocabulary = _index.Vocabulary();
+            var vocabulary = _index.Vocabulary(current);
             return new ModuleHistoryVocabulary(vocabulary.Speakers, vocabulary.Apps.Select(app => new ModuleHistoryApp(app.Name, app.ProcessName)).ToArray(),
                 vocabulary.Domains);
         }, ModuleHistoryVocabulary.Empty, cancellationToken);
@@ -106,12 +104,13 @@ internal sealed class ModuleHistorySearching : IHistorySearching
         }, cancellationToken);
     }
 
-    internal static HistorySearchScope Scope(ModuleHistorySearchScope scope) => new(scope.Period?.Start, scope.Period?.End)
+    // The module's scope, limited to the records History has now.
+    internal static HistorySearchScope Scope(ModuleHistorySearchScope scope, IReadOnlySet<string> current) => new(scope.Period?.Start, scope.Period?.End)
     {
         Sources = scope.Sources ?? new HashSet<string>(),
         AppProcessNames = scope.AppProcessNames ?? new HashSet<string>(),
         Domains = scope.Domains ?? new HashSet<string>(),
-        RecordIds = scope.RecordIds
+        RecordIds = scope.RecordIds is { } ids ? ids.Where(current.Contains).ToHashSet(StringComparer.Ordinal) : current
     };
 
     internal static ModuleHistoryPassage ToModulePassage(HistoryPassage passage) =>

@@ -54,19 +54,27 @@ public sealed record HistorySearchRecord(
     };
 
     /// <summary>The website domain of a URL, lowercased and without <c>www.</c>, or null.</summary>
-    public static string? DomainOf(string? url)
+    public static string? DomainOf(string? url) =>
+        string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri) ? null : NormalizedHost(uri.Host);
+
+    /// <summary>A website domain as the index stores it: lowercased and without <c>www.</c>, or null when empty.</summary>
+    public static string? NormalizedHost(string? host)
     {
-        if (string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri) || string.IsNullOrWhiteSpace(uri.Host)) return null;
-        var host = uri.Host.ToLowerInvariant();
-        return host.StartsWith("www.", StringComparison.Ordinal) ? host[4..] : host;
+        if (string.IsNullOrWhiteSpace(host)) return null;
+        var normalized = host.Trim().TrimEnd('.').ToLowerInvariant();
+        if (normalized.StartsWith("www.", StringComparison.Ordinal)) normalized = normalized[4..];
+        return normalized.Length == 0 ? null : normalized;
     }
+
+    /// <summary>A process name as the index stores it: Windows compares process names without case, so lowercased.</summary>
+    public static string? NormalizedProcessName(string? name) => string.IsNullOrWhiteSpace(name) ? null : name.Trim().ToLowerInvariant();
 
     /// <summary>The record as the index stores it, or null for a record the index does not hold.</summary>
     public static HistorySearchRecord? From(TranscriptionRecord record)
     {
         ArgumentNullException.ThrowIfNull(record);
         if (!Indexes(record)) return null;
-        var processName = Blank(record.AppProcessName);
+        var processName = NormalizedProcessName(record.AppProcessName);
         var name = Blank(record.AppName);
         return new(
             record.Id,

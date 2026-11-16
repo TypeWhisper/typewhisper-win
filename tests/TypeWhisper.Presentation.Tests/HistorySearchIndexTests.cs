@@ -105,6 +105,13 @@ public sealed class HistoryFullTextQueryTests
     }
 
     [Fact]
+    public void AccentsWrittenAsSeparateMarksStayInTheirWord()
+    {
+        Assert.Equal(["na\u00efve", "caf\u00e9"], HistoryFullTextQuery.Words("nai\u0308ve, cafe\u0301!"));
+        Assert.Equal("\"na\u00efve\"*", HistoryFullTextQuery.Expression(["NAI\u0308VE"]));
+    }
+
+    [Fact]
     public void NothingToSearchForGivesNoQueryAndLongSearchesAreCapped()
     {
         Assert.Null(HistoryFullTextQuery.Expression(["...", "  "], ["-"]));
@@ -274,7 +281,7 @@ public sealed class HistorySearchIndexTests : IDisposable
     }
 
     [Fact]
-    public void TheVocabularyNamesAppsAndDomains()
+    public void TheVocabularyNamesAppsAndDomainsOfTheGivenRecords()
     {
         _index.Upsert([Indexed("a", "one", url: "https://example.com"), Indexed("b", "two", url: "https://docs.example.org/x")]);
 
@@ -283,6 +290,50 @@ public sealed class HistorySearchIndexTests : IDisposable
         Assert.Equal([new HistorySearchApp("Notes", "notes")], vocabulary.Apps);
         Assert.Equal(["docs.example.org", "example.com"], vocabulary.Domains);
         Assert.Empty(vocabulary.Speakers);
+        Assert.Equal(["example.com"], _index.Vocabulary(new HashSet<string> { "a" }).Domains);
+        Assert.Empty(_index.Vocabulary(new HashSet<string>()).Apps);
+        Assert.Equal(2, _index.Vocabulary().Domains.Count);
+    }
+
+    [Fact]
+    public void AppProcessNamesAndDomainsCompareWithoutCase()
+    {
+        var word = HistorySearchRecord.From(HistorySearchTestData.Record("word", "budget") with
+            { AppName = "Word", AppProcessName = "WINWORD", AppUrl = "https://WWW.Example.COM/inbox" })!;
+        _index.Upsert([word, Indexed("other", "budget")]);
+
+        Assert.Equal(["word"], Found("budget", new() { AppProcessNames = new HashSet<string> { "winword" } }));
+        Assert.Equal(["word"], Found("budget", new() { AppProcessNames = new HashSet<string> { " WinWord " } }));
+        Assert.Equal(["word"], Found("budget", new() { Domains = new HashSet<string> { "www.example.com" } }));
+        Assert.Empty(Found("budget", new() { AppProcessNames = new HashSet<string> { " " } }));
+        Assert.Contains(new HistorySearchApp("Word", "winword"), _index.Vocabulary().Apps);
+        Assert.Equal(["example.com"], _index.Vocabulary().Domains);
+    }
+
+    [Fact]
+    public void AccentsCaseAndSeparateMarksMatchAsTyped()
+    {
+        _index.Upsert([Indexed("a", "Ein naïve Ansatz."), Indexed("b", "ÜBERWEISUNG an die KINDERZAHNÄRZTIN")]);
+
+        Assert.Equal(["a"], Found("nai\u0308ve"));
+        Assert.Equal(["b"], Found("uberweisung"));
+        // Inside a longer word, found by the substring search, which folds case and accents like the index.
+        Assert.Equal(["b"], Found("zahnarztin"));
+    }
+
+    [Fact]
+    public void RecordsOfOneSecondKeepTheirOrderToTheMillisecond()
+    {
+        static HistorySearchRecord At(string id, long milliseconds) => HistorySearchRecord.From(HistorySearchTestData.Record(id, "budget") with
+            { Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(milliseconds).UtcDateTime, AppProcessName = "notes" })!;
+        _index.Upsert([At("late", 1_000_900)]);
+        _index.Upsert([At("early", 1_000_100)]);
+
+        Assert.Equal(["late", "early"], _index.NewestRecords(new(), 2).Hits.Select(hit => hit.RecordId));
+        Assert.Equal(DateTimeOffset.FromUnixTimeMilliseconds(1_000_900), _index.NewestRecords(new(), 1).Hits[0].RecordedAt);
+        Assert.Equal(["late"], Found("budget", new(DateTimeOffset.FromUnixTimeMilliseconds(1_000_500), DateTimeOffset.FromUnixTimeMilliseconds(1_001_000))));
+        Assert.Equal(["early"], Found("budget", new(DateTimeOffset.FromUnixTimeMilliseconds(1_000_100), DateTimeOffset.FromUnixTimeMilliseconds(1_000_900))));
+        Assert.Empty(Found("budget", new(DateTimeOffset.FromUnixTimeMilliseconds(1_000_950), DateTimeOffset.FromUnixTimeMilliseconds(1_000_950))));
     }
 
     [Fact]

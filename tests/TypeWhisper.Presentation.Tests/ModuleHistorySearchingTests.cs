@@ -46,7 +46,9 @@ public sealed class ModuleHistorySearchingTests : IDisposable
     public async Task ReadsReturnOnlyRecordsHistoryStillHas()
     {
         var kept = HistorySearchTestData.Record("kept", "the budget meeting", recordedAt: 2_000);
-        _index.Upsert([HistorySearchRecord.From(kept)!, HistorySearchRecord.From(HistorySearchTestData.Record("deleted", "the budget secret"))!]);
+        var deleted = HistorySearchTestData.Record("deleted", "the budget secret", recordedAt: 3_000) with
+            { AppName = "Secret app", AppProcessName = "secret", AppUrl = "https://secret.example" };
+        _index.Upsert([HistorySearchRecord.From(kept)!, HistorySearchRecord.From(deleted)!]);
         _history.Replace(kept);
         _indexer.Start();
         var searching = Searching();
@@ -56,7 +58,12 @@ public sealed class ModuleHistorySearchingTests : IDisposable
         var hit = Assert.Single(hits);
         Assert.Equal(("kept", "dictation", DateTimeOffset.FromUnixTimeSeconds(2_000)), (hit.RecordId, hit.Source, hit.RecordedAt));
         Assert.True(hit.Score > 0);
-        Assert.Equal(1, (await searching.NewestRecordsAsync(new(), 10)).Total);
+        var newest = await searching.NewestRecordsAsync(new(), 1);
+        Assert.Equal((1, "kept"), (newest.Total, Assert.Single(newest.Hits).RecordId));
+        Assert.Equal(["kept"], (await searching.SearchAsync(new(["budget"]) { Limit = 1 })).Select(found => found.RecordId));
+        var vocabulary = await searching.VocabularyAsync();
+        Assert.Empty(vocabulary.Apps);
+        Assert.Empty(vocabulary.Domains);
         Assert.Null(await searching.TranscriptAsync("deleted"));
         var transcript = (await searching.TranscriptAsync("kept"))!;
         var passage = Assert.Single(transcript.Passages);
@@ -71,17 +78,19 @@ public sealed class ModuleHistorySearchingTests : IDisposable
     [Fact]
     public void ScopesAndPassagesMapToTheIndex()
     {
+        var current = new HashSet<string> { "a", "b" };
         var scope = ModuleHistorySearching.Scope(new()
         {
             Period = new(DateTimeOffset.FromUnixTimeSeconds(10), DateTimeOffset.FromUnixTimeSeconds(20)),
             AppProcessNames = new HashSet<string> { "winword" },
-            RecordIds = new HashSet<string>()
-        });
+            RecordIds = new HashSet<string> { "b", "gone" }
+        }, current);
         var passage = ModuleHistorySearching.ToModulePassage(new(HistoryPassageKind.Result, "text", ["S1"], 1, 2, 3, 7));
 
         Assert.Equal((DateTimeOffset.FromUnixTimeSeconds(10), DateTimeOffset.FromUnixTimeSeconds(20)), (scope.PeriodStart!.Value, scope.PeriodEnd!.Value));
         Assert.Equal(["winword"], scope.AppProcessNames);
-        Assert.Empty(scope.RecordIds!);
+        Assert.Equal(["b"], scope.RecordIds!);
+        Assert.Same(current, ModuleHistorySearching.Scope(new(), current).RecordIds);
         Assert.Equal(new ModuleHistoryPassage(ModuleHistoryPassageKind.Result, "text")
             { Speakers = ["S1"], StartSeconds = 1, EndSeconds = 2, TextSpan = new(3, 7) }, passage);
     }
@@ -90,12 +99,13 @@ public sealed class ModuleHistorySearchingTests : IDisposable
     public void ModuleQueriesSplitWordsLikeTheIndexAndScopesFilterHits()
     {
         Assert.Equal(HistoryFullTextQuery.Words("Grüße, 42x — Ärger!"), ModuleHistorySearchQuery.WordsIn("Grüße, 42x — Ärger!"));
+        Assert.Equal(HistoryFullTextQuery.Words("NAI\u0308VE cafe\u0301"), ModuleHistorySearchQuery.WordsIn("NAI\u0308VE cafe\u0301"));
         var hit = new ModuleHistorySearchHit("a", DateTimeOffset.FromUnixTimeSeconds(15), "file", 0, 0, new(ModuleHistoryPassageKind.Transcript, "t"))
             { Domain = "example.com" };
 
         Assert.True(new ModuleHistorySearchScope { Period = new(DateTimeOffset.FromUnixTimeSeconds(15), DateTimeOffset.FromUnixTimeSeconds(16)) }.Includes(hit));
         Assert.False(new ModuleHistorySearchScope { Period = new(DateTimeOffset.FromUnixTimeSeconds(10), DateTimeOffset.FromUnixTimeSeconds(15)) }.Includes(hit));
-        Assert.True(new ModuleHistorySearchScope { Domains = new HashSet<string> { "example.com" }, Sources = new HashSet<string> { "file" } }.Includes(hit));
+        Assert.True(new ModuleHistorySearchScope { Domains = new HashSet<string> { "Example.COM" }, Sources = new HashSet<string> { "file" } }.Includes(hit));
         Assert.False(new ModuleHistorySearchScope { AppProcessNames = new HashSet<string> { "winword" } }.Includes(hit));
         Assert.False(new ModuleHistorySearchScope { RecordIds = new HashSet<string>() }.Includes(hit));
     }
