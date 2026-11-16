@@ -14,6 +14,6 @@
     <ProjectReference Include="../../src/TypeWhisper.Cli/TypeWhisper.Cli.csproj" />
   </ItemGroup>
   <Target Name="CopyCliRuntime" AfterTargets="Build">
-    <Copy SourceFiles="../../src/TypeWhisper.Cli/bin/$(Configuration)/net10.0/TypeWhisper.Cli.runtimeconfig.json;../../src/TypeWhisper.Cli/bin/$(Configuration)/net10.0/TypeWhisper.Cli.deps.json" DestinationFolder="$(TargetDir)" />
+    <Copy SourceFiles="../../src/TypeWhisper.Cli/bin/$(Configuration)/$(TargetFramework)/TypeWhisper.Cli.runtimeconfig.json;../../src/TypeWhisper.Cli/bin/$(Configuration)/$(TargetFramework)/TypeWhisper.Cli.deps.json" DestinationFolder="$(TargetDir)" />
   </Target>
 </Project>
