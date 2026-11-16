@@ -30,6 +30,8 @@ public sealed partial class PortablePluginRuntimeRegistry
             if (plugin is not ITtsProviderPlugin { IsConfigured: true, SupportsPlaybackSelection: true } provider)
                 throw new InvalidOperationException("The selected speech provider is unavailable.");
             var playback = await provider.SpeakAsync(request, token);
+            // Disposed once the finally below has stopped the playback, also when stopping throws.
+            using var disposablePlayback = playback as IDisposable;
             var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             void Completed(object? sender, EventArgs args) => completion.TrySetResult();
             try
@@ -44,8 +46,7 @@ public sealed partial class PortablePluginRuntimeRegistry
             finally
             {
                 playback.Completed -= Completed;
-                try { playback.Stop(); }
-                finally { (playback as IDisposable)?.Dispose(); }
+                playback.Stop();
             }
         }, ct), () =>
         {
