@@ -24,6 +24,7 @@ internal sealed class ModuleUserDataLifecycle : IUserDataLifecycle
     private readonly Action<string, Exception> _report;
     private readonly TimeSpan _eraseTimeout;
     private readonly List<ModuleUserData> _registered = [];
+    private volatile bool _erasing;
 
     // root: the folder that holds one subfolder per module.
     internal ModuleUserDataLifecycle(string root, Action<string, Exception> report, TimeSpan? eraseTimeout = null)
@@ -36,6 +37,8 @@ internal sealed class ModuleUserDataLifecycle : IUserDataLifecycle
     public string DataFolder(string moduleId)
     {
         RequireValidId(moduleId, nameof(moduleId));
+        // Erase work that outlives its timeout must not recreate a folder the deletion has already removed.
+        if (_erasing) throw new InvalidOperationException("All data is being deleted.");
         var folder = Path.Join(_root, moduleId);
         Directory.CreateDirectory(folder);
         return folder;
@@ -58,6 +61,7 @@ internal sealed class ModuleUserDataLifecycle : IUserDataLifecycle
     // and the others still run, because the host deletes the data afterwards either way.
     internal async Task EraseAllAsync()
     {
+        _erasing = true;
         ModuleUserData[] registered;
         lock (_registered) registered = [.. _registered];
         foreach (var userData in registered)

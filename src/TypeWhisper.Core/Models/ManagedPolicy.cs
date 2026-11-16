@@ -314,9 +314,10 @@ public sealed class ManagedPolicySnapshot
     }
 
     /// <summary>Keeps this snapshot's status, revision and issues but the values of an earlier readable snapshot.</summary>
+    /// <remarks>The earlier definitions stay with those values, so their sensitivity still applies to them.</remarks>
     public ManagedPolicySnapshot RetainingValuesFrom(ManagedPolicySnapshot previous) =>
         new(Revision, Status, ReadAt, previous.EnforcedValues, previous.RecommendedValues, previous.InvalidEnforcedKeys, Issues,
-            AdditionalDefinitions);
+            previous.AdditionalDefinitions);
 
     /// <summary>Compares everything except <see cref="Revision"/> and <see cref="ReadAt"/>.</summary>
     public bool ContentEquals(ManagedPolicySnapshot? other) =>

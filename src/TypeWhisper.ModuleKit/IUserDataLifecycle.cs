@@ -9,6 +9,7 @@ namespace TypeWhisper.ModuleKit;
 public interface IUserDataLifecycle
 {
     /// <summary>The module's folder inside the user's data folder. It is created when missing.</summary>
+    /// <exception cref="InvalidOperationException">The user is erasing all data; the app restarts afterwards.</exception>
     /// <param name="moduleId">The module's <see cref="IHostModule.Id"/>: ASCII letters, digits, dots, hyphens and underscores.</param>
     string DataFolder(string moduleId);
 

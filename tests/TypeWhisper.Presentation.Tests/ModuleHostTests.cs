@@ -579,6 +579,7 @@ public sealed class ModulePremiumAndUserDataTests
         await lifecycle.EraseAllAsync();
 
         Assert.Equal(["first", "third", "fourth"], calls);
-        Assert.Equal(["modules.user-data.erase-failed module=second", "modules.user-data.erase-failed module=third"], reported);
+        Assert.Equal(["modules.user-data.erase-failed module=second", "modules.user-data.erase-failed module=third"], reported);        // Erase work that is still running cannot recreate a module folder once deletion has started.
+        Assert.Throws<InvalidOperationException>(() => lifecycle.DataFolder("third"));
     }
 }
