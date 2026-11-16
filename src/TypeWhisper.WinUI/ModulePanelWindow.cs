@@ -134,8 +134,11 @@ internal sealed class ModulePanelWindow : Window, IModulePanelSurface
         var scale = Math.Max(96u, NativeMethods.GetDpiForWindow(WinRT.Interop.WindowNative.GetWindowHandle(this))) / 96d;
         _frame.Measure(new global::Windows.Foundation.Size(MaximumWidth, double.PositiveInfinity));
         var size = _frame.DesiredSize;
-        var width = Math.Clamp((int)Math.Ceiling(Math.Max(size.Width, 160) * scale), 1, work.Width);
-        var height = Math.Clamp((int)Math.Ceiling(Math.Clamp(size.Height, 48, MaximumHeight) * scale), 1, work.Height);
+        // The work area bounds the whole window, so the title bar and borders come off the client's share.
+        var chromeWidth = Math.Max(0, AppWindow.Size.Width - AppWindow.ClientSize.Width);
+        var chromeHeight = Math.Max(0, AppWindow.Size.Height - AppWindow.ClientSize.Height);
+        var width = Math.Clamp((int)Math.Ceiling(Math.Max(size.Width, 160) * scale), 1, Math.Max(1, work.Width - chromeWidth));
+        var height = Math.Clamp((int)Math.Ceiling(Math.Clamp(size.Height, 48, MaximumHeight) * scale), 1, Math.Max(1, work.Height - chromeHeight));
         AppWindow.ResizeClient(new SizeInt32(width, height));
     }
 
