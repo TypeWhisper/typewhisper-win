@@ -11,15 +11,15 @@ public sealed partial class PortablePluginRuntimeRegistryTests
 
     private async Task<PortablePluginStore> DiarizationStore(string locality)
     {
-        var bundles = Path.Combine(_root, "diarization-bundles");
-        var folder = Path.Combine(bundles, Id); Directory.CreateDirectory(folder);
-        File.Copy(typeof(DiarizationProbePlugin).Assembly.Location, Path.Combine(folder, "fixture.dll"), overwrite: true);
-        File.WriteAllText(Path.Combine(folder, "manifest.json"), JsonSerializer.Serialize(new PluginManifest
+        var bundles = Path.Join(_root, "diarization-bundles");
+        var folder = Path.Join(bundles, Id); Directory.CreateDirectory(folder);
+        File.Copy(typeof(DiarizationProbePlugin).Assembly.Location, Path.Join(folder, "fixture.dll"), overwrite: true);
+        File.WriteAllText(Path.Join(folder, "manifest.json"), JsonSerializer.Serialize(new PluginManifest
         {
             Id = Id, Name = "Diarization fixture", Version = "1.0.0", Locality = locality, Categories = ["diarization"],
             AssemblyName = "fixture.dll", PluginClass = typeof(DiarizationProbePlugin).FullName!
         }));
-        var store = new PortablePluginStore(Path.Combine(_root, "diarization-store"), Version, _http);
+        var store = new PortablePluginStore(Path.Join(_root, "diarization-store"), Version, _http);
         await store.InitializeAsync(bundles);
         return store;
     }

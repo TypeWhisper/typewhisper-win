@@ -73,7 +73,7 @@ public sealed class OnnxGeluRewriteTests
     [NemotronModelFact]
     public void ThePinnedExportBecomesThePinnedDirectMlGraph()
     {
-        var rewritten = OnnxGeluRewrite.Rewrite(File.ReadAllBytes(Path.Combine(NemotronModelFactAttribute.ModelDirectory!, "model.onnx")), out var replaced);
+        var rewritten = OnnxGeluRewrite.Rewrite(File.ReadAllBytes(Path.Join(NemotronModelFactAttribute.ModelDirectory!, "model.onnx")), out var replaced);
 
         Assert.Equal(31, replaced);
         Assert.Equal(NemotronModelAssets.DirectMlModelSha256, Convert.ToHexStringLower(SHA256.HashData(rewritten)));
