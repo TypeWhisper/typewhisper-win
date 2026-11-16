@@ -56,20 +56,15 @@ public sealed partial class PortablePluginRuntimeRegistry
         ArgumentNullException.ThrowIfNull(request);
         var owner = DiarizationOwner(providerId);
         DenyDiarizationIfRefused(owner);
-        return UseAsync(owner, async token =>
+        return RefusedWhenPolicyCancelsAsync(UseAsync(owner, async token =>
         {
             var provider = CurrentDiarization(providerId, owner);
             DenyDiarizationIfRefused(owner);
             if (request.SpeakerCount is { } count && provider.SupportedSpeakerCounts?.Contains(count) != true)
                 throw new ArgumentOutOfRangeException(nameof(request), count, "The diarization provider does not accept this speaker count.");
-            try
-            {
-                var result = await provider.DiarizeAsync(request, progress, token).ConfigureAwait(false);
-                return result ?? throw new InvalidOperationException("The diarization provider returned no result.");
-            }
-            // A cancellation the policy pass caused is reported as the refusal, not as a plain cancellation.
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) { DenyDiarizationIfRefused(owner); throw; }
-        }, cancellationToken);
+            var result = await provider.DiarizeAsync(request, progress, token).ConfigureAwait(false);
+            return result ?? throw new InvalidOperationException("The diarization provider returned no result.");
+        }, cancellationToken), () => DenyDiarizationIfRefused(owner), cancellationToken);
     }
 
     /// <summary>
@@ -81,7 +76,7 @@ public sealed partial class PortablePluginRuntimeRegistry
     {
         var owner = DiarizationOwner(providerId);
         if (Policy.ModelDownloadRefusal() is { } refused) throw new ManagedPolicyDeniedException("model-download", refused);
-        return UseAsync(owner, async token =>
+        return RefusedWhenPolicyCancelsAsync(UseAsync(owner, async token =>
         {
             var provider = CurrentDiarization(providerId, owner);
             if (provider.AreDiarizationModelsInstalled) return true;
@@ -93,13 +88,14 @@ public sealed partial class PortablePluginRuntimeRegistry
                 if (Policy.ModelDownloadRefusal() is { } refusedNow) throw new ManagedPolicyDeniedException("model-download", refusedNow);
                 await provider.PrepareDiarizationModelsAsync(reports, token).ConfigureAwait(false);
             }
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && Policy.ModelDownloadRefusal() is { } refusedMeanwhile)
-            { throw new ManagedPolicyDeniedException("model-download", refusedMeanwhile); }
             finally { lock (_sync) owner.Downloading = false; }
             token.ThrowIfCancellationRequested();
             if (!provider.AreDiarizationModelsInstalled)
                 throw new InvalidOperationException("The plugin did not confirm that its diarization models were installed.");
             return true;
+        }, cancellationToken), () =>
+        {
+            if (Policy.ModelDownloadRefusal() is { } refusedMeanwhile) throw new ManagedPolicyDeniedException("model-download", refusedMeanwhile);
         }, cancellationToken);
     }
 
@@ -144,6 +140,14 @@ public sealed partial class PortablePluginRuntimeRegistry
         if (!_index.Diarization.TryGetValue(providerId, out var current) || current.Owner != owner)
             throw new InvalidOperationException("The diarization provider changed.");
         return current.Provider;
+    }
+
+    // A cancellation the policy pass caused is reported as the refusal, not as a plain cancellation. Covers the whole
+    // lease, including the check after the callback returned; a cancellation by the caller passes through unchanged.
+    private static async Task<T> RefusedWhenPolicyCancelsAsync<T>(Task<T> lease, Action denyIfRefused, CancellationToken cancellationToken)
+    {
+        try { return await lease.ConfigureAwait(false); }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) { denyIfRefused(); throw; }
     }
 
     private void DenyDiarizationIfRefused(Slot owner)

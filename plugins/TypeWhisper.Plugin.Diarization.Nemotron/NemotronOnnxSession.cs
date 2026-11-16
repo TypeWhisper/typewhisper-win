@@ -98,7 +98,7 @@ internal sealed class NemotronOnnxSession : INemotronStep, IDisposable
             if (_directMlLoaded) return;
             var architecture = RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "win-arm64" : "win-x64";
             var directory = Path.GetDirectoryName(typeof(NemotronOnnxSession).Assembly.Location)!;
-            var path = Path.Combine(directory, "runtimes", architecture, "native", "DirectML.dll");
+            var path = Path.Join(directory, "runtimes", architecture, "native", "DirectML.dll");
             if (File.Exists(path)) NativeLibrary.Load(path);
             _directMlLoaded = true;
         }

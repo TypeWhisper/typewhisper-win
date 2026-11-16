@@ -18,7 +18,10 @@ public sealed class NemotronDiarizationPluginTests : IDisposable
     public void Dispose()
     {
         GC.Collect(); GC.WaitForPendingFinalizers();
-        try { Directory.Delete(_root, true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+        // Best-effort removal of the temporary folder: a file Windows still holds open must not fail the test.
+        try { Directory.Delete(_root, true); }
+        catch (IOException) { /* Left in the temporary folder. */ }
+        catch (UnauthorizedAccessException) { /* Left in the temporary folder. */ }
     }
 
     private VocabularyHostServices Host() => new(Path.Combine(_root, "data"));
@@ -59,6 +62,17 @@ public sealed class NemotronDiarizationPluginTests : IDisposable
             var logits = new float[(cachedFrames + step) * 8 * 8];
             for (var row = 0; row < logits.Length / 8; row++) logitsPerFrame.CopyTo(logits, row * 8);
             return new(logits, new float[step * 512], new float[512]);
+        }
+    }
+
+    // Fails its run, or cancels the call first when given its cancellation source.
+    private sealed class FailingStep(CancellationTokenSource? cancel = null) : INemotronStep
+    {
+        public NemotronStepOutput Run(float[] features, int melFrames, float[] cached, int cachedFrames, long[] mask, CancellationToken cancellationToken)
+        {
+            cancel?.Cancel();
+            cancellationToken.ThrowIfCancellationRequested();
+            throw new InvalidOperationException("The device was removed.");
         }
     }
 
@@ -138,10 +152,30 @@ public sealed class NemotronDiarizationPluginTests : IDisposable
 
         await plugin.DiarizeAsync(Seconds(1), null, default);
         await plugin.SaveTextSettingAsync("profile", "offline", default);
-        await plugin.SaveTextSettingAsync("device", "directml:Fixture GPU", default);
+        await plugin.SaveTextSettingAsync("device", "directml:1:Fixture GPU", default);
         await plugin.DiarizeAsync(Seconds(1), null, default);
 
         Assert.Equal([("fast32", null), ("offline", "Fixture GPU")], opened);
+    }
+
+    [Fact]
+    public async Task AFailedRunReleasesTheModelAndACancelledRunKeepsIt()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var steps = new Queue<INemotronStep>([new FailingStep(), new FailingStep(cancellation)]);
+        var opened = 0;
+        using var plugin = new NemotronDiarizationPlugin(Http(), adapters: () => [], files: Files(),
+            openStep: (_, _, _) => { opened++; return steps.Dequeue(); });
+        await plugin.ActivateAsync(Host());
+        await plugin.PrepareDiarizationModelsAsync(null, default);
+
+        // The next call opens the model again instead of reusing the session that failed.
+        await Assert.ThrowsAsync<InvalidOperationException>(() => plugin.DiarizeAsync(Seconds(1), null, default));
+        Assert.Null(plugin.LoadedDevice);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => plugin.DiarizeAsync(Seconds(1), null, cancellation.Token));
+        Assert.NotNull(plugin.LoadedDevice);
+        Assert.Equal(2, opened);
     }
 
     [Fact]
@@ -159,16 +193,41 @@ public sealed class NemotronDiarizationPluginTests : IDisposable
         adapters = [new(0, "Fixture GPU", 4096)];
         var device = plugin.TextSettings.Single(setting => setting.Id == "device");
         Assert.Equal("cpu", device.Value);
-        Assert.Equal(["cpu", "directml:Fixture GPU"], device.Choices.Select(choice => choice.Value));
+        Assert.Equal(["cpu", "directml:0:Fixture GPU"], device.Choices.Select(choice => choice.Value));
 
-        await plugin.SaveTextSettingAsync("device", "directml:Fixture GPU", default);
+        await plugin.SaveTextSettingAsync("device", "directml:0:Fixture GPU", default);
         Assert.Equal("Fixture GPU", plugin.SelectedAdapter?.Name);
-        await Assert.ThrowsAsync<ArgumentException>(() => plugin.SaveTextSettingAsync("device", "directml:Other GPU", default));
+        await Assert.ThrowsAsync<ArgumentException>(() => plugin.SaveTextSettingAsync("device", "directml:0:Other GPU", default));
+        await Assert.ThrowsAsync<ArgumentException>(() => plugin.SaveTextSettingAsync("device", "directml:Fixture GPU", default));
         await Assert.ThrowsAsync<ArgumentException>(() => plugin.SaveTextSettingAsync("profile", "turbo", default));
 
         // A saved graphics card that is gone falls back to the CPU.
         adapters = [];
         Assert.Null(plugin.SelectedAdapter);
+    }
+
+    [Fact]
+    public async Task GraphicsCardsWithTheSameDescriptionAreChosenApart()
+    {
+        IReadOnlyList<DirectMlAdapter> adapters = [new(0, "Fixture GPU", 4096), new(2, "Fixture GPU", 4096)];
+        using var plugin = new NemotronDiarizationPlugin(Http(), adapters: () => adapters, files: Files());
+        var host = Host();
+        await plugin.ActivateAsync(host);
+
+        var device = plugin.TextSettings.Single(setting => setting.Id == "device");
+        Assert.Equal(["cpu", "directml:0:Fixture GPU", "directml:2:Fixture GPU"], device.Choices.Select(choice => choice.Value));
+        Assert.Equal(["CPU", "Fixture GPU #1 (DirectML)", "Fixture GPU #3 (DirectML)"], device.Choices.Select(choice => choice.Title));
+
+        await plugin.SaveTextSettingAsync("device", "directml:2:Fixture GPU", default);
+        Assert.Equal(2, plugin.SelectedAdapter?.Index);
+        Assert.Equal("directml:2:Fixture GPU", plugin.TextSettings.Single(setting => setting.Id == "device").Value);
+
+        // A card whose index moved is found by its description, like a value that names the description only.
+        adapters = [new(1, "Fixture GPU", 4096)];
+        Assert.Equal(1, plugin.SelectedAdapter?.Index);
+        host.SetSetting("device", "directml:Fixture GPU");
+        Assert.Equal(1, plugin.SelectedAdapter?.Index);
+        Assert.Equal("directml:1:Fixture GPU", plugin.TextSettings.Single(setting => setting.Id == "device").Value);
     }
 
     [Fact]
@@ -236,7 +295,7 @@ public sealed class NemotronDiarizationPluginTests : IDisposable
         using var plugin = new NemotronDiarizationPlugin(Http(), adapters: () => adapter is null ? [] : [adapter], files: files);
         var host = Host();
         await plugin.ActivateAsync(host);
-        if (adapter is not null) await plugin.SaveTextSettingAsync("device", "directml:" + adapter.Name, default);
+        if (adapter is not null) await plugin.SaveTextSettingAsync("device", $"directml:{adapter.Index}:{adapter.Name}", default);
         // The pinned files are copied into the plugin's model directory and verified there like a download.
         var target = Path.Combine(host.PluginAssetDirectory, "Models", "nemotron-3-diarization-" + NemotronModelAssets.Revision[..12]);
         Directory.CreateDirectory(target);

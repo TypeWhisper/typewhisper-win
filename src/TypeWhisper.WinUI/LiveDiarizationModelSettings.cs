@@ -93,6 +93,8 @@ internal sealed class LiveDiarizationModelSettings : UserControl
         _progress.Value = 0;
         _progress.Visibility = download ? Visibility.Visible : Visibility.Collapsed;
         void Cancel() => operation.Cancel();
+        // A recording start stops the operation, so dictation never waits for the runtime it holds.
+        _session.RecordingStarting += Cancel;
         // A download also stops when the policy turns downloads off.
         if (download) _session.ModelDownloadsRefused += Cancel;
         UpdateButtons();
@@ -122,6 +124,7 @@ internal sealed class LiveDiarizationModelSettings : UserControl
         }
         finally
         {
+            _session.RecordingStarting -= Cancel;
             if (download) _session.ModelDownloadsRefused -= Cancel;
             _operation = null; _busy = false;
             // The runtime publishes the new model state with its next refresh, which raises Changed.

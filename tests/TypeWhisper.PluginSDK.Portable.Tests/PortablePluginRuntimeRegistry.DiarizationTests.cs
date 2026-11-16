@@ -170,6 +170,67 @@ public sealed partial class PortablePluginRuntimeRegistryTests
         Assert.False(Host(Id).GetSetting<bool>("Installed"));
     }
 
+    // The plugin returns normally after the policy pass cancelled its request, so the lease's own cancellation check
+    // fails the call: that is reported as the refusal as well.
+    [Fact]
+    public async Task PolicyCancellationAfterTheProviderReturnedIsReportedAsTheRefusal()
+    {
+        var store = await DiarizationStore("cloud");
+        var policy = Policy();
+        await using var registry = PolicyRegistry(store, () => policy);
+        await registry.InitializeAsync();
+        Assert.Null(await registry.SetEnabledAsync(Id, true));
+        Host(Id).SetSetting("Hold", true);
+        Host(Id).SetSetting("IgnoreCancellation", true);
+
+        var running = registry.DiarizeAsync(DiarizationId, Request());
+        await Host(Id).Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        policy = Policy(cloudTranscription: false);
+        var reapplied = registry.ReapplyPolicyAsync();
+        Host(Id).Release.TrySetResult(null);
+
+        var refused = await Assert.ThrowsAsync<ManagedPolicyDeniedException>(() => running.WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.Equal("diarization", refused.PolicyKey);
+        await reapplied.WaitAsync(TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
+    public async Task ModelDownloadPolicyCancellationAfterTheDownloadReturnedIsReportedAsTheRefusal()
+    {
+        var store = await DiarizationStore("local");
+        var policy = Policy();
+        await using var registry = PolicyRegistry(store, () => policy);
+        await registry.InitializeAsync();
+        Assert.Null(await registry.SetEnabledAsync(Id, true));
+        Host(Id).SetSetting("Hold", true);
+        Host(Id).SetSetting("IgnoreCancellation", true);
+
+        var download = registry.PrepareDiarizationModelsAsync(DiarizationId);
+        await Host(Id).Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        policy = Policy(modelDownloads: false);
+        await registry.ReapplyPolicyAsync();
+        Host(Id).Release.TrySetResult(null);
+
+        var refused = await Assert.ThrowsAsync<ManagedPolicyDeniedException>(() => download.WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.Equal("model-download", refused.PolicyKey);
+    }
+
+    [Fact]
+    public async Task CallerCancellationOfADiarizationStaysACancellation()
+    {
+        var store = await DiarizationStore("local");
+        await using var registry = Registry(store);
+        Assert.Null(await registry.SetEnabledAsync(Id, true));
+        Host(Id).SetSetting("Hold", true);
+        using var cancellation = new CancellationTokenSource();
+
+        var running = registry.DiarizeAsync(DiarizationId, Request(), cancellationToken: cancellation.Token);
+        await Host(Id).Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await cancellation.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => running.WaitAsync(TimeSpan.FromSeconds(5)));
+    }
+
     private sealed class SynchronousProgress(Action<double> report) : IProgress<double>
     {
         public void Report(double value) => report(value);

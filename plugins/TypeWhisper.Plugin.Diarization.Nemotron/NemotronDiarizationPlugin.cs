@@ -23,7 +23,7 @@ public sealed partial class NemotronDiarizationPlugin : IAudioDiarizationProvide
     private IPluginHostServices? _host;
     private NemotronModelAssets? _assets;
     private INemotronStep? _step;
-    private (string Profile, string? Adapter)? _loadedFor;
+    private (string Profile, DirectMlAdapter? Adapter)? _loadedFor;
     private Timer? _idle;
 
     /// <summary>Creates the plugin with its own HTTP client for model downloads.</summary>
@@ -128,8 +128,20 @@ public sealed partial class NemotronDiarizationPlugin : IAudioDiarizationProvide
             var started = Stopwatch.GetTimestamp();
             var (step, profile) = await Task.Run(() => LoadStep(assets), cancellationToken).ConfigureAwait(false);
             var fixedShapes = step is NemotronOnnxSession { FixedShapes: true };
-            var probabilities = await Task.Run(() => new NemotronStreamingDiarizer(step, profile, fixedShapes)
-                .Run(request.Samples, progress, cancellationToken), cancellationToken).ConfigureAwait(false);
+            float[] probabilities;
+            try
+            {
+                probabilities = await Task.Run(() => new NemotronStreamingDiarizer(step, profile, fixedShapes)
+                    .Run(request.Samples, progress, cancellationToken), cancellationToken).ConfigureAwait(false);
+            }
+            // A session that failed, for example after its graphics card was removed, is not kept: the next call opens
+            // the model again and falls back to the CPU when the graphics card cannot open it.
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                ReleaseStep();
+                throw;
+            }
+
             var turns = SpeakerTurns.FromProbabilities(probabilities);
             _host?.Log(PluginLogLevel.Info, $"Diarized {request.DurationSeconds:0.0} s into {turns.Select(turn => turn.SpeakerLabel).Distinct().Count()} speakers "
                 + $"in {Stopwatch.GetElapsedTime(started).TotalSeconds:0.0} s ({profile.Id}, {LoadedDevice}).");
@@ -158,7 +170,7 @@ public sealed partial class NemotronDiarizationPlugin : IAudioDiarizationProvide
     {
         var profile = SelectedProfile;
         var adapter = SelectedAdapter;
-        if (_step is not null && _loadedFor == (profile.Id, adapter?.Name)) return (_step, profile);
+        if (_step is not null && _loadedFor == (profile.Id, adapter)) return (_step, profile);
         ReleaseStep();
         if (_openStep is not null) _step = _openStep(assets, profile, adapter);
         else if (adapter is null) _step = NemotronOnnxSession.Open(assets.CpuModel, assets.DirectMlModel, profile, null);
@@ -172,7 +184,7 @@ public sealed partial class NemotronDiarizationPlugin : IAudioDiarizationProvide
             }
         }
 
-        _loadedFor = (profile.Id, adapter?.Name);
+        _loadedFor = (profile.Id, adapter);
         return (_step, profile);
     }
 

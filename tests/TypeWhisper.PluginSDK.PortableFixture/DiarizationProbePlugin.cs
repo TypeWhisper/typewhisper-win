@@ -35,10 +35,16 @@ public sealed class DiarizationProbePlugin : IAudioDiarizationProvider
         if (_host.GetSetting<bool>("Hold"))
         {
             _host.Log(PluginLogLevel.Info, "request-start");
-            await _host.LoadSecretAsync("hold").WaitAsync(cancellationToken);
+            await Hold(cancellationToken);
         }
         _host.SetSetting("Installed", true);
         progress?.Report(1);
+    }
+    // Waits for the test's release; with IgnoreCancellation the call completes normally after the request was cancelled.
+    private Task Hold(CancellationToken cancellationToken)
+    {
+        var release = _host.LoadSecretAsync("hold");
+        return _host.GetSetting<bool>("IgnoreCancellation") ? release : release.WaitAsync(cancellationToken);
     }
     /// <inheritdoc />
     public Task DeleteDiarizationModelsAsync(CancellationToken cancellationToken) { _host.SetSetting("Installed", false); return Task.CompletedTask; }
@@ -53,7 +59,7 @@ public sealed class DiarizationProbePlugin : IAudioDiarizationProvider
         if (_host.GetSetting<bool>("Hold"))
         {
             _host.Log(PluginLogLevel.Info, "request-start");
-            await _host.LoadSecretAsync("hold").WaitAsync(cancellationToken);
+            await Hold(cancellationToken);
         }
         progress?.Report(1);
         return new([new("S1", 0, 1) { Confidence = 0.9 }, new("S2", 1, request.DurationSeconds)], "fixture") { ModelVersion = "1" };

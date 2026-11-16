@@ -38,32 +38,32 @@ internal sealed class NemotronModelAssets
     /// <param name="directMlSha256">The expected SHA-256 of the DirectML graph, or null to skip the check (tests).</param>
     internal NemotronModelAssets(string root, IReadOnlyList<NemotronModelFile>? files = null, string? directMlSha256 = DirectMlModelSha256)
     {
-        Directory = Path.Combine(root, "nemotron-3-diarization-" + Revision[..12]);
+        Directory = Path.Join(root, "nemotron-3-diarization-" + Revision[..12]);
         _files = files ?? DefaultFiles;
         _directMlSha256 = directMlSha256;
     }
 
     internal string Directory { get; }
-    internal string CpuModel => Path.Combine(Directory, CpuModelName);
-    internal string DirectMlModel => Path.Combine(Directory, DirectMlModelName);
+    internal string CpuModel => Path.Join(Directory, CpuModelName);
+    internal string DirectMlModel => Path.Join(Directory, DirectMlModelName);
     internal long TotalBytes => _files.Sum(file => file.SizeBytes);
 
     /// <summary>Every file is present with its pinned size and was verified after its download.</summary>
     internal bool IsInstalled =>
-        File.Exists(Path.Combine(Directory, MarkerName))
-        && _files.All(file => new FileInfo(Path.Combine(Directory, file.FileName)) is { Exists: true } info && info.Length == file.SizeBytes);
+        File.Exists(Path.Join(Directory, MarkerName))
+        && _files.All(file => new FileInfo(Path.Join(Directory, file.FileName)) is { Exists: true } info && info.Length == file.SizeBytes);
 
     /// <summary>Downloads the missing files, resuming partial ones, and verifies each by size and SHA-256.</summary>
     internal async Task DownloadAsync(HttpClient client, IProgress<double>? progress, CancellationToken cancellationToken)
     {
         if (IsInstalled) { progress?.Report(1); return; }
         System.IO.Directory.CreateDirectory(Directory);
-        File.Delete(Path.Combine(Directory, MarkerName));
+        File.Delete(Path.Join(Directory, MarkerName));
         var total = (double)TotalBytes;
         long done = 0;
         foreach (var file in _files)
         {
-            var destination = Path.Combine(Directory, file.FileName);
+            var destination = Path.Join(Directory, file.FileName);
             var completed = done;
             var fileProgress = progress is null ? null : new Relay(value => progress.Report(Math.Min(0.99, (completed + (value * file.SizeBytes)) / total)));
             if (!await IsVerifiedAsync(destination, file, cancellationToken).ConfigureAwait(false))
@@ -71,7 +71,7 @@ internal sealed class NemotronModelAssets
             done += file.SizeBytes;
         }
 
-        await File.WriteAllTextAsync(Path.Combine(Directory, MarkerName), JsonSerializer.Serialize(new
+        await File.WriteAllTextAsync(Path.Join(Directory, MarkerName), JsonSerializer.Serialize(new
         {
             repository = Repository, revision = Revision, files = _files.Select(file => new { file.FileName, file.SizeBytes, file.Sha256 })
         }), cancellationToken).ConfigureAwait(false);
