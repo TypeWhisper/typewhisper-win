@@ -1132,7 +1132,10 @@ public sealed class AuthenticatedCliPluginTests
                 .Where(candidateDirectory => File.Exists(Path.Join(
                     candidateDirectory,
                     "TypeWhisper.FakeProviderCli.exe")))
-                .OrderByDescending(candidateDirectory => File.GetLastWriteTimeUtc(Path.Join(
+                // The build of the tests' own configuration first; the other only when it is missing.
+                .OrderBy(candidateDirectory => string.Equals(Path.GetFileName(Path.GetDirectoryName(candidateDirectory)), configuration,
+                    StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+                .ThenByDescending(candidateDirectory => File.GetLastWriteTimeUtc(Path.Join(
                     candidateDirectory,
                     "TypeWhisper.FakeProviderCli.exe")))
                 .FirstOrDefault();
