@@ -52,9 +52,8 @@ internal sealed class ModuleHistoryReading : IHistoryReading
     private readonly List<(ModuleObservation Observation, Action<ModuleHistoryChange> Handler)> _observers = [];
     private int _subscribed;
     private int _comparePending;
-    // UI thread only: whether _changes holds the records of an earlier read, and who got the first Current.
+    // UI thread only: whether _changes holds the records of an earlier read.
     private bool _tracking;
-    private HashSet<ModuleObservation> _initialRecipients = [];
 
     internal ModuleHistoryReading(IHistoryService history, Func<string?, string?> resolveAudioPath, Action<string> showRecord,
         Action<Action> post, Action<string, Exception> report)
@@ -102,15 +101,20 @@ internal sealed class ModuleHistoryReading : IHistoryReading
         ArgumentNullException.ThrowIfNull(handler);
         var observation = new ModuleObservation(_post, _report, "modules.history.observer-failed");
         var entry = (observation, handler);
-        lock (_observers) _observers.Add(entry);
         observation.Unsubscribe = () => { lock (_observers) _observers.Remove(entry); };
         // Following History starts with the first observer and lasts as long as the app. Every observer first gets
-        // the records History has at that point: the first ones once the baseline exists, later ones right away.
-        if (Interlocked.Exchange(ref _subscribed, 1) == 0) _ = StartTrackingAsync();
+        // Current: the first ones from the baseline, later ones when they join on the UI thread. A later observer joins
+        // the list only then, so no comparison queued before it can reach it ahead of its Current.
+        if (Interlocked.Exchange(ref _subscribed, 1) == 0)
+        {
+            lock (_observers) _observers.Add(entry);
+            _ = StartTrackingAsync();
+        }
         else _post(() =>
         {
-            if (_tracking && !_initialRecipients.Contains(observation))
-                observation.Deliver(() => handler(new ModuleHistoryChange.Current(_changes.KnownIds)));
+            if (observation.IsDisposed) return;
+            if (_tracking) observation.Deliver(() => handler(new ModuleHistoryChange.Current(_changes.KnownIds)));
+            lock (_observers) _observers.Add(entry);
         });
         return observation;
     }
@@ -155,7 +159,6 @@ internal sealed class ModuleHistoryReading : IHistoryReading
             catch (Exception ex) when (ex is not OutOfMemoryException) { _report("modules.history.read-failed", ex); baseline = []; }
             _changes.Reset(baseline);
             _tracking = true;
-            lock (_observers) _initialRecipients = _observers.Select(observer => observer.Observation).ToHashSet();
             Deliver([new ModuleHistoryChange.Current(_changes.KnownIds)]);
         });
     }

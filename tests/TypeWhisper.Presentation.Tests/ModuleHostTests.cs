@@ -472,6 +472,30 @@ public sealed class ModuleHistoryTests
     }
 
     [Fact]
+    public async Task ALaterObserverGetsCurrentBeforeAComparisonQueuedEarlier()
+    {
+        var first = Record("a");
+        var history = new FakeHistory(first);
+        var posted = new Queue<Action>();
+        var reading = new ModuleHistoryReading(history, _ => null, _ => { }, posted.Enqueue, (stage, _) => Assert.Fail(stage));
+        void RunPosted() { while (posted.TryDequeue(out var action)) action(); }
+        reading.ObserveChanges(_ => { });
+        await Task.Yield();
+        RunPosted();
+
+        // A save queues a comparison, then an observer joins before it runs.
+        history.Replace(first, Record("b"));
+        var late = new List<ModuleHistoryChange>();
+        reading.ObserveChanges(late.Add);
+        RunPosted();
+
+        Assert.Equal(["a", "b"], Assert.IsType<ModuleHistoryChange.Current>(Assert.Single(late)).Ids.Order(StringComparer.Ordinal));
+        history.Replace(first);
+        RunPosted();
+        Assert.Equal(["b"], Assert.IsType<ModuleHistoryChange.Removed>(late[1]).Ids.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
     public async Task EveryObserverGetsCurrentOnce()
     {
         var history = new FakeHistory(Record("a"));
