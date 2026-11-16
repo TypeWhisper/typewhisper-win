@@ -66,15 +66,15 @@ public sealed partial class PortablePluginRuntimeRegistryTests
     }
 
     [Fact]
-    public async Task PreparedModelsAppearInTheNextSnapshotAndCanBeRemoved()
+    public async Task PreparedModelsArePublishedBeforePreparationReturnsAndCanBeRemoved()
     {
         var store = await DiarizationStore("local");
         await using var registry = Registry(store);
         Assert.Null(await registry.SetEnabledAsync(Id, true));
         var reports = new List<double>();
 
+        // Read without a refresh of its own: a module diarizes right after preparing and checks readiness first.
         await registry.PrepareDiarizationModelsAsync(DiarizationId, new SynchronousProgress(reports.Add));
-        await registry.RefreshCapabilitiesAsync();
         Assert.True(Assert.Single(registry.DiarizationProviders).Ready);
         Assert.Contains(1d, reports);
 

@@ -69,14 +69,15 @@ public sealed partial class PortablePluginRuntimeRegistry
 
     /// <summary>
     /// Downloads and verifies a provider's models under its package lease. Refused while the policy turns model
-    /// downloads off; a policy pass that turns them off cancels a running download and reports the refusal.
+    /// downloads off; a policy pass that turns them off cancels a running download and reports the refusal. Returns
+    /// once the provider's new state is published, so <see cref="DiarizationProviders"/> reads it ready at once.
     /// </summary>
     public Task PrepareDiarizationModelsAsync(string providerId, IProgress<double>? progress = null,
         CancellationToken cancellationToken = default)
     {
         var owner = DiarizationOwner(providerId);
         if (Policy.ModelDownloadRefusal() is { } refused) throw new ManagedPolicyDeniedException("model-download", refused);
-        return RefusedWhenPolicyCancelsAsync(UseAsync(owner, async token =>
+        return PublishedAfterAsync(RefusedWhenPolicyCancelsAsync(UseAsync(owner, async token =>
         {
             var provider = CurrentDiarization(providerId, owner);
             if (provider.AreDiarizationModelsInstalled) return true;
@@ -96,7 +97,7 @@ public sealed partial class PortablePluginRuntimeRegistry
         }, cancellationToken), () =>
         {
             if (Policy.ModelDownloadRefusal() is { } refusedMeanwhile) throw new ManagedPolicyDeniedException("model-download", refusedMeanwhile);
-        }, cancellationToken);
+        }, cancellationToken));
     }
 
     /// <summary>Unloads a provider's models and removes them from disk under its package lease.</summary>
@@ -148,6 +149,13 @@ public sealed partial class PortablePluginRuntimeRegistry
     {
         try { return await lease.ConfigureAwait(false); }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) { denyIfRefused(); throw; }
+    }
+
+    // The lease only queues a refresh when it ends; a completed operation waits for the refreshed snapshot instead.
+    private async Task PublishedAfterAsync(Task operation)
+    {
+        await operation.ConfigureAwait(false);
+        await RefreshCapabilitiesAsync().ConfigureAwait(false);
     }
 
     private void DenyDiarizationIfRefused(Slot owner)
