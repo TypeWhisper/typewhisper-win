@@ -3297,5 +3297,7 @@
   "Sending audio to {0} is turned off by your organization.": "{0} への音声送信は組織によって無効化されています。",
   "Tells who spoke when in a recording. Audio stays on this device.": "録音の中で誰がいつ話したかを判別します。音声はこのデバイスから送信されません。",
   "Tells who spoke when in a recording. Audio is sent to this provider.": "録音の中で誰がいつ話したかを判別します。音声はこのプロバイダーに送信されます。",
-  "No actions available": "使用できるアクションはありません"
+  "No actions available": "使用できるアクションはありません",
+  "Finish the current dictation, recording or transcription first.": "まず実行中のディクテーション、録音、または文字起こしを終了してください。",
+  "Transcription failed: {0}": "文字起こしに失敗しました: {0}"
 }

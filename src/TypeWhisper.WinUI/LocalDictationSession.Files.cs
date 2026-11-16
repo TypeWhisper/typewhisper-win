@@ -81,15 +81,9 @@ internal sealed partial class LocalDictationSession
             { throw new LocalApiRequestException(422, LocalApiTranscription.UnreadableAudio); }
             ct.ThrowIfCancellationRequested();
             Report(Loc.T("Transcribing with {0}…", modelName));
-            if (!registryProvider) DenyLocalTranscriptionIfRefused();
             var transcriptionStarted = System.Diagnostics.Stopwatch.GetTimestamp();
-            var decoded = registryProvider
-                ? await PluginRuntime.UseTranscriptionAsync(providerSelection, (engine, token) =>
-                    LanguageHintTranscription.DecodeAsync(engine, samples,
-                        () => PcmWaveEncoder.Encode(samples, engine.MaximumAudioUploadBytes),
-                        language == "auto" ? null : language,
-                        hints, translate, token, PromptTermsFor(providerSelection, lexicon.Dictionary?.EnabledTerms)), ct)
-                : await _transcriptionPlugin.DecodeResultAsync(samples, language == "auto" ? null : language, translate, ct);
+            var decoded = await DecodeSamplesAsync(samples, registryProvider, providerSelection, language, hints, translate,
+                lexicon.Dictionary?.EnabledTerms, ct);
             var transcriptionSeconds = System.Diagnostics.Stopwatch.GetElapsedTime(transcriptionStarted).TotalSeconds;
             // Keep the gate until non-interruptible native work has actually drained.
             ct.ThrowIfCancellationRequested();
@@ -181,6 +175,23 @@ internal sealed partial class LocalDictationSession
                 Changed?.Invoke();
             }
         }
+    }
+
+    // The transcript of 16 kHz audio from the engine chosen at the start of an operation. The registry judges its
+    // providers by the policy; the local engine is judged here. Dictionary terms reach the engine as a prompt only
+    // where the policy allows text for it.
+    private Task<TypeWhisper.PluginSDK.Models.PluginTranscriptionResult> DecodeSamplesAsync(float[] samples, bool registryProvider,
+        string providerSelection, string language, IReadOnlyList<string> hints, bool translate, IReadOnlyList<string>? dictionaryTerms,
+        CancellationToken ct)
+    {
+        var spoken = language == "auto" ? null : language;
+        if (registryProvider)
+            return PluginRuntime.UseTranscriptionAsync(providerSelection, (engine, token) =>
+                LanguageHintTranscription.DecodeAsync(engine, samples,
+                    () => PcmWaveEncoder.Encode(samples, engine.MaximumAudioUploadBytes),
+                    spoken, hints, translate, token, PromptTermsFor(providerSelection, dictionaryTerms)), ct);
+        DenyLocalTranscriptionIfRefused();
+        return _transcriptionPlugin.DecodeResultAsync(samples, spoken, translate, ct);
     }
 
     // savedRecordId is the History record saved for the result, or null when History did not save it.

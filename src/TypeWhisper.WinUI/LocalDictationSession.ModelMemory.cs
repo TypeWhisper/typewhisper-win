@@ -26,11 +26,13 @@ internal sealed partial class LocalDictationSession
 
     // A model released after inactivity loads while the user speaks instead of at the final transcription.
     // The rescoring model follows the same policy and is needed right after the decode.
-    private void PrepareTranscriptionModel()
+    private void PrepareTranscriptionModel() => PrepareTranscriptionModel(RescoresWithCtc);
+
+    private void PrepareTranscriptionModel(bool rescoresWithCtc)
     {
         if (UsesRegistryProvider) _ = PrepareRegistryTranscriptionAsync(RegistrySelectionId(_providerId));
         else Models.PrepareForDictation();
-        if (RescoresWithCtc) _ = PrepareCtcForTermsAsync();
+        if (rescoresWithCtc) _ = PrepareCtcForTermsAsync();
     }
 
     // Only dictionary terms are rescored, so a dictionary without them never needs the rescoring model.

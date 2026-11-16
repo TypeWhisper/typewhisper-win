@@ -40,6 +40,9 @@ public interface IModuleHost
     /// <summary>Writes events to the app's diagnostic log under this module's identifier.</summary>
     IModuleDiagnostics? Diagnostics => null;
 
+    /// <summary>Records and transcribes a spoken input with the user's dictation microphone and engine.</summary>
+    ISpeechInput? SpeechInput => null;
+
     /// <summary>
     /// Completes once the app has started: its windows can be shown and the managed policy keys that modules declare
     /// are readable. A module that awaits it on the UI thread continues there. It never fails or is cancelled, and it

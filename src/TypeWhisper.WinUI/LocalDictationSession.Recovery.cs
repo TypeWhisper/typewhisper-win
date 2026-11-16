@@ -1,5 +1,4 @@
 using TypeWhisper.Core.Services;
-using TypeWhisper.PluginHost;
 using TypeWhisper.Presentation;
 
 namespace TypeWhisper.WinUI;
@@ -81,13 +80,7 @@ internal sealed partial class LocalDictationSession
             ct.ThrowIfCancellationRequested();
             var samples = await MediaFoundationFileDecoder.LoadAsync(path, ct);
             ct.ThrowIfCancellationRequested();
-            if (!registry) DenyLocalTranscriptionIfRefused();
-            var decoded = registry
-                ? await PluginRuntime.UseTranscriptionAsync(selection, (engine, token) =>
-                    LanguageHintTranscription.DecodeAsync(engine, samples,
-                        () => PcmWaveEncoder.Encode(samples, engine.MaximumAudioUploadBytes),
-                        language == "auto" ? null : language, hints, translate, token), ct)
-                : await _transcriptionPlugin.DecodeResultAsync(samples, language == "auto" ? null : language, translate, ct);
+            var decoded = await DecodeSamplesAsync(samples, registry, selection, language, hints, translate, null, ct);
             ct.ThrowIfCancellationRequested();
             ObjectDisposedException.ThrowIf(_disposed, this);
             if (string.IsNullOrWhiteSpace(decoded.Text) || FinalSpeechPolicy.ShouldReject(decoded.Text,

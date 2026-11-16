@@ -60,6 +60,13 @@ internal sealed partial class LocalDictationSession
         else DenyRegistrySelectionIfRefused(RegistrySelectionId(provider.Id));
     }
 
+    // A spoken input records for the engine chosen at its start, local or from the registry. Once the policy refuses
+    // that engine, the input ends at once as a refusal instead of recording until it stops by itself.
+    private void CancelRefusedSpeechInput()
+    {
+        if (_speechInputActive && TranscriptionPolicyRefusal() is not null) RequestCancel();
+    }
+
     /// <summary>Why policy refuses downloading models or runtime assets, or null.</summary>
     internal static string? ModelDownloadRefusal() => ProviderPolicy.ModelDownloadRefusal();
 
@@ -78,9 +85,10 @@ internal sealed partial class LocalDictationSession
             if (Models.Enabled && !UsesRegistryProvider && TranscriptionPolicyRefusal() is not null
                 || CtcVocabulary.Enabled && !CtcAllowed)
             {
-                if (_audio.IsRecording || _fileBusy || _phase == DictationPhase.Processing) RequestCancel();
+                if (_audio.IsRecording || _fileBusy || _speechInputActive || _phase == DictationPhase.Processing) RequestCancel();
                 _training?.CancelDecode();
             }
+            CancelRefusedSpeechInput();
             // A refused local package stops downloading model data at once, before any unload is awaited.
             if (Models.Enabled && ProviderPolicy.PluginRefusal(LocalTranscriptionPlugin.PluginId) is not null) Models.CancelDownload();
             // Downloads that passed their check before the policy turned them off stop here; the runtime cancels its
@@ -94,6 +102,8 @@ internal sealed partial class LocalDictationSession
             // An installation in progress that the policy refuses now is cancelled, hook included.
             Packages.Store.ReapplyPolicy();
             await PluginRuntime.ReapplyPolicyAsync();
+            // The registry may have unloaded the input's package only now; the input holds the gate until it ends.
+            CancelRefusedSpeechInput();
             await _gate.WaitAsync();
             try
             {

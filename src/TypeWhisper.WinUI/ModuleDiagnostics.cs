@@ -72,6 +72,7 @@ internal sealed class ModuleScopedHost(IModuleHost host, IModuleDiagnostics? dia
     public IHistorySearching? HistorySearching => host.HistorySearching;
     public ILanguageModelAnswering? LanguageModelAnswering => host.LanguageModelAnswering;
     public IModuleDiagnostics? Diagnostics => diagnostics;
+    public ISpeechInput? SpeechInput => host.SpeechInput;
     public Task WhenStarted => host.WhenStarted;
     public void ShowSettingsSection(string sectionId) => host.ShowSettingsSection(sectionId);
     public void ShowPanel(string id) => host.ShowPanel(id);

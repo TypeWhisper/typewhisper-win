@@ -123,7 +123,7 @@ public sealed class HostModulesTests
     [Fact]
     public void WithDiagnosticsEachModuleSeesTheSharedHostWithItsOwnDiagnostics()
     {
-        var host = new TestHost();
+        var host = new TestHost { SpeechInput = new NoSpeechInput() };
         var written = new List<string>();
         var failures = new List<(string Stage, Exception Error)>();
         var seen = new Dictionary<string, IModuleHost>();
@@ -147,6 +147,7 @@ public sealed class HostModulesTests
         var scoped = seen["first"];
         Assert.Equal(host.HostVersion, scoped.HostVersion);
         Assert.Same(host.WhenStarted, scoped.WhenStarted);
+        Assert.Same(host.SpeechInput, scoped.SpeechInput);
         scoped.ShowPanel("panel");
         scoped.ShowSettingsSection("section");
         Assert.Equal(["show-panel panel", "show-settings-section section"], host.Calls);
@@ -190,6 +191,7 @@ public sealed class HostModulesTests
         IModuleHost host = new MinimalHost();
 
         Assert.Null(host.Diagnostics);
+        Assert.Null(host.SpeechInput);
         Assert.True(host.WhenStarted.IsCompletedSuccessfully);
         host.ShowSettingsSection("anything");
     }
@@ -210,12 +212,20 @@ public sealed class HostModulesTests
         public IHistorySearching? HistorySearching => null;
         public ILanguageModelAnswering? LanguageModelAnswering => null;
         public IModuleDiagnostics? Diagnostics => null;
+        public ISpeechInput? SpeechInput { get; init; }
         public Task WhenStarted => _started.Task;
         public void ShowSettingsSection(string sectionId) => Calls.Add("show-settings-section " + sectionId);
         public void ShowPanel(string id) => Calls.Add("show-panel " + id);
         public void HidePanel(string id) => Calls.Add("hide-panel " + id);
         public void TogglePanel(string id) => Calls.Add("toggle-panel " + id);
         public bool IsPanelVisible(string id) => false;
+    }
+
+    private sealed class NoSpeechInput : ISpeechInput
+    {
+        public Task<ModuleSpeechInputResult> ListenAsync(ModuleSpeechInputOptions? options = null, IProgress<ModuleSpeechInputState>? progress = null,
+            CancellationToken cancellationToken = default) => throw new ModuleSpeechInputException(ModuleSpeechInputErrorKind.NotSetUp);
+        public void Stop() { }
     }
 
     // Implements only the members without a default, as a host written before the newer members would.
