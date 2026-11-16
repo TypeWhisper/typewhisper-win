@@ -58,17 +58,25 @@ internal sealed class ModuleUserDataLifecycle : IUserDataLifecycle
     }
 
     // Runs every registered erase in order of registration on the calling thread. A failure or a timeout is reported
-    // and the others still run, because the host deletes the data afterwards either way.
-    internal async Task EraseAllAsync()
+    // and the others still run, because the host deletes the data afterwards either way. Returns false when erase work
+    // is still running after its timeout: it may still write through a folder path it got earlier.
+    internal async Task<bool> EraseAllAsync()
     {
+        var settled = true;
         _erasing = true;
         ModuleUserData[] registered;
         lock (_registered) registered = [.. _registered];
         foreach (var userData in registered)
         {
             try { await (userData.Erase() ?? Task.CompletedTask).WaitAsync(_eraseTimeout); }
+            catch (TimeoutException ex)
+            {
+                settled = false;
+                _report($"modules.user-data.erase-failed module={userData.Id}", ex);
+            }
             catch (Exception ex) when (ex is not OutOfMemoryException) { _report($"modules.user-data.erase-failed module={userData.Id}", ex); }
         }
+        return settled;
     }
 
     // ASCII letters, digits, dots, hyphens and underscores; never a path step, a trailing dot Windows would drop, or a device name.

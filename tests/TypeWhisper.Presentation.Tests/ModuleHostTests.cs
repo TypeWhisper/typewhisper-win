@@ -563,6 +563,17 @@ public sealed class ModulePremiumAndUserDataTests
     }
 
     [Fact]
+    public async Task EraseIsSettledWhenEveryRegistrationFinishesOrFails()
+    {
+        var lifecycle = new ModuleUserDataLifecycle(Path.GetTempPath(), (_, _) => { }, TimeSpan.FromSeconds(5));
+        lifecycle.Register(new("done", () => Task.CompletedTask));
+        lifecycle.Register(new("failed", () => throw new IOException()));
+
+        // A failure ends the work; only work still running after its timeout leaves the deletion unsettled.
+        Assert.True(await lifecycle.EraseAllAsync());
+    }
+
+    [Fact]
     public async Task EraseRunsEveryRegistrationOnceAndReportsFailures()
     {
         var reported = new List<string>();
@@ -576,7 +587,7 @@ public sealed class ModulePremiumAndUserDataTests
         lifecycle.Register(new("fourth", async () => { await Task.Yield(); calls.Add("fourth"); }));
         lifecycle.Register(new("first", () => { calls.Add("first"); return Task.CompletedTask; }));
 
-        await lifecycle.EraseAllAsync();
+        Assert.False(await lifecycle.EraseAllAsync());
 
         Assert.Equal(["first", "third", "fourth"], calls);
         Assert.Equal(["modules.user-data.erase-failed module=second", "modules.user-data.erase-failed module=third"], reported);        // Erase work that is still running cannot recreate a module folder once deletion has started.

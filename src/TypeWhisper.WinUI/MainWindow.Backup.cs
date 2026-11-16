@@ -13,7 +13,7 @@ public sealed partial class MainWindow
     internal Task DrainBeforeProfileExitAsync() => ShutdownCoreAsync();
 
     // Lets modules stop their own writers before "Delete all data" removes the profile. Failures are reported only.
-    internal Task EraseModuleDataAsync() => _services.ModuleHost.UserData.EraseAllAsync();
+    internal Task<bool> EraseModuleDataAsync() => _services.ModuleHost.UserData.EraseAllAsync();
 
     internal void FreezeForProfileRestore()
     {

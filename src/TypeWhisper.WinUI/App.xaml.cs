@@ -431,13 +431,16 @@ public partial class App : Application
         {
             _profileOperation.SetMessage(Loc.T("Deleting your TypeWhisper data…"), true);
             // Modules stop what writes to their folders first; each one that fails is reported and the deletion goes on.
-            await _window.EraseModuleDataAsync();
+            var modulesSettled = await _window.EraseModuleDataAsync();
             // Recorded first, so the deletion resumes on the next launch if the app ends during the cleanup below.
             ProfileDataEraser.RequestErasure(WinUIProfile.Root);
             // Start with Windows lives in the registration, not the profile; a new installation starts with it off.
             var startupError = await TurnOffStartupAsync();
             var cliError = await Task.Run(RemoveOwnCli);
             var report = await Task.Run(UserDataDeletion.FinishPending);
+            // Module work still running past its timeout may write again through a path it already has, so the next
+            // launch deletes once more before anything opens the folder.
+            if (!modulesSettled) ProfileDataEraser.RequestErasure(WinUIProfile.Root);
             if (startupError is not null || cliError is not null)
             {
                 var leftovers = cliError is null ? Loc.T("turn off Start with Windows under General")
