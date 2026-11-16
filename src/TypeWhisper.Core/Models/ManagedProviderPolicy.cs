@@ -134,13 +134,16 @@ public sealed record ManagedProviderPolicy(
         // A manifest may carry null or blank entries; they say nothing about the package and are skipped.
         var ids = new HashSet<string>((categories ?? []).Where(id => !string.IsNullOrWhiteSpace(id)).Select(id => id.Trim()), StringComparer.OrdinalIgnoreCase);
         if (ids.Count == 0) return null;
-        var audio = ids.Contains("transcription");
-        var text = ids.Any(id => !id.Equals("transcription", StringComparison.OrdinalIgnoreCase));
+        // Transcription and speaker diarization receive audio; every other capability receives text.
+        var audio = ids.Overlaps(AudioCategories);
+        var text = ids.Any(id => !AudioCategories.Contains(id));
         var audioRefusal = !audio ? null : Blocked(ManagedPolicyKeys.AllowCloudTranscription) ?? (CloudTranscriptionAllowed == false ? CloudPackageRefusal : null);
         var textRefusal = !text ? null : Blocked(ManagedPolicyKeys.AllowCloudTextProcessing) ?? (CloudTextProcessingAllowed == false ? CloudPackageRefusal : null);
         if (audio && audioRefusal is null || text && textRefusal is null) return null;
         return audioRefusal ?? textRefusal;
     }
+
+    private static readonly IReadOnlySet<string> AudioCategories = new HashSet<string>(["transcription", "diarization"], StringComparer.OrdinalIgnoreCase);
 
     private static string CloudPackageRefusal => Loc.T("This plugin processes content in the cloud, which your organization has turned off.");
 
@@ -188,6 +191,16 @@ public sealed record ManagedProviderPolicy(
         ?? Blocked(ManagedPolicyKeys.AllowCloudTextProcessing)
         ?? (CloudTextProcessingAllowed == false && locality != ContentLocality.Local
             ? Loc.T("Sending text to {0} is turned off by your organization.", pluginId) : null);
+
+    /// <summary>
+    /// Why audio may not be sent to a speaker diarization plugin, or null. Diarization receives the same audio as
+    /// transcription, so a provider that is not local follows <see cref="CloudTranscriptionAllowed"/>.
+    /// </summary>
+    public string? DiarizationRefusal(string pluginId, ContentLocality locality) =>
+        PluginRefusal(pluginId)
+        ?? Blocked(ManagedPolicyKeys.AllowCloudTranscription)
+        ?? (CloudTranscriptionAllowed == false && locality != ContentLocality.Local
+            ? Loc.T("Sending audio to {0} is turned off by your organization.", pluginId) : null);
 
     /// <summary>Why the app may not download or update plugins, or null.</summary>
     public string? PluginDownloadRefusal() =>

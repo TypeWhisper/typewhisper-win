@@ -3293,5 +3293,8 @@
   "Some Premium features are not included in this build.": "此版本未包含部分 Premium 功能。",
   "Select only one entry.": "请只选择一个条目。",
   "Select at most {0} entries.": "最多选择 {0} 个条目。",
-  "{0} shortcuts": "{0}快捷键"
+  "{0} shortcuts": "{0}快捷键",
+  "Sending audio to {0} is turned off by your organization.": "你的组织已关闭向 {0} 发送音频。",
+  "Tells who spoke when in a recording. Audio stays on this device.": "识别录音中谁在何时说话。音频保留在此设备上。",
+  "Tells who spoke when in a recording. Audio is sent to this provider.": "识别录音中谁在何时说话。音频会发送给此提供商。"
 }

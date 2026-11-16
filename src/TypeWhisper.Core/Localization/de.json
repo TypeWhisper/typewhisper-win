@@ -3293,5 +3293,8 @@
   "Some Premium features are not included in this build.": "Einige Premium-Funktionen sind in diesem Build nicht enthalten.",
   "Select only one entry.": "Wähle nur einen Eintrag aus.",
   "Select at most {0} entries.": "Wähle höchstens {0} Einträge aus.",
-  "{0} shortcuts": "{0}-Tastenkürzel"
+  "{0} shortcuts": "{0}-Tastenkürzel",
+  "Sending audio to {0} is turned off by your organization.": "Das Senden von Audio an {0} ist von deiner Organisation deaktiviert.",
+  "Tells who spoke when in a recording. Audio stays on this device.": "Erkennt, wer in einer Aufnahme wann gesprochen hat. Das Audio bleibt auf diesem Gerät.",
+  "Tells who spoke when in a recording. Audio is sent to this provider.": "Erkennt, wer in einer Aufnahme wann gesprochen hat. Das Audio wird an diesen Anbieter gesendet."
 }

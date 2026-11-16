@@ -32,6 +32,10 @@
     <PackageVersion Include="LLamaSharp" Version="0.27.0" />
     <PackageVersion Include="LLamaSharp.Backend.Cpu" Version="0.27.0" />
     <PackageVersion Include="Microsoft.ML.OnnxRuntime" Version="1.32.0" />
+    <!-- The diarization plugin's DirectML build of ONNX Runtime (its CPU provider included) and the DirectML runtime
+         that build needs. The newest DirectML release of ONNX Runtime is older than the CPU package above. -->
+    <PackageVersion Include="Microsoft.ML.OnnxRuntime.DirectML" Version="1.24.4" />
+    <PackageVersion Include="Microsoft.AI.DirectML" Version="1.15.4" />
     <PackageVersion Include="org.k2fsa.sherpa.onnx" Version="2.0.1" />
     <PackageVersion Include="SharpCompress" Version="0.50.9" />
     <PackageVersion Include="Whisper.net" Version="1.9.0" />

@@ -137,6 +137,30 @@ public class ManagedProviderPolicyTests
     }
 
     [Fact]
+    public void Diarization_ReceivesAudioAndFollowsTheCloudTranscriptionKey()
+    {
+        var audioOff = ManagedProviderPolicy.From(Snapshot([(ManagedPolicyKeys.AllowCloudTranscription, Number(0))]));
+        Assert.Null(audioOff.DiarizationRefusal("com.typewhisper.nemotron-diarization", ContentLocality.Local));
+        Assert.Contains("turned off", audioOff.DiarizationRefusal("com.example.cloud-diarization", ContentLocality.Cloud));
+        Assert.Contains("turned off", audioOff.DiarizationRefusal("com.example.endpoint", ContentLocality.Configurable));
+        Assert.Contains("turned off", audioOff.DiarizationRefusal("com.example.legacy", ContentLocality.Unknown));
+        // A package that only diarizes is refused as a whole, like one that only transcribes.
+        Assert.Contains("cloud", audioOff.PackageRefusal("com.example.cloud-diarization", ContentLocality.Cloud, ["diarization"]));
+        Assert.Null(audioOff.PackageRefusal("com.example.cloud-diarization", ContentLocality.Cloud, ["diarization", "llm"]));
+
+        // The text key does not govern audio.
+        var textOff = ManagedProviderPolicy.From(Snapshot([(ManagedPolicyKeys.AllowCloudTextProcessing, Number(0))]));
+        Assert.Null(textOff.DiarizationRefusal("com.example.cloud-diarization", ContentLocality.Cloud));
+        Assert.Null(textOff.PackageRefusal("com.example.cloud-diarization", ContentLocality.Cloud, ["diarization"]));
+
+        var allowlist = ManagedProviderPolicy.From(Allowlist(ManagedPolicyKeys.AllowedPlugins, "com.typewhisper.sherpa-onnx"));
+        Assert.Contains("not allowed", allowlist.DiarizationRefusal("com.typewhisper.nemotron-diarization", ContentLocality.Local));
+        var unreadable = ManagedProviderPolicy.From(ManagedPolicyValidator.Validate(ManagedPolicyReading.Unreadable("IOException"), 1, DateTimeOffset.UtcNow));
+        Assert.Contains("could not be read", unreadable.DiarizationRefusal("com.typewhisper.nemotron-diarization", ContentLocality.Local));
+        Assert.Null(ManagedProviderPolicy.None.DiarizationRefusal("com.example.cloud-diarization", ContentLocality.Cloud));
+    }
+
+    [Fact]
     public void EnforcedPairs_FixTheProviderAndTheModel()
     {
         var policy = ManagedProviderPolicy.From(Snapshot([

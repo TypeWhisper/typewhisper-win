@@ -130,6 +130,7 @@ public sealed class HostModulesTests
         public IManagedPolicyReading? ManagedPolicyReading => null;
         public IPremiumAccessReading? PremiumAccessReading => null;
         public IUserDataLifecycle? UserDataLifecycle => null;
+        public IAudioDiarization? AudioDiarization => null;
         public void ShowPanel(string id) { }
         public void HidePanel(string id) { }
         public void TogglePanel(string id) { }

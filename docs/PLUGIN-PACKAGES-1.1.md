@@ -53,7 +53,7 @@ NVIDIA Parakeet bundles its CTC component under
 `Dependencies/com.typewhisper.parakeet-ctc/`; it is not a separate installable integration.
 
 The package manager is provider-independent. WinUI connects portable transcription,
-LLM, text-processing, speech, explicit memory context and action capabilities.
+LLM, text-processing, speech, speaker diarization, explicit memory context and action capabilities.
 NVIDIA Parakeet retains its dedicated local-model adapter. Installing a package
 does not by itself implement an application UI for every possible SDK capability.
 
@@ -88,6 +88,35 @@ Model commands are bound to the captured package activation and engine instance.
 download; unmet required prerequisites block the request. Generic credential/license
 editors for these prerequisites remain future work. The host never assumes license
 acceptance or invents a credential.
+
+## Speaker diarization (plugin API 1.3.0)
+
+`IAudioDiarizationProvider` tells who spoke when in a recording. It separates voices; it
+does not identify people. Names and semantics follow the macOS Plugin SDK
+(`SpeakerDiarizationProviderPlugin`):
+
+- `DiarizationProviderId` and `DiarizationProviderDisplayName` identify the provider;
+  the ID is unique among diarization providers.
+- `AreDiarizationModelsInstalled`, `PrepareDiarizationModelsAsync(progress, ct)`,
+  `DeleteDiarizationModelsAsync(ct)` and `UnloadDiarizationModelsAsync()` manage the
+  provider's models. `DiarizationModel` names them and their size for the host's model
+  card in the plugin settings.
+- `DiarizeAsync(PluginDiarizationRequest, progress, ct)` receives mono PCM samples (16 kHz
+  in this host), the source file path when there is one, an optional language and an
+  optional fixed speaker count, and returns `PluginSpeakerTurn`s: a provider-local label
+  such as `S1`, start and end in seconds, and an optional confidence. Turns of different
+  speakers may overlap. `PluginDiarizationResult` may also carry one voice embedding per
+  label and the model that produced them.
+- `SupportedSpeakerCounts` lists the fixed counts the provider accepts; the default null
+  means automatic detection only, and the host rejects a count outside the range before
+  the call. Classified failures throw `PluginDiarizationException`.
+
+The host applies the managed policy before audio reaches a provider. Diarization receives
+the same audio as transcription, so a provider whose manifest declares a locality other
+than `local` follows `AllowCloudTranscription`, and model downloads follow
+`AllowModelDownloads`. A manifest category `diarization` counts as an audio capability
+when the policy judges a remote package as a whole. Plugins that implement the interface
+declare `minHostVersion` `1.3.0`.
 
 ## Lifecycle
 

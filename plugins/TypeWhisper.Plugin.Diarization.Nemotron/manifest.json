@@ -1,0 +1,18 @@
+{
+  "id": "com.typewhisper.nemotron-diarization",
+  "locality": "local",
+  "name": "NVIDIA Nemotron Diarization",
+  "version": "1.0.0",
+  "minHostVersion": "1.3.0",
+  "author": "TypeWhisper",
+  "description": "Local speaker diarization with NVIDIA Nemotron 3 Diarization: tells who spoke when in a recording, for up to 8 speakers. Runs with ONNX Runtime on the CPU or a DirectML graphics card; the audio never leaves your PC.",
+  "descriptions": {
+    "de": "Lokale Sprecherdiarisierung mit NVIDIA Nemotron 3 Diarization: erkennt, wer in einer Aufnahme wann gesprochen hat, für bis zu 8 Sprecher. Läuft mit ONNX Runtime auf der CPU oder einer DirectML-Grafikkarte; das Audio verlässt deinen PC nicht."
+  },
+  "categories": [
+    "diarization"
+  ],
+  "isLocal": true,
+  "assemblyName": "TypeWhisper.Plugin.Diarization.Nemotron.dll",
+  "pluginClass": "TypeWhisper.Plugin.Diarization.Nemotron.NemotronDiarizationPlugin"
+}

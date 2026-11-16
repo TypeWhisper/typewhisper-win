@@ -110,6 +110,8 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
     {
         internal Dictionary<string, PostProcessorRole> PostProcessors { get; init; } = new(StringComparer.Ordinal);
         internal PortableTtsProvider[] TtsSnapshots { get; init; } = [];
+        internal Dictionary<string, DiarizationRole> Diarization { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+        internal PortableDiarizationProvider[] DiarizationSnapshots { get; init; } = [];
         internal Dictionary<string, ActionRole> Actions { get; init; } = new(StringComparer.Ordinal);
         internal Dictionary<string, DictationTargetRole> DictationTargets { get; init; } = new(StringComparer.Ordinal);
         // The activation each included package's entries were read from.
@@ -478,6 +480,10 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
         foreach (var (selectionId, role) in _index.Llm)
             if (policy.LlmRefusal(selectionId, role.Owner.Id, role.Owner.Locality, RunningModel(role.Owner.RunningLlm, selectionId)) is not null)
                 CancelRequest(role.Owner);
+        // Diarization receives audio, so the audio rule cancels a running one.
+        foreach (var role in _index.Diarization.Values)
+            if (policy.DiarizationRefusal(role.Owner.Id, role.Owner.Locality) is not null)
+                CancelRequest(role.Owner);
         // A running model download stops once the download policy refuses it.
         if (policy.ModelDownloadRefusal() is not null)
             foreach (var slot in _slots.Values.Where(slot => slot.Downloading)) CancelRequest(slot);
@@ -818,6 +824,8 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
         var transcriptionSnapshots = new List<PortableTranscriptionProvider>();
         var llmSnapshots = new List<PortableLlmProvider>();
         var ttsSnapshots = new List<PortableTtsProvider>();
+        var diarization = new Dictionary<string, DiarizationRole>(StringComparer.OrdinalIgnoreCase);
+        var diarizationSnapshots = new List<PortableDiarizationProvider>();
         var postProcessors = new Dictionary<string, PostProcessorRole>(StringComparer.Ordinal);
         var actions = new Dictionary<string, ActionRole>(StringComparer.Ordinal);
         var dictationTargets = new Dictionary<string, DictationTargetRole>(StringComparer.Ordinal);
@@ -835,6 +843,12 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             {
                 // Added through the same checks as a fresh read, so a collision with the package read now is still found.
                 ttsSnapshots.AddRange(previous.TtsSnapshots.Where(item => item.PluginId == slot.Id));
+                foreach (var reused in previous.DiarizationSnapshots.Where(item => item.PluginId == slot.Id))
+                {
+                    if (!diarization.TryAdd(reused.ProviderId, previous.Diarization[reused.ProviderId]))
+                        throw new CapabilityCollisionException("Diarization capability identity collision: " + reused.ProviderId);
+                    diarizationSnapshots.Add(reused);
+                }
                 if (previous.Actions.TryGetValue(slot.Id, out var reusedAction)) actions.Add(slot.Id, reusedAction);
                 if (previous.PostProcessors.TryGetValue(slot.Id, out var reusedProcessor)) postProcessors.Add(slot.Id, reusedProcessor);
                 if (previous.DictationTargets.TryGetValue(slot.Id, out var reusedTarget)) dictationTargets.Add(slot.Id, reusedTarget);
@@ -855,6 +869,13 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             var plugin = package.Plugin;
             if (plugin is ITtsProviderPlugin tts && tts.SupportsPlaybackSelection)
                 ttsSnapshots.Add(new(slot.Id, tts.ProviderDisplayName, tts.IsConfigured, Array.AsReadOnly(tts.AvailableVoices.ToArray())) { IsLocal = slot.IsLocal });
+            if (plugin is IAudioDiarizationProvider diarizer)
+            {
+                var snapshot = DiarizationSnapshot(slot, diarizer);
+                if (!diarization.TryAdd(snapshot.ProviderId, new(slot, diarizer)))
+                    throw new CapabilityCollisionException("Diarization capability identity collision: " + snapshot.ProviderId);
+                diarizationSnapshots.Add(snapshot);
+            }
             if (plugin is IActionPlugin action)
             {
                 if (action.PluginId != slot.Id || string.IsNullOrWhiteSpace(action.ActionId))
@@ -911,7 +932,8 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
             }
         }
         return new(transcription, llm, transcriptionSnapshots.ToArray(), llmSnapshots.ToArray())
-            { PostProcessors = postProcessors, Actions = actions, TtsSnapshots = ttsSnapshots.ToArray(), DictationTargets = dictationTargets, Members = members };
+            { PostProcessors = postProcessors, Actions = actions, TtsSnapshots = ttsSnapshots.ToArray(), DictationTargets = dictationTargets, Members = members,
+              Diarization = diarization, DiarizationSnapshots = diarizationSnapshots.ToArray() };
     }
 
     private void Publish(Index index) { lock (_sync) _index = index; }
