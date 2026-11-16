@@ -26,6 +26,10 @@ internal interface ISpeechInputRuntime
 
     // Calls tick on the UI thread about every interval until the result is disposed.
     IDisposable Every(TimeSpan interval, Action tick);
+
+    // Runs action on the UI thread: at once when called there, so it keeps its place among other UI work, and
+    // otherwise queued in order.
+    void Dispatch(Action action);
 }
 
 // An open microphone with the engine reserved for it. Disposing discards a running recording and releases both.
@@ -108,7 +112,7 @@ internal sealed class ModuleSpeechInput : ISpeechInput
     private async Task<ModuleSpeechInputResult> RunAsync(Listening listening, TimeSpan? silenceTimeout, TimeSpan maximumDuration,
         IProgress<ModuleSpeechInputState>? progress, CancellationToken cancellationToken)
     {
-        progress?.Report(new(ModuleSpeechInputPhase.Starting));
+        Report(progress, new(ModuleSpeechInputPhase.Starting));
         // Without a timeout, silence is still tracked to report whether speech was heard.
         var silence = new SilenceAutoStop(silenceTimeout ?? TimeSpan.MaxValue);
         // Silence is judged on the runtime's clock; the duration counts from when the microphone records, so its setup
@@ -139,13 +143,13 @@ internal sealed class ModuleSpeechInput : ISpeechInput
                 var elapsed = now - origin;
                 if (elapsed >= maximumDuration) listening.End(ModuleSpeechInputEnding.MaximumDuration);
                 else if (silence.HasActivity && silence.ShouldStop(now, false)) listening.End(ModuleSpeechInputEnding.Silence);
-                else progress?.Report(new(ModuleSpeechInputPhase.Listening)
+                else Report(progress, new(ModuleSpeechInputPhase.Listening)
                     { Level = Loudness(capture.Level), Elapsed = elapsed, HeardSpeech = silence.HasActivity });
             }
             Tick();
             using (_runtime.Every(TickInterval, Tick)) ending = await listening.Task;
         }
-        progress?.Report(new(ModuleSpeechInputPhase.Transcribing));
+        Report(progress, new(ModuleSpeechInputPhase.Transcribing));
         var audio = await capture.StopAsync();
         token.ThrowIfCancellationRequested();
         var samples = audio.Samples ?? [];
@@ -156,8 +160,14 @@ internal sealed class ModuleSpeechInput : ISpeechInput
         token.ThrowIfCancellationRequested();
         var text = transcript.Text?.Trim();
         if (string.IsNullOrEmpty(text)) throw NoSpeech();
-        progress?.Report(new(ModuleSpeechInputPhase.Done));
+        Report(progress, new(ModuleSpeechInputPhase.Done));
         return new(text, transcript.Language, duration) { Ending = ending };
+    }
+
+    // Every state reaches the module on the UI thread, as ISpeechInput documents, whichever thread reports it.
+    private void Report(IProgress<ModuleSpeechInputState>? progress, ModuleSpeechInputState state)
+    {
+        if (progress is not null) _runtime.Dispatch(() => progress.Report(state));
     }
 
     internal static string BusyMessage => Loc.T("Finish the current dictation, recording or transcription first.");

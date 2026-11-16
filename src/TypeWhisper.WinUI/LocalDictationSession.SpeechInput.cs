@@ -37,6 +37,13 @@ internal sealed partial class LocalDictationSession
             return new Ticks(timer);
         }
 
+        public void Dispatch(Action action)
+        {
+            var dispatcher = owner._fileDispatcher;
+            if (dispatcher.HasThreadAccess) action();
+            else if (!dispatcher.TryEnqueue(() => action())) AppDiagnostics.Write("modules.speech-input.dispatch-unavailable");
+        }
+
         private sealed class Ticks(Microsoft.UI.Dispatching.DispatcherQueueTimer timer) : IDisposable
         {
             public void Dispose() => timer.Stop();

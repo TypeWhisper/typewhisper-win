@@ -42,6 +42,23 @@ public sealed class ModuleSpeechInputTests
     }
 
     [Fact]
+    public async Task EveryStateIsReportedThroughTheUiThreadDispatch()
+    {
+        var runtime = new FakeRuntime();
+        var states = new StateLog();
+        var input = new ModuleSpeechInput(runtime, _ => { });
+
+        var listen = input.ListenAsync(null, states);
+        runtime.Run(TimeSpan.FromSeconds(0.3), Speech);
+        input.Stop();
+        await listen;
+
+        // Starting, the first Listening, three ticks, Transcribing and Done.
+        Assert.Equal(7, states.Items.Count);
+        Assert.Equal(0, states.Undispatched);
+    }
+
+    [Fact]
     public async Task SilenceEndsTheRecordingOnlyAfterSpeechWasHeard()
     {
         var runtime = new FakeRuntime();
@@ -381,8 +398,14 @@ public sealed class ModuleSpeechInputTests
     private sealed class StateLog : IProgress<ModuleSpeechInputState>
     {
         private readonly List<ModuleSpeechInputState> _items = [];
+        private int _undispatched;
         internal IReadOnlyList<ModuleSpeechInputState> Items { get { lock (_items) return _items.ToArray(); } }
-        public void Report(ModuleSpeechInputState value) { lock (_items) _items.Add(value); }
+        internal int Undispatched => Volatile.Read(ref _undispatched);
+        public void Report(ModuleSpeechInputState value)
+        {
+            if (!FakeRuntime.Dispatching) Interlocked.Increment(ref _undispatched);
+            lock (_items) _items.Add(value);
+        }
     }
 
     // A microphone and clock the test drives: each step advances the clock, reports a level and ticks.
@@ -413,6 +436,17 @@ public sealed class ModuleSpeechInputTests
             if (OpenError is not null) throw OpenError;
             _level = level;
             return Capture = new FakeCapture(this, CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, Host.Token).Token);
+        }
+
+        // Stands in for the UI thread: a report counts as dispatched while its action runs on this thread.
+        [ThreadStatic] private static bool _dispatching;
+        internal static bool Dispatching => _dispatching;
+
+        public void Dispatch(Action action)
+        {
+            _dispatching = true;
+            try { action(); }
+            finally { _dispatching = false; }
         }
 
         public IDisposable Every(TimeSpan interval, Action tick)
