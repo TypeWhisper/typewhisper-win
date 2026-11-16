@@ -14,6 +14,9 @@ internal sealed class ModuleHistoryChanges
     // Sets the records the next Update compares with, without reporting them.
     internal void Reset(IEnumerable<TranscriptionRecord> records) => _known = Map(records);
 
+    // The identifiers the next Update compares with.
+    internal IReadOnlySet<string> KnownIds => _known.Keys.ToFrozenSet(StringComparer.Ordinal);
+
     internal IReadOnlyList<ModuleHistoryChange> Update(IEnumerable<TranscriptionRecord> records)
     {
         var previous = _known;
@@ -49,10 +52,9 @@ internal sealed class ModuleHistoryReading : IHistoryReading
     private readonly List<(ModuleObservation Observation, Action<ModuleHistoryChange> Handler)> _observers = [];
     private int _subscribed;
     private int _comparePending;
-    // Saves seen since following History started; one before the baseline read cannot be told apart from it.
-    private int _savesSinceSubscribed;
-    // UI thread only: whether _changes holds the records of an earlier read.
+    // UI thread only: whether _changes holds the records of an earlier read, and who got the first Current.
     private bool _tracking;
+    private HashSet<ModuleObservation> _initialRecipients = [];
 
     internal ModuleHistoryReading(IHistoryService history, Func<string?, string?> resolveAudioPath, Action<string> showRecord,
         Action<Action> post, Action<string, Exception> report)
@@ -102,8 +104,14 @@ internal sealed class ModuleHistoryReading : IHistoryReading
         var entry = (observation, handler);
         lock (_observers) _observers.Add(entry);
         observation.Unsubscribe = () => { lock (_observers) _observers.Remove(entry); };
-        // Following History starts with the first observer and lasts as long as the app.
+        // Following History starts with the first observer and lasts as long as the app. Every observer first gets
+        // the records History has at that point: the first ones once the baseline exists, later ones right away.
         if (Interlocked.Exchange(ref _subscribed, 1) == 0) _ = StartTrackingAsync();
+        else _post(() =>
+        {
+            if (_tracking && !_initialRecipients.Contains(observation))
+                observation.Deliver(() => handler(new ModuleHistoryChange.Current(_changes.KnownIds)));
+        });
         return observation;
     }
 
@@ -138,28 +146,23 @@ internal sealed class ModuleHistoryReading : IHistoryReading
         _history.RecordsChanged += OnRecordsChanged;
         try { await _history.EnsureLoadedAsync(); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { _report("modules.history.load-failed", ex); }
-        // The loaded records are the baseline. They are read here, not in the queued callback, so a save that lands
-        // before the callback runs is compared against them and delivered instead of becoming part of the baseline.
-        IReadOnlyList<TranscriptionRecord> baseline;
-        try { baseline = _history.Records; }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { _report("modules.history.read-failed", ex); baseline = []; }
-        // A save between loading and this read is already in the baseline, so its record is unknown. Every record is
-        // then reported once as upserted: observers re-read a few unchanged records instead of missing one.
-        var savedBeforeBaseline = Volatile.Read(ref _savesSinceSubscribed) > 0;
+        // The baseline goes out as Current, so whatever History did before it, saves and removals included, reaches
+        // observers through it; every later save is compared with it. No save can fall between the two.
         _post(() =>
         {
+            IReadOnlyList<TranscriptionRecord> baseline;
+            try { baseline = _history.Records; }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { _report("modules.history.read-failed", ex); baseline = []; }
             _changes.Reset(baseline);
             _tracking = true;
-            if (savedBeforeBaseline && baseline.Count > 0)
-                Deliver([new ModuleHistoryChange.Upserted(baseline.Select(record => record.Id).ToFrozenSet(StringComparer.Ordinal))]);
-            Compare();
+            lock (_observers) _initialRecipients = _observers.Select(observer => observer.Observation).ToHashSet();
+            Deliver([new ModuleHistoryChange.Current(_changes.KnownIds)]);
         });
     }
 
     // Raised on the saving thread, possibly in bursts: one comparison on the UI thread covers them all.
     private void OnRecordsChanged()
     {
-        Interlocked.Increment(ref _savesSinceSubscribed);
         if (Interlocked.Exchange(ref _comparePending, 1) != 0) return;
         _post(() =>
         {

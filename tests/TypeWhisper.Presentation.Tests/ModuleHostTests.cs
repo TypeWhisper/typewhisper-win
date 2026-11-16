@@ -402,21 +402,21 @@ public sealed class ModuleHistoryTests
         var subscription = reading.ObserveChanges(received.Add);
         await Task.Yield();
         RunPosted();
-        Assert.Empty(received);
+        Assert.Equal(["a"], Assert.IsType<ModuleHistoryChange.Current>(Assert.Single(received)).Ids.Order(StringComparer.Ordinal));
 
         // Both saves are compared once, after the second.
         var second = Record("b");
         history.Replace(first, second);
         history.Replace(second);
         RunPosted();
-        Assert.Equal(2, received.Count);
-        Assert.Equal(["a"], Assert.IsType<ModuleHistoryChange.Removed>(received[0]).Ids.Order(StringComparer.Ordinal));
-        Assert.Equal(["b"], Assert.IsType<ModuleHistoryChange.Upserted>(received[1]).Ids.Order(StringComparer.Ordinal));
+        Assert.Equal(3, received.Count);
+        Assert.Equal(["a"], Assert.IsType<ModuleHistoryChange.Removed>(received[1]).Ids.Order(StringComparer.Ordinal));
+        Assert.Equal(["b"], Assert.IsType<ModuleHistoryChange.Upserted>(received[2]).Ids.Order(StringComparer.Ordinal));
 
         subscription.Dispose();
         history.Replace();
         RunPosted();
-        Assert.Equal(2, received.Count);
+        Assert.Equal(3, received.Count);
     }
 
     [Fact]
@@ -434,11 +434,11 @@ public sealed class ModuleHistoryTests
         history.Replace(first, Record("b"));
         while (posted.TryDequeue(out var action)) action();
 
-        Assert.Equal(["b"], Assert.IsType<ModuleHistoryChange.Upserted>(Assert.Single(received)).Ids.Order(StringComparer.Ordinal));
+        Assert.Equal(["a", "b"], Assert.IsType<ModuleHistoryChange.Current>(Assert.Single(received)).Ids.Order(StringComparer.Ordinal));
     }
 
     [Fact]
-    public async Task ASaveBeforeTheBaselineIsReadReportsEveryRecordOnce()
+    public async Task ASaveBeforeTheBaselineIsReadIsPartOfCurrent()
     {
         var first = Record("a");
         var history = new FakeHistory(first);
@@ -452,7 +452,47 @@ public sealed class ModuleHistoryTests
         await Task.Yield();
         while (posted.TryDequeue(out var action)) action();
 
-        Assert.Equal(["a", "b"], Assert.IsType<ModuleHistoryChange.Upserted>(Assert.Single(received)).Ids.Order(StringComparer.Ordinal));
+        Assert.Equal(["a", "b"], Assert.IsType<ModuleHistoryChange.Current>(Assert.Single(received)).Ids.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public async Task RemovingEverythingBeforeTheBaselineGivesAnEmptyCurrent()
+    {
+        var history = new FakeHistory(Record("a"));
+        var posted = new Queue<Action>();
+        var reading = new ModuleHistoryReading(history, _ => null, _ => { }, posted.Enqueue, (stage, _) => Assert.Fail(stage));
+        var received = new List<ModuleHistoryChange>();
+        history.DuringLoad = () => history.Replace();
+
+        reading.ObserveChanges(received.Add);
+        await Task.Yield();
+        while (posted.TryDequeue(out var action)) action();
+
+        Assert.Empty(Assert.IsType<ModuleHistoryChange.Current>(Assert.Single(received)).Ids);
+    }
+
+    [Fact]
+    public async Task EveryObserverGetsCurrentOnce()
+    {
+        var history = new FakeHistory(Record("a"));
+        var posted = new Queue<Action>();
+        var reading = new ModuleHistoryReading(history, _ => null, _ => { }, posted.Enqueue, (stage, _) => Assert.Fail(stage));
+        var early = new List<ModuleHistoryChange>();
+        var late = new List<ModuleHistoryChange>();
+        void RunPosted() { while (posted.TryDequeue(out var action)) action(); }
+
+        reading.ObserveChanges(early.Add);
+        await Task.Yield();
+        // Registered before the baseline callback runs: it shares the first Current.
+        var between = new List<ModuleHistoryChange>();
+        reading.ObserveChanges(between.Add);
+        RunPosted();
+        reading.ObserveChanges(late.Add);
+        RunPosted();
+
+        Assert.IsType<ModuleHistoryChange.Current>(Assert.Single(early));
+        Assert.IsType<ModuleHistoryChange.Current>(Assert.Single(between));
+        Assert.Equal(["a"], Assert.IsType<ModuleHistoryChange.Current>(Assert.Single(late)).Ids.Order(StringComparer.Ordinal));
     }
 
     [Fact]

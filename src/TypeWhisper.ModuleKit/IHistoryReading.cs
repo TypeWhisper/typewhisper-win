@@ -12,7 +12,10 @@ public interface IHistoryReading
     /// <summary>The identifiers among <paramref name="ids"/> whose records History still has.</summary>
     Task<IReadOnlySet<string>> ExistingRecordIdsAsync(IReadOnlyCollection<string> ids, CancellationToken cancellationToken = default);
 
-    /// <summary>Calls <paramref name="handler"/> on the UI thread after each saved change to History, until the result is disposed.</summary>
+    /// <summary>
+    /// Calls <paramref name="handler"/> on the UI thread with <see cref="ModuleHistoryChange.Current"/> once History has
+    /// loaded, then after each saved change, until the result is disposed.
+    /// </summary>
     IDisposable ObserveChanges(Action<ModuleHistoryChange> handler);
 
     /// <summary>Opens the record in the History window.</summary>
@@ -25,9 +28,12 @@ public abstract record ModuleHistoryChange
     private ModuleHistoryChange() { }
 
     /// <summary>
-    /// Records that were added, or whose content changed. Rarely, right after observing starts, it also names records
-    /// that did not change; reading them again is enough.
+    /// The first change every observer receives: the records History has at that point. Records a module knows that
+    /// are not in it were removed before observing started. Later changes are relative to it.
     /// </summary>
+    public sealed record Current(IReadOnlySet<string> Ids) : ModuleHistoryChange;
+
+    /// <summary>Records that were added, or whose content changed.</summary>
     public sealed record Upserted(IReadOnlySet<string> Ids) : ModuleHistoryChange;
 
     /// <summary>Records that were removed.</summary>
