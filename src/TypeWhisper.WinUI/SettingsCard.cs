@@ -47,6 +47,19 @@ internal sealed class SettingsCard : SettingsRows
         Children.Add(copy);
     }
 
+    // Module sections for a settings page, each in its own card under its heading. A section whose content cannot be
+    // created is left out.
+    internal static IEnumerable<SettingsCard> ModuleSections(TypeWhisper.ModuleKit.ModuleSettingsPage page)
+    {
+        foreach (var section in HostModules.ActiveCatalog.SectionsFor(page))
+        {
+            if (ModuleCalls.Get("settings-section", section.Id, section.CreateContent, AppDiagnostics.WriteFailure) is not { } content) continue;
+            var card = new SettingsCard(section.Title);
+            card.Add(content);
+            yield return card;
+        }
+    }
+
     internal static StackPanel PageTitle(string text, string help = "")
     {
         var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
@@ -169,6 +182,15 @@ internal sealed class SettingsRow : StackPanel
     {
         _lead.ColumnSpacing = 12;
         _lead.Children.Add(new TypeWhisperGlyph { Kind = kind, Width = 22, Height = 22, VerticalAlignment = VerticalAlignment.Center });
+        return this;
+    }
+
+    // A Segoe Fluent Icons code point before the text, in the place of Icon.
+    internal SettingsRow FontIcon(string glyph)
+    {
+        _lead.ColumnSpacing = 12;
+        _lead.Children.Add(new Microsoft.UI.Xaml.Controls.FontIcon { Glyph = glyph, FontSize = 20, Width = 22, Height = 22, VerticalAlignment = VerticalAlignment.Center,
+            Foreground = (Brush)Application.Current.Resources["AccentBrush"] });
         return this;
     }
 

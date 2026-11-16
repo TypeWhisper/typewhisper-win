@@ -7,6 +7,9 @@ using Microsoft.UI.Xaml.Media.Imaging;
 
 namespace TypeWhisper.WinUI;
 
+// A module entry for the tray menu. Shortcut reads the chord to show beside it, or null.
+internal sealed record TrayModuleItem(string Title, string? Glyph, Func<string?> Shortcut, Action Run);
+
 // Host integration only: commands are supplied by the application lifetime owner.
 internal sealed class TrayIconService : IDisposable
 {
@@ -28,9 +31,10 @@ internal sealed class TrayIconService : IDisposable
     private string? _recorderStatus;
     private bool _markShown;
     private System.Drawing.Icon? _shownIcon;
+    private readonly List<(MenuFlyoutItem Item, TrayModuleItem Module)> _moduleItems = [];
 
     internal TrayIconService(Action toggleRecorder, Action recent, Action settings, Action history, Action files, Action exit, Action finishDictation, Action cancelProcessing, Action togglePause, Action recovery, Action updates,
-        Action pasteLast, Action copyLast, Action readLast, Action diagnostics)
+        Action pasteLast, Action copyLast, Action readLast, Action diagnostics, IReadOnlyList<TrayModuleItem>? moduleItems = null)
     {
         var menu = new MenuFlyout();
         var presenterStyle = new Style(typeof(MenuFlyoutPresenter));
@@ -58,6 +62,14 @@ internal sealed class TrayIconService : IDisposable
         menu.Items.Add(Label(Loc.T("General")));
         menu.Items.Add(CreateItem(Loc.T("Settings\u2026"), "\uE713", settings));
         menu.Items.Add(CreateItem(Loc.T("History"), "\uE81C", history));
+        // Module entries follow History, as on macOS.
+        foreach (var module in moduleItems ?? [])
+        {
+            var item = CreateItem(module.Title, module.Glyph ?? "", module.Run);
+            item.Tag = TrayMenuWindow.ShortcutTag;
+            _moduleItems.Add((item, module));
+            menu.Items.Add(item);
+        }
         menu.Items.Add(CreateItem(Loc.T("Diagnostics"), "\uE9D9", diagnostics));
         menu.Items.Add(new MenuFlyoutSeparator());
         menu.Items.Add(Label(Loc.T("Transcription")));
@@ -83,7 +95,11 @@ internal sealed class TrayIconService : IDisposable
         {
             ToolTipText = WinUIProfile.DisplayName,
             IconSource = new BitmapImage(new Uri("ms-appx:///app.ico")),
-            RightClickCommand = new TrayCommand(_menuWindow.Present),
+            RightClickCommand = new TrayCommand(() =>
+            {
+                RefreshModuleShortcuts();
+                _menuWindow.Present();
+            }),
             LeftClickCommand = new TrayCommand(settings),
             NoLeftClickDelay = true,
         };
@@ -92,6 +108,18 @@ internal sealed class TrayIconService : IDisposable
         {
             if (e.MouseEvent == H.NotifyIcon.Core.MouseEvent.BalloonToolTipClicked && !_closing) _notificationClicked?.Invoke();
         };
+    }
+
+    // Shortcuts can change in Settings while the menu is closed; each opening shows the current ones.
+    private void RefreshModuleShortcuts()
+    {
+        foreach (var (item, module) in _moduleItems)
+        {
+            string? chord = null;
+            try { chord = module.Shortcut(); }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { AppDiagnostics.Write("tray.module-shortcut.failed", ex); }
+            item.KeyboardAcceleratorTextOverride = chord ?? "";
+        }
     }
 
     public void Dispose()

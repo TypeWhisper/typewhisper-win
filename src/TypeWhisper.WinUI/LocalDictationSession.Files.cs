@@ -183,9 +183,10 @@ internal sealed partial class LocalDictationSession
         }
     }
 
-    internal string? AcceptFileResult(FileTranscriptionOutput result) => FileTranscriptionAcceptance.Commit(
+    // savedRecordId is the History record saved for the result, or null when History did not save it.
+    internal string? AcceptFileResult(FileTranscriptionOutput result, out string? savedRecordId) => FileTranscriptionAcceptance.Commit(
         result, _history, OutputPreferences.Current,
-        ids => DictationLexiconSnapshot.RecordUsage(DictationSnippetSnapshot.StoragePath, ids));
+        ids => DictationLexiconSnapshot.RecordUsage(DictationSnippetSnapshot.StoragePath, ids), out savedRecordId);
 
     private static async Task<string> ReadSnippetClipboardAsync(CancellationToken ct)
     {

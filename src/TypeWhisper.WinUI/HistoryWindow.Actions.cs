@@ -2,7 +2,9 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Media;
 using TypeWhisper.Core.Models;
+using TypeWhisper.ModuleKit;
 using TypeWhisper.Presentation;
 using global::Windows.ApplicationModel.DataTransfer;
 using global::Windows.Media.Core;
@@ -65,11 +67,46 @@ public sealed partial class HistoryWindow
             menu.Items.Add(export);
             if (records.Any(item => item.InboxState == HistoryWorkspace.InboxOpen)) Add(Loc.T("Mark Complete"), () => _ = SetInboxAsync(true, records));
             if (records.Any(item => item.InboxState == HistoryWorkspace.InboxCompleted)) Add(Loc.T("Reopen"), () => _ = SetInboxAsync(false, records));
+            foreach (var action in HostModules.ActiveCatalog.RecordActions)
+            {
+                var state = ModuleRecordActionState.For(action, records.Length);
+                if (!state.Visible) continue;
+                var item = new MenuFlyoutItem { Text = state.Title, IsEnabled = state.Enabled, Icon = new FontIcon { Glyph = action.Glyph } };
+                if (state.Help is { } help) { ToolTipService.SetToolTip(item, help); AutomationProperties.SetHelpText(item, help); }
+                item.Click += (_, _) => RunModuleAction(action, records);
+                menu.Items.Add(item);
+            }
             menu.Items.Add(new MenuFlyoutSeparator());
             Add(records.Length > 1 ? Loc.T("Delete {0} Entries…", records.Length) : Loc.T("Delete…"), () => _ = DeleteSelectionAsync(records));
         };
         return menu;
     }
+
+    // Module record actions for these records, as buttons. A disabled one explains the selection limit on hover.
+    private static IEnumerable<FrameworkElement> ModuleActionButtons(TranscriptionRecord[] records)
+    {
+        foreach (var action in HostModules.ActiveCatalog.RecordActions)
+        {
+            var state = ModuleRecordActionState.For(action, records.Length);
+            if (!state.Visible) continue;
+            var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+            content.Children.Add(new FontIcon { Glyph = action.Glyph, FontSize = 14 });
+            content.Children.Add(new TextBlock { Text = state.Title, VerticalAlignment = VerticalAlignment.Center });
+            var button = new HandCursorButton { Content = content, IsEnabled = state.Enabled, VerticalAlignment = VerticalAlignment.Center,
+                Style = (Style)Application.Current.Resources["SecondaryButtonStyle"] };
+            AutomationProperties.SetName(button, state.Title);
+            button.Click += (_, _) => RunModuleAction(action, records);
+            if (state.Help is not { } help) { yield return button; continue; }
+            AutomationProperties.SetHelpText(button, help);
+            // A disabled button gets no pointer input, so the explanation sits on a frame around it.
+            var frame = new Border { Child = button, Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent), VerticalAlignment = VerticalAlignment.Center };
+            ToolTipService.SetToolTip(frame, help);
+            yield return frame;
+        }
+    }
+
+    private static void RunModuleAction(ModuleRecordAction action, TranscriptionRecord[] records) =>
+        ModuleRecordActionState.Perform(action, records.Select(record => record.Id).ToArray(), AppDiagnostics.WriteFailure);
 
     private void CopySelection() => CopySelection(SelectedRecords());
 

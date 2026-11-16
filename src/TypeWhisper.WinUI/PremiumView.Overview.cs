@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using TypeWhisper.Core.Models;
+using TypeWhisper.ModuleKit;
 using TypeWhisper.Presentation;
 using Windows.System;
 using Windows.UI;
@@ -22,20 +23,22 @@ internal sealed partial class PremiumView
     private readonly StackPanel _overview = new() { Spacing = 20 };
     private readonly StackPanel _details = new() { Spacing = 16, Visibility = Visibility.Collapsed };
     private readonly StackPanel _accessDetails = new() { Spacing = 16 };
+    // Module settings sections follow the overview and hide with it.
+    private readonly StackPanel _moduleSections = new() { Spacing = 20 };
     private readonly TextBlock _detailTitle = Copy("", 20);
     private PremiumFeature? _selectedFeature;
 
     private void ShowOverview()
     {
         _details.Visibility = Visibility.Collapsed;
-        _overview.Visibility = Visibility.Visible;
+        _overview.Visibility = _moduleSections.Visibility = Visibility.Visible;
         RefreshOverview();
     }
 
     private void ShowDetails(PremiumFeature? feature)
     {
         _selectedFeature = feature;
-        _overview.Visibility = Visibility.Collapsed;
+        _overview.Visibility = _moduleSections.Visibility = Visibility.Collapsed;
         _details.Visibility = Visibility.Visible;
         RefreshDetails();
     }
@@ -263,7 +266,31 @@ internal sealed partial class PremiumView
             Loc.T("Reminds you before a scheduled meeting or starts recording automatically when you join."),
             Loc.T("Calendar integration is not connected in this Windows build yet."),
             (Loc.T("Coming later"), null), access.Any).Row);
+        foreach (var module in HostModules.ActiveCatalog.PremiumCards) card.Add(ModuleCardRow(module, access.Any));
         return card;
+    }
+
+    // A module's card, in the style of the rows above: its preview while locked, its status and settings while active.
+    private SettingsRow ModuleCardRow(ModulePremiumCard module, bool active)
+    {
+        var control = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, VerticalAlignment = VerticalAlignment.Center };
+        var status = active && module.Status is { } read ? ModuleCalls.Get("premium-card.status", module.Id, read, AppDiagnostics.WriteFailure) : null;
+        control.Children.Add(!active ? Pill(Loc.T("Premium"), Gold) : Pill(string.IsNullOrWhiteSpace(status) ? Loc.T("Active") : status, Green));
+        if (active && module.Perform is { } perform)
+        {
+            var open = new HandCursorButton { Style = (Style)Application.Current.Resources["SecondaryButtonStyle"], Content = Loc.T("Settings…") };
+            AutomationProperties.SetName(open, Loc.T("{0} settings", module.Title));
+            open.Click += (_, _) => ModuleCalls.Run("premium-card.perform", module.Id, perform, AppDiagnostics.WriteFailure);
+            control.Children.Add(open);
+        }
+        var row = new SettingsRow().FontIcon(module.Glyph).Set(module.Title, module.Summary, control: control);
+        if (!active && !string.IsNullOrWhiteSpace(module.Preview))
+        {
+            var preview = Copy(module.Preview, 12, true);
+            preview.Margin = new Thickness(34, -4, 0, 0);
+            row.Below(preview);
+        }
+        return row;
     }
 
     private async Task ShowLearnedCountAsync(TextBlock detail)

@@ -22,6 +22,7 @@ public sealed class HostModulesTests
         Assert.True(modules.IsStub);
         Assert.Empty(modules.Modules);
         Assert.Empty(modules.Contributions.ManagedPolicyKeys);
+        Assert.Empty(modules.Catalog.HotkeyActions);
     }
 
     [Fact]
@@ -129,6 +130,10 @@ public sealed class HostModulesTests
         public IManagedPolicyReading? ManagedPolicyReading => null;
         public IPremiumAccessReading? PremiumAccessReading => null;
         public IUserDataLifecycle? UserDataLifecycle => null;
+        public void ShowPanel(string id) { }
+        public void HidePanel(string id) { }
+        public void TogglePanel(string id) { }
+        public bool IsPanelVisible(string id) => false;
     }
 
     private sealed class TestModule(string id, Action<IModuleHost, ModuleContributions> contribute) : IHostModule

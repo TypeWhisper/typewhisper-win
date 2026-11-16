@@ -24,6 +24,7 @@ public sealed partial class MainWindow
         GlobalShortcuts.WorkflowPalette => ChangeWorkflowPaletteShortcut(value),
         GlobalShortcuts.Recorder => ChangeRecorderShortcut(value),
         GlobalShortcuts.PushToTalk or GlobalShortcuts.ToggleOnly or GlobalShortcuts.HoldOnly => ChangeRecordingShortcut(key, value),
+        _ when FindModuleHotkeyAction(key) is { } action => ChangeActionShortcut(_moduleShortcuts.GetValueOrDefault(action.Id), action.Title, value),
         _ => throw new ArgumentException("Unknown global shortcut.", nameof(key))
     };
 
@@ -39,12 +40,13 @@ public sealed partial class MainWindow
         GlobalShortcuts.CopyLastTranscription => _copyLastShortcut?.Value ?? "",
         GlobalShortcuts.PasteLastTranscription => _pasteLastShortcut?.Value ?? "",
         GlobalShortcuts.Workflows => _workflowShortcuts?.ActiveValue ?? "",
+        _ when FindModuleHotkeyAction(key) is { } action => _moduleShortcuts.GetValueOrDefault(action.Id)?.Value ?? "",
         _ => _recordingShortcuts.TryGetValue(key, out var recording) ? recording.Registration.Value : ""
     };
 
     // Every shortcut assignment, including saved values loaded at startup, goes through this one check.
     private string? ShortcutConflict(string key, string value) =>
-        GlobalShortcuts.FindConflict(key, WorkflowShortcutCatalog.Canonical(value), RegisteredShortcut);
+        GlobalShortcuts.FindConflict(key, WorkflowShortcutCatalog.Canonical(value), RegisteredShortcut, _moduleGlobalShortcuts);
 
     private ActionShortcut? InitializeActionShortcut(string key, Action callback, int idBase, string fileName, string displayName, string name)
     {
@@ -82,5 +84,6 @@ public sealed partial class MainWindow
         _pasteLastShortcut?.Dispose();
         _foregroundHistory?.Dispose();
         _readLastShortcut?.Dispose();
+        DisposeModuleShortcuts();
     }
 }

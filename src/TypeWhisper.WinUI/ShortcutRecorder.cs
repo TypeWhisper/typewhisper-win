@@ -53,7 +53,7 @@ public sealed class ShortcutRecorder : UserControl
     internal bool IsEditing { get; private set; }
 
     internal ShortcutRecorder(string key, string label, string defaultValue, Dictionary<string, string> values,
-        Func<IEnumerable<(string Key, string Label, string Value)>> bindings, Func<string, string?>? commit = null)
+        Func<IEnumerable<(string Key, string Label, string Value)>> bindings, Func<string, string?>? commit = null, string? moduleSubtitle = null)
     {
         _key = key; _label = label; _defaultValue = defaultValue; _values = values; _bindings = bindings;
         _commit = commit;
@@ -111,6 +111,8 @@ public sealed class ShortcutRecorder : UserControl
             "ReadLastTranscriptionHotkeys" => ("audio", Loc.T("Read last dictation aloud; press again to stop")),
             "WorkflowPaletteHotkeys" => ("workflow", Loc.T("Run a text workflow")),
             "WorkflowSelectedTextHotkeys" => ("workflow", Loc.T("Activate this workflow · saved when you save the workflow")),
+            // A module action describes itself.
+            _ when ModuleHotkeys.TryActionId(key, out _) => ("keyboard", moduleSubtitle ?? ""),
             _ => ("recorder", Loc.T("Open the audio recorder"))
         };
         var layout = new Grid { ColumnSpacing = 14 };
@@ -127,7 +129,8 @@ public sealed class ShortcutRecorder : UserControl
         });
         var copy = new StackPanel { Spacing = 4, VerticalAlignment = VerticalAlignment.Center };
         var heading = Text(label, 14); heading.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
-        copy.Children.Add(heading); copy.Children.Add(Text(description, 12, true));
+        copy.Children.Add(heading);
+        if (description.Length > 0) copy.Children.Add(Text(description, 12, true));
         if (key == "CancelProcessingHotkeys") ToolTipService.SetToolTip(copy,
             Loc.T("Saved global shortcut. Requests cancellation of final dictation processing or an active selected-text workflow without starting a recording. It does not cancel Recorder or file-transcription work. Use a main key; modifier-only shortcuts are unsupported."));
         Grid.SetColumn(copy, 1); layout.Children.Add(copy);
@@ -286,7 +289,8 @@ public sealed class ShortcutRecorder : UserControl
         SetValue(ShortcutRules.Upsert(Current, _editingIndex, _candidate)); _add.Focus(FocusState.Keyboard);
     }
     // Cancellation uses RegisterHotKey rather than the dictation modifier-only hook.
-    private string? Validate(string candidate) => ShortcutRules.Validate(candidate, allowModifiersOnly: _key is not ("CancelProcessingHotkeys" or "WorkflowSelectedTextHotkeys" or "RecentTranscriptionsHotkeys" or "CopyLastTranscriptionHotkeys" or "PasteLastTranscriptionHotkeys" or "ReadLastTranscriptionHotkeys" or "WorkflowPaletteHotkeys" or "RecorderToggleHotkeys"))
+    private string? Validate(string candidate) => ShortcutRules.Validate(candidate, allowModifiersOnly: _key is not ("CancelProcessingHotkeys" or "WorkflowSelectedTextHotkeys" or "RecentTranscriptionsHotkeys" or "CopyLastTranscriptionHotkeys" or "PasteLastTranscriptionHotkeys" or "ReadLastTranscriptionHotkeys" or "WorkflowPaletteHotkeys" or "RecorderToggleHotkeys")
+        && !ModuleHotkeys.TryActionId(_key, out _))
         ?? ShortcutRules.Duplicate(candidate, Current, _editingIndex)
         ?? ShortcutRules.AltGrConflict(candidate, ShortcutKeys.AltGrCharacter)
         ?? ShortcutRules.Conflict(candidate, _key, _bindings());

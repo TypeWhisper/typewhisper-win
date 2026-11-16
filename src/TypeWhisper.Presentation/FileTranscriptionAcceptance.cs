@@ -11,14 +11,26 @@ public static class FileTranscriptionAcceptance
     /// <param name="current">The output preferences at the instant of acceptance.</param>
     /// <param name="recordUsage">Records actual expanded IDs once; returns a recoverable warning when unsuccessful.</param>
     public static string? Commit(FileTranscriptionOutput result, IHistoryService history,
-        DictationOutputPreferences current, Func<IReadOnlyList<string>, string?> recordUsage)
+        DictationOutputPreferences current, Func<IReadOnlyList<string>, string?> recordUsage) =>
+        Commit(result, history, current, recordUsage, out _);
+
+    /// <summary>Like the other overload, and also reports the History record that was saved.</summary>
+    /// <param name="result">An accepted result with preauthorized immutable history data.</param>
+    /// <param name="history">The history service already loaded before acceptance.</param>
+    /// <param name="current">The output preferences at the instant of acceptance.</param>
+    /// <param name="recordUsage">Records actual expanded IDs once; returns a recoverable warning when unsuccessful.</param>
+    /// <param name="savedRecordId">The identifier of the saved History record, or null when none was saved.</param>
+    public static string? Commit(FileTranscriptionOutput result, IHistoryService history,
+        DictationOutputPreferences current, Func<IReadOnlyList<string>, string?> recordUsage, out string? savedRecordId)
     {
+        savedRecordId = null;
         var warnings = new List<string>();
         if (current.SaveToHistory && result.PendingHistory is { } record)
         {
             try
             {
-                if (!history.TryAddRecord(record))
+                if (history.TryAddRecord(record)) savedRecordId = record.Id;
+                else
                     warnings.Add(Loc.T("History could not be saved. Your transcript remains available here for export."));
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)

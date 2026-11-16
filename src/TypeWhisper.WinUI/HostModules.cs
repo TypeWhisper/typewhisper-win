@@ -12,11 +12,12 @@ internal sealed partial class HostModules
     internal const string StubBuildKind = "stub";
     internal const string UnsupportedVersionStage = "modules.version.unsupported";
 
-    private HostModules(string? buildKind, IReadOnlyList<IHostModule> modules, ModuleContributions contributions)
+    private HostModules(string? buildKind, IReadOnlyList<IHostModule> modules, ModuleContributions contributions, ModuleContributionCatalog? catalog = null)
     {
         BuildKind = buildKind;
         Modules = modules;
         Contributions = contributions;
+        Catalog = catalog ?? ModuleContributionCatalog.Empty;
     }
 
     // The metadata value of the linked modules assembly, or null if it has none.
@@ -25,6 +26,8 @@ internal sealed partial class HostModules
     // Only the modules whose contributions were accepted.
     internal IReadOnlyList<IHostModule> Modules { get; }
     internal ModuleContributions Contributions { get; }
+    // The combined contributions after validation, as the host binds them.
+    internal ModuleContributionCatalog Catalog { get; }
 
     internal static string? BuildKindOf(Assembly modulesAssembly) =>
         modulesAssembly.GetCustomAttributes<AssemblyMetadataAttribute>()
@@ -35,7 +38,8 @@ internal sealed partial class HostModules
         Assembly modulesAssembly,
         ModuleKitVersion requiredVersion,
         Func<IReadOnlyList<IHostModule>> createModules,
-        Action<string, Exception> reportFailure)
+        Action<string, Exception> reportFailure,
+        Action<string>? reportRejection = null)
     {
         var buildKind = BuildKindOf(modulesAssembly);
         // Modules written against an interface this host does not provide could fail anywhere, so none are created.
@@ -75,8 +79,21 @@ internal sealed partial class HostModules
                 continue;
             }
             accepted.Add(module);
-            foreach (var key in own.ManagedPolicyKeys) combined.ManagedPolicyKeys.Add(key);
+            Append(own.ManagedPolicyKeys, combined.ManagedPolicyKeys);
+            Append(own.HotkeyActions, combined.HotkeyActions);
+            Append(own.MenuItems, combined.MenuItems);
+            Append(own.Panels, combined.Panels);
+            Append(own.RecordActions, combined.RecordActions);
+            Append(own.PremiumCards, combined.PremiumCards);
+            Append(own.SettingsSections, combined.SettingsSections);
+            Append(own.FileTranscriptionOptions, combined.FileTranscriptionOptions);
+            Append(own.FileTranscriptionCompleted, combined.FileTranscriptionCompleted);
         }
-        return new(buildKind, accepted, combined);
+        return new(buildKind, accepted, combined, ModuleContributionCatalog.Resolve(combined, reportRejection ?? (_ => { })));
+    }
+
+    private static void Append<T>(IEnumerable<T> items, ICollection<T> target)
+    {
+        foreach (var item in items) target.Add(item);
     }
 }
