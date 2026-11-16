@@ -11,7 +11,9 @@ test('workflow selects the signing environment and omits unused token inputs', (
   const workflow = fs.readFileSync(path.join(__dirname, '../../.github/workflows/winui-daily-candidate.yml'), 'utf8');
   const inputs = [...workflow.matchAll(/^\s*api-token:\s*\$\{\{ (.+) \}\}\s*$/gm)];
   assert.equal(inputs.length, 1, 'Expected one conditional signing-token input');
-  const environments = [...workflow.matchAll(/^    environment:\s*\$\{\{ (.+) \}\}\s*$/gm)];
+  // The build job requests the modules environment; the packaging job the signing one.
+  const environments = [...workflow.matchAll(/^    environment:\s*\$\{\{ (.+) \}\}\s*$/gm)]
+    .filter(match => match[1].includes('signpath'));
   assert.equal(environments.length, 1, 'Expected one environment on the packaging job');
   // This expression uses only property access, equality and boolean operators,
   // which have the same result in Actions and JavaScript for these string inputs.
@@ -38,6 +40,23 @@ test('workflow selects the signing environment and omits unused token inputs', (
         const environment = environmentExpression.runInNewContext(context, { timeout: 1000 });
         assert.equal(environment, policy === 'none' ? 'unsigned-candidate' : 'signpath', `${event}: ${policy}`);
       }
+    }
+  }
+});
+
+test('only scheduled and manual runs on main or release branches build with the modules environment', () => {
+  const workflow = fs.readFileSync(path.join(__dirname, '../../.github/workflows/winui-daily-candidate.yml'), 'utf8');
+  const environments = [...workflow.matchAll(/^    environment:\s*\$\{\{ (.+) \}\}\s*$/gm)]
+    .filter(match => match[1].includes('premium-modules'));
+  assert.equal(environments.length, 1, 'Expected one modules environment on the build job');
+  const expression = new vm.Script(environments[0][1]);
+  const startsWith = (value, prefix) => String(value).startsWith(prefix);
+  for (const event of ['pull_request', 'pull_request_target', 'push', 'workflow_dispatch', 'schedule']) {
+    for (const ref of ['refs/heads/main', 'refs/heads/release/1.3', 'refs/heads/feature', 'refs/pull/1/merge', 'refs/tags/v1.3.0']) {
+      const expected = ['schedule', 'workflow_dispatch'].includes(event) &&
+        (ref === 'refs/heads/main' || ref.startsWith('refs/heads/release/')) ? 'premium-modules' : '';
+      const actual = expression.runInNewContext({ github: { event_name: event, ref }, startsWith }, { timeout: 1000 });
+      assert.equal(actual, expected, `${event} ${ref}`);
     }
   }
 });
