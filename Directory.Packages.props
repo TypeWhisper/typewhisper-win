@@ -16,6 +16,8 @@
     <PackageVersion Include="GitHub.Copilot.SDK" Version="1.0.13" />
     <PackageVersion Include="H.NotifyIcon" Version="$(HNotifyIconVersion)" />
     <PackageVersion Include="Interop.UIAutomationClient" Version="10.19041.0" />
+    <!-- The History search index: SQLite with FTS5, from the bundled native library on every platform. -->
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="11.0.0" />
     <PackageVersion Include="Microsoft.Graphics.Win2D" Version="1.4.0" />
     <PackageVersion Include="Microsoft.WindowsAppSDK.WinUI" Version="2.6.5" />
     <PackageVersion Include="NAudio" Version="3.1.0" />

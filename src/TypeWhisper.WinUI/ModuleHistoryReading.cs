@@ -125,13 +125,12 @@ internal sealed class ModuleHistoryReading : IHistoryReading
     }
 
     // A record a module may read: complete, not failed and not still arriving from another device.
-    internal static bool IsComplete(TranscriptionRecord record) =>
-        record.Status == TranscriptionRecordStatus.Succeeded && record.ProcessingState is null or "ready";
+    internal static bool IsComplete(TranscriptionRecord record) => TypeWhisper.Presentation.HistorySearchRecord.Indexes(record);
 
     internal static ModuleHistoryRecord ToModuleRecord(TranscriptionRecord record, Func<string?, string?> resolveAudioPath) => new(
         record.Id,
         RecordedAt(record.Timestamp),
-        string.IsNullOrEmpty(record.SourceKind) ? "dictation" : record.SourceKind,
+        TypeWhisper.Presentation.HistorySearchRecord.SourceOf(record),
         record.DisplayText,
         string.IsNullOrWhiteSpace(record.Language) ? null : record.Language,
         record.DurationSeconds,
@@ -139,11 +138,7 @@ internal sealed class ModuleHistoryReading : IHistoryReading
         string.IsNullOrEmpty(record.AudioFileName) ? null : resolveAudioPath(record.AudioFileName));
 
     // History stores UTC; a timestamp read back without a kind is UTC too.
-    internal static DateTimeOffset RecordedAt(DateTime timestamp) => timestamp.Kind switch
-    {
-        DateTimeKind.Local => new DateTimeOffset(timestamp.ToUniversalTime(), TimeSpan.Zero),
-        _ => new DateTimeOffset(DateTime.SpecifyKind(timestamp, DateTimeKind.Utc), TimeSpan.Zero)
-    };
+    internal static DateTimeOffset RecordedAt(DateTime timestamp) => TypeWhisper.Presentation.HistorySearchRecord.RecordedAtOf(timestamp);
 
     private async Task StartTrackingAsync()
     {

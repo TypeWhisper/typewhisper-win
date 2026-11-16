@@ -22,8 +22,8 @@ public readonly record struct UserDataExportProgress(int Files, long Bytes);
 /// The archive copies the data folder as it is, so history, audio, recordings, recaps, preferences and plugin
 /// settings go with it without a list that falls behind new features. What stays out is decided by rules
 /// (<see cref="IsExcluded"/>): stored secrets, license and account sign-ins, the local API's token, installed plugin
-/// packages, downloaded models inside plugin folders, and internal or temporary files. Links are never followed, and
-/// each folder stays open while it is read, so it cannot be swapped for a link on the way.
+/// packages, downloaded models inside plugin folders, the History search index, and internal or temporary files.
+/// Links are never followed, and each folder stays open while it is read, so it cannot be swapped for a link on the way.
 ///
 /// Data an earlier version kept in its own folders, which "Delete all data" removes as well, is copied the same way
 /// under <see cref="PreviousVersionFolderName"/>, without its models and plugin binaries.
@@ -56,6 +56,8 @@ public static class UserDataExport
     {
         // Installed plugin packages and the local API's upload scratch space.
         "PluginPackages", "HttpApi",
+        // The History search index: derived from History and built again from it when missing.
+        "HistorySearch",
         // Licenses, account sign-in and device identity: protected to this Windows account or only valid on this PC.
         "licenses.dat", "license.json", "premium-account.dat", "premium-account-device.txt", "premium-development.txt",
         // The running local API's port and token.
@@ -317,7 +319,8 @@ public static class UserDataExport
                 .Append("such as archived audio and recordings. Its settings and license files are left out because they can hold API keys.\r\n");
         text.Append("\r\nNot included: API keys and other stored secrets, licenses and account sign-ins, the local API token, ")
             .Append("downloaded models, installed plugins, folders inside a plugin's folder (models, runtimes and sign-ins ")
-            .Append("of tools a plugin uses) and temporary files.\r\n");
+            .Append("of tools a plugin uses), the History search index, which TypeWhisper builds again from your history, ")
+            .Append("and temporary files.\r\n");
         if (result.Skipped.Count > 0)
         {
             text.Append("\r\nThese files and folders were in use or could not be read and are missing from this export:\r\n");

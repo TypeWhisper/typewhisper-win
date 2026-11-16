@@ -232,8 +232,9 @@ public sealed partial class MainWindow : Window
         var workflows = WorkflowsView.ShutdownAsync();
         var lexicon = _lexicon?.ShutdownAsync() ?? Task.CompletedTask;
         var setupImport = ShutdownSettingsImportsAsync();
+        var historySearch = _services.HistorySearch.StopAsync();
         await Task.WhenAll(WinUIPremiumAccount.ShutdownAsync(), WinUICloudSync.ShutdownAsync(), WinUILicensing.ShutdownAsync(), api, session, files, workflows, lexicon, reviews, _profileUiDrain ?? Task.CompletedTask, _dictationInput?.Completion ?? Task.CompletedTask,
-            _dictationInitialization ?? Task.CompletedTask, setupImport);
+            _dictationInitialization ?? Task.CompletedTask, setupImport, historySearch);
         _liveOverlay?.Close();
     });
     internal void ShowShutdownFailure()
@@ -379,6 +380,7 @@ public sealed partial class MainWindow : Window
         _services = new(WinRT.Interop.WindowNative.GetWindowHandle(this), DispatcherQueue);
         _services.ModuleHost.ShowHistoryRecord = id => OpenHistory(id);
         _services.ModuleHost.ShowPremiumAccess = () => OpenSettingsPage("Premium");
+        _services.ModuleHost.ShowLanguageModelSettings = () => OpenSettingsPage("Workflows");
         PrepareModuleShortcuts();
         _dictation.DictationRequested += () => SuppressStartupWhatsNew();
         _dictation.Changed += ObserveWhatsNewActivity;

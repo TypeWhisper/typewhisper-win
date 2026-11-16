@@ -5,6 +5,10 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <!-- The History search index. Kept out of Core, which plugin hosts and plugin tests also reference. -->
+    <PackageReference Include="Microsoft.Data.Sqlite" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../TypeWhisper.Core/TypeWhisper.Core.csproj" />
   </ItemGroup>
   <ItemGroup>

@@ -36,6 +36,8 @@
     <Compile Include="../../src/TypeWhisper.WinUI/ModuleHistoryReading.cs" Link="ModuleHistoryReading.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/ModulePremiumAccessReading.cs" Link="ModulePremiumAccessReading.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/ModuleAudioDiarization.cs" Link="ModuleAudioDiarization.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/ModuleHistorySearching.cs" Link="ModuleHistorySearching.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/ModuleLanguageModelAnswering.cs" Link="ModuleLanguageModelAnswering.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/ModuleUserDataLifecycle.cs" Link="ModuleUserDataLifecycle.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/ModuleContributionCatalog.cs" Link="ModuleContributionCatalog.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/ModuleCalls.cs" Link="ModuleCalls.cs" />
