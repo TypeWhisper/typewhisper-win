@@ -59,8 +59,11 @@ internal sealed class ModulePanelWindow : Window, IModulePanelSurface
         _host.Loaded += (_, _) =>
         {
             _loaded = true;
-            Fit();
-            Place();
+            var work = TargetWorkArea();
+            // Moved onto the destination display first, so its DPI applies when the content is measured.
+            AppWindow.Move(new PointInt32(work.X, work.Y));
+            Fit(work);
+            Place(work);
             if (_showRequested) Present();
         };
         Content = _host;
@@ -121,23 +124,24 @@ internal sealed class ModulePanelWindow : Window, IModulePanelSurface
         _host.Focus(FocusState.Programmatic);
     }
 
-    // Sized to the content, up to a maximum; taller content scrolls.
-    private void Fit()
+    // The work area of the display under the pointer, where the panel appears.
+    private static RectInt32 TargetWorkArea() =>
+        (NativeMethods.GetCursorPos(out var cursor) ? DisplayArea.GetFromPoint(cursor, DisplayAreaFallback.Primary) : DisplayArea.Primary).WorkArea;
+
+    // Sized to the content, up to a maximum and to the destination's work area; taller content scrolls.
+    private void Fit(RectInt32 work)
     {
         var scale = Math.Max(96u, NativeMethods.GetDpiForWindow(WinRT.Interop.WindowNative.GetWindowHandle(this))) / 96d;
         _frame.Measure(new global::Windows.Foundation.Size(MaximumWidth, double.PositiveInfinity));
         var size = _frame.DesiredSize;
-        var work = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary).WorkArea;
         var width = Math.Clamp((int)Math.Ceiling(Math.Max(size.Width, 160) * scale), 1, work.Width);
         var height = Math.Clamp((int)Math.Ceiling(Math.Clamp(size.Height, 48, MaximumHeight) * scale), 1, work.Height);
         AppWindow.ResizeClient(new SizeInt32(width, height));
     }
 
-    // Centered horizontally on the display under the pointer, in its upper third.
-    private void Place()
+    // Centered horizontally on the destination display, in its upper third.
+    private void Place(RectInt32 work)
     {
-        var area = NativeMethods.GetCursorPos(out var cursor) ? DisplayArea.GetFromPoint(cursor, DisplayAreaFallback.Primary) : DisplayArea.Primary;
-        var work = area.WorkArea;
         var size = AppWindow.Size;
         AppWindow.Move(new PointInt32(work.X + Math.Max(0, (work.Width - size.Width) / 2), work.Y + Math.Max(0, (work.Height - size.Height) / 3)));
     }
