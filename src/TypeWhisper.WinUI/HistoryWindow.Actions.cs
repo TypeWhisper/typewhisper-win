@@ -67,10 +67,9 @@ public sealed partial class HistoryWindow
             menu.Items.Add(export);
             if (records.Any(item => item.InboxState == HistoryWorkspace.InboxOpen)) Add(Loc.T("Mark Complete"), () => _ = SetInboxAsync(true, records));
             if (records.Any(item => item.InboxState == HistoryWorkspace.InboxCompleted)) Add(Loc.T("Reopen"), () => _ = SetInboxAsync(false, records));
-            foreach (var action in HostModules.ActiveCatalog.RecordActions)
+            foreach (var (action, state) in ModuleRecordActionState.Offered(HostModules.ActiveCatalog.RecordActions, ModuleRecordInfos(records),
+                AppDiagnostics.WriteFailure))
             {
-                var state = ModuleRecordActionState.For(action, ModuleRecordInfos(records), AppDiagnostics.WriteFailure);
-                if (!state.Visible) continue;
                 var item = new MenuFlyoutItem { Text = state.Title, IsEnabled = state.Enabled, Icon = new FontIcon { Glyph = action.Glyph } };
                 if (state.Help is { } help) { ToolTipService.SetToolTip(item, help); AutomationProperties.SetHelpText(item, help); }
                 item.Click += (_, _) => RunModuleAction(action, records);

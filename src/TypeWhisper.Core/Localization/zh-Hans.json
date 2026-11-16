@@ -3296,5 +3296,6 @@
   "{0} shortcuts": "{0}快捷键",
   "Sending audio to {0} is turned off by your organization.": "你的组织已关闭向 {0} 发送音频。",
   "Tells who spoke when in a recording. Audio stays on this device.": "识别录音中谁在何时说话。音频保留在此设备上。",
-  "Tells who spoke when in a recording. Audio is sent to this provider.": "识别录音中谁在何时说话。音频会发送给此提供商。"
+  "Tells who spoke when in a recording. Audio is sent to this provider.": "识别录音中谁在何时说话。音频会发送给此提供商。",
+  "No actions available": "没有可用的操作"
 }

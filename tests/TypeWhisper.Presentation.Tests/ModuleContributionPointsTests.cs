@@ -197,6 +197,25 @@ public sealed class ModuleContributionPointsTests : IDisposable
     }
 
     [Fact]
+    public void OfferedActionsAskTheirVisibilityAgainOnEveryCall()
+    {
+        var allowed = false;
+        var ruled = RecordAction("ruled") with { IsVisible = _ => allowed };
+        var always = RecordAction("always");
+        var single = RecordAction("single");
+        ModuleRecordInfo[] records = [new("a", "dictation", true, 1)];
+        string[] Offered() => ModuleRecordActionState.Offered([ruled, always, single], records, Report).Select(entry => entry.Action.Id).ToArray();
+
+        Assert.Equal(["always", "single"], Offered());
+        allowed = true;
+        Assert.Equal(["ruled", "always", "single"], Offered());
+        allowed = false;
+        Assert.Equal(["always", "single"], Offered());
+        Assert.Empty(ModuleRecordActionState.Offered([ruled], records, Report));
+        Assert.Empty(_failures);
+    }
+
+    [Fact]
     public void ARecordActionWhoseVisibilityThrowsIsHiddenAndReported()
     {
         var action = RecordAction("act") with { IsVisible = _ => throw new InvalidOperationException("module failure") };

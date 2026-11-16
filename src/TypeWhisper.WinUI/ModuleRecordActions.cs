@@ -6,6 +6,12 @@ namespace TypeWhisper.WinUI;
 // offered for one record only; beyond its maximum it is shown disabled with help.
 internal readonly record struct ModuleRecordActionState(bool Visible, bool Enabled, string Title, string? Help)
 {
+    // The actions offered for these records, in order, each with its state. Visibility rules are asked on every call,
+    // so a menu calls this each time it opens.
+    internal static IReadOnlyList<(ModuleRecordAction Action, ModuleRecordActionState State)> Offered(
+        IEnumerable<ModuleRecordAction> actions, IReadOnlyList<ModuleRecordInfo> records, Action<string, Exception> report) =>
+        actions.Select(action => (action, For(action, records, report))).Where(entry => entry.Item2.Visible).ToArray();
+
     // Also asks the action whether it is offered for each record; one that is not offered for every record is hidden.
     internal static ModuleRecordActionState For(ModuleRecordAction action, IReadOnlyList<ModuleRecordInfo> records, Action<string, Exception> report)
     {
