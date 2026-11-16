@@ -151,6 +151,12 @@ uses these field names:
 IDs must be unique and match the package manifest. The manifest version must match
 the catalog version. The host rejects incompatible architecture/host versions,
 WPF assemblies, incomplete downloads, checksum mismatches and unsafe ZIP paths.
+Packages built from this repository target `net11.0` and declare `minHostVersion`
+`1.3.0`, the host contract of TypeWhisper 1.3. Hosts before 1.3 run on .NET 10 and
+cannot load a `net11.0` assembly; that minimum makes them refuse the package before
+loading it. Packages built for `net10.0` keep loading in 1.3 hosts. The feed holds one
+entry per ID, so once a plugin is published with minimum `1.3.0`, 1.2.x installations
+can no longer install or update it from the catalog.
 A checksum establishes consistency with this HTTPS feed; the UI does not present it
 as a publisher signature or a sandbox. Production publishing/attestation policy remains
 a separate release decision.

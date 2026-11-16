@@ -1,6 +1,6 @@
 # Linear
 
-Portable workflow action `create-linear-issue`, plugin version 1.2.2, minimum host 1.1.5.
+Portable workflow action `create-linear-issue`, plugin version 1.2.2, minimum host 1.3.0.
 
 ## Setup and behavior
 

@@ -32,8 +32,9 @@ public sealed class CopilotPackageTests
         Directory.CreateDirectory(root);
         try
         {
-            foreach (var file in new[] { "GitHub.Copilot.SDK.dll", "Microsoft.Extensions.AI.Abstractions.dll", "Microsoft.Extensions.Logging.Abstractions.dll",
-                "Microsoft.Extensions.DependencyInjection.Abstractions.dll", "TypeWhisper.Plugin.GitHubCopilot.deps.json", "Localization/en.json", "Localization/de.json",
+            // .NET 11 provides the logging and dependency injection abstractions in the shared framework.
+            foreach (var file in new[] { "GitHub.Copilot.SDK.dll", "Microsoft.Extensions.AI.Abstractions.dll",
+                "TypeWhisper.Plugin.GitHubCopilot.deps.json", "Localization/en.json", "Localization/de.json",
                 "Licenses/GitHub.Copilot.CLI.txt", "Licenses/GitHub.Copilot.SDK.txt" })
                 Assert.True(File.Exists(Path.Combine(PackageSource, file)), file);
             Assert.False(File.Exists(Path.Combine(PackageSource, "TypeWhisper.PluginSDK.dll")));
@@ -45,14 +46,14 @@ public sealed class CopilotPackageTests
             using var http = new HttpClient(new PackageHandler(payload));
             var host = new VocabularyHostServices(Path.Combine(root, "data"));
             host.SetSetting("selectedModel", "saved-model");
-            PortablePluginStore Store() => new(Path.Combine(root, "store"), new(1, 1, 2), http, _ => host);
+            PortablePluginStore Store() => new(Path.Combine(root, "store"), new(1, 3, 0), http, _ => host);
             var store = Store(); await store.InitializeAsync(); await store.InstallAsync(Entry(payload));
             var firstPath = store.Resolve(Id);
             for (var cycle = 0; cycle < 3; cycle++)
             {
                 store = Store(); await store.InitializeAsync();
                 if (cycle == 2) await store.InstallAsync(Entry(payload));
-                await using var registry = new PortablePluginRuntimeRegistry(store, new(1, 1, 2), _ => host);
+                await using var registry = new PortablePluginRuntimeRegistry(store, new(1, 3, 0), _ => host);
                 await registry.InitializeAsync();
                 Assert.Null(await registry.SetEnabledAsync(Id, true));
                 var provider = Assert.Single(registry.LlmProviders);
@@ -101,7 +102,7 @@ public sealed class CopilotPackageTests
             var older = await File.ReadAllBytesAsync(oldArchive);
             var handler = new PackageHandler(older);
             using var http = new HttpClient(handler);
-            PortablePluginStore Store() => new(Path.Combine(root, "store"), new(1, 1, 2), http);
+            PortablePluginStore Store() => new(Path.Combine(root, "store"), new(1, 3, 0), http);
             var store = Store(); await store.InitializeAsync();
             await store.InstallAsync(Entry(older, "1.0.0"));
             var oldPath = store.Resolve(Id);
@@ -112,7 +113,7 @@ public sealed class CopilotPackageTests
             var restart = Store(); await restart.InitializeAsync();
             Assert.False(restart.PendingRestart(Id));
             Assert.NotEqual(oldPath, restart.Resolve(Id));
-            await using var package = await PortablePluginPackage.LoadAsync(restart.Resolve(Id), new TestHost(), new(1, 1, 2));
+            await using var package = await PortablePluginPackage.LoadAsync(restart.Resolve(Id), new TestHost(), new(1, 3, 0));
             Assert.Equal("1.1.7", package.Plugin.PluginVersion);
             Assert.Equal(new Version(1, 1, 7, 0), package.Plugin.GetType().Assembly.GetName().Version);
         }
@@ -153,7 +154,7 @@ public sealed class CopilotPackageTests
 
     private static PortableCatalogEntry Entry(byte[] payload, string version = "1.1.7") => new()
     {
-        Id = Id, Name = "GitHub Copilot", Version = version, MinHostVersion = "1.1.2",
+        Id = Id, Name = "GitHub Copilot", Version = version, MinHostVersion = "1.3.0",
         DownloadUrl = "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-fixture-v1.0.0/copilot.zip", Size = payload.Length,
         Sha256 = Convert.ToHexString(SHA256.HashData(payload)), SupportedArchitectures = [PortablePluginCatalog.Architecture]
     };

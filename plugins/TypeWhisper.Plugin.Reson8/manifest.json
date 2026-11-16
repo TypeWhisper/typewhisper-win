@@ -17,5 +17,5 @@
   },
   "assemblyName": "TypeWhisper.Plugin.Reson8.dll",
   "pluginClass": "TypeWhisper.Plugin.Reson8.Reson8Plugin",
-  "minHostVersion": "1.1.5"
+  "minHostVersion": "1.3.0"
 }

@@ -1,6 +1,6 @@
 # Claude for the portable host
 
-Portable .NET 10 implementation of `com.typewhisper.claude`, version `1.2.0`, requiring host `1.1.2` or later.
+Portable .NET 11 implementation of `com.typewhisper.claude`, version `1.2.0`, requiring host `1.3.0` or later.
 
 ## Features
 

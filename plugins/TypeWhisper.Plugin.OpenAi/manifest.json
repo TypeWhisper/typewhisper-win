@@ -3,7 +3,7 @@
   "locality": "cloud",
   "name": "OpenAI / ChatGPT",
   "version": "1.2.0",
-  "minHostVersion": "1.1.5",
+  "minHostVersion": "1.3.0",
   "author": "TypeWhisper",
   "description": "OpenAI transcription, prompt processing, and text-to-speech with dynamic API and ChatGPT model catalogs. STT/TTS require an API key; prompts can use ChatGPT login.",
   "descriptions": {

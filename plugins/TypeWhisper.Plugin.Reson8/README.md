@@ -2,7 +2,7 @@
 
 Batch and realtime transcription with Reson8's model list, dictionary terms, pattern sets and portable server/header settings.
 
-Version `1.4.0`; plugin ID `com.typewhisper.reson8`; minimum host `1.1.5`.
+Version `1.4.0`; plugin ID `com.typewhisper.reson8`; minimum host `1.3.0`.
 
 ## Setup
 

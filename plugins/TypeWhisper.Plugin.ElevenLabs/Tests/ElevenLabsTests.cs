@@ -347,7 +347,7 @@ public sealed class ElevenLabsTests : IDisposable
         Directory.CreateDirectory(directory);
         File.Copy(typeof(ElevenLabsPlugin).Assembly.Location, Path.Combine(directory, "TypeWhisper.Plugin.ElevenLabs.dll"));
         File.Copy(Path.Combine(AppContext.BaseDirectory, "manifest.json"), Path.Combine(directory, "manifest.json"));
-        await using var package = await PortablePluginPackage.LoadAsync(directory, Host, new(1, 1, 5));
+        await using var package = await PortablePluginPackage.LoadAsync(directory, Host, new(1, 3, 0));
         Assert.IsAssignableFrom<IApiKeyPlugin>(package.Plugin);
         var engine = Assert.IsAssignableFrom<ITranscriptionEnginePlugin>(package.Plugin);
         Assert.Equal("scribe_v3", engine.SelectedModelId);
@@ -375,15 +375,15 @@ public sealed class ElevenLabsTests : IDisposable
         { Content = new ByteArrayContent(payload), RequestMessage = request })));
         var entry = new PortableCatalogEntry
         {
-            Id = id, Name = "ElevenLabs", Version = "1.3.0", MinHostVersion = "1.1.5",
+            Id = id, Name = "ElevenLabs", Version = "1.3.0", MinHostVersion = "1.3.0",
             DownloadUrl = "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-fixture-v1.0.0/elevenlabs.zip", Size = payload.Length,
             Sha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(payload)),
             SupportedArchitectures = [PortablePluginCatalog.Architecture]
         };
-        PortablePluginStore Store() => new(Path.Combine(_root, "store"), new(1, 1, 5), http, _ => Host);
+        PortablePluginStore Store() => new(Path.Combine(_root, "store"), new(1, 3, 0), http, _ => Host);
         var store = Store(); await store.InitializeAsync();
         await store.InstallAsync(entry);
-        await using (var registry = new PortablePluginRuntimeRegistry(store, new(1, 1, 5), _ => Host))
+        await using (var registry = new PortablePluginRuntimeRegistry(store, new(1, 3, 0), _ => Host))
         {
             await registry.InitializeAsync();
             Assert.Empty(registry.TranscriptionProviders);
@@ -403,7 +403,7 @@ public sealed class ElevenLabsTests : IDisposable
             Assert.Contains("ar", Assert.Single(registry.TranscriptionProviders).SupportedLanguages!);
         }
         var restarted = Store(); await restarted.InitializeAsync();
-        await using (var registry = new PortablePluginRuntimeRegistry(restarted, new(1, 1, 5), _ => Host))
+        await using (var registry = new PortablePluginRuntimeRegistry(restarted, new(1, 3, 0), _ => Host))
         {
             await registry.InitializeAsync();
             Assert.Equal("scribe_v2", Assert.Single(registry.TranscriptionProviders).SelectedModelId);
@@ -414,7 +414,7 @@ public sealed class ElevenLabsTests : IDisposable
         Assert.Equal("saved-key", _secrets.Value);
         var reinstall = Store(); await reinstall.InitializeAsync();
         await reinstall.InstallAsync(entry);
-        await using var finalRegistry = new PortablePluginRuntimeRegistry(reinstall, new(1, 1, 5), _ => Host);
+        await using var finalRegistry = new PortablePluginRuntimeRegistry(reinstall, new(1, 3, 0), _ => Host);
         await finalRegistry.InitializeAsync();
         Assert.Empty(finalRegistry.TranscriptionProviders);
         Assert.Null(await finalRegistry.SetEnabledAsync(id, true));

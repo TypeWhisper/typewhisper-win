@@ -7,7 +7,7 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" /><PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="Moq" /><Using Include="Xunit" />
-    <ProjectReference Include="../TypeWhisper.Plugin.Obsidian.csproj" SetTargetFramework="TargetFramework=net10.0" SkipGetTargetFrameworkProperties="true" />
+    <ProjectReference Include="../TypeWhisper.Plugin.Obsidian.csproj" SetTargetFramework="TargetFramework=net11.0" SkipGetTargetFrameworkProperties="true" />
     <ProjectReference Include="../../../src/TypeWhisper.PluginHost/TypeWhisper.PluginHost.csproj" />
     <None Include="../manifest.json" Link="manifest.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

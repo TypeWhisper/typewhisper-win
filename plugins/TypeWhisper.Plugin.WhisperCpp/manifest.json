@@ -3,7 +3,7 @@
   "locality": "local",
   "name": "Whisper (Local)",
   "version": "1.2.25",
-  "minHostVersion": "1.1.6",
+  "minHostVersion": "1.3.0",
   "author": "TypeWhisper",
   "description": "Local transcription with whisper.cpp",
   "category": "transcription",

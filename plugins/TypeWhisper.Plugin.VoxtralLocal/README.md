@@ -1,6 +1,6 @@
 # Voxtral (Local)
 
-Portable .NET 10 package `com.typewhisper.voxtral-local`, version `1.0.0`, requiring host `1.1.6`. It runs Mistral's
+Portable .NET 11 package `com.typewhisper.voxtral-local`, version `1.0.0`, requiring host `1.3.0`. It runs Mistral's
 [Voxtral Mini 4B Realtime](https://huggingface.co/mistralai/Voxtral-Mini-4B-Realtime-2602) offline through
 [transcribe.cpp](https://github.com/handy-computer/transcribe.cpp) 0.3.1, the runtime the NVIDIA Parakeet plugin uses
 for its graphics card path.

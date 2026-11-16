@@ -10,7 +10,7 @@
     <PackageReference Include="Moq" />
     <Using Include="Xunit" />
     <Compile Include="FillerWordFilterTests.cs" /><Compile Include="Portable/*.cs" />
-    <ProjectReference Include="../TypeWhisper.Plugin.FillerWords.csproj" SetTargetFramework="TargetFramework=net10.0" SkipGetTargetFrameworkProperties="true" />
+    <ProjectReference Include="../TypeWhisper.Plugin.FillerWords.csproj" SetTargetFramework="TargetFramework=net11.0" SkipGetTargetFrameworkProperties="true" />
     <ProjectReference Include="../../../src/TypeWhisper.PluginHost/TypeWhisper.PluginHost.csproj" />
     <None Include="../manifest.json" Link="manifest.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

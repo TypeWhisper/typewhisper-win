@@ -27,16 +27,16 @@ public partial class CerebrasTests
             using var http = new HttpClient(new Handler((request, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 { RequestMessage = request, Content = new ByteArrayContent(bytes) })));
             var host = new TestPluginHostServices();
-            PortablePluginStore Store() => new(Path.Combine(root, "store"), new(1, 1, 2), http, _ => host);
+            PortablePluginStore Store() => new(Path.Combine(root, "store"), new(1, 3, 0), http, _ => host);
             var entry = new PortableCatalogEntry
             {
-                Id = "com.typewhisper.cerebras", Name = "Cerebras", Version = "1.2.0", MinHostVersion = "1.1.2",
+                Id = "com.typewhisper.cerebras", Name = "Cerebras", Version = "1.2.0", MinHostVersion = "1.3.0",
                 DownloadUrl = "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-fixture-v1.0.0/cerebras.zip", Size = bytes.Length,
                 Sha256 = Convert.ToHexString(SHA256.HashData(bytes)), SupportedArchitectures = [PortablePluginCatalog.Architecture]
             };
             var store = Store(); await store.InitializeAsync(); await store.InstallAsync(entry);
             var firstPath = store.Resolve(entry.Id);
-            await using (var registry = new PortablePluginRuntimeRegistry(store, new(1, 1, 2), _ => host))
+            await using (var registry = new PortablePluginRuntimeRegistry(store, new(1, 3, 0), _ => host))
             {
                 await registry.InitializeAsync(); Assert.Empty(registry.LlmProviders);
                 Assert.Null(await registry.SetEnabledAsync(entry.Id, true));
@@ -54,7 +54,7 @@ public partial class CerebrasTests
                 await Assert.ThrowsAsync<InvalidOperationException>(() => store.InstallAsync(entry));
             }
             var restart = Store(); await restart.InitializeAsync(); Assert.Equal(firstPath, restart.Resolve(entry.Id));
-            await using (var registry = new PortablePluginRuntimeRegistry(restart, new(1, 1, 2), _ => host))
+            await using (var registry = new PortablePluginRuntimeRegistry(restart, new(1, 3, 0), _ => host))
             {
                 await registry.InitializeAsync(); Assert.True(Assert.Single(registry.LlmProviders).Ready);
                 Assert.Equal("qwen-3.8-27b", await registry.UseConfigurationAsync(entry.Id, (plugin, _) =>
@@ -62,7 +62,7 @@ public partial class CerebrasTests
                 Assert.Null(await registry.SetEnabledAsync(entry.Id, false)); await restart.UninstallAsync(entry.Id);
             }
             var reinstall = Store(); await reinstall.InitializeAsync(); await reinstall.InstallAsync(entry);
-            await using var final = new PortablePluginRuntimeRegistry(reinstall, new(1, 1, 2), _ => host);
+            await using var final = new PortablePluginRuntimeRegistry(reinstall, new(1, 3, 0), _ => host);
             Assert.Null(await final.SetEnabledAsync(entry.Id, true)); Assert.True(Assert.Single(final.LlmProviders).Ready);
             Assert.Equal("custom", await final.UseConfigurationAsync(entry.Id, (plugin, _) =>
                 Task.FromResult(((IPluginTextSettings)plugin).TextSettings.Single(s => s.Id == "llmTemperatureMode").Value)));

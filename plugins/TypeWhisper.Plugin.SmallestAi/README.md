@@ -2,7 +2,7 @@
 
 Pulse batch and realtime transcription, plus Lightning and Lightning Pro text-to-speech using the same API key.
 
-Version `1.3.0`; plugin ID `com.typewhisper.smallest-ai`; minimum host `1.1.4`.
+Version `1.3.0`; plugin ID `com.typewhisper.smallest-ai`; minimum host `1.3.0`.
 
 ## Setup
 

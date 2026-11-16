@@ -3,7 +3,7 @@
   "locality": "local",
   "name": "GigaAM",
   "version": "1.0.0",
-  "minHostVersion": "1.1.6",
+  "minHostVersion": "1.3.0",
   "author": "TypeWhisper",
   "description": "Local Russian speech-to-text with GigaAM v3 by Sber. Adds punctuation and capitalization and runs on the CPU. Russian only.",
   "descriptions": {

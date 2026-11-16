@@ -13,5 +13,5 @@
   "requiresApiKey": false,
   "assemblyName": "TypeWhisper.Plugin.AuthenticatedCli.dll",
   "pluginClass": "TypeWhisper.Plugin.AuthenticatedCli.AuthenticatedCliPlugin",
-  "minHostVersion": "1.1.2"
+  "minHostVersion": "1.3.0"
 }

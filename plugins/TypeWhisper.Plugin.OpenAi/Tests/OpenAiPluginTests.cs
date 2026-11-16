@@ -28,7 +28,7 @@ public partial class OpenAiPluginTests
 
         Assert.NotNull(manifest);
         Assert.Equal(manifest.Version, sut.PluginVersion);
-        Assert.Equal("1.1.5", manifest.MinHostVersion);
+        Assert.Equal("1.3.0", manifest.MinHostVersion);
         Assert.Contains("text-to-speech", manifest.Description, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("API key", manifest.Description, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(["transcription", "llm", "tts"], manifest.Categories);

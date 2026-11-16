@@ -2,7 +2,7 @@
 
 Meta transcription, realtime transcription, LLM completion, model refresh, language/dictionary/diarization and reasoning settings.
 
-Version `1.3.0`; plugin ID `com.typewhisper.meta`; minimum host `1.1.5`.
+Version `1.3.0`; plugin ID `com.typewhisper.meta`; minimum host `1.3.0`.
 
 ## Setup
 

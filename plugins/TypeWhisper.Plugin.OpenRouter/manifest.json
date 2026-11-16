@@ -3,7 +3,7 @@
   "locality": "cloud",
   "name": "OpenRouter",
   "version": "1.2.0",
-  "minHostVersion": "1.1.2",
+  "minHostVersion": "1.3.0",
   "author": "TypeWhisper",
   "description": "Text processing and speech-to-text via OpenRouter, with model discovery, text model pricing and API key budget checks.",
   "descriptions": {

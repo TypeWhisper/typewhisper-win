@@ -1,6 +1,6 @@
 # Gemini for the portable host
 
-Portable .NET 10 package `com.typewhisper.gemini` version `1.4.0`, requiring host `1.1.5`.
+Portable .NET 11 package `com.typewhisper.gemini` version `1.4.0`, requiring host `1.3.0`.
 
 ## Features
 

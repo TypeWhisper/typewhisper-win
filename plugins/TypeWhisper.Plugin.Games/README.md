@@ -2,7 +2,7 @@
 
 Dictation into game chats. World of Warcraft comes with the plugin, in all versions (Retail, Classic, Classic Era, Forever and the test realms), and users can add any other game with the key its chat opens with.
 
-Version `1.0.0`; plugin ID `com.typewhisper.games`; minimum host `1.1.7` (TypeWhisper for Windows 1.2.3 and 1.3).
+Version `1.0.0`; plugin ID `com.typewhisper.games`; minimum host `1.3.0` (TypeWhisper for Windows 1.3 and later).
 
 ## How it works
 

@@ -3,6 +3,7 @@
   "locality": "configurable",
   "name": "Obsidian",
   "version": "1.0.1",
+  "minHostVersion": "1.3.0",
   "author": "TypeWhisper",
   "description": "Save transcriptions as notes in Obsidian",
   "assemblyName": "TypeWhisper.Plugin.Obsidian.dll",

@@ -3,7 +3,7 @@
   "locality": "cloud",
   "name": "Gladia",
   "version": "1.2.4",
-  "minHostVersion": "1.1.5",
+  "minHostVersion": "1.3.0",
   "author": "TypeWhisper",
   "description": "Transcribes recorded audio and provides live dictation with Gladia.",
   "categories": [
