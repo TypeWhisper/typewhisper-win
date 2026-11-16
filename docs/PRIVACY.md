@@ -20,6 +20,7 @@ Besides the cloud providers and integrations you configure, the Windows app make
 
 - **Profile folder**: `%LocalAppData%\TypeWhisper-WinUI` (the public Store beta uses `TypeWhisper-WinUI-StoreBeta`). Settings, dictionary, snippets, workflows, history, license data and plugin data live there.
 - **History**: on by default and kept until you delete entries or choose a retention period in Settings; stored in `history.json`.
+- **History search index**: not created by default. When an optional module uses History search, a full-text index of your history is kept in `HistorySearch` in the profile folder. It is rebuilt from History, follows its deletions at once, is not included in "Export all data" and is removed by "Delete all data".
 - **History audio**: off by default. When on, the audio of eligible dictations is kept in `history-audio` next to the history.
 - **Recovery audio**: off by default. When on, recordings are kept in `dictation-recovery` for 30 days by default.
 - **Microphone pre-roll**: off by default. When enabled, the microphone stays active between dictations and the newest half-second is held in memory. Idle audio is not saved or uploaded. Starting a dictation includes that prefix in the recording; locking the screen, sleeping, disconnecting the session, or using Remote Desktop releases the idle microphone and clears the buffer.
