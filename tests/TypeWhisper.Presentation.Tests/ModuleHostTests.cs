@@ -438,6 +438,24 @@ public sealed class ModuleHistoryTests
     }
 
     [Fact]
+    public async Task ASaveBeforeTheBaselineIsReadReportsEveryRecordOnce()
+    {
+        var first = Record("a");
+        var history = new FakeHistory(first);
+        var posted = new Queue<Action>();
+        var reading = new ModuleHistoryReading(history, _ => null, _ => { }, posted.Enqueue, (stage, _) => Assert.Fail(stage));
+        var received = new List<ModuleHistoryChange>();
+        // The save lands after loading but before the baseline is read, so the baseline already holds it.
+        history.DuringLoad = () => history.Replace(first, Record("b"));
+
+        reading.ObserveChanges(received.Add);
+        await Task.Yield();
+        while (posted.TryDequeue(out var action)) action();
+
+        Assert.Equal(["a", "b"], Assert.IsType<ModuleHistoryChange.Upserted>(Assert.Single(received)).Ids.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
     public void ShowRecordPassesTheIdentifierOn()
     {
         var shown = new List<string>();
@@ -454,6 +472,7 @@ public sealed class ModuleHistoryTests
     {
         private TranscriptionRecord[] _records = records;
         public bool Loaded { get; private set; }
+        public Action? DuringLoad { get; set; }
         public IReadOnlyList<TranscriptionRecord> Records => [.. _records];
         public event Action? RecordsChanged;
         public void Replace(params TranscriptionRecord[] records)
@@ -461,7 +480,12 @@ public sealed class ModuleHistoryTests
             _records = records;
             RecordsChanged?.Invoke();
         }
-        public Task EnsureLoadedAsync() { Loaded = true; return Task.CompletedTask; }
+        public Task EnsureLoadedAsync()
+        {
+            Loaded = true;
+            DuringLoad?.Invoke();
+            return Task.CompletedTask;
+        }
         public void AddRecord(TranscriptionRecord record) => throw new NotSupportedException();
         public void UpdateRecord(string id, string finalText) => throw new NotSupportedException();
         public void DeleteRecord(string id) => throw new NotSupportedException();

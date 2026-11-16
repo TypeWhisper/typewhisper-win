@@ -24,7 +24,10 @@ public abstract record ModuleHistoryChange
 {
     private ModuleHistoryChange() { }
 
-    /// <summary>Records that were added, or whose content changed.</summary>
+    /// <summary>
+    /// Records that were added, or whose content changed. Rarely, right after observing starts, it also names records
+    /// that did not change; reading them again is enough.
+    /// </summary>
     public sealed record Upserted(IReadOnlySet<string> Ids) : ModuleHistoryChange;
 
     /// <summary>Records that were removed.</summary>

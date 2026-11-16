@@ -49,6 +49,8 @@ internal sealed class ModuleHistoryReading : IHistoryReading
     private readonly List<(ModuleObservation Observation, Action<ModuleHistoryChange> Handler)> _observers = [];
     private int _subscribed;
     private int _comparePending;
+    // Saves seen since following History started; one before the baseline read cannot be told apart from it.
+    private int _savesSinceSubscribed;
     // UI thread only: whether _changes holds the records of an earlier read.
     private bool _tracking;
 
@@ -141,10 +143,15 @@ internal sealed class ModuleHistoryReading : IHistoryReading
         IReadOnlyList<TranscriptionRecord> baseline;
         try { baseline = _history.Records; }
         catch (Exception ex) when (ex is not OutOfMemoryException) { _report("modules.history.read-failed", ex); baseline = []; }
+        // A save between loading and this read is already in the baseline, so its record is unknown. Every record is
+        // then reported once as upserted: observers re-read a few unchanged records instead of missing one.
+        var savedBeforeBaseline = Volatile.Read(ref _savesSinceSubscribed) > 0;
         _post(() =>
         {
             _changes.Reset(baseline);
             _tracking = true;
+            if (savedBeforeBaseline && baseline.Count > 0)
+                Deliver([new ModuleHistoryChange.Upserted(baseline.Select(record => record.Id).ToFrozenSet(StringComparer.Ordinal))]);
             Compare();
         });
     }
@@ -152,6 +159,7 @@ internal sealed class ModuleHistoryReading : IHistoryReading
     // Raised on the saving thread, possibly in bursts: one comparison on the UI thread covers them all.
     private void OnRecordsChanged()
     {
+        Interlocked.Increment(ref _savesSinceSubscribed);
         if (Interlocked.Exchange(ref _comparePending, 1) != 0) return;
         _post(() =>
         {
@@ -166,7 +174,11 @@ internal sealed class ModuleHistoryReading : IHistoryReading
         IReadOnlyList<TranscriptionRecord> records;
         try { records = _history.Records; }
         catch (Exception ex) when (ex is not OutOfMemoryException) { _report("modules.history.read-failed", ex); return; }
-        var changes = _changes.Update(records);
+        Deliver(_changes.Update(records));
+    }
+
+    private void Deliver(IReadOnlyList<ModuleHistoryChange> changes)
+    {
         if (changes.Count == 0) return;
         (ModuleObservation Observation, Action<ModuleHistoryChange> Handler)[] observers;
         lock (_observers) observers = [.. _observers];
