@@ -437,10 +437,9 @@ public partial class App : Application
             // Start with Windows lives in the registration, not the profile; a new installation starts with it off.
             var startupError = await TurnOffStartupAsync();
             var cliError = await Task.Run(RemoveOwnCli);
-            var report = await Task.Run(UserDataDeletion.FinishPending);
-            // Module work still running past its timeout may write again through a path it already has, so the next
-            // launch deletes once more before anything opens the folder.
-            if (!modulesSettled) ProfileDataEraser.RequestErasure(WinUIProfile.Root);
+            // Module work still running past its timeout may write again through a path it already has. The deletion
+            // then waits for the next launch, which runs it before anything opens the folder; the marker stays until then.
+            var report = modulesSettled ? await Task.Run(UserDataDeletion.FinishPending) : new ProfileErasureReport(0, 1, false);
             if (startupError is not null || cliError is not null)
             {
                 var leftovers = cliError is null ? Loc.T("turn off Start with Windows under General")
