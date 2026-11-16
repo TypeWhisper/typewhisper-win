@@ -218,6 +218,21 @@ public sealed class ModulePolicyKeysTests
     }
 
     [Fact]
+    public void ObserversHearWhenDeclaredKeysBecomeReadable()
+    {
+        var reading = new ModuleManagedPolicyReading(() => Build(), () => { }, _ => { }, _ => { }, action => action(), (stage, _) => Assert.Fail(stage));
+        var calls = 0;
+        using var subscription = reading.ObserveChanges(() => calls++);
+
+        // Host keys only: the policy itself does not change, but what the module may read does.
+        reading.UseDeclaredNames(new HashSet<string>([ManagedPolicyKeys.AllowCloudTranscription]));
+        Assert.Equal(1, calls);
+
+        reading.UseDeclaredNames(new HashSet<string>());
+        Assert.Equal(1, calls);
+    }
+
+    [Fact]
     public void AnObserverThatThrowsIsReported()
     {
         Action<ManagedPolicySnapshot>? listeners = null;

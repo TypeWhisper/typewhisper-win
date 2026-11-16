@@ -122,6 +122,7 @@ internal sealed class ModuleManagedPolicyReading : IManagedPolicyReading
     private readonly Action<Action> _post;
     private readonly Action<string, Exception> _report;
     private IReadOnlySet<string> _declaredNames = FrozenSet<string>.Empty;
+    private readonly List<Action<ManagedPolicySnapshot>> _listeners = [];
 
     internal ModuleManagedPolicyReading(Func<ManagedPolicySnapshot> current, Action refresh,
         Action<Action<ManagedPolicySnapshot>> subscribe, Action<Action<ManagedPolicySnapshot>> unsubscribe,
@@ -135,10 +136,18 @@ internal sealed class ModuleManagedPolicyReading : IManagedPolicyReading
         _report = report;
     }
 
-    internal IReadOnlySet<string> DeclaredNames
+    internal IReadOnlySet<string> DeclaredNames => Volatile.Read(ref _declaredNames);
+
+    // Called once every module has contributed. Keys that read as unmanaged until now may already be managed, also
+    // when they are host keys the policy service has no reason to report as changed, so observers hear about it here.
+    internal void UseDeclaredNames(IReadOnlySet<string> names)
     {
-        get => Volatile.Read(ref _declaredNames);
-        set => Volatile.Write(ref _declaredNames, value);
+        Volatile.Write(ref _declaredNames, names);
+        if (names.Count == 0) return;
+        Action<ManagedPolicySnapshot>[] listeners;
+        lock (_listeners) listeners = [.. _listeners];
+        var snapshot = _current();
+        foreach (var listener in listeners) listener(snapshot);
     }
 
     public ModuleManagedPolicyState State(string name) => ModulePolicyKeys.State(_current(), DeclaredNames, name);
@@ -150,8 +159,13 @@ internal sealed class ModuleManagedPolicyReading : IManagedPolicyReading
         ArgumentNullException.ThrowIfNull(handler);
         var observation = new ModuleObservation(_post, _report, "modules.policy.observer-failed");
         Action<ManagedPolicySnapshot> listener = _ => observation.Deliver(handler);
+        lock (_listeners) _listeners.Add(listener);
         _subscribe(listener);
-        observation.Unsubscribe = () => _unsubscribe(listener);
+        observation.Unsubscribe = () =>
+        {
+            _unsubscribe(listener);
+            lock (_listeners) _listeners.Remove(listener);
+        };
         return observation;
     }
 }

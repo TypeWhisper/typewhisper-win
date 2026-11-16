@@ -54,7 +54,7 @@ internal sealed class WinUIModuleHost : IModuleHost
     {
         var resolution = ModulePolicyKeys.Resolve(keys, (name, reason) => AppDiagnostics.Write(
             name is null ? $"{ModulePolicyKeys.RejectedStage} reason={reason}" : $"{ModulePolicyKeys.RejectedStage} key={name} reason={reason}"));
-        _managedPolicy.DeclaredNames = resolution.DeclaredNames;
+        _managedPolicy.UseDeclaredNames(resolution.DeclaredNames);
         if (resolution.Definitions.Count > 0) WinUIManagedPolicy.UseAdditionalDefinitions(resolution.Definitions);
     }
 }
