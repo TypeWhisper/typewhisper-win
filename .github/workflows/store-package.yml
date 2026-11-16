@@ -13,6 +13,11 @@ on:
       source_revision:
         type: string
         required: true
+    # Lives only in the premium-modules environment. A caller still has to pass it by name; the package job, which
+    # sets that environment, then receives the environment's value.
+    secrets:
+      PREMIUM_WIN_DEPLOY_KEY:
+        required: true
   workflow_dispatch:
     inputs:
       destination:
