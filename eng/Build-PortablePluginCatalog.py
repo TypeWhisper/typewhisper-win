@@ -11,6 +11,28 @@ import subprocess
 import sys
 import zipfile
 
+# Hosts from 1.3 (plugin API 1.3.0, .NET 11) read FEED_PATH. LEGACY_FEED_PATH stays frozen for 1.1 and 1.2 hosts,
+# which run on .NET 10 and cannot load packages built from this source; no tooling writes it any more.
+FEED_PATH = "plugins-v3.json"
+LEGACY_FEED_PATH = "plugins-v2.json"
+# The first host contract that reads FEED_PATH. Packages built from this source need it at least.
+FEED_MIN_HOST_VERSION = "1.3.0"
+
+
+def host_version(value: str) -> tuple[int, ...]:
+    """A minHostVersion as the host's System.Version reads it: two to four numeric parts."""
+    if not re.fullmatch(r"\d+(?:\.\d+){1,3}", value):
+        raise ValueError(f"Unsupported minHostVersion: {value}")
+    return tuple(map(int, value.split("."))) + (0,) * (4 - len(value.split(".")))
+
+
+def check_host_minimum(manifest: dict) -> None:
+    """Refuses a package that a host before FEED_MIN_HOST_VERSION would accept but cannot load."""
+    declared = manifest.get("minHostVersion")
+    if declared is None or host_version(declared) < host_version(FEED_MIN_HOST_VERSION):
+        raise ValueError(f"{manifest.get('id')} must declare minHostVersion {FEED_MIN_HOST_VERSION} or later; "
+                         "hosts before 1.3 cannot load packages built for .NET 11")
+
 
 def sha256(path: pathlib.Path) -> str:
     digest = hashlib.sha256()
@@ -171,6 +193,10 @@ def main() -> None:
                 raise SystemExit(f"Package output escapes the source checkout: {dependency_output}")
             if dependency_output.exists():
                 shutil.rmtree(dependency_output)
+        try:
+            check_host_minimum(manifest)
+        except ValueError as error:
+            raise SystemExit(str(error)) from error
         print(f"BUILD {plugin_id} {version}", flush=True)
         run = subprocess.run(
             ["dotnet", "build", str(project), "-c", "Release", "-v", "quiet"],
@@ -236,7 +262,7 @@ def main() -> None:
                 refreshed.append(entries[plugin_id])
                 print(f"KEEP  {plugin_id} {manifest['version']} (locality refreshed)", flush=True)
     feed = {"plugins": sorted(entries.values(), key=lambda entry: (entry["name"].casefold(), entry["id"]))}
-    (output / "plugins-v2.json").write_text(json.dumps(feed, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    (output / FEED_PATH).write_text(json.dumps(feed, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     (output / "summary.json").write_text(json.dumps({"source": str(source), "sourceCommit": source_commit,
         "tag": args.tag, "excludedIds": sorted(excluded), "entryCount": len(entries),
         "archiveCount": len(list(archives.glob("*.zip"))), "changedPlugins": changed, "refreshedPlugins": refreshed,

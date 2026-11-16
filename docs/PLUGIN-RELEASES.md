@@ -54,9 +54,12 @@ add package tests before using this workflow for those packages.
    downgrades and conflicting contents for an already published version.
 6. Request a GitHub Pages build and verify the public feed contains the exact entries.
 
-The feed remains `https://typewhisper.github.io/typewhisper-win/plugins-v2.json` because
-installed clients use that URL. The older `plugins.json`, other Pages files and old
-release assets remain intact. Labels in Actions simply say **plugins**.
+Publication reads and writes `https://typewhisper.github.io/typewhisper-win/plugins-v3.json`,
+the feed of hosts from 1.3 (.NET 11). `plugins-v2.json` stays frozen for 1.1 and 1.2 hosts,
+which cannot load .NET 11 packages; the scripts never write it. If `plugins-v3.json` does
+not exist yet, the first publication creates it from the `plugins-v2.json` entries that a
+1.3 host accepts, so version comparisons and the new feed start from everything already
+published. The older `plugins.json`, other Pages files and old release assets remain intact. Labels in Actions simply say **plugins**.
 
 The workflow needs no personal access token: build uses read-only `GITHUB_TOKEN`;
 publication gets `contents: write` and `pages: write`. GitHub documents that

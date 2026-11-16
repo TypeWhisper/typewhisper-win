@@ -20,4 +20,4 @@ Previously published 1.0 plugin packages and the legacy catalog remain unchanged
 
 See [plugin package documentation](PLUGIN-PACKAGES-1.1.md) for the package contract. Run `eng/Test-WinUIHeadless.ps1` for the host, application and provider suites. Published packages continue to use the v2 catalog and immutable package store.
 
-The public `plugins-v2.json` feed URL remains stable for existing 1.1 clients. Application upgrades from 1.0 use the profile migration described in [Daily delivery and migration](DAILY-1.1-CANDIDATE.md).
+The public `plugins-v2.json` feed URL remains stable for 1.1 and 1.2 clients; it is frozen, and hosts from 1.3 read `plugins-v3.json`. Application upgrades from 1.0 use the profile migration described in [Daily delivery and migration](DAILY-1.1-CANDIDATE.md).

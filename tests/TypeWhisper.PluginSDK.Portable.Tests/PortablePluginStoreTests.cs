@@ -401,11 +401,11 @@ public sealed class PortablePluginStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task CatalogUsesOnlyV2AndRejectsDuplicateIds()
+    public async Task CatalogUsesOnlyV3AndRejectsDuplicateIds()
     {
         var entry = Entry(); _download = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new { plugins = new[] { entry } }));
         var catalog = new PortablePluginCatalog(_http);
-        Assert.Equal("https://typewhisper.github.io/typewhisper-win/plugins-v2.json", catalog.Feed.AbsoluteUri);
+        Assert.Equal("https://typewhisper.github.io/typewhisper-win/plugins-v3.json", catalog.Feed.AbsoluteUri);
         Assert.Single(await catalog.FetchAsync());
         _download = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new[] { entry, entry }));
         await Assert.ThrowsAsync<InvalidDataException>(() => catalog.FetchAsync());
