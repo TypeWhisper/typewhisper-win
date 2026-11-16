@@ -78,7 +78,7 @@ internal sealed partial class LocalDictationSession
             if (Models.Enabled && !UsesRegistryProvider && TranscriptionPolicyRefusal() is not null
                 || CtcVocabulary.Enabled && !CtcAllowed)
             {
-                if (_audio.IsRecording || _fileBusy || _phase == DictationPhase.Processing) RequestCancel();
+                if (_audio.IsRecording || _fileBusy || _speechInputActive || _phase == DictationPhase.Processing) RequestCancel();
                 _training?.CancelDecode();
             }
             // A refused local package stops downloading model data at once, before any unload is awaited.

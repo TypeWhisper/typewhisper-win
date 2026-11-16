@@ -532,6 +532,7 @@ public sealed class ModuleContributionPointsTests : IDisposable
         public IHistorySearching? HistorySearching => null;
         public ILanguageModelAnswering? LanguageModelAnswering => null;
         public IModuleDiagnostics? Diagnostics => null;
+        public ISpeechInput? SpeechInput => null;
         public Task WhenStarted => Task.CompletedTask;
         public void ShowSettingsSection(string sectionId) { }
         public void ShowPanel(string id) { }

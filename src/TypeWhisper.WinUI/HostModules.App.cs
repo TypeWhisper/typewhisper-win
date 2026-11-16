@@ -89,6 +89,7 @@ internal sealed class WinUIModuleHost : IModuleHost
             (id, model, ct) => plugins.UseLlmAsync(id, (_, _) => Task.FromResult(true), ct, model),
             // Opens a window, so it runs on the UI thread whichever thread the module calls from.
             () => Post(() => ShowLanguageModelSettings?.Invoke())), AppDiagnostics.WriteFailure);
+        SpeechInput = new ModuleSpeechInput(dictation.CreateSpeechInputRuntime(), stage => AppDiagnostics.Write(stage));
     }
 
     private static ModuleDiarizationProvider ToModuleProvider(PortableDiarizationProvider provider) =>
@@ -107,6 +108,7 @@ internal sealed class WinUIModuleHost : IModuleHost
     public IAudioDiarization AudioDiarization { get; }
     public IHistorySearching HistorySearching { get; }
     public ILanguageModelAnswering LanguageModelAnswering { get; }
+    public ISpeechInput SpeechInput { get; }
 
     internal ModuleUserDataLifecycle UserData { get; }
     public Task WhenStarted => _started.Task;
