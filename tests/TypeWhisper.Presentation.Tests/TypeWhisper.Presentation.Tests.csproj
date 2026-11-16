@@ -2,6 +2,9 @@
   <PropertyGroup>
     <TargetFramework>net11.0-windows10.0.26100.0</TargetFramework>
     <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <!-- The Windows target brings the CsWinRT analyzer, which flags collection expressions for trimming and AOT; the
+         tests, like the app, are neither trimmed nor AOT-compiled. -->
+    <NoWarn>$(NoWarn);CsWinRT1032</NoWarn>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
