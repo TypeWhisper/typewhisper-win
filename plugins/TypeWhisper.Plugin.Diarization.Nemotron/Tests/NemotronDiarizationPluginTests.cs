@@ -11,7 +11,7 @@ namespace TypeWhisper.Plugin.Diarization.Nemotron.Tests;
 
 public sealed class NemotronDiarizationPluginTests : IDisposable
 {
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "nemotron-diarization-" + Guid.NewGuid().ToString("N"));
+    private readonly string _root = Path.Join(Path.GetTempPath(), "nemotron-diarization-" + Guid.NewGuid().ToString("N"));
     private readonly Dictionary<string, byte[]> _served = new(StringComparer.Ordinal);
     private int _requests;
 
@@ -24,7 +24,7 @@ public sealed class NemotronDiarizationPluginTests : IDisposable
         catch (UnauthorizedAccessException) { /* Left in the temporary folder. */ }
     }
 
-    private VocabularyHostServices Host() => new(Path.Combine(_root, "data"));
+    private VocabularyHostServices Host() => new(Path.Join(_root, "data"));
 
     // Small stand-ins for the pinned files, served by a fake transport and verified like the real ones.
     private IReadOnlyList<NemotronModelFile> Files(bool corrupt = false)
@@ -103,7 +103,7 @@ public sealed class NemotronDiarizationPluginTests : IDisposable
 
         await plugin.DeleteDiarizationModelsAsync(default);
         Assert.False(plugin.AreDiarizationModelsInstalled);
-        Assert.Empty(Directory.GetFiles(Path.Combine(_root, "data"), "model.onnx*", SearchOption.AllDirectories));
+        Assert.Empty(Directory.GetFiles(Path.Join(_root, "data"), "model.onnx*", SearchOption.AllDirectories));
     }
 
     [Fact]
@@ -233,23 +233,23 @@ public sealed class NemotronDiarizationPluginTests : IDisposable
     [Fact]
     public async Task PackageInstallsAndOffersALocalDiarizationProvider()
     {
-        var project = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        var project = Path.GetFullPath(Path.Join(AppContext.BaseDirectory, "..", "..", "..", ".."));
         var manifest = PortablePluginPackage.ReadManifest(project);
-        var source = Path.Combine(project, "bin", new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name, "portable-host", "Plugins", manifest.Id);
+        var source = Path.Join(project, "bin", new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name, "portable-host", "Plugins", manifest.Id);
         Assert.Equal(("1.0.0", "1.3.0", "local"), (manifest.Version, manifest.MinHostVersion, manifest.Locality));
         Assert.Equal(["diarization"], manifest.Categories);
         foreach (var license in new[] { "ONNXRuntime-LICENSE.txt", "DirectML-LICENSE.txt", "OpenMDW-1.1.txt" })
-            Assert.True(File.Exists(Path.Combine(source, "Licenses", license)), license);
+            Assert.True(File.Exists(Path.Join(source, "Licenses", license)), license);
         foreach (var architecture in new[] { "win-x64", "win-arm64" })
             foreach (var library in new[] { "onnxruntime.dll", "DirectML.dll" })
-                Assert.True(File.Exists(Path.Combine(source, "runtimes", architecture, "native", library)), architecture + "/" + library);
+                Assert.True(File.Exists(Path.Join(source, "runtimes", architecture, "native", library)), architecture + "/" + library);
 
-        var archive = Path.Combine(_root, "package.zip");
+        var archive = Path.Join(_root, "package.zip");
         Directory.CreateDirectory(_root);
         ZipFile.CreateFromDirectory(source, archive, CompressionLevel.Fastest, false);
         _served["https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-fixture-v1.0.0/package.zip"] = File.ReadAllBytes(archive);
         var host = Host();
-        var store = new PortablePluginStore(Path.Combine(_root, "store"), new(1, 3, 0), Http(), _ => host);
+        var store = new PortablePluginStore(Path.Join(_root, "store"), new(1, 3, 0), Http(), _ => host);
         await store.InitializeAsync();
         await store.InstallAsync(new PortableCatalogEntry
         {
@@ -297,9 +297,9 @@ public sealed class NemotronDiarizationPluginTests : IDisposable
         await plugin.ActivateAsync(host);
         if (adapter is not null) await plugin.SaveTextSettingAsync("device", $"directml:{adapter.Index}:{adapter.Name}", default);
         // The pinned files are copied into the plugin's model directory and verified there like a download.
-        var target = Path.Combine(host.PluginAssetDirectory, "Models", "nemotron-3-diarization-" + NemotronModelAssets.Revision[..12]);
+        var target = Path.Join(host.PluginAssetDirectory, "Models", "nemotron-3-diarization-" + NemotronModelAssets.Revision[..12]);
         Directory.CreateDirectory(target);
-        foreach (var file in files) File.Copy(Path.Combine(directory, file.FileName), Path.Combine(target, file.FileName));
+        foreach (var file in files) File.Copy(Path.Join(directory, file.FileName), Path.Join(target, file.FileName));
         await plugin.PrepareDiarizationModelsAsync(null, default);
         Assert.True(plugin.AreDiarizationModelsInstalled);
 

@@ -9,7 +9,7 @@ public sealed class NemotronModelFactAttribute : FactAttribute
 {
     internal static string? ModelDirectory =>
         Environment.GetEnvironmentVariable("TYPEWHISPER_NEMOTRON_MODEL_DIR") is { Length: > 0 } directory
-        && File.Exists(Path.Combine(directory, "model.onnx")) && File.Exists(Path.Combine(directory, "model.onnx_data"))
+        && File.Exists(Path.Join(directory, "model.onnx")) && File.Exists(Path.Join(directory, "model.onnx_data"))
             ? directory : null;
 
     public NemotronModelFactAttribute()
