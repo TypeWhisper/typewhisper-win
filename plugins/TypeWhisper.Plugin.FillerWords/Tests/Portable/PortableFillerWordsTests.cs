@@ -139,7 +139,7 @@ public sealed class PortableFillerWordsTests : IDisposable
         File.Copy(typeof(FillerWordsPlugin).Assembly.Location, Path.Combine(bundle, manifest.AssemblyName));
         File.WriteAllText(Path.Combine(bundle, "manifest.json"), JsonSerializer.Serialize(manifest));
         using var http = new HttpClient();
-        var store = new PortablePluginStore(Path.Combine(_root, "store"), new Version(1, 3, 0), http);
+        var store = new PortablePluginStore(Path.Join(_root, "store"), new Version(1, 3, 0), http);
         await store.InitializeAsync(Path.Combine(_root, "bundles"));
         await using var registry = new PortablePluginRuntimeRegistry(store, new Version(1, 3, 0),
             id => new VocabularyHostServices(Path.Combine(_root, "data", id)));

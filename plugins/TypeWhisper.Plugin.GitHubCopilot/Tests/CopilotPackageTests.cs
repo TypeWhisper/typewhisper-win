@@ -46,7 +46,7 @@ public sealed class CopilotPackageTests
             using var http = new HttpClient(new PackageHandler(payload));
             var host = new VocabularyHostServices(Path.Combine(root, "data"));
             host.SetSetting("selectedModel", "saved-model");
-            PortablePluginStore Store() => new(Path.Combine(root, "store"), new(1, 3, 0), http, _ => host);
+            PortablePluginStore Store() => new(Path.Join(root, "store"), new(1, 3, 0), http, _ => host);
             var store = Store(); await store.InitializeAsync(); await store.InstallAsync(Entry(payload));
             var firstPath = store.Resolve(Id);
             for (var cycle = 0; cycle < 3; cycle++)
@@ -102,7 +102,7 @@ public sealed class CopilotPackageTests
             var older = await File.ReadAllBytesAsync(oldArchive);
             var handler = new PackageHandler(older);
             using var http = new HttpClient(handler);
-            PortablePluginStore Store() => new(Path.Combine(root, "store"), new(1, 3, 0), http);
+            PortablePluginStore Store() => new(Path.Join(root, "store"), new(1, 3, 0), http);
             var store = Store(); await store.InitializeAsync();
             await store.InstallAsync(Entry(older, "1.0.0"));
             var oldPath = store.Resolve(Id);

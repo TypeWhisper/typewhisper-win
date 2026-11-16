@@ -25,7 +25,7 @@ public partial class OpenAiCompatiblePluginTests
             using var http = new HttpClient(new CapturingHandler((request, _) => new HttpResponseMessage(HttpStatusCode.OK)
                 { RequestMessage = request, Content = new ByteArrayContent(bytes) }));
             var host = new TestPluginHostServices();
-            PortablePluginStore Store() => new(Path.Combine(root, "store"), new(1, 3, 0), http, _ => host);
+            PortablePluginStore Store() => new(Path.Join(root, "store"), new(1, 3, 0), http, _ => host);
             var entry = new PortableCatalogEntry
             {
                 Id = "com.typewhisper.openai-compatible", Name = "OpenAI Compatible", Version = "1.1.4", MinHostVersion = "1.3.0",

@@ -23,7 +23,7 @@ public sealed partial class GeminiPluginTests
             using var http = new HttpClient(new CapturingHandler((request, _) => new(System.Net.HttpStatusCode.OK)
                 { RequestMessage = request, Content = new ByteArrayContent(bytes) }));
             var host = new TestPluginHostServices();
-            PortablePluginStore Store() => new(Path.Combine(root, "store"), new(1, 3, 0), http, _ => host);
+            PortablePluginStore Store() => new(Path.Join(root, "store"), new(1, 3, 0), http, _ => host);
             var entry = new PortableCatalogEntry
             {
                 Id = "com.typewhisper.gemini", Name = "Google Gemini", Version = PortablePluginPackage.ReadManifest(source).Version, MinHostVersion = "1.3.0",

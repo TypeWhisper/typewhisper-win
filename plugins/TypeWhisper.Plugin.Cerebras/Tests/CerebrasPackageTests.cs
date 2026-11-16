@@ -27,7 +27,7 @@ public partial class CerebrasTests
             using var http = new HttpClient(new Handler((request, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 { RequestMessage = request, Content = new ByteArrayContent(bytes) })));
             var host = new TestPluginHostServices();
-            PortablePluginStore Store() => new(Path.Combine(root, "store"), new(1, 3, 0), http, _ => host);
+            PortablePluginStore Store() => new(Path.Join(root, "store"), new(1, 3, 0), http, _ => host);
             var entry = new PortableCatalogEntry
             {
                 Id = "com.typewhisper.cerebras", Name = "Cerebras", Version = "1.2.0", MinHostVersion = "1.3.0",

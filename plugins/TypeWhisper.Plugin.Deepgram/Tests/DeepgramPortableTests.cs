@@ -156,7 +156,7 @@ public sealed class DeepgramPortableTests : IDisposable
             Sha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(payload)),
             SupportedArchitectures = [PortablePluginCatalog.Architecture]
         };
-        PortablePluginStore Store() => new(Path.Combine(_root, "store"), new(1, 3, 0), http, _ => Host);
+        PortablePluginStore Store() => new(Path.Join(_root, "store"), new(1, 3, 0), http, _ => Host);
         var store = Store(); await store.InitializeAsync();
         await store.InstallAsync(entry);
         await using (var registry = new PortablePluginRuntimeRegistry(store, new(1, 3, 0), _ => Host))
