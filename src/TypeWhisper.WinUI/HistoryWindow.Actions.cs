@@ -17,6 +17,7 @@ public sealed partial class HistoryWindow
 {
     private MediaPlayer? _player;
     private string? _playerId;
+    private readonly HistoryAudioLoads _audioLoads = new();
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _playerTimer;
     private HandCursorButton? _playButton;
     private Slider? _timeline;
@@ -243,6 +244,8 @@ public sealed partial class HistoryWindow
         if (Opened is not { } record || record.Id != id || string.IsNullOrWhiteSpace(record.AudioFileName)) return;
         if (double.IsFinite(record.DurationSeconds) && record.DurationSeconds > 0) seconds = Math.Min(seconds, record.DurationSeconds);
         var position = TimeSpan.FromSeconds(Math.Min(seconds, int.MaxValue));
+        // While this entry's audio still loads or opens, only the latest time is applied once it has opened.
+        if (_audioLoads.TrySeekPending(id, position)) return;
         if (_player is { } player && _playerId == id)
         {
             SetPosition(player, position);
@@ -263,20 +266,30 @@ public sealed partial class HistoryWindow
     {
         if (CanPlayAudio?.Invoke() == false) { _notice.Text = Loc.T("Finish the current recording or operation before playing audio."); return; }
         StopAudioPlayback();
+        // Only the latest load may install its player; an earlier one that finishes later is dropped.
+        var load = _audioLoads.Begin(id, start);
+        // A current load that gives up, because the window closed or another entry opened, leaves no time pending.
+        bool Stale()
+        {
+            if (!_audioLoads.IsCurrent(load)) return true;
+            if (!_closing && Opened?.Id == id) return false;
+            _audioLoads.Reset();
+            return true;
+        }
         try
         {
             if (PrepareAudioPlayback is { } prepare) await prepare();
             var path = await Task.Run(() => AudioPath(id));
-            if (_closing || Opened?.Id != id) return;
-            if (path is null) { _notice.Text = Loc.T("The saved audio is missing. The transcript is still available."); return; }
+            if (Stale()) return;
+            if (path is null) { _audioLoads.Reset(); _notice.Text = Loc.T("The saved audio is missing. The transcript is still available."); return; }
             var file = await StorageFile.GetFileFromPathAsync(path);
-            if (_closing || Opened?.Id != id) return;
+            if (Stale()) return;
             var player = _player = new MediaPlayer { AutoPlay = play, Source = MediaSource.CreateFromStorageFile(file) };
             _playerId = id;
-            // The position can only be set once the media has opened.
-            if (start is { } position) player.MediaOpened += (_, _) => DispatcherQueue.TryEnqueue(() =>
+            // The position can only be set once the media has opened; seeks until then leave only the latest time.
+            player.MediaOpened += (_, _) => DispatcherQueue.TryEnqueue(() =>
             {
-                if (ReferenceEquals(_player, player)) SetPosition(player, position);
+                if (ReferenceEquals(_player, player) && _audioLoads.Opened(load) is { } position) SetPosition(player, position);
             });
             player.MediaEnded += (_, _) => DispatcherQueue.TryEnqueue(() =>
             {
@@ -301,6 +314,8 @@ public sealed partial class HistoryWindow
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             AppDiagnostics.Write("history.playback.failed", ex);
+            // A newer load owns the player by now; a stale failure must not stop it.
+            if (!_audioLoads.IsCurrent(load)) return;
             StopAudioPlayback();
             _notice.Text = Loc.T("The saved audio could not be played. Check the file and audio output.");
         }
@@ -333,6 +348,8 @@ public sealed partial class HistoryWindow
 
     internal void StopAudioPlayback()
     {
+        // Loads still running become stale, so none of them installs a player afterwards.
+        _audioLoads.Reset();
         _playerTimer?.Stop();
         var player = _player;
         _player = null;
