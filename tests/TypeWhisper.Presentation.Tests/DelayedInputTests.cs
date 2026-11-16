@@ -14,6 +14,19 @@ public sealed class DelayedInputTests
         Assert.Equal(stale, InputEventTiming.IsStale(timestamp, now));
 
     [Fact]
+    public void FreshNativeEventIsNotStaleAfterSleep()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        // Hook and message timestamps come from GetTickCount, which counts sleep time.
+        // A clock without sleep time (Environment.TickCount64 since .NET 11) drifts after a resume.
+        var eventTime = GetTickCount();
+        Assert.False(InputEventTiming.IsStale(eventTime, InputEventTiming.Now));
+    }
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", ExactSpelling = true)]
+    private static extern uint GetTickCount();
+
+    [Fact]
     public void DelayedChordCannotStartUntilAllKeysAreReleased()
     {
         var state = new HybridHotkeyState();

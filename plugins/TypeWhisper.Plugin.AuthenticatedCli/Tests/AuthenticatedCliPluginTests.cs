@@ -1120,12 +1120,12 @@ public sealed class AuthenticatedCliPluginTests
                 "tests",
                 "TypeWhisper.FakeProviderCli",
                 "bin");
+            // Any target framework folder, so the lookup survives a .NET upgrade of the fake CLI.
             var candidate = new[] { configuration, "Debug", "Release" }
                 .Distinct()
-                .Select(candidateConfiguration => Path.Combine(
-                    outputRoot,
-                    candidateConfiguration,
-                    "net10.0-windows10.0.19041.0"))
+                .Select(candidateConfiguration => Path.Combine(outputRoot, candidateConfiguration))
+                .Where(Directory.Exists)
+                .SelectMany(Directory.EnumerateDirectories)
                 .Where(candidateDirectory => File.Exists(Path.Combine(
                     candidateDirectory,
                     "TypeWhisper.FakeProviderCli.exe")))

@@ -117,7 +117,7 @@ internal sealed class HotkeyRegistration : IShortcutRegistrationBackend, IMouseS
             _queue.TryEnqueue(() =>
             {
                 if (_registered && _mouseChords.Contains(pressed))
-                    _dispatch.Invoke(pressed, time, Environment.TickCount64, ShortcutRecorder.CaptureRegisteredShortcut);
+                    _dispatch.Invoke(pressed, time, InputEventTiming.Now, ShortcutRecorder.CaptureRegisteredShortcut);
             });
         return owned;
     }
@@ -137,7 +137,7 @@ internal sealed class HotkeyRegistration : IShortcutRegistrationBackend, IMouseS
     {
         if (message == WmHotkey && _bindings.FirstOrDefault(binding => binding.Value == wParam.ToInt32()).Key is { } chord)
         {
-            _dispatch.Invoke(chord, unchecked((uint)NativeMethods.GetMessageTime()), Environment.TickCount64,
+            _dispatch.Invoke(chord, unchecked((uint)NativeMethods.GetMessageTime()), InputEventTiming.Now,
                 ShortcutRecorder.CaptureRegisteredShortcut);
         }
 

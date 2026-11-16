@@ -57,7 +57,7 @@ internal sealed class DictationHotkeyRegistration : IShortcutRegistrationBackend
         void Feed(int key, bool down, uint time)
         {
             var mode = recordingMode();
-            var now = Environment.TickCount64;
+            var now = InputEventTiming.Now;
             // Two SystemParametersInfo calls; read only for an event that compares a gap, at most once per event.
             _state.ReadLostReleaseFrom(LostReleaseFromRepeatTiming);
             Dispatch(_state.Key(key, down, now - InputEventTiming.Age(time, now), _bindings, isRecording(), mode, paused?.Invoke() == true,
