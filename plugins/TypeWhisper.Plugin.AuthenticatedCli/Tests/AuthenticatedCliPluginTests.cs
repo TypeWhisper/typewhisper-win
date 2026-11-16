@@ -1120,16 +1120,19 @@ public sealed class AuthenticatedCliPluginTests
                 "tests",
                 "TypeWhisper.FakeProviderCli",
                 "bin");
-            // Any target framework folder, so the lookup survives a .NET upgrade of the fake CLI.
+            // The fake CLI targets the same .NET as these tests, so only that framework folder counts: an output left
+            // from an earlier .NET version is never picked, whatever its timestamp.
+            var framework = $"net{Environment.Version.Major}.{Environment.Version.Minor}-";
             var candidate = new[] { configuration, "Debug", "Release" }
                 .Distinct()
-                .Select(candidateConfiguration => Path.Combine(outputRoot, candidateConfiguration))
+                .Select(candidateConfiguration => Path.Join(outputRoot, candidateConfiguration))
                 .Where(Directory.Exists)
                 .SelectMany(Directory.EnumerateDirectories)
-                .Where(candidateDirectory => File.Exists(Path.Combine(
+                .Where(candidateDirectory => Path.GetFileName(candidateDirectory).StartsWith(framework, StringComparison.OrdinalIgnoreCase))
+                .Where(candidateDirectory => File.Exists(Path.Join(
                     candidateDirectory,
                     "TypeWhisper.FakeProviderCli.exe")))
-                .OrderByDescending(candidateDirectory => File.GetLastWriteTimeUtc(Path.Combine(
+                .OrderByDescending(candidateDirectory => File.GetLastWriteTimeUtc(Path.Join(
                     candidateDirectory,
                     "TypeWhisper.FakeProviderCli.exe")))
                 .FirstOrDefault();
