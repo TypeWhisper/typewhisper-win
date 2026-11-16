@@ -92,6 +92,43 @@ public sealed class ModuleSpeechInputTests
     }
 
     [Fact]
+    public async Task TheMicrophoneSetupDoesNotCountAgainstTheMaximumDuration()
+    {
+        // Opening takes two seconds of the three the input may last.
+        var runtime = new FakeRuntime { OpenDelay = TimeSpan.FromSeconds(2) };
+        var states = new StateLog();
+        var listen = new ModuleSpeechInput(runtime, _ => { }).ListenAsync(new() { MaximumDuration = TimeSpan.FromSeconds(3) }, states);
+
+        runtime.Run(TimeSpan.FromSeconds(5), Speech);
+        var result = await listen;
+
+        Assert.Equal(ModuleSpeechInputEnding.MaximumDuration, result.Ending);
+        var listening = states.Items.Where(state => state.Phase == ModuleSpeechInputPhase.Listening).ToArray();
+        Assert.Equal(TimeSpan.Zero, listening[0].Elapsed);
+        Assert.Equal(TimeSpan.FromSeconds(2.9), listening[^1].Elapsed);
+    }
+
+    [Fact]
+    public async Task APolicyThatRefusesTheEngineWhileRecordingEndsTheInputAsARefusal()
+    {
+        var runtime = new FakeRuntime();
+        var written = new List<string>();
+        var listen = new ModuleSpeechInput(runtime, written.Add).ListenAsync();
+
+        runtime.Run(TimeSpan.FromSeconds(1), Speech);
+        runtime.Refused = "Sending audio to Cloud is turned off by your organization.";
+        runtime.Run(Step, Speech);
+
+        var error = await Assert.ThrowsAsync<ModuleSpeechInputException>(() => listen);
+        Assert.Equal(ModuleSpeechInputErrorKind.Refused, error.Kind);
+        Assert.Equal(runtime.Refused, error.Message);
+        Assert.False(runtime.Capture!.Stopped);
+        Assert.True(runtime.Capture.Disposed);
+        Assert.Equal(0, runtime.Transcriptions);
+        Assert.Equal("modules.speech-input.failed kind=refused", written[^1]);
+    }
+
+    [Fact]
     public async Task AStopBeforeTheMicrophoneOpenedEndsTheRecordingAtOnce()
     {
         var runtime = new FakeRuntime { OpenGate = new(TaskCreationOptions.RunContinuationsAsynchronously) };
@@ -317,12 +354,12 @@ public sealed class ModuleSpeechInputTests
     [Fact]
     public async Task TheDictionaryCorrectsTheTextButSnippetsDoNotExpand()
     {
-        var root = Path.Combine(Path.GetTempPath(), "speech-input-" + Guid.NewGuid());
+        var root = Path.Join(Path.GetTempPath(), "speech-input-" + Guid.NewGuid());
         Directory.CreateDirectory(root);
         try
         {
-            var dictionaryPath = Path.Combine(root, "dictionary.json");
-            var snippetPath = Path.Combine(root, "snippets.json");
+            var dictionaryPath = Path.Join(root, "dictionary.json");
+            var snippetPath = Path.Join(root, "snippets.json");
             File.WriteAllText(snippetPath, JsonSerializer.Serialize(new[] { new Snippet { Id = "signature", Trigger = "sig", Replacement = "Expanded" } }));
             File.WriteAllText(dictionaryPath, JsonSerializer.Serialize(new[]
             {
@@ -359,6 +396,7 @@ public sealed class ModuleSpeechInputTests
         public CancellationTokenSource Host { get; } = new();
         public Exception? OpenError { get; init; }
         public TaskCompletionSource? OpenGate { get; init; }
+        public TimeSpan OpenDelay { get; init; }
         public float Peak { get; init; } = 0.1f;
         public FakeCapture? Capture { get; private set; }
         public int Transcriptions;
@@ -370,6 +408,7 @@ public sealed class ModuleSpeechInputTests
         public async Task<ISpeechInputCapture> OpenAsync(Action<float> level, CancellationToken cancellationToken)
         {
             if (OpenGate is not null) await OpenGate.Task;
+            Now += OpenDelay;
             cancellationToken.ThrowIfCancellationRequested();
             if (OpenError is not null) throw OpenError;
             _level = level;

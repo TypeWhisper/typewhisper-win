@@ -111,8 +111,10 @@ internal sealed class ModuleSpeechInput : ISpeechInput
         progress?.Report(new(ModuleSpeechInputPhase.Starting));
         // Without a timeout, silence is still tracked to report whether speech was heard.
         var silence = new SilenceAutoStop(silenceTimeout ?? TimeSpan.MaxValue);
+        // Silence is judged on the runtime's clock; the duration counts from when the microphone records, so its setup
+        // does not shorten the input.
+        await using var capture = await _runtime.OpenAsync(level => silence.Observe(_runtime.Now, level), cancellationToken);
         var origin = _runtime.Now;
-        await using var capture = await _runtime.OpenAsync(level => silence.Observe(_runtime.Now - origin, level), cancellationToken);
         var token = capture.Cancellation;
         ModuleSpeechInputEnding ending;
         using (token.Register(listening.Cancel))
@@ -127,9 +129,16 @@ internal sealed class ModuleSpeechInput : ISpeechInput
                         Loc.T("Microphone disconnected · recording stopped")));
                     return;
                 }
-                var elapsed = _runtime.Now - origin;
+                // The policy may refuse the engine while the input records; nothing more is recorded for it.
+                if (_runtime.Refusal() is { } refused)
+                {
+                    listening.Fail(new ModuleSpeechInputException(ModuleSpeechInputErrorKind.Refused, refused));
+                    return;
+                }
+                var now = _runtime.Now;
+                var elapsed = now - origin;
                 if (elapsed >= maximumDuration) listening.End(ModuleSpeechInputEnding.MaximumDuration);
-                else if (silence.HasActivity && silence.ShouldStop(elapsed, false)) listening.End(ModuleSpeechInputEnding.Silence);
+                else if (silence.HasActivity && silence.ShouldStop(now, false)) listening.End(ModuleSpeechInputEnding.Silence);
                 else progress?.Report(new(ModuleSpeechInputPhase.Listening)
                     { Level = Loudness(capture.Level), Elapsed = elapsed, HeardSpeech = silence.HasActivity });
             }
