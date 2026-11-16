@@ -278,6 +278,8 @@ public sealed class HistorySearchIndexer
             _stalled = true;
             return false;
         }
+        // Taken before History is read: a change after it ends the batches below, so the next pass sees it.
+        var changedAt = Interlocked.Read(ref _lastChange);
         var records = _history.Records;
 
         if (_known is null)
@@ -345,25 +347,34 @@ public sealed class HistorySearchIndexer
             return true;
         }
 
-        var batch = due.Take(BatchSize).Select(HistorySearchRecord.From).OfType<HistorySearchRecord>().ToArray();
-        try
+        // Batch after batch from this comparison, so building a large index does not compare History again for each
+        // batch. A History change, a dictation, a damaged file or a request to stop ends the run; the next pass then
+        // compares again, removals first.
+        for (var start = 0; start < due.Length; start += BatchSize)
         {
-            _index.Upsert(batch);
-            _failures = 0;
-            foreach (var record in batch) _known[record.Id] = record.ContentHash;
-        }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
-        {
-            _report("history-search.update-failed", ex);
-            // The index deleted a damaged file and asks for the rebuild itself.
-            if (ex is HistorySearchIndexException { IsUnusableFile: true }) return true;
-            if (++_failures > UpsertRetries)
+            if (start > 0 && (_stopped || _damaged || _disableRequested || !_enabled || _isBusy()
+                || Interlocked.Read(ref _lastChange) != changedAt)) return true;
+            var batch = due.Skip(start).Take(BatchSize).Select(HistorySearchRecord.From).OfType<HistorySearchRecord>().ToArray();
+            try
             {
+                _index.Upsert(batch);
                 _failures = 0;
-                _stalled = true;
-                return false;
+                foreach (var record in batch) _known[record.Id] = record.ContentHash;
             }
-            await SleepAsync(_retryDelay).ConfigureAwait(false);
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                _report("history-search.update-failed", ex);
+                // The index deleted a damaged file and asks for the rebuild itself.
+                if (ex is HistorySearchIndexException { IsUnusableFile: true }) return true;
+                if (++_failures > UpsertRetries)
+                {
+                    _failures = 0;
+                    _stalled = true;
+                    return false;
+                }
+                await SleepAsync(_retryDelay).ConfigureAwait(false);
+                return true;
+            }
         }
         return true;
     }
@@ -372,7 +383,10 @@ public sealed class HistorySearchIndexer
     private void Rebuild()
     {
         _known = null;
-        if (!_index.Destroy()) _report("history-search.delete-failed", new IOException("The search index could not be deleted."));
+        if (_index.Destroy()) return;
+        _report("history-search.delete-failed", new IOException("The search index could not be deleted."));
+        // Trying again at once would fail the same way; the next History change or preparation tries again.
+        _stalled = true;
     }
 
     // Completes the waiters that registered before `pass` started, or every waiter; with an error, they fail.

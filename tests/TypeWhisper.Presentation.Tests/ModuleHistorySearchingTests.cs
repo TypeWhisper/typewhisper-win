@@ -79,6 +79,25 @@ public sealed class ModuleHistorySearchingTests : IDisposable
     }
 
     [Fact]
+    public async Task AnEditedRecordIsLeftOutUntilItIsIndexedAgain()
+    {
+        var original = HistorySearchTestData.Record("a", "the secret budget plan");
+        _index.Upsert([HistorySearchRecord.From(original)!]);
+        _history.Replace(original with { RawText = "the budget plan", FinalText = "the budget plan" });
+        _indexer.Start();
+        var searching = Searching();
+
+        Assert.Empty(await searching.SearchAsync(new(["secret"])));
+        Assert.Empty(await searching.SearchAsync(new(["budget"])));
+        Assert.Null(await searching.TranscriptAsync("a"));
+        Assert.Equal(0, (await searching.NewestRecordsAsync(new(), 5)).Total);
+
+        _index.Upsert([HistorySearchRecord.From(_history.Records[0])!]);
+        Assert.Empty(await searching.SearchAsync(new(["secret"])));
+        Assert.Equal(["a"], (await searching.SearchAsync(new(["budget"]))).Select(hit => hit.RecordId));
+    }
+
+    [Fact]
     public void ScopesAndPassagesMapToTheIndex()
     {
         var current = new HashSet<string> { "a", "b" };
@@ -111,6 +130,9 @@ public sealed class ModuleHistorySearchingTests : IDisposable
         Assert.True(new ModuleHistorySearchScope { Domains = new HashSet<string> { "Example.COM" }, Sources = new HashSet<string> { "file" } }.Includes(hit));
         Assert.False(new ModuleHistorySearchScope { AppProcessNames = new HashSet<string> { "winword" } }.Includes(hit));
         Assert.False(new ModuleHistorySearchScope { RecordIds = new HashSet<string>() }.Includes(hit));
+        // Requested domains are compared as the index stores them.
+        Assert.True(new ModuleHistorySearchScope { Domains = new HashSet<string> { " WWW.Example.com. " } }.Includes(hit));
+        Assert.False(new ModuleHistorySearchScope { Domains = new HashSet<string> { "www.", " " } }.Includes(hit));
     }
 }
 

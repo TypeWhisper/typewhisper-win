@@ -5,8 +5,9 @@ using TypeWhisper.Presentation;
 
 namespace TypeWhisper.WinUI;
 
-// IHistorySearching over the History search index. Reads run off the UI thread and are limited to the records History
-// still has, so text a user deleted is never returned while the indexer is still removing it.
+// IHistorySearching over the History search index. Reads run off the UI thread and are limited to the records whose
+// indexed content matches History now, so text a user deleted or edited away is never returned while the indexer
+// catches up.
 internal sealed class ModuleHistorySearching : IHistorySearching
 {
     private readonly HistorySearchIndexer _indexer;
@@ -97,9 +98,16 @@ internal sealed class ModuleHistorySearching : IHistorySearching
         catch (Exception ex) when (ex is not (OperationCanceledException or OutOfMemoryException)) { return empty; }
         return await Task.Run(() =>
         {
-            var current = _history.Records.Where(HistorySearchRecord.Indexes).Select(record => record.Id).ToFrozenSet(StringComparer.Ordinal);
             cancellationToken.ThrowIfCancellationRequested();
-            try { return read(current); }
+            try
+            {
+                // A record whose indexed content hash differs from History's was changed since it was indexed.
+                var indexed = _index.ContentHashes();
+                var current = _history.Records.Where(HistorySearchRecord.Indexes)
+                    .Where(record => indexed.TryGetValue(record.Id, out var hash) && hash == HistorySearchRecord.HashOf(record))
+                    .Select(record => record.Id).ToFrozenSet(StringComparer.Ordinal);
+                return read(current);
+            }
             catch (HistorySearchIndexException ex) { throw new InvalidOperationException("The History search index could not be read.", ex); }
         }, cancellationToken);
     }

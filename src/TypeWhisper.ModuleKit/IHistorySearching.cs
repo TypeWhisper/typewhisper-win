@@ -6,7 +6,8 @@ namespace TypeWhisper.ModuleKit;
 /// <summary>Searches the host's full-text index of History.</summary>
 /// <remarks>
 /// The host keeps the index in step with History: added and changed records are indexed in the background, removed
-/// records leave it at once, and clearing History empties it. Reads only return records History still has. The index
+/// records leave it at once, and clearing History empties it. Reads only return records whose content the index holds
+/// as History has it now: a removed record, or a changed one that is not indexed again yet, is left out. The index
 /// is off until a module calls <see cref="PrepareAsync"/>; it then stays on across restarts until
 /// <see cref="DisableAsync"/> or "Delete all data". While it is off, reads find nothing.
 /// </remarks>
@@ -135,7 +136,10 @@ public sealed record ModuleHistorySearchScope
     /// <summary>The process names of apps, as <see cref="ModuleHistoryApp.ProcessName"/> names them, compared without case.</summary>
     public IReadOnlySet<string> AppProcessNames { get; init; } = new HashSet<string>();
 
-    /// <summary>Website domains such as <c>"example.com"</c>, compared without case.</summary>
+    /// <summary>
+    /// Website domains such as <c>"example.com"</c>, compared as the index stores them: without case, surrounding
+    /// spaces, a trailing dot or a leading <c>www.</c>.
+    /// </summary>
     public IReadOnlySet<string> Domains { get; init; } = new HashSet<string>();
 
     /// <summary>The records the search is limited to, or null for no such limit. An empty set matches none.</summary>
@@ -150,8 +154,18 @@ public sealed record ModuleHistorySearchScope
         return (Period?.Contains(hit.RecordedAt) ?? true)
             && (Sources.Count == 0 || Sources.Contains(hit.Source))
             && AppProcessNames.Count == 0
-            && (Domains.Count == 0 || hit.Domain is { } domain && Domains.Any(item => string.Equals(item, domain, StringComparison.OrdinalIgnoreCase)))
+            && (Domains.Count == 0 || hit.Domain is { } domain && Domains.Any(item => NormalizedDomain(item) is { } requested
+                && string.Equals(requested, NormalizedDomain(domain), StringComparison.Ordinal)))
             && (RecordIds?.Contains(hit.RecordId) ?? true);
+    }
+
+    // A domain as the index stores it, or null when nothing is left.
+    private static string? NormalizedDomain(string? domain)
+    {
+        if (string.IsNullOrWhiteSpace(domain)) return null;
+        var normalized = domain.Trim().TrimEnd('.').ToLowerInvariant();
+        if (normalized.StartsWith("www.", StringComparison.Ordinal)) normalized = normalized[4..];
+        return normalized.Length == 0 ? null : normalized;
     }
 }
 

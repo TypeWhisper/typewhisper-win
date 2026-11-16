@@ -545,6 +545,28 @@ public sealed class HistorySearchIndexerTests : IDisposable
     }
 
     [Fact]
+    public async Task AnIndexThatCannotBeDeletedStopsTheIndexerUntilTheNextChange()
+    {
+        _history.Replace(HistorySearchTestData.Record("a", "budget"));
+        var indexer = Indexer();
+        await indexer.PrepareAsync();
+        _index.Close();
+        int Deletions() { lock (_failures) return _failures.Count(stage => stage == "history-search.delete-failed"); }
+
+        using (new FileStream(Path.Join(_directory, HistorySearchIndex.FileName), FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            _history.Replace();
+            await Assert.ThrowsAsync<InvalidOperationException>(() => indexer.WaitForQueuedWorkAsync());
+            await Task.Delay(200);
+            Assert.Equal(1, Deletions());
+        }
+
+        _history.Replace(HistorySearchTestData.Record("b", "weather"));
+        await indexer.PrepareAsync();
+        Assert.Equal(["b"], Indexed());
+    }
+
+    [Fact]
     public async Task NothingWaitsForAnIndexerThatStopped()
     {
         _history.Replace(HistorySearchTestData.Record("a", "budget"));

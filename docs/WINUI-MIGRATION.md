@@ -36,8 +36,8 @@ bundled native SQLite.
   written two seconds after the last change in batches of 50 and wait while a
   dictation runs. Clearing History deletes the file and starts an empty one.
 - **Privacy.** Deleted rows are overwritten (`secure_delete` and FTS5
-  `secure-delete`), and reads return only records History still has, so deleted
-  text is never returned while the indexer catches up.
+  `secure-delete`), and reads return only records whose indexed content matches
+  History, so deleted or edited text is never returned while the indexer catches up.
 - **User data.** "Export all data" leaves the `HistorySearch` folder out
   (`UserDataExport.IsExcluded`). "Delete all data" removes it with the rest of the
   profile; the indexer stops and closes the file before a restore or a deletion.
