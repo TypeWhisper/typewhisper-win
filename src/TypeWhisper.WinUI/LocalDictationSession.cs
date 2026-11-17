@@ -691,8 +691,12 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         if (SessionOperationRefusal() is { } busy) return busy;
         // Interactive settings actions and spoken feedback are cancellable at recording startup. Admit the hotkey while
         // one is active so it can reach that cancellation before using a provider. An LLM request, such as a module's
-        // answer, ends on its own, so a dictation that needs a plugin only waits for it.
-        if (PluginRuntime.IsBusyBeyondLlmRequest && RecordingStarting is null && !SpokenFeedback.IsBusy && !LocalLlmDownload.State.IsBusy)
+        // answer, ends on its own, so a dictation that needs a plugin only waits for it. A streaming provider is the
+        // exception: its stream opens under the runtime queue while the microphone already records, and a stop in
+        // that wait would not end the recording, so it still waits for every runtime operation.
+        var streams = UsesRegistryProvider && ActiveRegistryProvider is { SupportsStreaming: true };
+        if ((streams ? PluginRuntime.IsBusy : PluginRuntime.IsBusyBeyondLlmRequest)
+            && RecordingStarting is null && !SpokenFeedback.IsBusy && !LocalLlmDownload.State.IsBusy)
             return "plugins-busy";
 #if DEBUG
         if (CorrectionProbeEnabled) return null;
