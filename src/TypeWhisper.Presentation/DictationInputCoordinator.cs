@@ -22,20 +22,27 @@ public sealed class DictationInputCoordinator : IDisposable
     private readonly Func<Action, bool> _dispatch;
     private readonly Action<Exception>? _reportError;
     private readonly Action? _markStop;
+    private readonly Action<string>? _reportDropped;
     private readonly TimeProvider _clock;
+    // A start that waits longer than this for the UI thread is discarded, so a late one never surprises the user.
+    private static readonly TimeSpan StartExpiry = TimeSpan.FromMilliseconds(500);
     private bool _busy, _starting, _disposed;
     private DictationInputAction? _terminal;
     private RecordingMode _observedMode;
     private TaskCompletionSource _completion = Completed();
 
     /// <summary>Creates a coordinator. Submit, configuration observations and disposal must use the same UI thread; dispatch schedules audio work on that thread.
-    /// markStop records where the user stopped speaking when a stop arrives while a start is still running.</summary>
+    /// markStop records where the user stopped speaking when a stop arrives while a start is still running.
+    /// reportDropped receives why the coordinator itself discarded a start; a start that canStart refuses is not reported
+    /// here, since that condition knows its own reason.</summary>
     public DictationInputCoordinator(Func<Task> start, Func<Task> stop, Func<Task> cancel,
         Func<bool> recording, Func<bool> canStart, Func<RecordingMode> mode,
-        Func<Action, bool>? dispatch = null, Action<Exception>? reportError = null, Action? markStop = null, TimeProvider? timeProvider = null)
+        Func<Action, bool>? dispatch = null, Action<Exception>? reportError = null, Action? markStop = null, TimeProvider? timeProvider = null,
+        Action<string>? reportDropped = null)
     {
         _start = start; _stop = stop; _cancel = cancel; _recording = recording; _canStart = canStart; _mode = mode;
         _dispatch = dispatch ?? (action => { action(); return true; }); _reportError = reportError; _markStop = markStop;
+        _reportDropped = reportDropped;
         _clock = timeProvider ?? TimeProvider.System;
         _observedMode = mode();
     }
@@ -70,10 +77,19 @@ public sealed class DictationInputCoordinator : IDisposable
             }
             return Completion;
         }
-        if (_busy) return Completion;
+        if (_busy)
+        {
+            if (action == DictationInputAction.Start) _reportDropped?.Invoke("busy");
+            return Completion;
+        }
         if (action == DictationInputAction.Start)
         {
-            if (_recording() || !(canStartOverride ?? _canStart)()) return Completion;
+            if (_recording())
+            {
+                _reportDropped?.Invoke("recording");
+                return Completion;
+            }
+            if (!(canStartOverride ?? _canStart)()) return Completion;
             _starting = true;
         }
         else if (!_recording()) return Completion;
@@ -102,8 +118,18 @@ public sealed class DictationInputCoordinator : IDisposable
                 ObserveMode();
                 // Expiry applies only before capture begins. Slow model startup must still honor
                 // a pending stop/cancel, and a delayed stop must never leave the microphone on.
-                if (_disposed || _terminal == DictationInputAction.Cancel || !canStart()
-                    || _clock.GetElapsedTime(acceptedAt) > TimeSpan.FromMilliseconds(500)) return;
+                if (_disposed || _terminal == DictationInputAction.Cancel)
+                {
+                    _reportDropped?.Invoke(_disposed ? "closing" : "canceled");
+                    return;
+                }
+                if (!canStart()) return;
+                var waited = _clock.GetElapsedTime(acceptedAt);
+                if (waited > StartExpiry)
+                {
+                    _reportDropped?.Invoke("expired waitedMs=" + (long)waited.TotalMilliseconds);
+                    return;
+                }
                 await (startOverride ?? _start)();
                 ObserveMode();
                 _starting = false;

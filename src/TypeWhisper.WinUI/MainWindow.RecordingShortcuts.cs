@@ -30,6 +30,14 @@ public sealed partial class MainWindow
 
     }
 
+    // A shortcut start the session refuses logs why, since the user sees nothing happen.
+    private bool CanStartDictation(Func<string?> sessionRefusal)
+    {
+        var refusal = DictationHotkeysPaused ? "shortcuts-paused" : sessionRefusal();
+        if (refusal is not null) AppDiagnostics.Write("dictation.start-refused reason=" + refusal);
+        return refusal is null;
+    }
+
     private void InitializeRecordingShortcuts()
     {
         if (_closing || _profileRestoreClosing) return;

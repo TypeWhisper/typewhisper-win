@@ -189,7 +189,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     internal IReadOnlyList<string> LanguageChoices => UsesRegistryProvider ? SupportedLanguages : SpokenLanguageChoices.For(SupportedLanguages);
     internal string Language => !UsesRegistryProvider ? Models.Language : SupportedLanguages.Count == 0 ? "auto" : ActiveRegistryProvider is { } provider
         ? WinUIPluginPackages.CreateServices(provider.PluginId).GetSetting<string>("Language") ?? "auto" : "auto";
-    private bool CanStartSessionOperation => !_disposed && !_fileBusy && !_recorderReserved && !_workflowReserved && !IsRecording && _phase is not (DictationPhase.Processing or DictationPhase.Configuring or DictationPhase.LoadingModel);
+    private bool CanStartSessionOperation => SessionOperationRefusal() is null;
     internal bool CanChangeProvider => CanStartSessionOperation && !PluginRuntime.IsBusy;
     internal bool CanStartPluginSettingsAction => CanChangeProvider && _gate.CurrentCount > 0;
     internal bool HasActiveUserWork => _fileBusy || _recorderReserved || _workflowReserved || IsRecording || _phase == DictationPhase.Processing;
@@ -680,18 +680,34 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     }
 
     internal Task ToggleAsync() => SetRecordingAsync(null);
-    // Interactive settings actions and spoken feedback are cancellable at recording startup. Admit the
-    // hotkey while one is active so it can reach that cancellation before using a provider.
-    internal bool CanStartFromShortcut => CanStartShortcut(IsReady);
+    // Why a dictation shortcut cannot start now, as a short diagnostic reason, or null when it can.
+    internal string? ShortcutStartRefusal => ShortcutRefusal(IsReady);
     // A workflow with its own model can start while the selected model is unavailable; its model loads at the start.
-    internal bool CanStartWorkflowModelShortcut(string? model) =>
-        CanStartShortcut(IsReady || (!TranscriptionSelectionLocked && !string.IsNullOrWhiteSpace(model)));
-    private bool CanStartShortcut(bool ready) => CanCaptureWhileModelLoads || CanStartSessionOperation
-        && (!PluginRuntime.IsBusy || RecordingStarting is not null || SpokenFeedback.IsBusy || LocalLlmDownload.State.IsBusy) && (ready
+    internal string? WorkflowModelShortcutStartRefusal(string? model) =>
+        ShortcutRefusal(IsReady || (!TranscriptionSelectionLocked && !string.IsNullOrWhiteSpace(model)));
+    private string? ShortcutRefusal(bool ready)
+    {
+        if (CanCaptureWhileModelLoads) return null;
+        if (SessionOperationRefusal() is { } busy) return busy;
+        // Interactive settings actions and spoken feedback are cancellable at recording startup. Admit the hotkey while
+        // one is active so it can reach that cancellation before using a provider. An LLM request, such as a module's
+        // answer, ends on its own, so a dictation that needs a plugin only waits for it.
+        if (PluginRuntime.IsBusyBeyondLlmRequest && RecordingStarting is null && !SpokenFeedback.IsBusy && !LocalLlmDownload.State.IsBusy)
+            return "plugins-busy";
 #if DEBUG
-        || CorrectionProbeEnabled
+        if (CorrectionProbeEnabled) return null;
 #endif
-        );
+        return ready ? null : "not-ready";
+    }
+    // Why no recording, transcription or model operation can start now, or null.
+    private string? SessionOperationRefusal() =>
+        _disposed ? "closing"
+        : _fileBusy ? "file-transcription"
+        : _recorderReserved ? "recorder"
+        : _workflowReserved ? "workflow"
+        : IsRecording ? "recording"
+        : _phase is DictationPhase.Processing or DictationPhase.Configuring or DictationPhase.LoadingModel ? "phase-" + _phase.ToString().ToLowerInvariant()
+        : null;
 #if DEBUG
     internal static bool CorrectionProbeEnabled => WinUIProfile.IsTestProfile && Environment.GetEnvironmentVariable("TYPEWHISPER_WINUI_CORRECTION_PROBE") == "1";
 #endif

@@ -292,4 +292,51 @@ public sealed class DictationInputCoordinatorTests
         await input.SubmitAsync(DictationInputAction.Start);
         Assert.Equal(2, starts); Assert.Equal(2, errors.Count);
     }
+
+    private sealed class SteppedClock : TimeProvider
+    {
+        internal long Ticks;
+        public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+        public override long GetTimestamp() => Ticks;
+    }
+
+    [Fact]
+    public async Task StartThatWaitedTooLongForTheDispatcherIsReportedAsExpired()
+    {
+        var queued = new Queue<Action>();
+        var dropped = new List<string>();
+        var clock = new SteppedClock();
+        var session = new Session();
+        using var input = new DictationInputCoordinator(() => { session.Starts++; return Task.CompletedTask; },
+            () => Task.CompletedTask, () => Task.CompletedTask, () => false, () => true, () => RecordingMode.Hold,
+            action => { queued.Enqueue(action); return true; }, timeProvider: clock, reportDropped: dropped.Add);
+        var pending = input.SubmitAsync(DictationInputAction.Start);
+        clock.Ticks += TimeSpan.FromMilliseconds(750).Ticks;
+        queued.Dequeue()();
+        await pending.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(0, session.Starts);
+        Assert.Equal(["expired waitedMs=750"], dropped);
+    }
+
+    [Fact]
+    public async Task StartDuringFinalProcessingIsReportedAndARefusedConditionIsLeftToItsOwner()
+    {
+        var dropped = new List<string>();
+        var ready = true;
+        var finish = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var recording = false;
+        using var input = new DictationInputCoordinator(() => { recording = true; return Task.CompletedTask; },
+            async () => { recording = false; await finish.Task; }, () => Task.CompletedTask, () => recording, () => ready,
+            () => RecordingMode.Hold, reportDropped: dropped.Add);
+        await input.SubmitAsync(DictationInputAction.Start);
+        var finishing = input.SubmitAsync(DictationInputAction.Stop);
+        _ = input.SubmitAsync(DictationInputAction.Start);
+        _ = input.SubmitAsync(DictationInputAction.Stop);
+        finish.SetResult();
+        await finishing.WaitAsync(TimeSpan.FromSeconds(5));
+        ready = false;
+        await input.SubmitAsync(DictationInputAction.Start);
+        Assert.Equal(["busy"], dropped);
+        Assert.False(recording);
+    }
 }

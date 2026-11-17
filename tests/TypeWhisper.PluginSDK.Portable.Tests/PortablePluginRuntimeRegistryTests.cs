@@ -315,6 +315,34 @@ public sealed partial class PortablePluginRuntimeRegistryTests : IDisposable
     }
 
     [Fact]
+    public async Task RunningLlmRequestLeavesTheRuntimeBusyButNotBeyondTheRequest()
+    {
+        var store = await Store();
+        await using var registry = Registry(store);
+        Assert.Null(await registry.SetEnabledAsync(Id, true));
+        // Enabling queues a capability refresh; wait until it has run.
+        while (registry.IsBusy) await Task.Delay(10);
+        Assert.False(registry.IsBusyBeyondLlmRequest);
+
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var request = registry.UseLlmAsync(Id, async (_, _) => { started.SetResult(); await release.Task; return "answer"; });
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.True(registry.IsBusy);
+        Assert.False(registry.IsBusyBeyondLlmRequest);
+        release.SetResult();
+        Assert.Equal("answer", await request);
+        while (registry.IsBusy) await Task.Delay(10);
+
+        var holding = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var held = registry.UseConfigurationAsync(Id, async (_, _) => { await holding.Task; return true; });
+        while (!registry.IsBusy) await Task.Delay(10);
+        Assert.True(registry.IsBusyBeyondLlmRequest);
+        holding.SetResult();
+        Assert.True(await held);
+    }
+
+    [Fact]
     public async Task CancelingSettingsTransferReleasesQueuedForegroundLlmRequest()
     {
         var store = await Store();

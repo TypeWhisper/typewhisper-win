@@ -4,7 +4,7 @@ internal sealed partial class LocalDictationSession
 {
     private bool _workflowReserved;
     internal bool CanStartWorkflowShortcut => CanStartSessionOperation
-        && (!PluginRuntime.IsBusy || LocalLlmDownload.State.IsBusy) && !Models.Busy;
+        && (!PluginRuntime.IsBusyBeyondLlmRequest || LocalLlmDownload.State.IsBusy) && !Models.Busy;
     internal IDisposable ReserveWorkflowShortcut()
     {
         if (!CanStartWorkflowShortcut || !_gate.Wait(0))
