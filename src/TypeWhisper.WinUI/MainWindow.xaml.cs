@@ -60,10 +60,11 @@ public sealed partial class MainWindow : Window
                     ShowTaskStartError(await _dictation.StartAsync());
                 },
                 _dictation.StopAsync, _dictation.CancelAsync,
-                () => _dictation.IsRecording, () => !DictationHotkeysPaused && _dictation.CanStartFromShortcut,
+                () => _dictation.IsRecording, () => CanStartDictation(() => _dictation.ShortcutStartRefusal),
                 () => _dictation.RecordingModePreferences.Current,
                 dispatch: action => DispatcherQueue.TryEnqueue(() => action()),
                 reportError: error => AppDiagnostics.Write("dictation.input.failed", error),
+                reportDropped: reason => AppDiagnostics.Write("dictation.start-dropped reason=" + reason),
                 markStop: _dictation.MarkEarlyStop);
             _observeInputMode = () =>
             {

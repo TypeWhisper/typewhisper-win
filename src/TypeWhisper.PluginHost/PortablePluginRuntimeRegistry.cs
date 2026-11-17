@@ -197,6 +197,19 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
     /// <summary>Whether a serialized runtime operation is currently executing.</summary>
     public bool IsBusy => _gate.CurrentCount == 0;
 
+    /// <summary>
+    /// Whether a serialized runtime operation other than an LLM request is executing. An LLM request ends on its own,
+    /// so work queued behind it is only delayed, while a change of packages or a held recording session can last.
+    /// </summary>
+    public bool IsBusyBeyondLlmRequest
+    {
+        get
+        {
+            if (_gate.CurrentCount > 0) return false;
+            lock (_sync) return !_slots.Values.Any(slot => slot.RunningLlm is not null);
+        }
+    }
+
     /// <summary>Returns the last published metadata snapshots of enabled transcription roles.</summary>
     public IReadOnlyList<PortableTranscriptionProvider> TranscriptionProviders
     {

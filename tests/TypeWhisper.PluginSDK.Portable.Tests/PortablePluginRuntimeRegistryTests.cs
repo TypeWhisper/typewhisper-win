@@ -315,6 +315,47 @@ public sealed partial class PortablePluginRuntimeRegistryTests : IDisposable
     }
 
     [Fact]
+    public async Task RunningLlmRequestLeavesTheRuntimeBusyButNotBeyondTheRequest()
+    {
+        var store = await Store();
+        await using var registry = Registry(store);
+        Assert.Null(await registry.SetEnabledAsync(Id, true));
+        // Enabling queues a capability refresh; wait until it has run.
+        await WaitUntil(() => !registry.IsBusy);
+        Assert.False(registry.IsBusyBeyondLlmRequest);
+
+        // Held operations are released in finally blocks, so a failed assertion cannot leave teardown waiting for them.
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var request = registry.UseLlmAsync(Id, async (_, _) => { started.TrySetResult(); await release.Task; return "answer"; });
+        try
+        {
+            await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.True(registry.IsBusy);
+            Assert.False(registry.IsBusyBeyondLlmRequest);
+        }
+        finally { release.TrySetResult(); }
+        Assert.Equal("answer", await request.WaitAsync(TimeSpan.FromSeconds(10)));
+        await WaitUntil(() => !registry.IsBusy);
+
+        var holding = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var held = registry.UseConfigurationAsync(Id, async (_, _) => { await holding.Task; return true; });
+        try
+        {
+            await WaitUntil(() => registry.IsBusy);
+            Assert.True(registry.IsBusyBeyondLlmRequest);
+        }
+        finally { holding.TrySetResult(); }
+        Assert.True(await held.WaitAsync(TimeSpan.FromSeconds(10)));
+
+        static async Task WaitUntil(Func<bool> condition)
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            while (!condition()) await Task.Delay(10, timeout.Token);
+        }
+    }
+
+    [Fact]
     public async Task CancelingSettingsTransferReleasesQueuedForegroundLlmRequest()
     {
         var store = await Store();
