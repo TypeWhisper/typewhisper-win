@@ -21,6 +21,11 @@ public sealed partial class HistoryWindow
 
     private void RenderDetail()
     {
+        if (_group is { } group)
+        {
+            RenderGroupDetail(group);
+            return;
+        }
         // Filtering or a refresh must not replace text the user is editing.
         if (Dirty && _selection is [var editing] && editing == _editedId) return;
         _editor = null;
@@ -192,6 +197,11 @@ public sealed partial class HistoryWindow
 
     private void RenderToolbar()
     {
+        if (_group is { } group)
+        {
+            RenderGroupToolbar(group);
+            return;
+        }
         _toolbarActions.Children.Clear();
         if (_selection.Count == 0) return;
         var records = SelectedRecords();

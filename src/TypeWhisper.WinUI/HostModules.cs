@@ -90,6 +90,7 @@ internal sealed partial class HostModules
             Append(own.SettingsSections, combined.SettingsSections);
             Append(own.FileTranscriptionOptions, combined.FileTranscriptionOptions);
             Append(own.FileTranscriptionCompleted, combined.FileTranscriptionCompleted);
+            Append(own.HistorySidebarGroups, combined.HistorySidebarGroups);
         }
         return new(buildKind, accepted, combined, ModuleContributionCatalog.Resolve(combined, reportRejection ?? (_ => { })));
     }

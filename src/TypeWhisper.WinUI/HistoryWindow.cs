@@ -160,6 +160,7 @@ public sealed partial class HistoryWindow : Window
         };
         Closed += (_, _) => { _closing = true; StopAudioPlayback(); };
         BuildMenus();
+        SubscribeGroups();
         Render();
     }
 
@@ -242,6 +243,7 @@ public sealed partial class HistoryWindow : Window
     private void ApplyReveal(string id)
     {
         if (_records.FirstOrDefault(record => record.Id == id) is not { } record) return;
+        if (_group is not null) LeaveGroup();
         bool Shows(HistoryScope scope, string search, HistoryDateRange range, string? app) =>
             HistoryWorkspace.Query([record], scope, search, range, app, _sort, DateTimeOffset.Now, localDeviceId: LocalDeviceId()).Any();
         if (!Shows(_scope, _search.Text, _range, _app))
@@ -289,6 +291,11 @@ public sealed partial class HistoryWindow : Window
 
     private void Refilter()
     {
+        if (_group is { } group)
+        {
+            RefilterGroup(group);
+            return;
+        }
         _filteredSearch = _search.Text;
         _visible = HistoryWorkspace.Query(_records, _scope, _search.Text, _range, _app, _sort, DateTimeOffset.Now, localDeviceId: LocalDeviceId());
         _listTitle.Text = ScopeTitle(_scope);
@@ -352,6 +359,8 @@ public sealed partial class HistoryWindow : Window
     private void RenderSidebar()
     {
         _sidebar.Children.Clear();
+        // While a module's group is chosen, none of History's own scopes is.
+        var scope = _group is null ? _scope : null;
         _sidebar.Children.Add(SectionHeader(Loc.T("Smart Mailboxes")));
         foreach (var (mailbox, icon, label) in new[]
         {
@@ -360,18 +369,18 @@ public sealed partial class HistoryWindow : Window
         })
         {
             var count = _records.Count(record => HistoryWorkspace.InMailbox(record, mailbox));
-            _sidebar.Children.Add(SidebarRow(icon, label, count, _scope.Mailbox == mailbox, 0, () => SelectScope(new HistoryScope(mailbox))));
+            _sidebar.Children.Add(SidebarRow(icon, label, count, scope?.Mailbox == mailbox, 0, () => SelectScope(new HistoryScope(mailbox))));
         }
         _sidebar.Children.Add(SectionHeader(Loc.T("Devices")));
         var localId = LocalDeviceId();
         var local = _records.Where(record => HistoryWorkspace.IsLocal(record, localId)).ToArray();
-        _sidebar.Children.Add(SidebarRow("laptop", Loc.T("This PC"), local.Length, _scope is { Mailbox: null, Source: null, Device: null }, 0,
+        _sidebar.Children.Add(SidebarRow("laptop", Loc.T("This PC"), local.Length, scope is { Mailbox: null, Source: null, Device: null }, 0,
             () => SelectScope(new HistoryScope(null))));
         foreach (var (source, icon) in new[] { ("dictation", "microphone"), ("recording", "recorder"), ("file", "file"), ("other", "history") })
         {
             var count = local.Count(record => HistoryWorkspace.SourceOf(record) == source);
             if (count == 0) continue;
-            _sidebar.Children.Add(SidebarRow(icon, SourceName(source), count, _scope is { Mailbox: null, Device: null } && _scope.Source == source, 18,
+            _sidebar.Children.Add(SidebarRow(icon, SourceName(source), count, scope is { Mailbox: null, Device: null } && scope.Source == source, 18,
                 () => SelectScope(new HistoryScope(null, source))));
         }
         // Devices known from the sync folder, even before any of their entries arrived.
@@ -380,8 +389,9 @@ public sealed partial class HistoryWindow : Window
         foreach (var (id, device) in Devices())
             if (id != localId && !id.StartsWith("transport:", StringComparison.Ordinal)) remote.TryAdd(id, (0, device.Platform));
         foreach (var (id, device) in remote.OrderBy(pair => DeviceName(pair.Key, pair.Value.Platform), StringComparer.CurrentCultureIgnoreCase))
-            _sidebar.Children.Add(SidebarRow(DeviceIcon(device.Platform), DeviceName(id, device.Platform), device.Count, _scope.Device == id, 0,
+            _sidebar.Children.Add(SidebarRow(DeviceIcon(device.Platform), DeviceName(id, device.Platform), device.Count, scope?.Device == id, 0,
                 () => SelectScope(new HistoryScope(null, Device: id))));
+        RenderGroupRows();
     }
 
     private static TextBlock SectionHeader(string text)
@@ -394,11 +404,16 @@ public sealed partial class HistoryWindow : Window
 
     private static HandCursorButton SidebarRow(string icon, string label, int count, bool selected, double indent, Action click)
     {
+        var glyph = Glyph(icon, 18); glyph.Inverse = selected;
+        return SidebarRow(glyph, label, count, selected, indent, click);
+    }
+
+    private static HandCursorButton SidebarRow(FrameworkElement glyph, string label, int count, bool selected, double indent, Action click)
+    {
         var row = new Grid { ColumnSpacing = 10, Margin = new Thickness(indent, 0, 0, 0) };
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         row.ColumnDefinitions.Add(new ColumnDefinition());
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        var glyph = Glyph(icon, 18); glyph.Inverse = selected;
         row.Children.Add(glyph);
         var name = Text(label, 14, bold: selected);
         name.VerticalAlignment = VerticalAlignment.Center; name.TextTrimming = TextTrimming.CharacterEllipsis; name.TextWrapping = TextWrapping.NoWrap;
@@ -423,7 +438,8 @@ public sealed partial class HistoryWindow : Window
 
     private async void SelectScope(HistoryScope scope)
     {
-        if (scope == _scope || !await ConfirmLeaveEditAsync()) return;
+        if ((scope == _scope && _group is null) || !await ConfirmLeaveEditAsync()) return;
+        LeaveGroup();
         _scope = scope;
         _shown = PageSize;
         _selection.Clear();
@@ -438,6 +454,11 @@ public sealed partial class HistoryWindow : Window
 
     private void RenderList()
     {
+        if (_group is { } sidebarGroup)
+        {
+            RenderGroupList(sidebarGroup);
+            return;
+        }
         // Keep lightweight factories as the data source. WinUI creates controls only for the
         // viewport and its cache, including after loading many pages or changing selection.
         var rows = new List<Func<UIElement>>();
@@ -681,6 +702,17 @@ public sealed partial class HistoryWindow : Window
         if (ctrl && e.Key == VirtualKey.S) { _ = SaveAsync(); e.Handled = true; }
         else if (ctrl && e.Key == VirtualKey.F) { _search.Focus(FocusState.Keyboard); _search.SelectAll(); e.Handled = true; }
         else if (inText) return;
+        else if (_group is { } group)
+        {
+            // The module's view takes its own keys.
+            if (FocusInDetail()) return;
+            if (e.Key is VirtualKey.Down or VirtualKey.Up) { MoveGroupSelection(group, e.Key == VirtualKey.Down ? 1 : -1); e.Handled = true; }
+            else if (e.Key == VirtualKey.Delete && _groupEntryListed && _groupEntries.FirstOrDefault(entry => entry.Id == _groupEntry) is { } chosen)
+            {
+                _ = DeleteGroupEntryAsync(group, chosen);
+                e.Handled = true;
+            }
+        }
         else if (ctrl && e.Key == VirtualKey.C) { CopySelection(); e.Handled = true; }
         else if (ctrl && e.Key == VirtualKey.A) { _selection.Clear(); _selection.AddRange(_visible.Select(record => record.Id)); OnSelectionChanged(); e.Handled = true; }
         else if (e.Key == VirtualKey.Delete && _selection.Count > 0) { _ = DeleteSelectionAsync(); e.Handled = true; }

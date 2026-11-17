@@ -39,4 +39,7 @@ public sealed class ModuleContributions
 
     /// <summary>Handlers called after a file transcription result was accepted.</summary>
     public IList<ModuleFileTranscriptionHook> FileTranscriptionCompleted { get; } = new List<ModuleFileTranscriptionHook>();
+
+    /// <summary>Groups in the sidebar of the History window. Since ModuleKit 1.1.</summary>
+    public IList<ModuleHistorySidebarGroup> HistorySidebarGroups { get; } = new List<ModuleHistorySidebarGroup>();
 }

@@ -3299,5 +3299,14 @@
   "Tells who spoke when in a recording. Audio is sent to this provider.": "Erkennt, wer in einer Aufnahme wann gesprochen hat. Das Audio wird an diesen Anbieter gesendet.",
   "No actions available": "Keine Aktionen verfügbar",
   "Finish the current dictation, recording or transcription first.": "Beende zuerst das laufende Diktat, die Aufnahme oder die Transkription.",
-  "Transcription failed: {0}": "Transkription fehlgeschlagen: {0}"
+  "Transcription failed: {0}": "Transkription fehlgeschlagen: {0}",
+  "No entries match your search.": "Keine Einträge passen zu deiner Suche.",
+  "No Entries": "Keine Einträge",
+  "Untitled": "Ohne Titel",
+  "Choose an entry to open it.": "Wähle einen Eintrag, um ihn zu öffnen.",
+  "Entry Unavailable": "Eintrag nicht verfügbar",
+  "This entry could not be shown.": "Dieser Eintrag konnte nicht angezeigt werden.",
+  "New": "Neu",
+  "“{0}” is removed from this PC. This cannot be undone.": "„{0}“ wird von diesem PC entfernt. Das kann nicht rückgängig gemacht werden.",
+  "The entry could not be deleted.": "Der Eintrag konnte nicht gelöscht werden."
 }

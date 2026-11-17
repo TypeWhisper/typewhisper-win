@@ -3299,5 +3299,14 @@
   "Tells who spoke when in a recording. Audio is sent to this provider.": "録音の中で誰がいつ話したかを判別します。音声はこのプロバイダーに送信されます。",
   "No actions available": "使用できるアクションはありません",
   "Finish the current dictation, recording or transcription first.": "まず実行中のディクテーション、録音、または文字起こしを終了してください。",
-  "Transcription failed: {0}": "文字起こしに失敗しました: {0}"
+  "Transcription failed: {0}": "文字起こしに失敗しました: {0}",
+  "No entries match your search.": "検索に一致する項目はありません。",
+  "No Entries": "項目なし",
+  "Untitled": "無題",
+  "Choose an entry to open it.": "開く項目を選択してください。",
+  "Entry Unavailable": "項目を表示できません",
+  "This entry could not be shown.": "この項目を表示できませんでした。",
+  "New": "新規",
+  "“{0}” is removed from this PC. This cannot be undone.": "「{0}」をこの PC から削除します。この操作は取り消せません。",
+  "The entry could not be deleted.": "項目を削除できませんでした。"
 }

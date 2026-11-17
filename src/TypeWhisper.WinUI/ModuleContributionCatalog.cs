@@ -21,6 +21,7 @@ internal sealed partial class ModuleContributionCatalog
     internal IReadOnlyList<ModuleSettingsSection> SettingsSections { get; private init; } = [];
     internal IReadOnlyList<ModuleFileTranscriptionOption> FileTranscriptionOptions { get; private init; } = [];
     internal IReadOnlyList<ModuleFileTranscriptionHook> FileTranscriptionHooks { get; private init; } = [];
+    internal IReadOnlyList<ModuleHistorySidebarGroup> HistorySidebarGroups { get; private init; } = [];
 
     internal IEnumerable<ModuleSettingsSection> SectionsFor(ModuleSettingsPage page) => SettingsSections.Where(section => section.Page == page);
 
@@ -75,7 +76,9 @@ internal sealed partial class ModuleContributionCatalog
             FileTranscriptionOptions = Accept("file-transcription-option", contributions.FileTranscriptionOptions, item => item.Id,
                 item => item.CreateContent is not null, report),
             FileTranscriptionHooks = Accept("file-transcription-hook", contributions.FileTranscriptionCompleted, item => item.Id,
-                item => item.Completed is not null, report)
+                item => item.Completed is not null, report),
+            HistorySidebarGroups = Accept("history-sidebar-group", contributions.HistorySidebarGroups, item => item.Id,
+                item => !string.IsNullOrWhiteSpace(item.Title) && item.Entries is not null && item.CreateView is not null, report)
         };
     }
 

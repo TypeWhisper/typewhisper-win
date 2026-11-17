@@ -48,6 +48,7 @@ public sealed class ModuleContributionPointsTests : IDisposable
         Assert.Equal(["first", "second"], contributions.SettingsSections.Select(item => item.Id));
         Assert.Equal(["first", "second"], contributions.FileTranscriptionOptions.Select(item => item.Id));
         Assert.Equal(["first", "second"], contributions.FileTranscriptionCompleted.Select(item => item.Id));
+        Assert.Equal(["first", "second"], contributions.HistorySidebarGroups.Select(item => item.Id));
         var catalog = modules.Catalog;
         Assert.Equal(["first", "second"], catalog.HotkeyActions.Select(item => item.Id));
         Assert.Equal(["first", "second"], catalog.MenuItems.Select(item => item.Id));
@@ -58,6 +59,38 @@ public sealed class ModuleContributionPointsTests : IDisposable
         Assert.Empty(catalog.SectionsFor(ModuleSettingsPage.Premium));
         Assert.Equal(["first", "second"], catalog.FileTranscriptionOptions.Select(item => item.Id));
         Assert.Equal(["first", "second"], catalog.FileTranscriptionHooks.Select(item => item.Id));
+        Assert.Equal(["first", "second"], catalog.HistorySidebarGroups.Select(item => item.Id));
+    }
+
+    [Fact]
+    public void AHistorySidebarGroupNeedsATitleAndAUniqueIdentifier()
+    {
+        var contributions = new ModuleContributions();
+        contributions.HistorySidebarGroups.Add(SidebarGroup("chats"));
+        contributions.HistorySidebarGroups.Add(SidebarGroup("CHATS"));
+        contributions.HistorySidebarGroups.Add(SidebarGroup("untitled", " "));
+
+        var catalog = ModuleContributionCatalog.Resolve(contributions, _reports.Add);
+
+        Assert.Equal(["chats"], catalog.HistorySidebarGroups.Select(item => item.Id));
+        Assert.Equal(
+        [
+            "modules.contribution.rejected kind=history-sidebar-group id=CHATS reason=duplicate",
+            "modules.contribution.rejected kind=history-sidebar-group id=untitled reason=incomplete"
+        ], _reports.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void AHistorySidebarGroupTellsItsListenersAboutChanges()
+    {
+        var group = SidebarGroup("chats");
+        var changes = 0;
+        group.Changed += () => changes++;
+
+        group.NotifyChanged();
+        group.NotifyChanged();
+
+        Assert.Equal(2, changes);
     }
 
     [Theory]
@@ -486,7 +519,11 @@ public sealed class ModuleContributionPointsTests : IDisposable
         contributions.SettingsSections.Add(new ModuleSettingsSection(id, ModuleSettingsPage.Advanced, "Section", () => throw new InvalidOperationException("never created")));
         contributions.FileTranscriptionOptions.Add(new ModuleFileTranscriptionOption(id, () => throw new InvalidOperationException("never created")));
         contributions.FileTranscriptionCompleted.Add(new ModuleFileTranscriptionHook(id, _ => { }));
+        contributions.HistorySidebarGroups.Add(SidebarGroup(id));
     }
+
+    private static ModuleHistorySidebarGroup SidebarGroup(string id, string title = "Group") =>
+        new(id, title, "", () => [], _ => throw new InvalidOperationException("never created"));
 
     private static ModuleHotkeyAction Hotkey(string id) => new(id, "Action " + id, () => { });
 
