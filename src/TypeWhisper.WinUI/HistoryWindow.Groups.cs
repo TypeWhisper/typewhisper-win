@@ -230,6 +230,8 @@ public sealed partial class HistoryWindow
         {
             ReportGroupFailure(group, "view", ex);
             _detailHost.Child = EmptyState("info", Loc.T("Entry Unavailable"), Loc.T("This entry could not be shown."));
+            // The next refresh tries again; only a view that was created is kept.
+            _groupView = null;
         }
     }
 

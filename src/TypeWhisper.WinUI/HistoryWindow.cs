@@ -697,6 +697,8 @@ public sealed partial class HistoryWindow : Window
     private void Root_KeyDown(object sender, KeyRoutedEventArgs e)
     {
         if (_dialogOpen) return;
+        // A module's view takes its own keys, the host's shortcuts too.
+        if (_group is not null && FocusInDetail()) return;
         var inText = FocusManager.GetFocusedElement(Content.XamlRoot) is TextBox;
         var ctrl = IsDown(VirtualKey.Control);
         if (ctrl && e.Key == VirtualKey.S) { _ = SaveAsync(); e.Handled = true; }
@@ -704,8 +706,6 @@ public sealed partial class HistoryWindow : Window
         else if (inText) return;
         else if (_group is { } group)
         {
-            // The module's view takes its own keys.
-            if (FocusInDetail()) return;
             if (e.Key is VirtualKey.Down or VirtualKey.Up) { MoveGroupSelection(group, e.Key == VirtualKey.Down ? 1 : -1); e.Handled = true; }
             else if (e.Key == VirtualKey.Delete && _groupEntryListed && _groupEntries.FirstOrDefault(entry => entry.Id == _groupEntry) is { } chosen)
             {
