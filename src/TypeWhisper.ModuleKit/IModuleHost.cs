@@ -4,6 +4,8 @@ namespace TypeWhisper.ModuleKit;
 /// <remarks>
 /// Members are used on the UI thread, and the host calls back on the UI thread. A capability is null when the host
 /// does not provide it, for example in a test host, so modules check before use.
+/// The app keeps the host, and the modules it created, as long as it runs, so a module may hold it and its
+/// capabilities for as long as it needs them.
 /// </remarks>
 public interface IModuleHost
 {
