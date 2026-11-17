@@ -56,13 +56,16 @@ public sealed partial class HistoryWindow
         }
     }
 
-    private static IReadOnlyList<ModuleHistorySidebarEntry> EntriesOf(ModuleHistorySidebarGroup group)
+    private static IReadOnlyList<ModuleHistorySidebarEntry> EntriesOf(ModuleHistorySidebarGroup group) => TryEntriesOf(group) ?? [];
+
+    // Null when the module could not list its entries, which says nothing about whether an entry still exists.
+    private static IReadOnlyList<ModuleHistorySidebarEntry>? TryEntriesOf(ModuleHistorySidebarGroup group)
     {
         try { return [.. (group.Entries() ?? []).Where(entry => entry is not null && !string.IsNullOrEmpty(entry.Id))]; }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             ReportGroupFailure(group, "entries", ex);
-            return [];
+            return null;
         }
     }
 
@@ -109,16 +112,18 @@ public sealed partial class HistoryWindow
     {
         _filteredSearch = _search.Text;
         var search = _search.Text.Trim();
-        var all = EntriesOf(group);
+        var listed = TryEntriesOf(group);
+        var all = listed ?? [];
         _groupEntries = search.Length == 0 ? all : [.. all.Where(entry =>
             entry.Title.Contains(search, StringComparison.CurrentCultureIgnoreCase) ||
             entry.Subtitle?.Contains(search, StringComparison.CurrentCultureIgnoreCase) == true)];
-        if (_groupEntry is { } chosen)
+        // Only a list the module could give tells that the chosen entry is gone; after a failure its view stays.
+        if (_groupEntry is { } chosen && listed is not null)
         {
-            var listed = all.Any(entry => entry.Id == chosen);
+            var isListed = all.Any(entry => entry.Id == chosen);
             // Deleted, also by the module itself: the view goes with it.
-            if (_groupEntryListed && !listed) _groupEntry = null;
-            else _groupEntryListed = listed;
+            if (_groupEntryListed && !isListed) _groupEntry = null;
+            else _groupEntryListed = isListed;
         }
         _filterButton.IsEnabled = _sortButton.IsEnabled = false;
         _listTitle.Text = group.Title;
