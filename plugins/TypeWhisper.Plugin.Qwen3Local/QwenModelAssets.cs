@@ -35,6 +35,16 @@ internal sealed class QwenModelAssets(HttpClient http, QwenAssetSource source, F
         new("tokenizer/merges.txt", "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5", 1671853),
         new("tokenizer/vocab.json", "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910", 2776833),
         new("tokenizer/tokenizer_config.json", "4942d005604266809309cabc9f4e9cb89ce855d59b14681fdc0e1cc62ea26c4c", 12487));
+    // Reson8's Rumble-2-Flash, a fine-tune of Qwen3-ASR 0.6B with a 14-layer decoder, exported by TypeWhisper with the
+    // same converter as the 1.7B build. Revision and file hashes are pinned like the 1.7B files.
+    internal static readonly QwenAssetSource ModelRumble = QwenAssetSource.FromFiles("Rumble-2-Flash",
+        "https://huggingface.co/TypeWhisper/Rumble-2-Flash-sherpa-onnx-int8/resolve/a8128305e8e8c4aa5bf6fcd0a8454347ff80d6d1",
+        new("conv_frontend.onnx", "00c48c47db2937884636a3d99f23166390088e8c939ff7e9e803e69b8af4c0b5", 44148280),
+        new("encoder.int8.onnx", "e6b4847992553dfa57bffda161b8c62d0af79c952c73269e6a2f6dc887f3e5dd", 182491662),
+        new("decoder.int8.onnx", "e9be29023d0d52518e75cc4b77abbfc569564c7453ad1f546e50174c9a8b426c", 426507858),
+        new("tokenizer/merges.txt", "ca57770275b525f8766ed68bf4b2d1d66b85adc41b06d8b5686cc3ca2b808aa9", 1075910),
+        new("tokenizer/vocab.json", "c5e356c0638515539c196bca5da724fcf35a91fceaf1a2204c2a7193adc21059", 1961918),
+        new("tokenizer/tokenizer_config.json", "c812aa17410d17b1b8c12f499d5359d6d9bd7395729bc7a7e1742aaa21f2b7df", 13585));
     internal static readonly string[] RequiredFiles = ["conv_frontend.onnx", "encoder.int8.onnx",
         "decoder.int8.onnx", "tokenizer/merges.txt", "tokenizer/vocab.json", "tokenizer/tokenizer_config.json"];
     private readonly QwenAssetSource _source = source;
