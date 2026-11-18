@@ -8,9 +8,9 @@ namespace TypeWhisper.ModuleKit;
 /// list and shows the view of the chosen entry.
 /// </summary>
 /// <remarks>
-/// The host calls the members on the UI thread, each time it draws the sidebar or the list, so they return quickly.
-/// If one throws, the host reports it and leaves out what it would have shown. History's search, filter and sort
-/// menus do not apply to the entries.
+/// The host calls the members on the UI thread, each time it draws the sidebar or the detail pane, so they return
+/// quickly. If one throws, the host reports it and leaves out what it would have shown. History's search, filter and
+/// sort menus do not apply to the entries.
 /// </remarks>
 public sealed class ModuleHistorySidebarGroup
 {
@@ -62,7 +62,7 @@ public sealed class ModuleHistorySidebarGroup
 
     /// <summary>
     /// Deletes an entry after the host asked the user, or null to offer no deletion. Offered in the menu of each entry
-    /// in the sidebar. Returns false when it could not be deleted; the host then says so.
+    /// in the sidebar and by the Delete key for the chosen entry. Returns false when it could not be deleted; the host then says so.
     /// </summary>
     public Func<string, bool>? Delete { get; init; }
 

@@ -22,6 +22,8 @@ public sealed partial class HistoryWindow
     private (string Group, string? Entry)? _groupView;
     // Groups whose entries the sidebar shows all of.
     private readonly HashSet<string> _expandedGroups = new(StringComparer.Ordinal);
+    // The "Show more" button of each group as last drawn.
+    private readonly Dictionary<string, HandCursorButton> _showMoreRows = new(StringComparer.Ordinal);
 
     private static IReadOnlyList<ModuleHistorySidebarGroup> SidebarGroups => HostModules.ActiveCatalog.HistorySidebarGroups;
 
@@ -158,6 +160,8 @@ public sealed partial class HistoryWindow
         menu.Items.Add(delete);
         button.ContextFlyout = menu;
         var more = SidebarIconButton("", Loc.T("More actions"), selected);
+        // Each menu button says which entry it belongs to.
+        AutomationProperties.SetName(more, string.Join(", ", Loc.T("More actions"), titleText));
         more.Margin = new Thickness(0, 0, 4, 0);
         more.Flyout = menu;
         Grid.SetColumn(more, 1);
@@ -165,7 +169,13 @@ public sealed partial class HistoryWindow
         // Shown for the chosen entry, and for another while the pointer is over it or the keyboard is on it.
         var hovered = false;
         var focused = false;
-        void Update() => more.Opacity = selected || hovered || focused || menu.IsOpen ? 1 : 0;
+        void Update()
+        {
+            var shown = selected || hovered || focused || menu.IsOpen;
+            more.Opacity = shown ? 1 : 0;
+            // A tap on a hidden button opens the entry, as on touch, where nothing hovers.
+            more.IsHitTestVisible = shown;
+        }
         Update();
         row.PointerEntered += (_, _) => { hovered = true; Update(); };
         row.PointerExited += (_, _) => { hovered = false; Update(); };
@@ -214,7 +224,10 @@ public sealed partial class HistoryWindow
             // Collapsing may hide an older chosen entry from the sidebar; it stays open in the detail pane.
             if (!_expandedGroups.Remove(group.Id)) _expandedGroups.Add(group.Id);
             RenderSidebar();
+            // The keyboard stays on the button, which the sidebar has drawn anew.
+            if (_showMoreRows.TryGetValue(group.Id, out var drawn)) drawn.Focus(FocusState.Keyboard);
         };
+        _showMoreRows[group.Id] = button;
         return button;
     }
 
@@ -258,8 +271,11 @@ public sealed partial class HistoryWindow
     private async void OpenGroupEntry(ModuleHistorySidebarGroup group, string id, bool listed)
     {
         if (ReferenceEquals(group, _group) && id == _groupEntry) return;
+        var entering = !ReferenceEquals(group, _group);
         if (!await EnterGroupAsync(group)) return;
         SelectGroupEntry(group, id, listed);
+        // Entering hides the list column, clears History's toolbar and lists the entries for the keyboard.
+        if (entering) Refilter();
     }
 
     // Back to History's own scopes; the caller draws again.
@@ -346,7 +362,8 @@ public sealed partial class HistoryWindow
         try
         {
             confirmed = await Dialogs.ConfirmAsync((FrameworkElement)Content, Loc.T("Delete this entry?"),
-                Loc.T("“{0}” is removed from this PC. This cannot be undone.", entry.Title), Loc.T("Delete"), destructive: true);
+                Loc.T("“{0}” is removed from this PC. This cannot be undone.", entry.Title.Length == 0 ? Loc.T("Untitled") : entry.Title),
+                Loc.T("Delete"), destructive: true);
         }
         finally { _dialogOpen = false; }
         if (!confirmed || _closing) return;

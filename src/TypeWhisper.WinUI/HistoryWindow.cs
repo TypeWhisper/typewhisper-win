@@ -162,7 +162,13 @@ public sealed partial class HistoryWindow : Window
             _allowClose = true;
             Close();
         };
-        Closed += (_, _) => { _closing = true; StopAudioPlayback(); };
+        Closed += (_, _) =>
+        {
+            _closing = true;
+            StopAudioPlayback();
+            // A module's view ends what it runs when it is unloaded, which closing the window alone may not raise.
+            _detailHost.Child = null;
+        };
         BuildMenus();
         SubscribeGroups();
         Render();
