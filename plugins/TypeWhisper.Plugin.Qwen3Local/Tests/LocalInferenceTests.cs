@@ -157,6 +157,8 @@ public sealed class LocalInferenceTests(ITestOutputHelper output)
         Assert.True(longResult.Segments.Count >= 2);
         Assert.Equal((double)repeated.Length / 16000, longResult.DurationSeconds);
         Assert.True(longResult.Text.Split("Bergbau", StringSplitOptions.None).Length >= 5, longResult.Text);
+        // No language set: the model's language marker must not reach the text.
+        Assert.DoesNotContain("language ", longResult.Text);
         output.WriteLine($"Long audio: {longResult.DurationSeconds:F3}s elapsed={timer.Elapsed.TotalSeconds:F3}s text={longResult.Text}");
         metrics.Add(new { file = "repeated-de", longResult.Text, longResult.DurationSeconds, elapsedSeconds = timer.Elapsed.TotalSeconds });
         var silence = await engine.TranscribePcmAsync(new float[16000], null, false, default); Assert.Empty(silence.Text);

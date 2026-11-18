@@ -425,6 +425,9 @@ public sealed class QwenTests : IDisposable
     [InlineData("Nachdem der Damm erbaut war. language German<asr_text>Kamen die Fluten.", "Nachdem der Damm erbaut war. Kamen die Fluten.")]
     [InlineData("<asr_text>Hello there.", "Hello there.")]
     [InlineData("Die Sprache language ist wichtig.", "Die Sprache language ist wichtig.")]
+    [InlineData("language German. Raptorium Bergbau scheint profitierter zu sein.", "Raptorium Bergbau scheint profitierter zu sein.")]
+    [InlineData("Someone spilled water on their machine. language English. I, yeah.", "Someone spilled water on their machine. I, yeah.")]
+    [InlineData("They teach the language English. Then French.", "They teach the language English. Then French.")]
     public void LanguageMarkersLeakedByTheModelAreRemoved(string text, string expected) =>
         Assert.Equal(expected, QwenRecognizer.StripLanguageMarkers(text));
 
