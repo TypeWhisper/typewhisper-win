@@ -1,10 +1,11 @@
 # Third-party notices
 
 - Qwen3-ASR 0.6B and 1.7B: Alibaba Qwen team, Apache-2.0. Models: https://huggingface.co/Qwen/Qwen3-ASR-0.6B and https://huggingface.co/Qwen/Qwen3-ASR-1.7B
+- Rumble-2-Flash: Reson8, Apache-2.0. Model: https://huggingface.co/Reson8/Rumble-2-Flash
 - sherpa-onnx 2.0.0: Xiaomi Corporation and contributors, Apache-2.0. https://github.com/k2-fsa/sherpa-onnx
 - ONNX Runtime (distributed by sherpa-onnx): Microsoft Corporation, MIT. https://github.com/microsoft/onnxruntime
 - SharpCompress 0.50.7: Adam Hathcock and contributors, MIT. https://github.com/adamhathcock/sharpcompress
 
-The models are downloaded separately. The 0.6B model comes from the official sherpa-onnx ASR model release; see https://k2-fsa.github.io/sherpa/onnx/qwen3-asr/pretrained.html for its provenance. The 1.7B model comes from the community export https://huggingface.co/thieunv-asilla/sherpa-onnx-qwen3-asr-1.7B-int8 (Apache-2.0), pinned to revision 69eb686fd94a4a865bb5340a3d6ac0d7f1fec0d5. Both conversions use https://github.com/Wasser1462/Qwen3-ASR-onnx.
+The models are downloaded separately. The 0.6B model comes from the official sherpa-onnx ASR model release; see https://k2-fsa.github.io/sherpa/onnx/qwen3-asr/pretrained.html for its provenance. The 1.7B model comes from the community export https://huggingface.co/thieunv-asilla/sherpa-onnx-qwen3-asr-1.7B-int8 (Apache-2.0), pinned to revision 69eb686fd94a4a865bb5340a3d6ac0d7f1fec0d5. Rumble-2-Flash comes from TypeWhisper's export https://huggingface.co/TypeWhisper/Rumble-2-Flash-sherpa-onnx-int8 (Apache-2.0), pinned to revision a8128305e8e8c4aa5bf6fcd0a8454347ff80d6d1. All three conversions use https://github.com/Wasser1462/Qwen3-ASR-onnx.
 
 The packaged Windows sherpa-onnx import name is changed from `onnxruntime.dll` to `qwenort.dll` to isolate the CPU runtime from other plugins. Model weights are not modified.

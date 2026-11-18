@@ -83,7 +83,7 @@ public sealed class Qwen3LocalPlugin : IPcmTranscriptionEnginePlugin, IPluginSet
         // text, so the model runs without them.
         new(RumbleModelId, "Rumble-2-Flash INT8")
         {
-            Publisher = "Reson8", SizeDescription = "Higher accuracy, fast · ~624 MB download · ~624 MB installed · ~1.5 GB RAM", EstimatedSizeMB = 624,
+            Publisher = "Reson8", SizeDescription = "Higher accuracy, fast · ~624 MB download · ~624 MB installed · ~1.2 GB RAM", EstimatedSizeMB = 624,
             LanguageCount = Languages.Count, LanguageCodes = Languages.Keys.ToArray()
         }
     ];
