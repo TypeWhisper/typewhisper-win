@@ -428,6 +428,7 @@ public sealed class QwenTests : IDisposable
     [InlineData("language German. Raptorium Bergbau scheint profitierter zu sein.", "Raptorium Bergbau scheint profitierter zu sein.")]
     [InlineData("Someone spilled water on their machine. language English. I, yeah.", "Someone spilled water on their machine. I, yeah.")]
     [InlineData("They teach the language English. Then French.", "They teach the language English. Then French.")]
+    [InlineData("language Python. Next.", "language Python. Next.")]
     public void LanguageMarkersLeakedByTheModelAreRemoved(string text, string expected) =>
         Assert.Equal(expected, QwenRecognizer.StripLanguageMarkers(text));
 

@@ -73,13 +73,15 @@ internal sealed partial class QwenRecognizer : IQwenRecognizer
     // runs without its control tokens and, with no language set, ends the marker with a period instead of
     // <asr_text> ("language German. Es ..."); that form is removed where a sentence starts.
     internal static string StripLanguageMarkers(string text) =>
-        SentenceLanguageMarker().Replace(LanguageMarker().Replace(text, ""), "").Trim();
+        SentenceLanguageMarker.Replace(LanguageMarker().Replace(text, ""), "").Trim();
 
     [GeneratedRegex(@"(?:language\s+[A-Za-z]+(?:\s[A-Za-z]+)?\s*)?<asr_text>", RegexOptions.CultureInvariant)]
     private static partial Regex LanguageMarker();
 
-    [GeneratedRegex(@"(?<=^\s*|[.!?]\s+)language\s+[A-Z][a-z]+\.\s*", RegexOptions.CultureInvariant)]
-    private static partial Regex SentenceLanguageMarker();
+    // Only the language names the models report, so "language Python." stays text.
+    private static readonly Regex SentenceLanguageMarker = new(
+        @"(?<=^\s*|[.!?]\s+)language\s+(?:" + string.Join("|", Qwen3LocalPlugin.LanguageNames.Select(Regex.Escape)) + @")\.\s*",
+        RegexOptions.CultureInvariant);
 
     public void Dispose() => _recognizer.Dispose();
 

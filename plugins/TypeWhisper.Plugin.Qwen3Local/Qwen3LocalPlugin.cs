@@ -18,6 +18,8 @@ public sealed class Qwen3LocalPlugin : IPcmTranscriptionEnginePlugin, IPluginSet
         ["da"] = "Danish", ["fi"] = "Finnish", ["pl"] = "Polish", ["cs"] = "Czech", ["fil"] = "Filipino",
         ["fa"] = "Persian", ["el"] = "Greek", ["hu"] = "Hungarian", ["mk"] = "Macedonian", ["ro"] = "Romanian"
     };
+    // The names the models write in their "language X" marker.
+    internal static IEnumerable<string> LanguageNames => Languages.Values;
     private readonly SemaphoreSlim _gate = new(1);
     private readonly HttpClient _http;
     private readonly IReadOnlyDictionary<string, QwenModelAssets> _assets;
