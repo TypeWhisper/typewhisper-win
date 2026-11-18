@@ -7,10 +7,12 @@ using TypeWhisper.ModuleKit;
 
 namespace TypeWhisper.WinUI;
 
-// Groups that modules add to the sidebar. While one is chosen, the list shows its entries and the detail pane the
-// module's view of the chosen entry; search narrows the entries by title and subtitle.
+// Groups that modules add to the sidebar. A group lists its newest entries below its name, more on request, and the
+// detail pane, which then takes the list's place, shows the module's view of the chosen entry.
 public sealed partial class HistoryWindow
 {
+    // Entries a group shows in the sidebar until the user asks for more.
+    private const int GroupEntriesShown = 5;
     private ModuleHistorySidebarGroup? _group;
     private string? _groupEntry;
     // Whether the chosen entry was listed; an entry that was listed and no longer is was deleted.
@@ -18,6 +20,8 @@ public sealed partial class HistoryWindow
     private IReadOnlyList<ModuleHistorySidebarEntry> _groupEntries = [];
     // The group and entry whose view the detail pane shows, so a refresh keeps the view and its state.
     private (string Group, string? Entry)? _groupView;
+    // Groups whose entries the sidebar shows all of.
+    private readonly HashSet<string> _expandedGroups = new(StringComparer.Ordinal);
 
     private static IReadOnlyList<ModuleHistorySidebarGroup> SidebarGroups => HostModules.ActiveCatalog.HistorySidebarGroups;
 
@@ -39,8 +43,8 @@ public sealed partial class HistoryWindow
             Render();
             return;
         }
-        RenderSidebar();
         if (_group is not null) Refilter();
+        else RenderSidebar();
     });
 
     private static void ReportGroupFailure(ModuleHistorySidebarGroup group, string stage, Exception ex) =>
@@ -69,6 +73,13 @@ public sealed partial class HistoryWindow
         }
     }
 
+    // The list column gives way to the detail pane while a group is chosen.
+    private void ShowListColumn(bool show)
+    {
+        _listColumn.Width = new GridLength(show ? 380 : 0);
+        _listHeaderSurface.Visibility = _listSurface.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+    }
+
     private void RenderGroupRows()
     {
         var groups = SidebarGroups.Where(IsShown).ToArray();
@@ -76,25 +87,179 @@ public sealed partial class HistoryWindow
         _sidebar.Children.Add(new Border { Height = 1, Background = Brush("HairlineBrush"), Margin = new Thickness(10, 12, 10, 4) });
         foreach (var group in groups)
         {
-            var selected = ReferenceEquals(_group, group);
-            var icon = new FontIcon { Glyph = group.Glyph, FontSize = 16, Width = 18, Height = 18, VerticalAlignment = VerticalAlignment.Center };
-            if (selected) icon.Foreground = new SolidColorBrush(Microsoft.UI.Colors.White);
-            _sidebar.Children.Add(SidebarRow(icon, group.Title, EntriesOf(group).Count, selected, 0, () => SelectGroup(group)));
+            _sidebar.Children.Add(GroupHeader(group));
+            var entries = EntriesOf(group);
+            var chosen = ReferenceEquals(_group, group) ? _groupEntry : null;
+            var expanded = _expandedGroups.Contains(group.Id);
+            foreach (var entry in expanded ? entries : entries.Take(GroupEntriesShown))
+                _sidebar.Children.Add(GroupEntryRow(group, entry, entry.Id == chosen));
+            if (entries.Count > GroupEntriesShown) _sidebar.Children.Add(ShowMoreRow(group, expanded));
         }
     }
 
-    private async void SelectGroup(ModuleHistorySidebarGroup group)
+    // The group's name, which starts a new entry when the group offers that, and its new-entry button.
+    private Grid GroupHeader(ModuleHistorySidebarGroup group)
     {
-        if (ReferenceEquals(group, _group) || !await ConfirmLeaveEditAsync()) return;
+        // Chosen while nothing it lists is open, such as a new entry the module does not list yet.
+        var selected = ReferenceEquals(_group, group) && !_groupEntryListed;
+        var icon = new FontIcon { Glyph = group.Glyph, FontSize = 16, Width = 18, Height = 18, VerticalAlignment = VerticalAlignment.Center };
+        if (selected) icon.Foreground = new SolidColorBrush(Microsoft.UI.Colors.White);
+        var header = new Grid();
+        header.ColumnDefinitions.Add(new ColumnDefinition());
+        header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var row = SidebarRow(icon, group.Title, 0, selected, 0, () => StartGroupEntry(group));
+        Grid.SetColumnSpan(row, 2);
+        header.Children.Add(row);
+        if (group.CreateNew is not null)
+        {
+            var title = NewTitle(group);
+            var add = SidebarIconButton("", title, selected);
+            add.Margin = new Thickness(0, 0, 4, 0);
+            add.Click += (_, _) => StartGroupEntry(group);
+            Grid.SetColumn(add, 1);
+            header.Children.Add(add);
+        }
+        return header;
+    }
+
+    private static string NewTitle(ModuleHistorySidebarGroup group) =>
+        string.IsNullOrWhiteSpace(group.NewTitle) ? Loc.T("New") : group.NewTitle;
+
+    // An entry below its group's name, with a menu of its actions on the right while the pointer or focus is on it.
+    private Grid GroupEntryRow(ModuleHistorySidebarGroup group, ModuleHistorySidebarEntry entry, bool selected)
+    {
+        var titleText = entry.Title.Length == 0 ? Loc.T("Untitled") : entry.Title;
+        var title = Text(titleText, 13, bold: selected);
+        title.TextWrapping = TextWrapping.NoWrap; title.TextTrimming = TextTrimming.CharacterEllipsis;
+        title.VerticalAlignment = VerticalAlignment.Center;
+        if (selected) title.Foreground = new SolidColorBrush(Microsoft.UI.Colors.White);
+        var button = new HandCursorButton
+        {
+            Content = title, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            MinHeight = 32, Padding = new Thickness(38, 6, group.Delete is null ? 10 : 36, 6),
+            Style = (Style)Application.Current.Resources[selected ? "SidebarSelectedButtonStyle" : "MenuButtonStyle"]
+        };
+        var details = string.Join(", ", new[] { titleText, entry.Subtitle, Elapsed(entry.Date.UtcDateTime, DateTimeOffset.Now) }
+            .Where(part => !string.IsNullOrWhiteSpace(part)));
+        ToolTipService.SetToolTip(button, details);
+        AutomationProperties.SetName(button, details);
+        AutomationProperties.SetItemStatus(button, selected ? Loc.T("Selected") : Loc.T("Not selected"));
+        button.Click += (_, _) => OpenGroupEntry(group, entry.Id, listed: true);
+        var row = new Grid();
+        row.ColumnDefinitions.Add(new ColumnDefinition());
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        Grid.SetColumnSpan(button, 2);
+        row.Children.Add(button);
+        if (group.Delete is null) return row;
+
+        var menu = new MenuFlyout();
+        var delete = new MenuFlyoutItem { Text = Loc.T("Delete…"), Icon = new FontIcon { Glyph = "" } };
+        delete.Click += (_, _) => _ = DeleteGroupEntryAsync(group, entry);
+        menu.Items.Add(delete);
+        button.ContextFlyout = menu;
+        var more = SidebarIconButton("", Loc.T("More actions"), selected);
+        more.Margin = new Thickness(0, 0, 4, 0);
+        more.Flyout = menu;
+        Grid.SetColumn(more, 1);
+        row.Children.Add(more);
+        // Shown for the chosen entry, and for another while the pointer is over it or the keyboard is on it.
+        var hovered = false;
+        var focused = false;
+        void Update() => more.Opacity = selected || hovered || focused || menu.IsOpen ? 1 : 0;
+        Update();
+        row.PointerEntered += (_, _) => { hovered = true; Update(); };
+        row.PointerExited += (_, _) => { hovered = false; Update(); };
+        row.GotFocus += (_, _) => { focused = true; Update(); };
+        // Also raised when the focus moves between the row's own buttons.
+        row.LostFocus += (_, _) => { focused = HasFocus(row); Update(); };
+        menu.Closed += (_, _) => Update();
+        return row;
+    }
+
+    private bool HasFocus(UIElement element)
+    {
+        // Before the window is shown there is no focus to ask about.
+        if (Content?.XamlRoot is not { } root) return false;
+        for (var focused = FocusManager.GetFocusedElement(root) as DependencyObject; focused is not null; focused = VisualTreeHelper.GetParent(focused))
+            if (ReferenceEquals(focused, element)) return true;
+        return false;
+    }
+
+    private static HandCursorButton SidebarIconButton(string glyph, string name, bool onSelected)
+    {
+        var icon = new FontIcon { Glyph = glyph, FontSize = 14 };
+        if (onSelected) icon.Foreground = new SolidColorBrush(Microsoft.UI.Colors.White);
+        var button = new HandCursorButton
+        {
+            Content = icon, Width = 28, Height = 28, Padding = new Thickness(0), VerticalAlignment = VerticalAlignment.Center,
+            Style = (Style)Application.Current.Resources["MenuButtonStyle"]
+        };
+        ToolTipService.SetToolTip(button, name);
+        AutomationProperties.SetName(button, name);
+        return button;
+    }
+
+    private HandCursorButton ShowMoreRow(ModuleHistorySidebarGroup group, bool expanded)
+    {
+        var label = Text(expanded ? Loc.T("Show less") : Loc.T("Show more"), 13, muted: true);
+        label.VerticalAlignment = VerticalAlignment.Center;
+        var button = new HandCursorButton
+        {
+            Content = label, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Left,
+            MinHeight = 32, Padding = new Thickness(38, 6, 10, 6), Style = (Style)Application.Current.Resources["MenuButtonStyle"]
+        };
+        AutomationProperties.SetName(button, label.Text);
+        button.Click += (_, _) =>
+        {
+            // Collapsing may hide an older chosen entry from the sidebar; it stays open in the detail pane.
+            if (!_expandedGroups.Remove(group.Id)) _expandedGroups.Add(group.Id);
+            RenderSidebar();
+        };
+        return button;
+    }
+
+    // Chooses the group, leaving History's own scopes; false when the user kept editing an entry.
+    private async Task<bool> EnterGroupAsync(ModuleHistorySidebarGroup group)
+    {
+        if (ReferenceEquals(group, _group)) return true;
+        if (!await ConfirmLeaveEditAsync() || _closing) return false;
         StopAudioPlayback();
         _group = group;
         _groupEntry = null;
         _groupEntryListed = false;
+        _groupView = null;
         _selection.Clear();
         _anchor = null;
         _notice.Text = "";
-        RenderSidebar();
+        return true;
+    }
+
+    // Starts a new entry, when the group offers that, and opens it.
+    private async void StartGroupEntry(ModuleHistorySidebarGroup group)
+    {
+        if (!await EnterGroupAsync(group)) return;
+        if (group.CreateNew is { } create)
+        {
+            string? id = null;
+            try { id = create(); }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { ReportGroupFailure(group, "new", ex); }
+            if (id is not null)
+            {
+                // The module may list it only once it holds something; a refresh then keeps it chosen.
+                _groupView = null;
+                _groupEntry = id;
+                _groupEntryListed = EntriesOf(group).Any(entry => entry.Id == id);
+                _notice.Text = "";
+            }
+        }
         Refilter();
+    }
+
+    private async void OpenGroupEntry(ModuleHistorySidebarGroup group, string id, bool listed)
+    {
+        if (ReferenceEquals(group, _group) && id == _groupEntry) return;
+        if (!await EnterGroupAsync(group)) return;
+        SelectGroupEntry(group, id, listed);
     }
 
     // Back to History's own scopes; the caller draws again.
@@ -110,98 +275,35 @@ public sealed partial class HistoryWindow
 
     private void RefilterGroup(ModuleHistorySidebarGroup group)
     {
+        // Search narrows History's own list, which is hidden while a group is chosen.
         _filteredSearch = _search.Text;
-        var search = _search.Text.Trim();
         var listed = TryEntriesOf(group);
-        var all = listed ?? [];
-        _groupEntries = search.Length == 0 ? all : [.. all.Where(entry =>
-            entry.Title.Contains(search, StringComparison.CurrentCultureIgnoreCase) ||
-            entry.Subtitle?.Contains(search, StringComparison.CurrentCultureIgnoreCase) == true)];
+        _groupEntries = listed ?? [];
         // Only a list the module could give tells that the chosen entry is gone; after a failure its view stays.
         if (_groupEntry is { } chosen && listed is not null)
         {
-            var isListed = all.Any(entry => entry.Id == chosen);
+            var isListed = listed.Any(entry => entry.Id == chosen);
             // Deleted, also by the module itself: the view goes with it.
             if (_groupEntryListed && !isListed) _groupEntry = null;
             else _groupEntryListed = isListed;
         }
         _filterButton.IsEnabled = _sortButton.IsEnabled = false;
-        _listTitle.Text = group.Title;
-        _listCount.Text = _groupEntries.Count == 1 ? Loc.T("1 entry") : Loc.T("{0:N0} entries", _groupEntries.Count);
-        RenderGroupList(group);
         RenderGroupDetail(group);
         RenderGroupToolbar(group);
-    }
-
-    private void RenderGroupList(ModuleHistorySidebarGroup group)
-    {
-        var rows = new List<Func<UIElement>>();
-        _rowIndex.Clear();
-        if (_groupEntries.Count == 0)
-        {
-            rows.Add(_search.Text.Trim().Length > 0
-                ? () => EmptyState("search", Loc.T("No Results"), Loc.T("No entries match your search."))
-                : () => EmptyState("history", Loc.T("No Entries"), ""));
-        }
-        var now = DateTimeOffset.Now;
-        var first = true;
-        foreach (var entry in _groupEntries)
-        {
-            if (!first) rows.Add(() => new Border { Height = 1, Background = Brush("HairlineBrush"), Margin = new Thickness(12, 0, 12, 0) });
-            first = false;
-            _rowIndex[entry.Id] = rows.Count;
-            rows.Add(() => GroupEntryRow(group, entry, now));
-        }
-        _list.ItemsSource = rows;
-    }
-
-    private HandCursorButton GroupEntryRow(ModuleHistorySidebarGroup group, ModuleHistorySidebarEntry entry, DateTimeOffset now)
-    {
-        var selected = entry.Id == _groupEntry;
-        var foreground = selected ? new SolidColorBrush(Microsoft.UI.Colors.White) : Brush("TextBrush");
-        var secondary = selected ? new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(0xD9, 0xFF, 0xFF, 0xFF)) : Brush("MutedBrush");
-        var content = new StackPanel { Spacing = 3 };
-        var title = Text(entry.Title.Length == 0 ? Loc.T("Untitled") : entry.Title, 14, bold: true);
-        title.Foreground = foreground; title.TextWrapping = TextWrapping.NoWrap; title.TextTrimming = TextTrimming.CharacterEllipsis;
-        content.Children.Add(title);
-        if (!string.IsNullOrWhiteSpace(entry.Subtitle))
-        {
-            var subtitle = Text(entry.Subtitle, 12);
-            subtitle.Foreground = secondary; subtitle.TextWrapping = TextWrapping.NoWrap; subtitle.TextTrimming = TextTrimming.CharacterEllipsis;
-            content.Children.Add(subtitle);
-        }
-        var when = Text(Elapsed(entry.Date.UtcDateTime, now), 12);
-        when.Foreground = secondary;
-        content.Children.Add(when);
-        var button = new HandCursorButton
-        {
-            Content = content, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch,
-            Padding = new Thickness(12, 10, 12, 10), Margin = new Thickness(0, 1, 0, 1),
-            Style = (Style)Application.Current.Resources[selected ? "SidebarSelectedButtonStyle" : "MenuButtonStyle"]
-        };
-        AutomationProperties.SetName(button, string.Join(", ", new[] { title.Text, entry.Subtitle, when.Text }.Where(part => !string.IsNullOrWhiteSpace(part))));
-        AutomationProperties.SetItemStatus(button, selected ? Loc.T("Selected") : Loc.T("Not selected"));
-        button.Click += (_, _) => SelectGroupEntry(group, entry.Id, listed: true);
-        if (group.Delete is not null)
-        {
-            var menu = new MenuFlyout();
-            var delete = new MenuFlyoutItem { Text = Loc.T("Delete…") };
-            delete.Click += (_, _) => _ = DeleteGroupEntryAsync(group, entry);
-            menu.Items.Add(delete);
-            button.ContextFlyout = menu;
-        }
-        return button;
+        RenderSidebar();
     }
 
     private void SelectGroupEntry(ModuleHistorySidebarGroup group, string? id, bool listed)
     {
-        if (!ReferenceEquals(group, _group) || id == _groupEntry) return;
+        if (!ReferenceEquals(group, _group)) return;
+        if (id == _groupEntry && _groupView is not null) return;
         _groupEntry = id;
         _groupEntryListed = listed;
         _notice.Text = "";
-        RenderGroupList(group);
+        // An entry chosen with the keyboard may be older than those the sidebar shows first.
+        if (id is not null && EntriesOf(group).Select(entry => entry.Id).ToList().IndexOf(id) >= GroupEntriesShown) _expandedGroups.Add(group.Id);
         RenderGroupDetail(group);
-        RenderGroupToolbar(group);
+        RenderSidebar();
     }
 
     private void MoveGroupSelection(ModuleHistorySidebarGroup group, int offset)
@@ -209,9 +311,7 @@ public sealed partial class HistoryWindow
         if (_groupEntries.Count == 0) return;
         var index = _groupEntry is { } chosen ? _groupEntries.ToList().FindIndex(entry => entry.Id == chosen) : -1;
         index = index < 0 ? (offset > 0 ? 0 : _groupEntries.Count - 1) : Math.Clamp(index + offset, 0, _groupEntries.Count - 1);
-        var id = _groupEntries[index].Id;
-        SelectGroupEntry(group, id, listed: true);
-        BringIntoView(id);
+        SelectGroupEntry(group, _groupEntries[index].Id, listed: true);
     }
 
     private void RenderGroupDetail(ModuleHistorySidebarGroup group)
@@ -235,34 +335,8 @@ public sealed partial class HistoryWindow
         }
     }
 
-    private void RenderGroupToolbar(ModuleHistorySidebarGroup group)
-    {
-        _toolbarActions.Children.Clear();
-        if (group.CreateNew is { } create)
-        {
-            var title = string.IsNullOrWhiteSpace(group.NewTitle) ? Loc.T("New") : group.NewTitle;
-            _toolbarActions.Children.Add(ActionButton(title, () =>
-            {
-                string? id;
-                try { id = create(); }
-                catch (Exception ex) when (ex is not OutOfMemoryException)
-                {
-                    ReportGroupFailure(group, "new", ex);
-                    return;
-                }
-                if (id is null) return;
-                // The module may list it only once it holds something; a refresh then keeps it chosen.
-                _groupView = null;
-                SelectGroupEntry(group, id, listed: EntriesOf(group).Any(entry => entry.Id == id));
-            }));
-        }
-        if (group.Delete is not null && _groupEntryListed && _groupEntries.FirstOrDefault(entry => entry.Id == _groupEntry) is { } chosen)
-        {
-            var delete = ActionButton(Loc.T("Delete…"), () => _ = DeleteGroupEntryAsync(group, chosen));
-            delete.Style = (Style)Application.Current.Resources["DestructiveButtonStyle"];
-            _toolbarActions.Children.Add(delete);
-        }
-    }
+    // A group's actions sit in the sidebar, next to its name and its entries.
+    private void RenderGroupToolbar(ModuleHistorySidebarGroup group) => _toolbarActions.Children.Clear();
 
     private async Task DeleteGroupEntryAsync(ModuleHistorySidebarGroup group, ModuleHistorySidebarEntry entry)
     {
@@ -284,20 +358,15 @@ public sealed partial class HistoryWindow
             deleted = false;
         }
         _notice.Text = deleted ? Loc.T("Entry deleted.") : Loc.T("The entry could not be deleted.");
-        if (deleted && entry.Id == _groupEntry)
+        if (deleted && ReferenceEquals(group, _group) && entry.Id == _groupEntry)
         {
             _groupEntry = null;
             _groupEntryListed = false;
         }
         if (ReferenceEquals(group, _group)) RefilterGroup(group);
-        RenderSidebar();
+        else RenderSidebar();
     }
 
     // Whether the keyboard focus is in the module's view, whose keys belong to it.
-    private bool FocusInDetail()
-    {
-        for (var element = FocusManager.GetFocusedElement(Content.XamlRoot) as DependencyObject; element is not null; element = VisualTreeHelper.GetParent(element))
-            if (ReferenceEquals(element, _detailHost)) return true;
-        return false;
-    }
+    private bool FocusInDetail() => HasFocus(_detailHost);
 }

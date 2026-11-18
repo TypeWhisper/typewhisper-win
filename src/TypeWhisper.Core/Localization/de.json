@@ -3308,5 +3308,7 @@
   "This entry could not be shown.": "Dieser Eintrag konnte nicht angezeigt werden.",
   "New": "Neu",
   "“{0}” is removed from this PC. This cannot be undone.": "„{0}“ wird von diesem PC entfernt. Das kann nicht rückgängig gemacht werden.",
-  "The entry could not be deleted.": "Der Eintrag konnte nicht gelöscht werden."
+  "The entry could not be deleted.": "Der Eintrag konnte nicht gelöscht werden.",
+  "Show more": "Mehr anzeigen",
+  "Show less": "Weniger anzeigen"
 }

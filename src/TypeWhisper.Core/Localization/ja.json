@@ -3308,5 +3308,7 @@
   "This entry could not be shown.": "この項目を表示できませんでした。",
   "New": "新規",
   "“{0}” is removed from this PC. This cannot be undone.": "「{0}」をこの PC から削除します。この操作は取り消せません。",
-  "The entry could not be deleted.": "項目を削除できませんでした。"
+  "The entry could not be deleted.": "項目を削除できませんでした。",
+  "Show more": "さらに表示",
+  "Show less": "表示を減らす"
 }

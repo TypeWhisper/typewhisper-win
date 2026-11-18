@@ -28,6 +28,10 @@ public sealed partial class HistoryWindow : Window
         ItemTemplate = new HistoryElementFactory()
     };
     private readonly ScrollViewer _listScroll;
+    // The list column, hidden while a module's group is chosen: its entries are listed in the sidebar.
+    private readonly ColumnDefinition _listColumn = new() { Width = new GridLength(380) };
+    private readonly Border _listHeaderSurface;
+    private readonly Border _listSurface;
     private readonly TextBlock _listTitle = Text(Loc.T("All History"), 15, bold: true);
     private readonly TextBlock _listCount = Text("", 12, muted: true);
     private readonly TextBox _search = new() { PlaceholderText = Loc.T("Search History"), VerticalAlignment = VerticalAlignment.Center };
@@ -71,7 +75,7 @@ public sealed partial class HistoryWindow : Window
         Title = Loc.T("History");
         var root = new Grid { Background = Brush("InkBrush") };
         root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(240) });
-        root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(380) });
+        root.ColumnDefinitions.Add(_listColumn);
         root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(64) });
         root.RowDefinitions.Add(new RowDefinition());
@@ -91,9 +95,9 @@ public sealed partial class HistoryWindow : Window
         var listHeader = new StackPanel { Spacing = 2, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(22, 0, 16, 0) };
         listHeader.Children.Add(_listTitle);
         listHeader.Children.Add(_listCount);
-        var listHeaderSurface = new Border { Child = listHeader, BorderBrush = Brush("HairlineBrush"), BorderThickness = new Thickness(0, 0, 1, 0) };
-        Grid.SetColumn(listHeaderSurface, 1);
-        root.Children.Add(listHeaderSurface);
+        _listHeaderSurface = new Border { Child = listHeader, BorderBrush = Brush("HairlineBrush"), BorderThickness = new Thickness(0, 0, 1, 0) };
+        Grid.SetColumn(_listHeaderSurface, 1);
+        root.Children.Add(_listHeaderSurface);
         _listScroll = new ScrollViewer { Content = _list, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
         _listScroll.ViewChanged += (_, _) =>
         {
@@ -117,9 +121,9 @@ public sealed partial class HistoryWindow : Window
         listColumn.RowDefinitions.Add(new RowDefinition());
         listColumn.Children.Add(find);
         Grid.SetRow(_listScroll, 1); listColumn.Children.Add(_listScroll);
-        var listSurface = new Border { Child = listColumn, BorderBrush = Brush("HairlineBrush"), BorderThickness = new Thickness(0, 1, 1, 0) };
-        Grid.SetColumn(listSurface, 1); Grid.SetRow(listSurface, 1);
-        root.Children.Add(listSurface);
+        _listSurface = new Border { Child = listColumn, BorderBrush = Brush("HairlineBrush"), BorderThickness = new Thickness(0, 1, 1, 0) };
+        Grid.SetColumn(_listSurface, 1); Grid.SetRow(_listSurface, 1);
+        root.Children.Add(_listSurface);
 
         // Entry actions share the title bar row; the caption buttons keep their space on the right.
         _toolbarActions.Margin = new Thickness(24, 0, 150, 0);
@@ -291,6 +295,7 @@ public sealed partial class HistoryWindow : Window
 
     private void Refilter()
     {
+        ShowListColumn(_group is null);
         if (_group is { } group)
         {
             RefilterGroup(group);
@@ -454,11 +459,8 @@ public sealed partial class HistoryWindow : Window
 
     private void RenderList()
     {
-        if (_group is { } sidebarGroup)
-        {
-            RenderGroupList(sidebarGroup);
-            return;
-        }
+        // A module's group lists its entries in the sidebar.
+        if (_group is not null) return;
         // Keep lightweight factories as the data source. WinUI creates controls only for the
         // viewport and its cache, including after loading many pages or changing selection.
         var rows = new List<Func<UIElement>>();
