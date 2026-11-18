@@ -38,7 +38,7 @@ public sealed class LocalInferenceTests(ITestOutputHelper output)
             var host = new TestHost(Path.Combine(root, "assets"));
             var entry = new PortableCatalogEntry
             {
-                Id = "com.typewhisper.qwen3-local", Name = "Qwen3 ASR (Local)", Version = "1.1.3", MinHostVersion = "1.3.0",
+                Id = "com.typewhisper.qwen3-local", Name = "Qwen3 ASR (Local)", Version = "1.2.0", MinHostVersion = "1.3.0",
                 DownloadUrl = "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-fixture-v1.0.0/qwen.zip", Size = new FileInfo(zip).Length,
                 Sha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(zip))),
                 SupportedArchitectures = ["x64", "arm64"], Categories = ["transcription"]
@@ -107,18 +107,25 @@ public sealed class LocalInferenceTests(ITestOutputHelper output)
     }
 
     [LocalModelFact("QWEN_LOCAL_TEST_LARGE_FILES")]
-    public async Task RealCpuInferenceWithPinnedLargeModel()
+    public Task RealCpuInferenceWithPinnedLargeModel() =>
+        RunPinnedFilesAsync("QWEN_LOCAL_TEST_LARGE_FILES", QwenModelAssets.Model17B, Qwen3LocalPlugin.LargeModelId);
+
+    [LocalModelFact("QWEN_LOCAL_TEST_RUMBLE_FILES")]
+    public Task RealCpuInferenceWithPinnedRumbleModel() =>
+        RunPinnedFilesAsync("QWEN_LOCAL_TEST_RUMBLE_FILES", QwenModelAssets.ModelRumble, Qwen3LocalPlugin.RumbleModelId);
+
+    private async Task RunPinnedFilesAsync(string variable, QwenAssetSource source, string modelId)
     {
-        var files = Environment.GetEnvironmentVariable("QWEN_LOCAL_TEST_LARGE_FILES")!;
+        var files = Environment.GetEnvironmentVariable(variable)!;
         // Serves the previously downloaded files under their pinned names, so every production
-        // size and SHA-256 check runs against the real 1.7B files.
-        var prefix = new Uri(QwenModelAssets.Model17B.Url + "/").AbsolutePath;
+        // size and SHA-256 check runs against the real files.
+        var prefix = new Uri(source.Url + "/").AbsolutePath;
         using var http = QwenTests.Http(request =>
         {
             Assert.StartsWith(prefix, request.RequestUri!.AbsolutePath);
             return new StreamContent(File.OpenRead(Path.Join(files, request.RequestUri.AbsolutePath[prefix.Length..])));
         });
-        await RunRealInferenceAsync(new QwenModelAssets(http, QwenModelAssets.Model17B), Qwen3LocalPlugin.LargeModelId);
+        await RunRealInferenceAsync(new QwenModelAssets(http, source), modelId);
     }
 
     private async Task RunRealInferenceAsync(QwenModelAssets assets, string modelId)
@@ -150,6 +157,8 @@ public sealed class LocalInferenceTests(ITestOutputHelper output)
         Assert.True(longResult.Segments.Count >= 2);
         Assert.Equal((double)repeated.Length / 16000, longResult.DurationSeconds);
         Assert.True(longResult.Text.Split("Bergbau", StringSplitOptions.None).Length >= 5, longResult.Text);
+        // No language set: the model's language marker must not reach the text.
+        Assert.DoesNotContain("language ", longResult.Text);
         output.WriteLine($"Long audio: {longResult.DurationSeconds:F3}s elapsed={timer.Elapsed.TotalSeconds:F3}s text={longResult.Text}");
         metrics.Add(new { file = "repeated-de", longResult.Text, longResult.DurationSeconds, elapsedSeconds = timer.Elapsed.TotalSeconds });
         var silence = await engine.TranscribePcmAsync(new float[16000], null, false, default); Assert.Empty(silence.Text);

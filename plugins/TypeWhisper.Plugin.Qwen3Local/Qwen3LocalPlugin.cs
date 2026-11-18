@@ -8,6 +8,7 @@ public sealed class Qwen3LocalPlugin : IPcmTranscriptionEnginePlugin, IPluginSet
 {
     internal const string ModelId = "qwen3-asr-0.6b-int8";
     internal const string LargeModelId = "qwen3-asr-1.7b-int8";
+    internal const string RumbleModelId = "rumble-2-flash-int8";
     private static readonly IReadOnlyDictionary<string, string> Languages = new Dictionary<string, string>
     {
         ["zh"] = "Chinese", ["en"] = "English", ["yue"] = "Cantonese", ["ar"] = "Arabic", ["de"] = "German",
@@ -17,6 +18,8 @@ public sealed class Qwen3LocalPlugin : IPcmTranscriptionEnginePlugin, IPluginSet
         ["da"] = "Danish", ["fi"] = "Finnish", ["pl"] = "Polish", ["cs"] = "Czech", ["fil"] = "Filipino",
         ["fa"] = "Persian", ["el"] = "Greek", ["hu"] = "Hungarian", ["mk"] = "Macedonian", ["ro"] = "Romanian"
     };
+    // The names the models write in their "language X" marker.
+    internal static IEnumerable<string> LanguageNames => Languages.Values;
     private readonly SemaphoreSlim _gate = new(1);
     private readonly HttpClient _http;
     private readonly IReadOnlyDictionary<string, QwenModelAssets> _assets;
@@ -37,7 +40,8 @@ public sealed class Qwen3LocalPlugin : IPcmTranscriptionEnginePlugin, IPluginSet
         _assets = new Dictionary<string, QwenModelAssets>
         {
             [ModelId] = new(http, source ?? QwenModelAssets.Model06B, availableBytes),
-            [LargeModelId] = new(http, source ?? QwenModelAssets.Model17B, availableBytes)
+            [LargeModelId] = new(http, source ?? QwenModelAssets.Model17B, availableBytes),
+            [RumbleModelId] = new(http, source ?? QwenModelAssets.ModelRumble, availableBytes)
         };
     }
 
@@ -46,7 +50,7 @@ public sealed class Qwen3LocalPlugin : IPcmTranscriptionEnginePlugin, IPluginSet
     /// <inheritdoc />
     public string PluginName => "Qwen3 ASR (Local)";
     /// <inheritdoc />
-    public string PluginVersion => "1.1.3";
+    public string PluginVersion => "1.2.0";
     /// <inheritdoc />
     public string ProviderId => "qwen3-local";
     /// <inheritdoc />
@@ -75,6 +79,13 @@ public sealed class Qwen3LocalPlugin : IPcmTranscriptionEnginePlugin, IPluginSet
         new(LargeModelId, "Qwen3-ASR 1.7B INT8")
         {
             Publisher = "Qwen", SizeDescription = "Higher accuracy, slower · ~2.4 GB download · ~2.4 GB installed · ~3.5 GB RAM", EstimatedSizeMB = 2404,
+            LanguageCount = Languages.Count, LanguageCodes = Languages.Keys.ToArray()
+        },
+        // Same languages as Qwen3-ASR. sherpa-onnx would split Rumble's control tokens (<digits> and so on) into plain
+        // text, so the model runs without them.
+        new(RumbleModelId, "Rumble-2-Flash INT8")
+        {
+            Publisher = "Reson8", SizeDescription = "Higher accuracy, fast · ~624 MB download · ~624 MB installed · ~1.2 GB RAM", EstimatedSizeMB = 624,
             LanguageCount = Languages.Count, LanguageCodes = Languages.Keys.ToArray()
         }
     ];

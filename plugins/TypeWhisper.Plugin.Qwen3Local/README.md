@@ -1,6 +1,6 @@
 # Qwen3 ASR (Local) — portable V2 plugin
 
-Offline CPU transcription with Qwen3-ASR 0.6B or 1.7B INT8, running on the
+Offline CPU transcription with Qwen3-ASR 0.6B or 1.7B INT8, or Reson8's Rumble-2-Flash INT8, running on the
 sherpa-onnx 2.0.0 runtime. Plugin ID: `com.typewhisper.qwen3-local`.
 
 ## Models
@@ -9,8 +9,9 @@ sherpa-onnx 2.0.0 runtime. Plugin ID: `com.typewhisper.qwen3-local`.
 | --- | --- | ---: | ---: | ---: |
 | Qwen3-ASR 0.6B INT8 (recommended) | Low memory | 879 MB | ~1 GB | ~2 GB |
 | Qwen3-ASR 1.7B INT8 | Higher accuracy, slower | 2.4 GB | 2.4 GB | ~3.5 GB |
+| Rumble-2-Flash INT8 | Higher accuracy, fast | 624 MB | 624 MB | ~1.2 GB |
 
-Both models run on the CPU only; no GPU execution provider is used. The settings page shows the tier at the start of each model's size line. Working memory varies by device and recording.
+All models run on the CPU only; no GPU execution provider is used. The settings page shows the tier at the start of each model's size line. Working memory varies by device and recording.
 
 The macOS plugin offers MLX models at 4, 5, 6 and 8 bit and BF16. Windows has no
 validated sherpa-onnx artifact for those precisions, so its tiers are the two INT8
@@ -58,7 +59,8 @@ boundary in the final three seconds. Segments represent these decoding windows,
 not word-aligned timestamps. Quiet input is raised to the 0.707 peak the recorder
 uses for dictation, so files and API audio are decoded at the same level; the
 1.7B model drops whole windows of quiet speech otherwise. A `language X<asr_text>`
-marker that the 1.7B model sometimes emits as plain text is removed. Native
+marker that the 1.7B model sometimes emits as plain text is removed, and so is the
+`language X.` that Rumble-2-Flash writes at the start of a window when no language is set. Native
 decoding is drained before cancellation is reported; cancellation does not return
 a partial transcript. Unload, removal, download, load and transcription share an
 operation lock.
@@ -87,6 +89,26 @@ export in the same layout, made with the converter of the official archive
 | `tokenizer/merges.txt` | 1,671,853 | `8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5` |
 | `tokenizer/vocab.json` | 2,776,833 | `ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910` |
 | `tokenizer/tokenizer_config.json` | 12,487 | `4942d005604266809309cabc9f4e9cb89ce855d59b14681fdc0e1cc62ea26c4c` |
+
+Rumble-2-Flash is Reson8's model in the Qwen3-ASR architecture with a 14-layer decoder
+([Reson8/Rumble-2-Flash](https://huggingface.co/Reson8/Rumble-2-Flash), Apache-2.0). TypeWhisper
+renamed its transformers 5 weights to the original Qwen3-ASR layout and exported them with the
+same converter as the 1.7B build. The model was trained with control tokens such as `<digits>` at
+the start of the system prompt; sherpa-onnx would split them into text, so the plugin runs it
+without them. With sherpa-onnx 2.0.1 on four threads it reached 7.4 % WER on 20 suites of the
+TypeWhisper benchmark against 9.8 % for Qwen3-ASR 0.6B INT8, in about two thirds of the time.
+
+- [TypeWhisper/Rumble-2-Flash-sherpa-onnx-int8](https://huggingface.co/TypeWhisper/Rumble-2-Flash-sherpa-onnx-int8),
+  pinned to revision `a8128305e8e8c4aa5bf6fcd0a8454347ff80d6d1` (Apache-2.0)
+
+| File | Size | SHA-256 |
+| --- | ---: | --- |
+| `conv_frontend.onnx` | 44,148,280 | `00c48c47db2937884636a3d99f23166390088e8c939ff7e9e803e69b8af4c0b5` |
+| `encoder.int8.onnx` | 182,491,662 | `e6b4847992553dfa57bffda161b8c62d0af79c952c73269e6a2f6dc887f3e5dd` |
+| `decoder.int8.onnx` | 426,507,858 | `e9be29023d0d52518e75cc4b77abbfc569564c7453ad1f546e50174c9a8b426c` |
+| `tokenizer/merges.txt` | 1,075,910 | `ca57770275b525f8766ed68bf4b2d1d66b85adc41b06d8b5686cc3ca2b808aa9` |
+| `tokenizer/vocab.json` | 1,961,918 | `c5e356c0638515539c196bca5da724fcf35a91fceaf1a2204c2a7193adc21059` |
+| `tokenizer/tokenizer_config.json` | 13,585 | `c812aa17410d17b1b8c12f499d5359d6d9bd7395729bc7a7e1742aaa21f2b7df` |
 
 A second, independent export of the same model has an identical decoder; the
 tokenizer files are byte-identical to the official 0.6B archive.

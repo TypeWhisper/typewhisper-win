@@ -69,11 +69,19 @@ internal sealed partial class QwenRecognizer : IQwenRecognizer
     }
 
     // sherpa-onnx strips the "language X<asr_text>" prefix for the 0.6B model, but the 1.7B export leaves it
-    // in the text of some windows, sometimes mid-window, so any remaining marker is removed here.
-    internal static string StripLanguageMarkers(string text) => LanguageMarker().Replace(text, "").Trim();
+    // in the text of some windows, sometimes mid-window, so any remaining marker is removed here. Rumble-2-Flash
+    // runs without its control tokens and, with no language set, ends the marker with a period instead of
+    // <asr_text> ("language German. Es ..."); that form is removed where a sentence starts.
+    internal static string StripLanguageMarkers(string text) =>
+        SentenceLanguageMarker.Replace(LanguageMarker().Replace(text, ""), "").Trim();
 
     [GeneratedRegex(@"(?:language\s+[A-Za-z]+(?:\s[A-Za-z]+)?\s*)?<asr_text>", RegexOptions.CultureInvariant)]
     private static partial Regex LanguageMarker();
+
+    // Only the language names the models report, so "language Python." stays text.
+    private static readonly Regex SentenceLanguageMarker = new(
+        @"(?<=^\s*|[.!?]\s+)language\s+(?:" + string.Join("|", Qwen3LocalPlugin.LanguageNames.Select(Regex.Escape)) + @")\.\s*",
+        RegexOptions.CultureInvariant);
 
     public void Dispose() => _recognizer.Dispose();
 

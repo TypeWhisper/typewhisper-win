@@ -178,13 +178,15 @@ public sealed class QwenTests : IDisposable
     }
 
     [Fact]
-    public void LargeModelPinsRevisionAndEveryRequiredFile()
+    public void FileModelsPinRevisionAndEveryRequiredFile()
     {
-        var source = QwenModelAssets.Model17B;
-        Assert.Matches("/resolve/[0-9a-f]{40}$", source.Url);
-        Assert.Equal(QwenModelAssets.RequiredFiles, source.Files!.Select(file => file.Name));
-        Assert.All(source.Files!, file => { Assert.Matches("^[0-9a-f]{64}$", file.Sha256); Assert.True(file.Size > 0); });
-        Assert.Equal(source.Files!.Sum(file => file.Size), source.Size);
+        foreach (var source in new[] { QwenModelAssets.Model17B, QwenModelAssets.ModelRumble })
+        {
+            Assert.Matches("/resolve/[0-9a-f]{40}$", source.Url);
+            Assert.Equal(QwenModelAssets.RequiredFiles, source.Files!.Select(file => file.Name));
+            Assert.All(source.Files!, file => { Assert.Matches("^[0-9a-f]{64}$", file.Sha256); Assert.True(file.Size > 0); });
+            Assert.Equal(source.Files!.Sum(file => file.Size), source.Size);
+        }
         Assert.Null(QwenModelAssets.Model06B.Files);
     }
 
@@ -197,7 +199,8 @@ public sealed class QwenTests : IDisposable
         using var plugin = new Qwen3LocalPlugin(Http(() => new ByteArrayContent(bytes)), directory =>
         { var recognizer = new FakeRecognizer(); loaded.Add((directory, recognizer)); return recognizer; }, Source(bytes));
         await plugin.ActivateAsync(host);
-        Assert.Equal([Qwen3LocalPlugin.ModelId, Qwen3LocalPlugin.LargeModelId], plugin.TranscriptionModels.Select(model => model.Id));
+        Assert.Equal([Qwen3LocalPlugin.ModelId, Qwen3LocalPlugin.LargeModelId, Qwen3LocalPlugin.RumbleModelId],
+            plugin.TranscriptionModels.Select(model => model.Id));
         Assert.Single(plugin.TranscriptionModels, model => model.IsRecommended);
 
         await plugin.DownloadModelAsync(Qwen3LocalPlugin.LargeModelId, null, default);
@@ -218,7 +221,8 @@ public sealed class QwenTests : IDisposable
 
         // The host keeps blocking the earlier model's removal, so its own action removes it while the selection
         // and the loaded model stay.
-        Assert.Equal(["remove-" + Qwen3LocalPlugin.ModelId, "remove-" + Qwen3LocalPlugin.LargeModelId], plugin.SettingsActions.Select(action => action.Id));
+        Assert.Equal(["remove-" + Qwen3LocalPlugin.ModelId, "remove-" + Qwen3LocalPlugin.LargeModelId, "remove-" + Qwen3LocalPlugin.RumbleModelId],
+            plugin.SettingsActions.Select(action => action.Id));
         await plugin.ExecuteSettingsActionAsync("remove-" + Qwen3LocalPlugin.LargeModelId, default);
         Assert.False(plugin.IsModelDownloaded(Qwen3LocalPlugin.LargeModelId));
         Assert.Equal(Qwen3LocalPlugin.ModelId, plugin.SelectedModelId);
@@ -421,6 +425,10 @@ public sealed class QwenTests : IDisposable
     [InlineData("Nachdem der Damm erbaut war. language German<asr_text>Kamen die Fluten.", "Nachdem der Damm erbaut war. Kamen die Fluten.")]
     [InlineData("<asr_text>Hello there.", "Hello there.")]
     [InlineData("Die Sprache language ist wichtig.", "Die Sprache language ist wichtig.")]
+    [InlineData("language German. Raptorium Bergbau scheint profitierter zu sein.", "Raptorium Bergbau scheint profitierter zu sein.")]
+    [InlineData("Someone spilled water on their machine. language English. I, yeah.", "Someone spilled water on their machine. I, yeah.")]
+    [InlineData("They teach the language English. Then French.", "They teach the language English. Then French.")]
+    [InlineData("language Python. Next.", "language Python. Next.")]
     public void LanguageMarkersLeakedByTheModelAreRemoved(string text, string expected) =>
         Assert.Equal(expected, QwenRecognizer.StripLanguageMarkers(text));
 
