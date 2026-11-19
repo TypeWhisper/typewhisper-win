@@ -143,7 +143,12 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
             var policy = PolicyModels?.Invoke() ?? default;
             // Policy IDs compare case-insensitively; the engine compares exactly, so the catalog's own spelling is used.
             policy = (Canonical(policy.Enforced), Canonical(policy.Recommended));
-            var selected = policy.Enforced ?? _host.GetSetting<string>("SelectedModelId") ?? policy.Recommended ?? _lease.Engine.SelectedModelId
+            // Policy and the saved choice stay as they are; without them, the first downloaded fallback loads, so removing
+            // the active model leaves another downloaded one in use on the next start.
+            var downloaded = new[] { _lease.Engine.SelectedModelId, Models.FirstOrDefault(model => model.Model.IsRecommended)?.Model.Id }
+                .Concat(Models.Select(model => model.Model.Id))
+                .FirstOrDefault(id => id is not null && Models.Any(m => m.Model.Id == id && m.Downloaded));
+            var selected = policy.Enforced ?? _host.GetSetting<string>("SelectedModelId") ?? policy.Recommended ?? downloaded
                 ?? Models.FirstOrDefault(model => model.Model.IsRecommended)?.Model.Id
                 ?? Models.FirstOrDefault()?.Model.Id;
             if (selected is null || !Models.Any(m => m.Model.Id == selected && m.Downloaded))

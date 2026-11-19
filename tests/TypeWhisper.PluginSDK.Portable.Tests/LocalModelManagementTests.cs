@@ -418,6 +418,11 @@ public sealed class LocalModelManagementTests : IDisposable
         Assert.Null(runtime.ActiveModelId);
         Assert.False(runtime.Ready);
         Assert.Null(new VocabularyHostServices(_root).GetSetting<string>("SelectedModelId"));
+
+        // The next start loads the other downloaded model, although the removed one is first and recommended.
+        _engine.SetupGet(e => e.TranscriptionModels).Returns([new(LocalTranscriptionPlugin.ModelId, "Parakeet") { IsRecommended = true }, new("canary", "Canary")]);
+        await using var restarted = Create(); await restarted.InitializeAsync();
+        Assert.Equal("canary", restarted.ActiveModelId);
     }
 
     [Fact]
