@@ -26,6 +26,8 @@ public sealed partial class HistoryWindow
     private readonly Dictionary<string, HandCursorButton> _showMoreRows = new(StringComparer.Ordinal);
     // The row of the chosen entry as last drawn, so keyboard selection can scroll it into view.
     private Grid? _chosenGroupRow;
+    // The buttons of the group names and entries as last drawn, so the keyboard can be put back after a deletion.
+    private readonly Dictionary<(string Group, string? Entry), Control> _groupRowButtons = [];
 
     private static IReadOnlyList<ModuleHistorySidebarGroup> SidebarGroups => HostModules.ActiveCatalog.HistorySidebarGroups;
 
@@ -87,9 +89,10 @@ public sealed partial class HistoryWindow
     private void RenderGroupRows()
     {
         var groups = SidebarGroups.Where(IsShown).ToArray();
+        _chosenGroupRow = null;
+        _groupRowButtons.Clear();
         if (groups.Length == 0) return;
         _sidebar.Children.Add(new Border { Height = 1, Background = Brush("HairlineBrush"), Margin = new Thickness(10, 12, 10, 4) });
-        _chosenGroupRow = null;
         foreach (var group in groups)
         {
             _sidebar.Children.Add(GroupHeader(group));
@@ -117,6 +120,7 @@ public sealed partial class HistoryWindow
         header.ColumnDefinitions.Add(new ColumnDefinition());
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         var row = SidebarRow(icon, group.Title, 0, selected, 0, () => StartGroupEntry(group));
+        _groupRowButtons[(group.Id, null)] = row;
         Grid.SetColumnSpan(row, 2);
         header.Children.Add(row);
         if (group.CreateNew is not null)
@@ -154,6 +158,7 @@ public sealed partial class HistoryWindow
         AutomationProperties.SetName(button, details);
         AutomationProperties.SetItemStatus(button, selected ? Loc.T("Selected") : Loc.T("Not selected"));
         button.Click += (_, _) => OpenGroupEntry(group, entry.Id, listed: true);
+        _groupRowButtons[(group.Id, entry.Id)] = button;
         var row = new Grid();
         row.ColumnDefinitions.Add(new ColumnDefinition());
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -383,6 +388,10 @@ public sealed partial class HistoryWindow
         }
         finally { _dialogOpen = false; }
         if (!confirmed || _closing) return;
+        // The entry that takes the deleted one's place in the sidebar, or the one above it at the end.
+        var entries = EntriesOf(group).Select(listed => listed.Id).ToList();
+        var index = entries.IndexOf(entry.Id);
+        var neighbor = index < 0 ? null : index + 1 < entries.Count ? entries[index + 1] : index > 0 ? entries[index - 1] : null;
         bool deleted;
         try { deleted = delete(entry.Id); }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -398,6 +407,16 @@ public sealed partial class HistoryWindow
         }
         if (ReferenceEquals(group, _group)) RefilterGroup(group);
         else RenderSidebar();
+        // The row whose menu or key deleted it is gone; the keyboard stays in the sidebar. Queued at the priority of
+        // the redraw a module's NotifyChanged from within Delete has queued, so it runs right after it and finds the new
+        // buttons, before later input could move the focus elsewhere.
+        if (deleted) DispatcherQueue.TryEnqueue(() =>
+        {
+            if (_closing || FocusInDetail()) return;
+            var target = (neighbor is not null ? _groupRowButtons.GetValueOrDefault((group.Id, neighbor)) : null)
+                ?? _groupRowButtons.GetValueOrDefault((group.Id, null));
+            target?.Focus(FocusState.Programmatic);
+        });
     }
 
     // Whether the keyboard focus is in the module's view, whose keys belong to it.
