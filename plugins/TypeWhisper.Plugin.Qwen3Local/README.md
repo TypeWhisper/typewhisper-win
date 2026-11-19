@@ -61,7 +61,9 @@ uses for dictation, so files and API audio are decoded at the same level; the
 1.7B model drops whole windows of quiet speech otherwise. A `language X<asr_text>`
 marker that the 1.7B model sometimes emits as plain text is removed, and so is the
 `language X.` (or `language X。`) that Rumble-2-Flash writes at the start of a window when no language is set.
-If a window holds only that marker, with or without punctuation, it is decoded once more with the reported language as a hint. Native
+If a window holds only that marker, with or without punctuation, it is decoded once more with the reported language as a hint.
+On clips of a second or two the model can report the wrong language and then transcribes in that language; setting the
+language avoids this. Native
 decoding is drained before cancellation is reported; cancellation does not return
 a partial transcript. Unload, removal, download, load and transcription share an
 operation lock.
