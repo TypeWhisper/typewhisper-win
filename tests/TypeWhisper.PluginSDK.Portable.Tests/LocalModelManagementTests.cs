@@ -446,6 +446,22 @@ public sealed class LocalModelManagementTests : IDisposable
         Assert.DoesNotContain("canary", _downloaded);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task CanceledRemovalClearsTheSavedSelectionOnlyWhenTheFilesAreGone(bool deleted)
+    {
+        AllowRemoval();
+        await using var runtime = Create(); await runtime.InitializeAsync();
+        using var cancellation = new CancellationTokenSource();
+        _engine.Setup(e => e.RemoveModelAsync(LocalTranscriptionPlugin.ModelId, It.IsAny<CancellationToken>()))
+            .Returns(() => { if (deleted) _downloaded.Remove(LocalTranscriptionPlugin.ModelId); cancellation.Cancel(); throw new OperationCanceledException(cancellation.Token); });
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => runtime.RemoveAsync(LocalTranscriptionPlugin.ModelId, runtime.Generation, cancellation.Token));
+        var saved = new VocabularyHostServices(_root).GetSetting<string>("SelectedModelId");
+        if (deleted) Assert.Null(saved);
+        else Assert.Equal(LocalTranscriptionPlugin.ModelId, saved);
+    }
+
     [Fact]
     public async Task RemovalRejectsReactivatedPackageAndUnknownModel()
     {

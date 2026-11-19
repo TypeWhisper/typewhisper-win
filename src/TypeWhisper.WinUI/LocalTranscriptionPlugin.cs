@@ -459,12 +459,19 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
                 await engine.UnloadModelAsync();
                 ActiveModelId = null;
             }
-            if (engine.IsModelDownloaded(modelId))
-                await engine.RemoveModelAsync(modelId, ct);
+            try
+            {
+                if (engine.IsModelDownloaded(modelId))
+                    await engine.RemoveModelAsync(modelId, ct);
+            }
+            finally
+            {
+                // Also after a cancellation or failure that already deleted the files: the next start then loads
+                // another downloaded model instead of looking for this one.
+                if (SavedModelId == modelId && !engine.IsModelDownloaded(modelId)) _host.SetSetting<string?>("SelectedModelId", null);
+            }
             ct.ThrowIfCancellationRequested();
             if (engine.IsModelDownloaded(modelId)) throw new IOException(Loc.T("The plugin still reports this model as downloaded."));
-            // The next start then loads another downloaded model instead of looking for this one.
-            if (SavedModelId == modelId) _host.SetSetting<string?>("SelectedModelId", null);
             Feedback = Loc.T("Model removed. Download it again to use it.");
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
