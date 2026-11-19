@@ -3,17 +3,17 @@
     {
       "id": "com.typewhisper.assemblyai",
       "name": "AssemblyAI",
-      "version": "1.2.0",
-      "minHostVersion": "1.1.5",
+      "version": "1.4.0",
+      "minHostVersion": "1.3.1",
       "author": "TypeWhisper",
-      "description": "Universal-3.5 Pro and Universal-2 transcription with live streaming, dictionary terms and speaker diarization.",
+      "description": "AssemblyAI-STT-3.7 and Universal-2 transcription with live streaming, cleaned-up dictations, dictionary terms and speaker diarization.",
       "categories": [
         "transcription"
       ],
       "locality": "cloud",
-      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-assemblyai-v1.2.0/com.typewhisper.assemblyai-1.2.0-win-x64.zip",
-      "sha256": "c47056735ebc1b5e8eb9ccc57787a2da5f74a48285316e92132fcfce5cdc5343",
-      "size": 37523,
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-assemblyai-v1.4.0/com.typewhisper.assemblyai-1.4.0-win-x64.zip",
+      "sha256": "d1887f8b428b8736d8a2199ed1c1f05e42b60dbacacbb2ffb1e6e86303102bd2",
+      "size": 41200,
       "platforms": [
         "windows"
       ],
