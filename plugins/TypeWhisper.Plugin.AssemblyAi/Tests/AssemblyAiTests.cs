@@ -21,9 +21,10 @@ public partial class AssemblyAiTests
     }
 
     [Theory]
-    [InlineData(null, "universal-3-5-pro", 18)]
-    [InlineData("universal-3-pro", "universal-3-5-pro", 18)]
-    [InlineData("stale", "universal-3-5-pro", 18)]
+    [InlineData(null, "assemblyai-stt-3-7", 32)]
+    [InlineData("universal-3-5-pro", "assemblyai-stt-3-7", 32)]
+    [InlineData("universal-3-pro", "assemblyai-stt-3-7", 32)]
+    [InlineData("stale", "assemblyai-stt-3-7", 32)]
     [InlineData("universal-2", "universal-2", 37)]
     public async Task ActivationResolvesMacCatalogAndReadsOnlyHostSettings(string? stored, string expected, int languages)
     {
@@ -32,14 +33,14 @@ public partial class AssemblyAiTests
         await plugin.ActivateAsync(host);
         Assert.Equal(expected, plugin.SelectedModelId); Assert.Equal(languages, plugin.SupportedLanguages.Count);
         Assert.True(plugin.IsConfigured); Assert.True(plugin.SupportsDictionaryTerms); Assert.True(plugin.SupportsStreamingCompletion);
-        Assert.False(plugin.SupportsTranslation); Assert.Equal(4, plugin.TextSettings.Count); Assert.Single(plugin.SettingsActions);
+        Assert.False(plugin.SupportsTranslation); Assert.Equal(5, plugin.TextSettings.Count); Assert.Single(plugin.SettingsActions);
         await plugin.DeactivateAsync(); Assert.False(plugin.IsConfigured);
     }
 
     [Theory]
-    [InlineData("universal-3-5-pro", null, "keyterms_prompt")]
+    [InlineData("assemblyai-stt-3-7", null, "keyterms_prompt")]
     [InlineData("universal-2", "de", "word_boost")]
-    [InlineData("universal-3-5-pro", " auto ", "keyterms_prompt")]
+    [InlineData("assemblyai-stt-3-7", " auto ", "keyterms_prompt")]
     public async Task UploadSubmitPollPreservesAuthAudioDictionaryAndTimestamps(string model, string? language, string dictionaryField)
     {
         var calls = 0;
@@ -58,7 +59,11 @@ public partial class AssemblyAiTests
                 case 2:
                     Assert.Equal("/v2/transcript", request.RequestUri.AbsolutePath);
                     var body = JsonSerializer.Deserialize<JsonElement>(await request.Content!.ReadAsStringAsync(ct));
-                    Assert.Equal(model, body.GetProperty("speech_models")[0].GetString());
+                    // AssemblyAI-STT-3.7 sends a detected language it does not support to Universal-2 only when the request lists it.
+                    Assert.Equal(model == "universal-2" ? ["universal-2"] : new[] { model, "universal-2" },
+                        body.GetProperty("speech_models").EnumerateArray().Select(e => e.GetString()));
+                    // AssemblyAI-STT-3.7 keeps filler words unless asked not to.
+                    Assert.False(body.GetProperty("disfluencies").GetBoolean());
                     Assert.Equal(new[] { "Grüße", "TypeWhisper" }, body.GetProperty(dictionaryField).EnumerateArray().Select(e => e.GetString()));
                     Assert.False(body.TryGetProperty("speaker_labels", out _));
                     if (language == "de") Assert.Equal("de", body.GetProperty("language_code").GetString());
@@ -221,6 +226,8 @@ public partial class AssemblyAiTests
         Assert.Empty(AssemblyAiModels.Terms("one two three four five six seven", AssemblyAiModels.All[0]));
         plugin.SelectModel("universal-2"); Assert.Equal(100, plugin.DictionaryTermsBudget.MaxTerms);
         Assert.Equal(100, AssemblyAiModels.Terms(terms, AssemblyAiModels.All[1]).Count);
-        Assert.True(plugin.SupportsStreamingForPrompt("TypeWhisper, Grüße"));
+        // Universal-2 has no live sessions.
+        Assert.False(plugin.SupportsStreaming); Assert.False(plugin.SupportsStreamingForPrompt("TypeWhisper, Grüße"));
+        Assert.False(plugin.SupportsStreamingPreviewForPrompt(terms));
     }
 }

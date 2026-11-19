@@ -33,7 +33,7 @@ public partial class AssemblyAiTests
             calls++;
             Assert.Equal(HttpMethod.Post, request.Method); Assert.Equal("https://sync.assemblyai.com/v1/transcribe", request.RequestUri!.AbsoluteUri);
             Assert.Equal("fixture-key", Assert.Single(request.Headers.GetValues("Authorization")));
-            Assert.Equal("universal-3-5-pro", Assert.Single(request.Headers.GetValues("X-AAI-Model")));
+            Assert.Equal("universal-3-6-pro", Assert.Single(request.Headers.GetValues("X-AAI-Model")));
             var parts = Assert.IsType<MultipartFormDataContent>(request.Content).ToArray();
             Assert.Equal("audio", parts[0].Headers.ContentDisposition!.Name!.Trim('"'));
             Assert.Equal("audio/wav", parts[0].Headers.ContentType!.MediaType); Assert.Equal(audio, await parts[0].ReadAsByteArrayAsync(ct));
@@ -158,19 +158,20 @@ public partial class AssemblyAiTests
 
     [Theory]
     [InlineData("universal-2", "live", false, "de", 10, 1, false)]
-    [InlineData("universal-3-5-pro", "async", false, "de", 10, 1, false)]
-    [InlineData("universal-3-5-pro", "live", true, "de", 10, 1, false)]
-    [InlineData("universal-3-5-pro", "sync", false, "xx", 10, 1, false)]
-    [InlineData("universal-3-5-pro", "sync", false, "ko", 10, 1, true)]
-    [InlineData("universal-3-5-pro", "sync", false, null, 1200, 100, true)]
-    [InlineData("universal-3-5-pro", "live", false, null, 1201, 1, false)]
-    [InlineData("universal-3-5-pro", "live", false, null, 10, 101, false)]
+    [InlineData("assemblyai-stt-3-7", "async", false, "de", 10, 1, false)]
+    [InlineData("assemblyai-stt-3-7", "live", true, "de", 10, 1, false)]
+    [InlineData("assemblyai-stt-3-7", "sync", false, "xx", 10, 1, false)]
+    [InlineData("assemblyai-stt-3-7", "sync", false, "ko", 10, 1, true)]
+    [InlineData("assemblyai-stt-3-7", "dictation", false, "yue", 10, 1, true)]
+    [InlineData("assemblyai-stt-3-7", "sync", false, null, 1200, 100, true)]
+    [InlineData("assemblyai-stt-3-7", "live", false, null, 1201, 1, false)]
+    [InlineData("assemblyai-stt-3-7", "live", false, null, 10, 101, false)]
     public void SyncApiTakesOnlyWhatItAccepts(string model, string mode, bool diarization, string? language, int seconds, int terms, bool sync)
     {
         var prompt = string.Join(",", Enumerable.Range(0, terms).Select(i => "term" + i));
         var request = AssemblyAiPlugin.SyncRequestFor(AssemblyAiModels.Require(model), mode, diarization, language, prompt, TimeSpan.FromSeconds(seconds));
         Assert.Equal(sync, request is not null);
-        if (request is not null) Assert.Equal(terms, request.Keyterms.Count);
+        if (request is not null) { Assert.Equal(terms, request.Keyterms.Count); Assert.Equal("universal-3-6-pro", request.Model); }
     }
 
     [Fact]
@@ -211,7 +212,7 @@ public partial class AssemblyAiTests
     }
 
     [Theory]
-    [InlineData("live", true)] [InlineData("sync", false)] [InlineData("async", false)]
+    [InlineData("live", true)] [InlineData("sync", false)] [InlineData("dictation", false)] [InlineData("async", false)]
     public async Task OnlyTheLiveModeStreamsAndTheModeSurvivesRestart(string mode, bool streams)
     {
         var host = Host();
@@ -226,13 +227,43 @@ public partial class AssemblyAiTests
         Assert.Equal(mode, restart.TextSettings.Single(s => s.Id == "transcriptionMode").Value); Assert.Equal(streams, restart.SupportsStreaming);
     }
 
-    [Fact]
-    public async Task ProfilesFromBeforeTheModeSettingUseLive()
+    [Theory]
+    [InlineData("universal-3-5-pro")] [InlineData("universal-3-pro")]
+    public async Task ProfilesFromBeforeTheModeSettingUseLiveWithAssemblyAiStt37AndRealtimeAgent(string model)
     {
         var host = Host();
-        host.SetSetting("configuration", new { Model = "universal-3-5-pro", SpeakerDiarizationEnabled = false, SecretName = "api-key" });
+        host.SetSetting("configuration", new { Model = model, SpeakerDiarizationEnabled = false, SecretName = "api-key" });
         using var plugin = Plugin((_, _) => throw new Xunit.Sdk.XunitException("Unexpected network"));
         await plugin.ActivateAsync(host);
         Assert.Equal("live", plugin.Mode); Assert.True(plugin.SupportsStreaming); Assert.True(plugin.IsConfigured);
+        Assert.Equal("assemblyai-stt-3-7", plugin.SelectedModelId); Assert.Equal("assemblyai-stt-3-7-realtime-agent", plugin.LiveModel);
+        // The move is saved, so the profile no longer names the deprecated model.
+        var saved = host.GetSetting<JsonElement>("configuration");
+        Assert.Equal("assemblyai-stt-3-7", saved.GetProperty("Model").GetString());
+        Assert.Equal("assemblyai-stt-3-7-realtime-agent", saved.GetProperty("LiveModel").GetString());
+    }
+
+    [Theory]
+    [InlineData("assemblyai-stt-3-7-realtime", "Live – $0.30/h")]
+    [InlineData("assemblyai-stt-3-7-realtime-agent", "Live – $0.45/h")]
+    public async Task TheLiveModelSurvivesRestartAndPricesTheLiveMode(string liveModel, string liveTitle)
+    {
+        var host = Host();
+        using var plugin = Plugin((_, _) => throw new Xunit.Sdk.XunitException("Unexpected network"));
+        await plugin.ActivateAsync(host);
+        var setting = plugin.TextSettings.Single(s => s.Id == "liveModel");
+        Assert.Equal("assemblyai-stt-3-7-realtime-agent", setting.Value);
+        Assert.Equal(new[] { "assemblyai-stt-3-7-realtime-agent", "assemblyai-stt-3-7-realtime" }, setting.Choices.Select(c => c.Value));
+        Assert.Equal("transcriptionMode", setting.VisibleWhen!.SettingId); Assert.Equal(["live"], setting.VisibleWhen.Values);
+        // Universal-2 has no modes, so they show only for AssemblyAI-STT-3.7.
+        var mode = plugin.TextSettings.Single(s => s.Id == "transcriptionMode");
+        Assert.Equal("selectedModel", mode.VisibleWhen!.SettingId); Assert.Equal(["assemblyai-stt-3-7"], mode.VisibleWhen.Values);
+        Assert.Equal(new[] { "live", "sync", "dictation", "async" }, mode.Choices.Select(c => c.Value));
+        await plugin.SaveTextSettingAsync("liveModel", liveModel, default);
+        await Assert.ThrowsAsync<ArgumentException>(() => plugin.SaveTextSettingAsync("liveModel", "universal-3-5-pro", default));
+        using var restart = Plugin((_, _) => throw new Xunit.Sdk.XunitException("Unexpected network"));
+        await restart.ActivateAsync(host);
+        Assert.Equal(liveModel, restart.LiveModel); Assert.Equal(liveModel, restart.TextSettings.Single(s => s.Id == "liveModel").Value);
+        Assert.Equal(liveTitle, restart.TextSettings.Single(s => s.Id == "transcriptionMode").Choices[0].Title);
     }
 }

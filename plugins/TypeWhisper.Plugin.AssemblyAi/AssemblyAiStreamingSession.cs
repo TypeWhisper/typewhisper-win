@@ -34,25 +34,27 @@ internal sealed class AssemblyAiStreamingSession : IStreamingSession
         _receiver = ReceiveAsync(_lifetime.Token);
     }
 
-    internal static Uri BuildUri(AssemblyAiModel model, string? language, string? prompt)
+    /// <summary>The realtime API's address for a session with <paramref name="liveModel"/>, one of <see cref="AssemblyAiLiveModels.All"/>.</summary>
+    internal static Uri BuildUri(AssemblyAiModel model, string liveModel, string? language, string? prompt)
     {
+        var languages = model.LiveLanguages ?? throw new NotSupportedException(model.Name + " has no live sessions.");
         var code = AssemblyAiModels.Language(language);
-        if (code is not null && !(model.IsPro ? model.Languages : AssemblyAiModels.StreamingLanguages).Contains(code))
-            throw new NotSupportedException("Use recorded-audio transcription for this language with Universal-2.");
-        var speechModel = model.IsPro ? model.Id : code == "en" ? "universal-streaming-english" : "universal-streaming-multilingual";
-        var query = "sample_rate=16000&encoding=pcm_s16le&speech_model=" + speechModel;
-        if (!model.IsPro) query += "&format_turns=true";
-        if (speechModel != "universal-streaming-english") query += "&language_detection=true";
-        if (model.IsPro && code is not null) query += "&language_codes=" + Uri.EscapeDataString(JsonSerializer.Serialize(new[] { code }));
+        if (code is not null && !languages.Contains(code))
+            throw new NotSupportedException("Use recorded-audio transcription for this language.");
+        var query = "sample_rate=16000&encoding=pcm_s16le&speech_model=" + Uri.EscapeDataString(AssemblyAiLiveModels.Normalize(liveModel));
+        if (code is not null) query += "&language_codes=" + Uri.EscapeDataString(JsonSerializer.Serialize(new[] { code }));
+        // Turns then report the spoken language, also with a fixed one, as Universal-3.5 Pro did; the text stays the same.
+        query += "&language_detection=true";
         var terms = AssemblyAiModels.Terms(prompt, model);
         if (terms.Count > 100 || terms.Any(t => t.Length > 50)) throw new NotSupportedException("Dictionary terms require recorded-audio transcription.");
         if (terms.Count > 0) query += "&keyterms_prompt=" + Uri.EscapeDataString(JsonSerializer.Serialize(terms));
         return new("wss://streaming.assemblyai.com/v3/ws?" + query);
     }
 
-    internal static async Task<IStreamingSession> ConnectAsync(string key, AssemblyAiModel model, string? language, string? prompt, CancellationToken ct)
+    internal static async Task<IStreamingSession> ConnectAsync(string key, AssemblyAiModel model, string liveModel, string? language, string? prompt,
+        CancellationToken ct)
     {
-        var uri = BuildUri(model, language, prompt);
+        var uri = BuildUri(model, liveModel, language, prompt);
         var socket = new ClientWebSocket();
         socket.Options.SetRequestHeader("Authorization", key);
         AssemblyAiStreamingSession? session = null;
