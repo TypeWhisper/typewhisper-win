@@ -408,7 +408,8 @@ public sealed class TranscriptionWorkerTests : IAsyncLifetime
         await registry.OverrideModelAsync(large);
         Assert.Equal("large", await Model());
         Assert.Equal("small", host.GetSetting<string>("selectedModel"));
-        Assert.Contains("is selected", await RemovalBlock("small"));
+        Assert.Contains("request is using", await RemovalBlock("small"));
+        Assert.Contains("request is using", await RemovalBlock("large"));
         await registry.ClearModelOverrideAsync(large);
         Assert.Equal("small", await Model());
         Assert.Equal("small", host.GetSetting<string>("selectedModel"));
@@ -418,7 +419,8 @@ public sealed class TranscriptionWorkerTests : IAsyncLifetime
         await registry.OverrideModelAsync(large);
         await registry.SelectModelAsync(large);
         Assert.Equal("large", host.GetSetting<string>("selectedModel"));
-        Assert.DoesNotContain("is selected", await RemovalBlock("small") ?? "");
+        Assert.Null(await RemovalBlock("small"));
+        Assert.Null(await RemovalBlock("large"));
     }
 
     [Fact]

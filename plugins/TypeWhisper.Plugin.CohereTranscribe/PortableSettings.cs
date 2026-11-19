@@ -19,11 +19,7 @@ public sealed partial class CohereTranscribePlugin
                     L("Removes unfinished model and runtime downloads. Completed models are kept.",
                       "Entfernt unvollständige Modell- und Laufzeitdownloads. Vollständige Modelle bleiben erhalten."))
                     { Section = PluginSettingsSection.Transcription });
-            if (_selectedModelId is not null)
-                actions.Add(new("remove-selected-model", L("Unload and remove selected model", "Ausgewähltes Modell entladen und entfernen"),
-                    L("Stops the selected model and deletes its downloaded weights. Download it again to use it later.",
-                      "Stoppt das ausgewählte Modell und löscht seine heruntergeladenen Gewichte. Für eine spätere Nutzung erneut herunterladen."))
-                    { Section = PluginSettingsSection.Transcription });
+            // The host's model rows remove downloaded models, including the selected one.
             return actions;
         }
     }
@@ -31,20 +27,12 @@ public sealed partial class CohereTranscribePlugin
     /// <inheritdoc />
     public async Task<string?> ExecuteSettingsActionAsync(string id, CancellationToken cancellationToken)
     {
-        if (id == "discard-partial-downloads")
-        {
-            await _gate.WaitAsync(cancellationToken);
-            try { await GetAssets().DiscardPartialDownloadsAsync(cancellationToken); }
-            finally { _gate.Release(); }
-            _host?.NotifyCapabilitiesChanged();
-            return L("Incomplete downloads removed.", "Unvollständige Downloads entfernt.");
-        }
-        if (id != "remove-selected-model" || _selectedModelId is not { } selected)
-            throw new InvalidOperationException("No selected model is available to remove.");
-        cancellationToken.ThrowIfCancellationRequested();
-        await UnloadModelAsync();
-        await RemoveModelAsync(selected, cancellationToken);
-        return L("Selected model removed. Shared runtime files were kept.", "Ausgewähltes Modell entfernt. Gemeinsame Laufzeitdateien wurden beibehalten.");
+        if (id != "discard-partial-downloads") throw new InvalidOperationException("Unknown Cohere Transcribe settings action.");
+        await _gate.WaitAsync(cancellationToken);
+        try { await GetAssets().DiscardPartialDownloadsAsync(cancellationToken); }
+        finally { _gate.Release(); }
+        _host?.NotifyCapabilitiesChanged();
+        return L("Incomplete downloads removed.", "Unvollständige Downloads entfernt.");
     }
 
     /// <inheritdoc />

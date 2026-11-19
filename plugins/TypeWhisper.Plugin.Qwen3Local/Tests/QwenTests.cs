@@ -219,28 +219,26 @@ public sealed class QwenTests : IDisposable
         Assert.True(loaded[0].Recognizer.Disposed);
         Assert.EndsWith(Qwen3LocalPlugin.ModelId, loaded[1].Directory);
 
-        // The host keeps blocking the earlier model's removal, so its own action removes it while the selection
-        // and the loaded model stay.
-        Assert.Equal(["remove-" + Qwen3LocalPlugin.ModelId, "remove-" + Qwen3LocalPlugin.LargeModelId, "remove-" + Qwen3LocalPlugin.RumbleModelId],
-            plugin.SettingsActions.Select(action => action.Id));
-        await plugin.ExecuteSettingsActionAsync("remove-" + Qwen3LocalPlugin.LargeModelId, default);
+        // Removing the earlier model keeps the selection and the loaded model.
+        await plugin.RemoveModelAsync(Qwen3LocalPlugin.LargeModelId, default);
         Assert.False(plugin.IsModelDownloaded(Qwen3LocalPlugin.LargeModelId));
         Assert.Equal(Qwen3LocalPlugin.ModelId, plugin.SelectedModelId);
         Assert.False(loaded[1].Recognizer.Disposed);
         Assert.True(plugin.IsConfigured);
 
-        await plugin.ExecuteSettingsActionAsync("remove-" + Qwen3LocalPlugin.ModelId, default);
+        // Removing the selected model unloads it and clears the selection.
+        await plugin.RemoveModelAsync(Qwen3LocalPlugin.ModelId, default);
         Assert.True(loaded[1].Recognizer.Disposed);
         Assert.Null(plugin.SelectedModelId);
         Assert.False(plugin.IsModelDownloaded(Qwen3LocalPlugin.ModelId));
-        Assert.Equal("Qwen3-ASR 0.6B INT8 is not downloaded.", await plugin.ExecuteSettingsActionAsync("remove-" + Qwen3LocalPlugin.ModelId, default));
+        await plugin.RemoveModelAsync(Qwen3LocalPlugin.ModelId, default);
 
-        // A model directory that fails the readiness check is still removable through its action.
+        // A model directory that fails the readiness check is still removed.
         var incomplete = Path.Join(((TypeWhisper.PluginSDK.IPluginHostServices)host).PluginAssetDirectory, "Models", Qwen3LocalPlugin.LargeModelId);
         Directory.CreateDirectory(incomplete);
         await File.WriteAllTextAsync(Path.Join(incomplete, "encoder.int8.onnx"), "partial");
         Assert.False(plugin.IsModelDownloaded(Qwen3LocalPlugin.LargeModelId));
-        await plugin.ExecuteSettingsActionAsync("remove-" + Qwen3LocalPlugin.LargeModelId, default);
+        await plugin.RemoveModelAsync(Qwen3LocalPlugin.LargeModelId, default);
         Assert.False(Directory.Exists(incomplete));
 
         host.SetSetting("selectedModel", Qwen3LocalPlugin.LargeModelId);
@@ -293,7 +291,7 @@ public sealed class QwenTests : IDisposable
     }
 
     [Fact]
-    public async Task ReadinessRequiresSelectedIntactAssetsAndSettingsActionRemovesSelectedModel()
+    public async Task ReadinessRequiresSelectedIntactAssetsAndRemovalUnloadsSelectedModel()
     {
         var bytes = Archive();
         var host = new TestHost(_root);
@@ -312,10 +310,10 @@ public sealed class QwenTests : IDisposable
         await plugin.LoadModelAsync(Qwen3LocalPlugin.ModelId, default);
         using var cancelled = new CancellationTokenSource();
         cancelled.Cancel();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => plugin.ExecuteSettingsActionAsync("remove-" + Qwen3LocalPlugin.ModelId, cancelled.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => plugin.RemoveModelAsync(Qwen3LocalPlugin.ModelId, cancelled.Token));
         Assert.True(plugin.IsConfigured);
         Assert.False(decoder.Disposed);
-        await plugin.ExecuteSettingsActionAsync(plugin.SettingsActions[0].Id, default);
+        await plugin.RemoveModelAsync(Qwen3LocalPlugin.ModelId, default);
         Assert.True(decoder.Disposed);
         Assert.False(Directory.Exists(directory));
         Assert.False(plugin.IsConfigured);
@@ -324,7 +322,7 @@ public sealed class QwenTests : IDisposable
         await plugin.ActivateAsync(host);
         Assert.False(plugin.IsConfigured);
         Assert.Null(plugin.SelectedModelId);
-        await Assert.ThrowsAsync<ArgumentException>(() => plugin.ExecuteSettingsActionAsync("unknown", default));
+        await Assert.ThrowsAsync<ArgumentException>(() => plugin.RemoveModelAsync("unknown", default));
     }
 
     [Fact]

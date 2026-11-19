@@ -322,8 +322,14 @@ internal sealed class LivePortableModelSettings : UserControl
         _working = true; UpdateButtons();
         try
         {
-            if (!await Dialogs.ConfirmAsync(this, Loc.T("Remove {0}?", expected.DisplayName),
-                Loc.T("Downloaded files for this model will be removed. You will need to download it again before using it. The plugin and its settings will be kept."), Loc.T("Remove model"), destructive: true) || !Current(lifetime)) return;
+            // The plugin's selected model is unloaded first and leaves the plugin without a usable model.
+            var selected = _session.PluginRuntime.TranscriptionProviders.FirstOrDefault(p => p.PluginId == _pluginId
+                && p.SelectionId == expected.SelectionId)?.SelectedModelId == expected.ModelId;
+            var message = selected
+                ? Loc.T("This model is selected. It will be unloaded and its downloaded files removed. Download or choose another model before dictating with this plugin. The plugin and its settings will be kept.")
+                : Loc.T("Downloaded files for this model will be removed. You will need to download it again before using it. The plugin and its settings will be kept.");
+            if (!await Dialogs.ConfirmAsync(this, Loc.T("Remove {0}?", expected.DisplayName), message, Loc.T("Remove model"), destructive: true)
+                || !Current(lifetime)) return;
             var error = await _session.RemoveRegistryModelAsync(expected);
             if (Current(lifetime)) _status.Text = error ?? Loc.T("Model removed. Download it again to use it.");
         }
@@ -363,7 +369,8 @@ internal sealed class LivePortableModelSettings : UserControl
             row.Use.IsEnabled = available && provider is not null && !selected &&
                 (model.SupportsDownload ? model.Downloaded : provider.Ready);
             row.Remove.Visibility = model.SupportsRemoval && model.Downloaded ? Visibility.Visible : Visibility.Collapsed;
-            row.Remove.IsEnabled = available && provider is not null && !selected && model.RemovalBlockedReason is null;
+            // A selected or loaded model is unloaded before its files are removed.
+            row.Remove.IsEnabled = available && provider is not null && model.RemovalBlockedReason is null;
             ToolTipService.SetToolTip(row.Remove, model.RemovalBlockedReason ?? Loc.T("Remove downloaded files for this model."));
             AutomationProperties.SetHelpText(row.Remove, model.RemovalBlockedReason ?? Loc.T("Remove downloaded files for this model."));
             row.Cancel.Visibility = active && state.IsBusy ? Visibility.Visible : Visibility.Collapsed;

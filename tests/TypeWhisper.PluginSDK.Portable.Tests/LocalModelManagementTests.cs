@@ -407,14 +407,59 @@ public sealed class LocalModelManagementTests : IDisposable
     }
 
     [Fact]
-    public async Task LoadedAndPluginSelectedModelsCannotBeRemoved()
+    public async Task LoadedModelIsUnloadedRemovedAndNoLongerSaved()
     {
         AllowRemoval();
         await using var runtime = Create(); await runtime.InitializeAsync();
-        await Assert.ThrowsAsync<InvalidOperationException>(() => runtime.RemoveAsync(LocalTranscriptionPlugin.ModelId, runtime.Generation, default));
+        Assert.True(runtime.IsModelInUse(LocalTranscriptionPlugin.ModelId));
+        await runtime.RemoveAsync(LocalTranscriptionPlugin.ModelId, runtime.Generation, default);
+        _engine.Verify(e => e.UnloadModelAsync(), Times.Once);
+        Assert.DoesNotContain(LocalTranscriptionPlugin.ModelId, _downloaded);
+        Assert.Null(runtime.ActiveModelId);
+        Assert.False(runtime.Ready);
+        Assert.Null(new VocabularyHostServices(_root).GetSetting<string>("SelectedModelId"));
+
+        // The next start loads the other downloaded model, although the removed one is first and recommended.
+        _engine.SetupGet(e => e.TranscriptionModels).Returns([new(LocalTranscriptionPlugin.ModelId, "Parakeet") { IsRecommended = true }, new("canary", "Canary")]);
+        await using var restarted = Create(); await restarted.InitializeAsync();
+        Assert.Equal("canary", restarted.ActiveModelId);
+    }
+
+    [Fact]
+    public async Task PluginSelectedModelIsUnloadedOnlyWhileNothingElseIsActive()
+    {
+        AllowRemoval();
+        await using var runtime = Create(); await runtime.InitializeAsync();
         _engine.SetupGet(e => e.SelectedModelId).Returns("canary");
-        await Assert.ThrowsAsync<InvalidOperationException>(() => runtime.RemoveAsync("canary", runtime.Generation, default));
-        _engine.Verify(e => e.RemoveModelAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        Assert.False(runtime.IsModelInUse("canary"));
+        // Another model is active: the engine holds its files, not this model's, and it stays loaded.
+        await runtime.RemoveAsync("canary", runtime.Generation, default);
+        _engine.Verify(e => e.UnloadModelAsync(), Times.Never);
+        Assert.Equal(LocalTranscriptionPlugin.ModelId, runtime.ActiveModelId);
+        Assert.Equal(LocalTranscriptionPlugin.ModelId, new VocabularyHostServices(_root).GetSetting<string>("SelectedModelId"));
+
+        _downloaded.Add("canary");
+        await runtime.UnloadAsync(default);
+        _engine.Invocations.Clear();
+        await runtime.RemoveAsync("canary", runtime.Generation, default);
+        _engine.Verify(e => e.UnloadModelAsync(), Times.Once);
+        Assert.DoesNotContain("canary", _downloaded);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task CanceledRemovalClearsTheSavedSelectionOnlyWhenTheFilesAreGone(bool deleted)
+    {
+        AllowRemoval();
+        await using var runtime = Create(); await runtime.InitializeAsync();
+        using var cancellation = new CancellationTokenSource();
+        _engine.Setup(e => e.RemoveModelAsync(LocalTranscriptionPlugin.ModelId, It.IsAny<CancellationToken>()))
+            .Returns(() => { if (deleted) _downloaded.Remove(LocalTranscriptionPlugin.ModelId); cancellation.Cancel(); throw new OperationCanceledException(cancellation.Token); });
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => runtime.RemoveAsync(LocalTranscriptionPlugin.ModelId, runtime.Generation, cancellation.Token));
+        var saved = new VocabularyHostServices(_root).GetSetting<string>("SelectedModelId");
+        if (deleted) Assert.Null(saved);
+        else Assert.Equal(LocalTranscriptionPlugin.ModelId, saved);
     }
 
     [Fact]
