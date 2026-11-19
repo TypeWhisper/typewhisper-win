@@ -56,8 +56,20 @@ internal sealed partial class LocalDictationSession
     }
 
     // A dictation workflow's own model is ignored while policy fixes the selection: the enforced pair wins.
-    private static string? WorkflowTranscriptionModel(AutomaticWorkflowSnapshot? workflow) =>
-        TranscriptionSelectionLocked ? null : workflow?.TranscriptionModel;
+    private string? WorkflowTranscriptionModel(AutomaticWorkflowSnapshot? workflow) =>
+        TranscriptionSelectionLocked ? null : CurrentTranscriptionModel(workflow?.TranscriptionModel);
+
+    // A provider-qualified model ID ("provider:model") as the provider names the model now: a workflow saved with a
+    // model the provider has renamed since, such as a retired cloud model, uses its successor (PluginModelInfo.FormerIds).
+    internal string? CurrentTranscriptionModel(string? model)
+    {
+        if (string.IsNullOrWhiteSpace(model)) return model;
+        var provider = DictationProviders.FirstOrDefault(item => model.StartsWith(item.Id + ":", StringComparison.Ordinal));
+        if (provider is null) return model;
+        var id = model[(provider.Id.Length + 1)..];
+        return provider.Models.Any(item => item.Id == id) ? model
+            : provider.Models.FirstOrDefault(item => item.IsNamed(id)) is { } current ? provider.Id + ":" + current.Id : model;
+    }
 
     // The provider at startup: the enforced pair, then the user's saved choice, then a recommendation, then local.
     private string StartupProviderId() => EnforcedTranscription is { } enforced ? PolicyProviderId(enforced.ProviderId)

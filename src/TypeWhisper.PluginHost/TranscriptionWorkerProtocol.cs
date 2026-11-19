@@ -121,6 +121,12 @@ internal static class TranscriptionWorkerAudioFormats
     internal const string Wav = "wav";
 }
 
+/// <summary><see cref="TranscriptionWorkerMessage.Purpose"/> values; null is <see cref="TranscriptionPurpose.Verbatim"/>.</summary>
+internal static class TranscriptionWorkerPurposes
+{
+    internal const string Dictation = "dictation";
+}
+
 /// <summary>The single envelope of every frame; unused fields stay null.</summary>
 internal sealed record TranscriptionWorkerMessage
 {
@@ -135,6 +141,8 @@ internal sealed record TranscriptionWorkerMessage
     public bool Translate { get; init; }
     public string? Prompt { get; init; }
     public string? AudioFormat { get; init; }
+    /// <summary>In a transcription request: <see cref="TranscriptionWorkerPurposes.Dictation"/> for a dictation, otherwise null.</summary>
+    public string? Purpose { get; init; }
     public TranscriptionWorkerResult? Result { get; init; }
     public TranscriptionWorkerError? Error { get; init; }
     public TranscriptionWorkerState? State { get; init; }

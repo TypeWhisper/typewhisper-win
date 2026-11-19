@@ -427,10 +427,15 @@ public sealed partial class WorkflowsView : UserControl
             WorkflowSummary.Text = Loc.T("Unsupported workflow: editing and execution are unavailable. Enablement can change without changing other settings. An enabled matching App/Global rule with unsupported overrides sends dictation to review without pasting.");
             return;
         }
-        _opened = workflow;
+        _opened = WithCurrentTranscriptionModel(workflow);
         _creating = false;
         LoadConfiguration();
     }
+
+    // A workflow saved with a model its provider has renamed since shows the current model and saves it.
+    private WorkflowDraft WithCurrentTranscriptionModel(WorkflowDraft workflow) =>
+        _session?.CurrentTranscriptionModel(workflow.TranscriptionModel) is { } current && current != workflow.TranscriptionModel
+            ? workflow with { TranscriptionModel = current } : workflow;
 
     private void Workflow_Click(object sender, ItemClickEventArgs e)
     {
@@ -569,7 +574,7 @@ public sealed partial class WorkflowsView : UserControl
     {
         if (_closing || IsBusy) return;
         if (WorkflowList.SelectedItem is not WorkflowDraft { IsEditable: true } workflow) return;
-        _opened = workflow;
+        _opened = WithCurrentTranscriptionModel(workflow);
         _creating = false;
         LoadConfiguration(activation);
         UpdateConfigurationState();

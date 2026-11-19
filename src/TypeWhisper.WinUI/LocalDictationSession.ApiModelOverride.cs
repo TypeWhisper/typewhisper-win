@@ -34,7 +34,7 @@ internal sealed partial class LocalDictationSession
             }
             if (provider is null)
             {
-                var matches = DictationProviders.Where(item => item.Models.Any(model => model.Id == modelId)).ToArray();
+                var matches = DictationProviders.Where(item => item.Models.Any(model => model.IsNamed(modelId))).ToArray();
                 provider = matches.FirstOrDefault(item => item.Id == _providerId)
                     ?? (matches.Length == 1 ? matches[0] : null);
                 // A qualified model whose provider the policy unloaded is judged through the package that served it.
@@ -54,8 +54,10 @@ internal sealed partial class LocalDictationSession
         modelId ??= provider.SelectedModelId ?? provider.PreferredModelId
             ?? (awaitDownload ? provider.Models.FirstOrDefault()?.Id : null);
         if (modelId is null) throw new LocalApiRequestException(409, "Choose a downloaded model, or set await_download to true.");
-        var model = provider.Models.FirstOrDefault(item => item.Id == modelId)
+        // A model the provider renamed since is used under its current ID.
+        var model = provider.Models.FirstOrDefault(item => item.Id == modelId) ?? provider.Models.FirstOrDefault(item => item.IsNamed(modelId))
             ?? throw new LocalApiRequestException(404, "Transcription model not found in this engine.");
+        modelId = model.Id;
         // An enforced pair wins over request overrides: a different provider or model is refused, never substituted silently.
         if (SelectionRefusal(provider.Id, modelId) is { } refused) throw new LocalApiRequestException(403, refused);
         if (provider.Id == _providerId && modelId == ActiveModelId && IsReady) return null;

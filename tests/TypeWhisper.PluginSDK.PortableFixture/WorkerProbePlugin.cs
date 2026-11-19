@@ -125,7 +125,7 @@ public sealed class WorkerProbePlugin : IPcmTranscriptionEnginePlugin, ITranscri
                 if (!File.Exists(frozen)) { File.WriteAllText(frozen, ""); await Task.Run(Freeze); }
                 break;
         }
-        return new($"pid={Environment.ProcessId};model={_loaded};selected={SelectedModelId};asyncSelects={_host!.GetSetting<int>("asyncSelectCalls")};accel={_acceleration};length={length};detail={detail};prompt={prompt}", language, 1)
+        return new($"pid={Environment.ProcessId};model={_loaded};selected={SelectedModelId};asyncSelects={_host!.GetSetting<int>("asyncSelectCalls")};accel={_acceleration};length={length};detail={detail};prompt={prompt};purpose={TranscriptionRequestContext.Purpose}", language, 1)
         {
             TokenTimings = [new VocabularyTokenTiming("probe", 0.25, 0.5)],
             Segments = [new PluginTranscriptionSegment("probe", 0, 1) { NoSpeechProbability = 0.25f }]

@@ -24,4 +24,12 @@ public sealed record PluginModelInfo(string Id, string DisplayName)
 
     /// <summary>ISO language codes supported by this model, for catalog descriptions.</summary>
     public IReadOnlyList<string> LanguageCodes { get; init; } = [];
+
+    /// <summary>
+    /// Identifiers this model had before, such as a model the provider retired in favour of this one. A workflow or an
+    /// HTTP API request that names one of them uses this model, and the workflow editor shows and saves this model's
+    /// <see cref="Id"/>. The plugin must accept these identifiers in <see cref="ITranscriptionEnginePlugin.SelectModel"/>.
+    /// Plugin API 1.3.1: a plugin that sets it needs a <c>minHostVersion</c> of at least 1.3.1.
+    /// </summary>
+    public IReadOnlyList<string> FormerIds { get; init; } = [];
 }

@@ -1,5 +1,6 @@
 using TypeWhisper.Core.Services;
 using TypeWhisper.Presentation;
+using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.WinUI;
 
@@ -80,7 +81,10 @@ internal sealed partial class LocalDictationSession
             ct.ThrowIfCancellationRequested();
             var samples = await MediaFoundationFileDecoder.LoadAsync(path, ct);
             ct.ThrowIfCancellationRequested();
-            var decoded = await DecodeSamplesAsync(samples, registry, selection, language, hints, translate, null, ct);
+            // The saved audio of a failed dictation is transcribed as the dictation it was.
+            PluginTranscriptionResult decoded;
+            using (TranscriptionRequestContext.Begin(TranscriptionPurpose.Dictation))
+                decoded = await DecodeSamplesAsync(samples, registry, selection, language, hints, translate, null, ct);
             ct.ThrowIfCancellationRequested();
             ObjectDisposedException.ThrowIf(_disposed, this);
             if (string.IsNullOrWhiteSpace(decoded.Text) || FinalSpeechPolicy.ShouldReject(decoded.Text,

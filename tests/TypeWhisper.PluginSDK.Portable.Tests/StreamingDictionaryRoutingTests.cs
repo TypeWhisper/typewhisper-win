@@ -34,6 +34,23 @@ public sealed class StreamingDictionaryRoutingTests
     }
 
     [Fact]
+    public async Task TheLiveStreamOpensAsADictation()
+    {
+        var engine = new Mock<ITranscriptionEnginePlugin>();
+        engine.SetupGet(e => e.SupportsStreaming).Returns(true);
+        engine.SetupGet(e => e.SupportsStreamingCompletion).Returns(true);
+        engine.Setup(e => e.SupportsStreamingForPrompt(null)).Returns(true);
+        TranscriptionPurpose? purpose = null;
+        engine.Setup(e => e.StartStreamingWithLanguageHintsAndPromptAsync(It.IsAny<IReadOnlyList<string>>(), null, It.IsAny<CancellationToken>()))
+            .Callback(() => purpose = TranscriptionRequestContext.Purpose).ReturnsAsync(new Session());
+        await using var stream = new StreamingDictation((use, ct) => use(engine.Object, ct), ["de"], _ => { }, () => { }, default);
+        stream.Append(new float[160]);
+        Assert.Equal("Complete.", await stream.FinishAsync().WaitAsync(TimeSpan.FromSeconds(2)));
+        Assert.Equal(TranscriptionPurpose.Dictation, purpose);
+        Assert.Equal(TranscriptionPurpose.Verbatim, TranscriptionRequestContext.Purpose);
+    }
+
+    [Fact]
     public async Task PreviewStreamRunsWithoutThePromptAndLeavesTheFinalTextToTheCompleteRecording()
     {
         var engine = new Mock<ITranscriptionEnginePlugin>();

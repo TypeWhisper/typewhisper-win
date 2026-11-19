@@ -118,6 +118,35 @@ than `local` follows `AllowCloudTranscription`, and model downloads follow
 when the policy judges a remote package as a whole. Plugins that implement the interface
 declare `minHostVersion` `1.3.0`.
 
+## Transcription purpose and former model IDs (plugin API 1.3.1)
+
+`TranscriptionRequestContext.Purpose` tells a transcription engine what the host transcribes,
+like the macOS SDK's `PluginSpeakerLabels.areRequested` and `PluginVerbatimTranscript.isRequired`:
+
+- `Dictation` for the final text of a dictation, also one started through a workflow shortcut
+  or `POST /v1/dictation/start`, its local live preview, the start of its live stream and the
+  retry of a failed dictation. A provider may return the text cleaned up, for example without
+  filler words, and should leave speaker labels out. AssemblyAI 1.4.0 sends such dictations to
+  its Dictation API in the Dictation mode.
+- `Verbatim` for everything else: file transcriptions, watch folders, recordings, the HTTP
+  API's transcription routes, dictionary training and module spoken input. Hosts before 1.3.1
+  report `Verbatim` for every request.
+
+The value flows with the call (an `AsyncLocal`), so chunked and retried requests keep it. A
+plugin reads it in the call the host made. For engines the host runs in a worker process,
+`IsolatedTranscriptionEngine` sends it with each request and the worker sets it again.
+
+`PluginModelInfo.FormerIds` lists IDs a model had before, such as a retired cloud model it
+replaces. A workflow's own transcription model or an HTTP API request's `model` that names a
+former ID uses the current model, and the workflow editor shows and saves the current ID. The
+plugin must still accept a former ID in `SelectModel`.
+
+A setting with `VisibleWhen` is also hidden while the setting its condition reads is hidden, so
+a choice that only applies to another choice hides with it.
+
+Plugins that read the purpose or set `FormerIds` declare `minHostVersion` `1.3.1`; older hosts
+lack these members.
+
 ## Lifecycle
 
 `ITypeWhisperPlugin.ActivateAsync(host)` loads resources when the provider is enabled.

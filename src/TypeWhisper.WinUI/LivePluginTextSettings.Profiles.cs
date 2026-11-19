@@ -194,9 +194,12 @@ internal sealed partial class LivePluginTextSettings
         {
             foreach (var field in editable)
                 if (fieldGroups.TryGetValue(field.Id, out var group))
-                    group.Visibility = field.VisibleWhen is not { } condition ||
-                        values.TryGetValue(condition.SettingId, out var controllingValue) && condition.Values.Contains(controllingValue)
-                        ? Visibility.Visible : Visibility.Collapsed;
+                    group.Visibility = IsShown(field, editable.Length) ? Visibility.Visible : Visibility.Collapsed;
+            // A setting shows when its condition holds and the setting the condition reads shows too (plugin API 1.3.1),
+            // so a choice that only applies to a hidden choice hides with it. The depth limit ends a cycle.
+            bool IsShown(PluginTextSetting field, int depth) => field.VisibleWhen is not { } condition
+                || depth > 0 && values.TryGetValue(condition.SettingId, out var controllingValue) && condition.Values.Contains(controllingValue)
+                    && (editable.FirstOrDefault(other => other.Id == condition.SettingId) is not { } controlling || IsShown(controlling, depth - 1));
             var dirty = _profileActionDrafts.Contains(selector.Value) || _pendingApiKey() is not null || editable.Any(f => values[f.Id] != f.Value);
             _dirtyProfiles[selector.Value] = dirty;
             foreach (var choice in selector.Choices)

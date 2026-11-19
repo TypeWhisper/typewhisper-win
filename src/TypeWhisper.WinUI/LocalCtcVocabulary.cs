@@ -10,7 +10,9 @@ internal sealed class LocalCtcVocabulary : IAsyncDisposable
     // 1.1.8: request models that the plugin does not save (ITranscriptionModelOverride).
     // 1.3.0: the host runs on .NET 11. Plugins built for net11.0 declare this minimum so older hosts,
     // which run on .NET 10 and cannot load them, refuse to install them.
-    internal static readonly Version HostVersion = new(1, 3, 0);
+    // 1.3.1: the purpose of a transcription (TranscriptionRequestContext), former model IDs (PluginModelInfo.FormerIds)
+    // and settings hidden with the setting their condition reads.
+    internal static readonly Version HostVersion = new(1, 3, 1);
     internal event Action? Changed;
     internal bool Busy { get; private set; }
     internal string? Status { get; private set; }
