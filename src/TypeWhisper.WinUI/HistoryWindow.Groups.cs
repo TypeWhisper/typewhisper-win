@@ -24,6 +24,8 @@ public sealed partial class HistoryWindow
     private readonly HashSet<string> _expandedGroups = new(StringComparer.Ordinal);
     // The "Show more" button of each group as last drawn.
     private readonly Dictionary<string, HandCursorButton> _showMoreRows = new(StringComparer.Ordinal);
+    // The row of the chosen entry as last drawn, so keyboard selection can scroll it into view.
+    private Grid? _chosenGroupRow;
 
     private static IReadOnlyList<ModuleHistorySidebarGroup> SidebarGroups => HostModules.ActiveCatalog.HistorySidebarGroups;
 
@@ -87,6 +89,7 @@ public sealed partial class HistoryWindow
         var groups = SidebarGroups.Where(IsShown).ToArray();
         if (groups.Length == 0) return;
         _sidebar.Children.Add(new Border { Height = 1, Background = Brush("HairlineBrush"), Margin = new Thickness(10, 12, 10, 4) });
+        _chosenGroupRow = null;
         foreach (var group in groups)
         {
             _sidebar.Children.Add(GroupHeader(group));
@@ -94,7 +97,11 @@ public sealed partial class HistoryWindow
             var chosen = ReferenceEquals(_group, group) ? _groupEntry : null;
             var expanded = _expandedGroups.Contains(group.Id);
             foreach (var entry in expanded ? entries : entries.Take(GroupEntriesShown))
-                _sidebar.Children.Add(GroupEntryRow(group, entry, entry.Id == chosen));
+            {
+                var row = GroupEntryRow(group, entry, entry.Id == chosen);
+                if (entry.Id == chosen) _chosenGroupRow = row;
+                _sidebar.Children.Add(row);
+            }
             if (entries.Count > GroupEntriesShown) _sidebar.Children.Add(ShowMoreRow(group, expanded));
         }
     }
@@ -328,7 +335,16 @@ public sealed partial class HistoryWindow
         var index = _groupEntry is { } chosen ? _groupEntries.ToList().FindIndex(entry => entry.Id == chosen) : -1;
         index = index < 0 ? (offset > 0 ? 0 : _groupEntries.Count - 1) : Math.Clamp(index + offset, 0, _groupEntries.Count - 1);
         SelectGroupEntry(group, _groupEntries[index].Id, listed: true);
+        BringChosenGroupRowIntoView();
     }
+
+    // The sidebar scrolls; an entry chosen with the keyboard may lie outside its viewport.
+    private void BringChosenGroupRowIntoView() => DispatcherQueue.TryEnqueue(() =>
+    {
+        if (_closing || _chosenGroupRow is not { } row) return;
+        row.UpdateLayout();
+        row.StartBringIntoView(new BringIntoViewOptions { AnimationDesired = false });
+    });
 
     private void RenderGroupDetail(ModuleHistorySidebarGroup group)
     {
