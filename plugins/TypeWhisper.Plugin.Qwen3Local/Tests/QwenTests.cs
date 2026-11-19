@@ -429,8 +429,24 @@ public sealed class QwenTests : IDisposable
     [InlineData("Someone spilled water on their machine. language English. I, yeah.", "Someone spilled water on their machine. I, yeah.")]
     [InlineData("They teach the language English. Then French.", "They teach the language English. Then French.")]
     [InlineData("language Python. Next.", "language Python. Next.")]
+    [InlineData("language Chinese。你好。", "你好。")]
+    [InlineData("你好。language Chinese。多少钱？", "你好。多少钱？")]
+    [InlineData("language Japanese. こんにちは。", "こんにちは。")]
     public void LanguageMarkersLeakedByTheModelAreRemoved(string text, string expected) =>
         Assert.Equal(expected, QwenRecognizer.StripLanguageMarkers(text));
+
+    [Fact]
+    public void AWindowThatEndsAfterTheLanguageMarkerIsDecodedAgainWithThatLanguage()
+    {
+        var hints = new List<string?>();
+        var text = QwenRecognizer.DecodeWithLanguageRetry(hint =>
+        {
+            hints.Add(hint);
+            return hint is null ? "language Chinese。" : "打开灯。";
+        }, null);
+        Assert.Equal("打开灯。", text);
+        Assert.Equal([null, "Chinese"], hints);
+    }
 
     [Fact]
     public void WavParsingHandlesMetadataAndRejectsWrongFormatsAndTruncation()

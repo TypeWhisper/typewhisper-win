@@ -60,7 +60,8 @@ not word-aligned timestamps. Quiet input is raised to the 0.707 peak the recorde
 uses for dictation, so files and API audio are decoded at the same level; the
 1.7B model drops whole windows of quiet speech otherwise. A `language X<asr_text>`
 marker that the 1.7B model sometimes emits as plain text is removed, and so is the
-`language X.` that Rumble-2-Flash writes at the start of a window when no language is set. Native
+`language X.` (or `language X。`) that Rumble-2-Flash writes at the start of a window when no language is set.
+If a window holds only that marker, it is decoded once more with the reported language as a hint. Native
 decoding is drained before cancellation is reported; cancellation does not return
 a partial transcript. Unload, removal, download, load and transcription share an
 operation lock.
