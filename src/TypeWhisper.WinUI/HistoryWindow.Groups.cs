@@ -89,10 +89,10 @@ public sealed partial class HistoryWindow
     private void RenderGroupRows()
     {
         var groups = SidebarGroups.Where(IsShown).ToArray();
-        if (groups.Length == 0) return;
-        _sidebar.Children.Add(new Border { Height = 1, Background = Brush("HairlineBrush"), Margin = new Thickness(10, 12, 10, 4) });
         _chosenGroupRow = null;
         _groupRowButtons.Clear();
+        if (groups.Length == 0) return;
+        _sidebar.Children.Add(new Border { Height = 1, Background = Brush("HairlineBrush"), Margin = new Thickness(10, 12, 10, 4) });
         foreach (var group in groups)
         {
             _sidebar.Children.Add(GroupHeader(group));
