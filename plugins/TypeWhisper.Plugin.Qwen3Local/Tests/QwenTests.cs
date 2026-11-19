@@ -429,8 +429,35 @@ public sealed class QwenTests : IDisposable
     [InlineData("Someone spilled water on their machine. language English. I, yeah.", "Someone spilled water on their machine. I, yeah.")]
     [InlineData("They teach the language English. Then French.", "They teach the language English. Then French.")]
     [InlineData("language Python. Next.", "language Python. Next.")]
+    [InlineData("language Chinese。你好。", "你好。")]
+    [InlineData("你好。language Chinese。多少钱？", "你好。多少钱？")]
+    [InlineData("language Japanese. こんにちは。", "こんにちは。")]
     public void LanguageMarkersLeakedByTheModelAreRemoved(string text, string expected) =>
         Assert.Equal(expected, QwenRecognizer.StripLanguageMarkers(text));
+
+    [Theory]
+    [InlineData("language Chinese。", "Chinese", "打开灯。")]
+    [InlineData("language German", "German", "Es leben noch viele Menschen.")]
+    [InlineData("language German<asr_text>", "German", "Es leben noch viele Menschen.")]
+    public void AWindowThatHoldsOnlyTheLanguageMarkerIsDecodedAgainWithThatLanguage(string tagOnly, string language, string transcript)
+    {
+        var hints = new List<string?>();
+        var text = QwenRecognizer.DecodeWithLanguageRetry(hint =>
+        {
+            hints.Add(hint);
+            return hint is null ? tagOnly : transcript;
+        }, null);
+        Assert.Equal(transcript, text);
+        Assert.Equal([null, language], hints);
+    }
+
+    [Fact]
+    public void ATranscriptAfterTheLanguageMarkerIsNotDecodedAgain()
+    {
+        var calls = 0;
+        Assert.Equal("你好。", QwenRecognizer.DecodeWithLanguageRetry(_ => { calls++; return "language Chinese。你好。"; }, null));
+        Assert.Equal(1, calls);
+    }
 
     [Fact]
     public void WavParsingHandlesMetadataAndRejectsWrongFormatsAndTruncation()

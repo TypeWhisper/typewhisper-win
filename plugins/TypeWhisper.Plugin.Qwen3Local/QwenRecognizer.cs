@@ -59,19 +59,32 @@ internal sealed partial class QwenRecognizer : IQwenRecognizer
             "The Qwen3-ASR model could not be loaded. Its files may be damaged; remove the model and download it again.");
     }
 
-    public string Decode(float[] samples, string? language)
+    public string Decode(float[] samples, string? language) => DecodeWithLanguageRetry(hint => DecodeRaw(samples, hint), language);
+
+    private string DecodeRaw(float[] samples, string? language)
     {
         using var stream = _recognizer.CreateStream();
         if (language is not null) stream.SetOption("language", language);
         stream.AcceptWaveform(QwenAudio.SampleRate, samples);
         _recognizer.Decode(stream);
-        return StripLanguageMarkers(stream.Result.Text);
+        return stream.Result.Text;
+    }
+
+    // On short clips Rumble-2-Flash sometimes stops right after its language marker when no language is set,
+    // with or without punctuation ("language Chinese。", "language German"). The decode with that language as a
+    // hint is stable, so such a window is decoded once more with it.
+    internal static string DecodeWithLanguageRetry(Func<string?, string> decode, string? language)
+    {
+        var raw = decode(language);
+        if (language is not null || LanguageOnlyMarker.Match(raw) is not { Success: true } tagOnly) return StripLanguageMarkers(raw);
+        var retried = decode(tagOnly.Groups["name"].Value);
+        return LanguageOnlyMarker.IsMatch(retried) ? "" : StripLanguageMarkers(retried);
     }
 
     // sherpa-onnx strips the "language X<asr_text>" prefix for the 0.6B model, but the 1.7B export leaves it
     // in the text of some windows, sometimes mid-window, so any remaining marker is removed here. Rumble-2-Flash
     // runs without its control tokens and, with no language set, ends the marker with a period instead of
-    // <asr_text> ("language German. Es ..."); that form is removed where a sentence starts.
+    // <asr_text> ("language German. Es ...", "language Chinese。你好"); that form is removed where a sentence starts.
     internal static string StripLanguageMarkers(string text) =>
         SentenceLanguageMarker.Replace(LanguageMarker().Replace(text, ""), "").Trim();
 
@@ -79,9 +92,14 @@ internal sealed partial class QwenRecognizer : IQwenRecognizer
     private static partial Regex LanguageMarker();
 
     // Only the language names the models report, so "language Python." stays text.
+    private static readonly string LanguageNames = string.Join("|", Qwen3LocalPlugin.LanguageNames.Select(Regex.Escape));
+
     private static readonly Regex SentenceLanguageMarker = new(
-        @"(?<=^\s*|[.!?]\s+)language\s+(?:" + string.Join("|", Qwen3LocalPlugin.LanguageNames.Select(Regex.Escape)) + @")\.\s*",
-        RegexOptions.CultureInvariant);
+        @"(?<=^\s*|[.!?]\s+|[。！？]\s*)language\s+(?<name>" + LanguageNames + @")[.。]\s*", RegexOptions.CultureInvariant);
+
+    // A window that holds nothing but the marker.
+    private static readonly Regex LanguageOnlyMarker = new(
+        @"^\s*language\s+(?<name>" + LanguageNames + @")\s*(?:[.。]|<asr_text>)?\s*$", RegexOptions.CultureInvariant);
 
     public void Dispose() => _recognizer.Dispose();
 
