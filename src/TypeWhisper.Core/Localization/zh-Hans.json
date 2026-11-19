@@ -3308,5 +3308,7 @@
   "This entry could not be shown.": "无法显示此条目。",
   "New": "新建",
   "“{0}” is removed from this PC. This cannot be undone.": "“{0}”将从此电脑中删除。此操作无法撤销。",
-  "The entry could not be deleted.": "无法删除该条目。"
+  "The entry could not be deleted.": "无法删除该条目。",
+  "Show more": "显示更多",
+  "Show less": "收起"
 }
