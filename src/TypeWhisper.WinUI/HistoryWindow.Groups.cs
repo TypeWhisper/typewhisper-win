@@ -407,13 +407,15 @@ public sealed partial class HistoryWindow
         }
         if (ReferenceEquals(group, _group)) RefilterGroup(group);
         else RenderSidebar();
-        // The row whose menu or key deleted it is gone; the keyboard stays in the sidebar.
-        if (deleted && !FocusInDetail())
+        // The row whose menu or key deleted it is gone; the keyboard stays in the sidebar. After the redraw a module's
+        // NotifyChanged from within Delete has queued, which replaces the buttons again.
+        if (deleted) DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
         {
+            if (_closing || FocusInDetail()) return;
             var target = (neighbor is not null ? _groupRowButtons.GetValueOrDefault((group.Id, neighbor)) : null)
                 ?? _groupRowButtons.GetValueOrDefault((group.Id, null));
             target?.Focus(FocusState.Programmatic);
-        }
+        });
     }
 
     // Whether the keyboard focus is in the module's view, whose keys belong to it.
