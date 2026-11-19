@@ -35,7 +35,8 @@ public sealed partial class AssemblyAiPlugin : ITranscriptionEnginePlugin, IApiK
         string? LiveModel = AssemblyAiLiveModels.RealtimeAgent);
 
     /// <summary>Creates the provider with its own HTTP transport.</summary>
-    public AssemblyAiPlugin() : this(new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(120) }) { }
+    // Each request sets its own deadline in ReadAsync: a Sync or Dictation request may take longer than the default.
+    public AssemblyAiPlugin() : this(new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = Timeout.InfiniteTimeSpan }) { }
     internal AssemblyAiPlugin(HttpClient http, TimeSpan? pollInterval = null, TimeSpan? jobTimeout = null)
     {
         _http = http;
@@ -288,9 +289,7 @@ public sealed partial class AssemblyAiPlugin : ITranscriptionEnginePlugin, IApiK
         // The Dictation API always runs Universal-3.6 Pro and takes no model header.
         if (!dictation) request.Headers.Add("X-AAI-Model", sync.Model);
         request.Content = SyncContent(wavAudio, sync);
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        deadline.CancelAfter(SyncTimeout(sync.Endpoint, duration, wavAudio.Length));
-        using var response = await ReadAsync(request, deadline.Token);
+        using var response = await ReadAsync(request, ct, SyncTimeout(sync.Endpoint, duration, wavAudio.Length));
         var root = response.RootElement;
         if (!root.TryGetProperty("text", out var textField) || textField.ValueKind is not (JsonValueKind.String or JsonValueKind.Null))
             throw InvalidResponse();
@@ -403,11 +402,16 @@ public sealed partial class AssemblyAiPlugin : ITranscriptionEnginePlugin, IApiK
         return request;
     }
 
-    private async Task<JsonDocument> ReadAsync(HttpRequestMessage request, CancellationToken ct)
+    private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(120);
+
+    /// <summary>Sends <paramref name="request"/> with a deadline of <paramref name="timeout"/>, 120 s by default; a missed deadline is a timeout failure.</summary>
+    private async Task<JsonDocument> ReadAsync(HttpRequestMessage request, CancellationToken ct, TimeSpan? timeout = null)
     {
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        deadline.CancelAfter(timeout ?? RequestTimeout);
         try
         {
-            using var response = await _http.SendAsync(request, ct);
+            using var response = await _http.SendAsync(request, deadline.Token);
             if (!response.IsSuccessStatusCode)
             {
                 var status = (int)response.StatusCode;
@@ -420,8 +424,8 @@ public sealed partial class AssemblyAiPlugin : ITranscriptionEnginePlugin, IApiK
                 };
                 throw new PluginRequestException("AssemblyAI rejected the request.", kind, status, response.Headers.RetryAfter?.Delta);
             }
-            var json = await response.Content.ReadAsStringAsync(ct);
-            ct.ThrowIfCancellationRequested();
+            var json = await response.Content.ReadAsStringAsync(deadline.Token);
+            deadline.Token.ThrowIfCancellationRequested();
             var doc = JsonDocument.Parse(json);
             if (doc.RootElement.ValueKind != JsonValueKind.Object) { doc.Dispose(); throw InvalidResponse(); }
             return doc;
