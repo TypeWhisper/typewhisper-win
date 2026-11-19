@@ -15,6 +15,7 @@ public sealed partial class AssemblyAiPlugin : ITranscriptionEnginePlugin, IApiK
 {
     private const string BaseUrl = "https://api.assemblyai.com";
     private const string SyncUrl = "https://sync.assemblyai.com/v1/transcribe";
+    private const string DictationUrl = "https://dictation.assemblyai.com/v1/transcribe";
     private readonly HttpClient _http;
     private readonly TimeSpan _pollInterval;
     private readonly TimeSpan _jobTimeout;
@@ -28,11 +29,14 @@ public sealed partial class AssemblyAiPlugin : ITranscriptionEnginePlugin, IApiK
     internal TimeProvider Clock { get; set; } = TimeProvider.System;
     private string? _apiKey;
     private Configuration _configuration = new(AssemblyAiModels.DefaultId, false, "api-key");
-    // Profiles saved before 1.2.0 have no mode and get the Live default.
-    private sealed record Configuration(string Model, bool SpeakerDiarizationEnabled, string? SecretName, string? Mode = AssemblyAiModes.Live);
+    // Profiles saved before 1.2.0 have no mode and get the Live default; before 1.4.0, no live model and get Realtime-Agent,
+    // the price Live had.
+    private sealed record Configuration(string Model, bool SpeakerDiarizationEnabled, string? SecretName, string? Mode = AssemblyAiModes.Live,
+        string? LiveModel = AssemblyAiLiveModels.RealtimeAgent);
 
     /// <summary>Creates the provider with its own HTTP transport.</summary>
-    public AssemblyAiPlugin() : this(new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(120) }) { }
+    // Each request sets its own deadline in ReadAsync: a Sync or Dictation request may take longer than the default.
+    public AssemblyAiPlugin() : this(new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = Timeout.InfiniteTimeSpan }) { }
     internal AssemblyAiPlugin(HttpClient http, TimeSpan? pollInterval = null, TimeSpan? jobTimeout = null)
     {
         _http = http;
@@ -45,7 +49,7 @@ public sealed partial class AssemblyAiPlugin : ITranscriptionEnginePlugin, IApiK
     /// <inheritdoc />
     public string PluginName => "AssemblyAI";
     /// <inheritdoc />
-    public string PluginVersion => "1.2.0";
+    public string PluginVersion => "1.4.0";
     /// <inheritdoc />
     public string ProviderId => "assemblyai";
     /// <inheritdoc />
@@ -54,14 +58,22 @@ public sealed partial class AssemblyAiPlugin : ITranscriptionEnginePlugin, IApiK
     public bool IsConfigured => _host is not null && !string.IsNullOrWhiteSpace(_apiKey);
     /// <inheritdoc />
     public IReadOnlyList<PluginModelInfo> TranscriptionModels { get; } = AssemblyAiModels.All.Select(m =>
-        new PluginModelInfo(m.Id, m.Name) { LanguageCodes = m.Languages, LanguageCount = m.Languages.Count, IsRecommended = m.IsPro }).ToArray();
+        new PluginModelInfo(m.Id, m.Name)
+        {
+            LanguageCodes = m.Languages, LanguageCount = m.Languages.Count, IsRecommended = m.Id == AssemblyAiModels.DefaultId,
+            // Workflows saved with Universal-3.5 Pro or Universal-3 Pro use AssemblyAI-STT-3.7.
+            FormerIds = m.Id == AssemblyAiModels.DefaultId ? AssemblyAiModels.LegacyDefaultIds : []
+        }).ToArray();
     /// <inheritdoc />
     public string? SelectedModelId => _configuration.Model;
     /// <inheritdoc />
     public bool SupportsTranslation => false;
     /// <inheritdoc />
-    /// <remarks>Only the Live mode streams; Sync and Async show no live preview from AssemblyAI, so their price is what they cost.</remarks>
-    public bool SupportsStreaming => Mode == AssemblyAiModes.Live && !_configuration.SpeakerDiarizationEnabled;
+    /// <remarks>
+    /// Only the Live mode streams, and only AssemblyAI-STT-3.7; Sync, Dictation and Async show no live preview from AssemblyAI,
+    /// so their price is what they cost. Universal-2 has no live sessions.
+    /// </remarks>
+    public bool SupportsStreaming => Mode == AssemblyAiModes.Live && !_configuration.SpeakerDiarizationEnabled && Model.LiveLanguages is not null;
     /// <inheritdoc />
     public bool SupportsStreamingCompletion => true;
     /// <inheritdoc />
@@ -74,6 +86,7 @@ public sealed partial class AssemblyAiPlugin : ITranscriptionEnginePlugin, IApiK
     public IReadOnlyList<string> SupportedLanguages => Model.Languages;
     private AssemblyAiModel Model => AssemblyAiModels.Resolve(_configuration.Model);
     internal string Mode => AssemblyAiModes.Normalize(_configuration.Mode);
+    internal string LiveModel => AssemblyAiLiveModels.Normalize(_configuration.LiveModel);
 
     /// <inheritdoc />
     public async Task ActivateAsync(IPluginHostServices host)
@@ -81,7 +94,12 @@ public sealed partial class AssemblyAiPlugin : ITranscriptionEnginePlugin, IApiK
         var saved = host.GetSetting<Configuration>("configuration")
             ?? new(host.GetSetting<string>("selectedModel") ?? AssemblyAiModels.DefaultId,
                 host.GetSetting<bool?>("speakerDiarizationEnabled") ?? false, "api-key");
-        var normalized = saved with { Model = AssemblyAiModels.Resolve(saved.Model).Id, Mode = AssemblyAiModes.Normalize(saved.Mode) };
+        // Saved Universal-3.5 Pro and Universal-3 Pro selections move to AssemblyAI-STT-3.7.
+        var normalized = saved with
+        {
+            Model = AssemblyAiModels.Resolve(saved.Model).Id, Mode = AssemblyAiModes.Normalize(saved.Mode),
+            LiveModel = AssemblyAiLiveModels.Normalize(saved.LiveModel)
+        };
         var key = normalized.SecretName is null ? null : await host.LoadSecretAsync(normalized.SecretName);
         if (saved != normalized) host.SetSetting("configuration", normalized);
         _configuration = normalized;
@@ -117,24 +135,35 @@ public sealed partial class AssemblyAiPlugin : ITranscriptionEnginePlugin, IApiK
         ct.ThrowIfCancellationRequested();
         var key = RequireKey();
         if (!SupportsStreamingForPrompt(prompt)) throw new NotSupportedException("This configuration requires recorded-audio transcription.");
-        return await AssemblyAiStreamingSession.ConnectAsync(key, Model, language, prompt, ct);
+        return await AssemblyAiStreamingSession.ConnectAsync(key, Model, LiveModel, language, prompt, ct);
     }
 
     /// <inheritdoc />
-    public async Task<PluginTranscriptionResult> TranscribeAsync(byte[] wavAudio, string? language, bool translate, string? prompt, CancellationToken ct)
+    public Task<PluginTranscriptionResult> TranscribeAsync(byte[] wavAudio, string? language, bool translate, string? prompt, CancellationToken ct) =>
+        TranscribeAsync(wavAudio, language, translate, prompt, TranscriptionRequestContext.Purpose == TranscriptionPurpose.Dictation, ct);
+
+    /// <summary>
+    /// Transcribes a recording; <paramref name="dictation"/> says whether the host transcribes a dictation. Only dictations go
+    /// to the Dictation API and leave speaker labels out; recordings, files, the HTTP API and dictionary training keep the
+    /// verbatim transcript.
+    /// </summary>
+    internal async Task<PluginTranscriptionResult> TranscribeAsync(byte[] wavAudio, string? language, bool translate, string? prompt,
+        bool dictation, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
         var key = RequireKey();
         if (translate) throw new NotSupportedException("AssemblyAI does not support native translation.");
         if (wavAudio.Length == 0) throw new ArgumentException("Audio is empty.", nameof(wavAudio));
         var model = Model;
-        var diarization = _configuration.SpeakerDiarizationEnabled;
+        // Dictations leave speaker labels out: AssemblyAI bills them, and dictated text has no use for them.
+        var diarization = _configuration.SpeakerDiarizationEnabled && !dictation;
         var normalizedLanguage = AssemblyAiModels.Language(language);
         if (normalizedLanguage is not null && !model.Languages.Contains(normalizedLanguage))
             throw new NotSupportedException("The selected AssemblyAI model does not support this language.");
 
         var duration = WavDuration(wavAudio);
-        if (SyncRequestFor(model, Mode, diarization, normalizedLanguage, prompt, duration, wavAudio.Length) is { } sync)
+        var endpoint = Mode == AssemblyAiModes.Dictation && dictation ? SyncEndpoint.Dictation : SyncEndpoint.Sync;
+        if (SyncRequestFor(model, Mode, diarization, normalizedLanguage, prompt, duration, wavAudio.Length, endpoint) is { } sync)
         {
             var recording = SyncRequestIdentity(wavAudio, sync);
             if (!SyncFailedBefore(recording))
@@ -143,10 +172,11 @@ public sealed partial class AssemblyAiPlugin : ITranscriptionEnginePlugin, IApiK
                 catch (Exception ex) when (!ct.IsCancellationRequested && ex is not OutOfMemoryException
                     && ex is not PluginRequestException { FailureKind: PluginRequestFailureKind.Authentication })
                 {
-                    // A failed Sync request is not sent again: AssemblyAI may have received and billed it.
+                    // A failed Sync or Dictation request is not sent again: AssemblyAI may have received and billed it.
                     RememberFailedSync(recording);
                     var reason = ex is PluginRequestException request ? request.FailureKind.ToString() : "Timeout";
-                    _host?.Log(PluginLogLevel.Warning, $"AssemblyAI Sync API failed ({reason}); transcribing with the async API.");
+                    var cleanup = sync.Endpoint == SyncEndpoint.Dictation ? " without cleanup" : "";
+                    _host?.Log(PluginLogLevel.Warning, $"AssemblyAI {sync.Endpoint} API failed ({reason}); transcribing with the async API{cleanup}.");
                 }
             }
         }
@@ -212,15 +242,25 @@ public sealed partial class AssemblyAiPlugin : ITranscriptionEnginePlugin, IApiK
         lock (_failedSyncRequests) _failedSyncRequests[request] = Clock.GetUtcNow();
     }
 
-    /// <summary>The Sync API request for a recording.</summary>
-    internal sealed record SyncRequest(string? Language, IReadOnlyList<string> Keyterms);
+    /// <summary>Where a recording goes when it fits the Sync API's limits.</summary>
+    internal enum SyncEndpoint
+    {
+        /// <summary>The Sync API: the verbatim transcript.</summary>
+        Sync,
+        /// <summary>The Dictation API: the same request, always on Universal-3.6 Pro, with the transcript cleaned up by an LLM.</summary>
+        Dictation
+    }
+
+    /// <summary>The Sync or Dictation API request for a recording. <c>Model</c> is the Sync API's <c>X-AAI-Model</c>; the Dictation API takes no model.</summary>
+    internal sealed record SyncRequest(string? Language, IReadOnlyList<string> Keyterms, string Model = "", SyncEndpoint Endpoint = SyncEndpoint.Sync);
 
     /// <summary>
     /// Null when the recording needs the async API: the Async mode, a model without a Sync API, speaker labels,
-    /// a language or dictionary the Sync API would reject, or audio over its length or size limit.
+    /// a language or dictionary the Sync API would reject, or audio over its length or size limit. The Dictation API has
+    /// the same limits.
     /// </summary>
     internal static SyncRequest? SyncRequestFor(AssemblyAiModel model, string mode, bool diarization, string? language, string? prompt,
-        TimeSpan? duration, long bytes = 0)
+        TimeSpan? duration, long bytes = 0, SyncEndpoint endpoint = SyncEndpoint.Sync)
     {
         if (mode == AssemblyAiModes.Async || diarization || model.Sync is not { } limits || duration > limits.MaxDuration || bytes > limits.MaxBytes)
             return null;
@@ -228,25 +268,44 @@ public sealed partial class AssemblyAiPlugin : ITranscriptionEnginePlugin, IApiK
         if (code is not null && !limits.Languages.Contains(code)) return null;
         var terms = AssemblyAiModels.Terms(prompt, model);
         if (terms.Count > limits.MaxTerms || terms.Sum(t => t.Length) > limits.MaxTermCharacters) return null;
-        return new(code, terms);
+        return new(code, terms, limits.Model, endpoint);
     }
+
+    /// <summary>
+    /// How long a Sync or Dictation request may take, the upload at 1 MB/s included. The Sync server gives up after 30 s.
+    /// The Dictation API also rewrites the text, and AssemblyAI recommends a 90 s client timeout for it; a short dictation
+    /// gets 30 s plus its length, so a stuck request soon falls back to the async API.
+    /// </summary>
+    internal static TimeSpan SyncTimeout(SyncEndpoint endpoint, TimeSpan? duration, long bytes) =>
+        TimeSpan.FromSeconds(endpoint == SyncEndpoint.Dictation ? Math.Min(90, 30 + (duration?.TotalSeconds ?? 60)) : 45)
+        + TimeSpan.FromSeconds(bytes / 1_000_000.0);
 
     private async Task<PluginTranscriptionResult> TranscribeSyncAsync(byte[] wavAudio, SyncRequest sync, string key, TimeSpan? duration, CancellationToken ct)
     {
         var started = Stopwatch.StartNew();
-        using var request = new HttpRequestMessage(HttpMethod.Post, SyncUrl);
+        var dictation = sync.Endpoint == SyncEndpoint.Dictation;
+        using var request = new HttpRequestMessage(HttpMethod.Post, dictation ? DictationUrl : SyncUrl);
         request.Headers.Add("Authorization", key);
-        request.Headers.Add("X-AAI-Model", AssemblyAiModels.DefaultId);
+        // The Dictation API always runs Universal-3.6 Pro and takes no model header.
+        if (!dictation) request.Headers.Add("X-AAI-Model", sync.Model);
         request.Content = SyncContent(wavAudio, sync);
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        // The server gives up after 30 s; the rest covers the upload.
-        deadline.CancelAfter(TimeSpan.FromSeconds(45) + TimeSpan.FromSeconds(wavAudio.Length / 1_000_000.0));
-        using var response = await ReadAsync(request, deadline.Token);
+        using var response = await ReadAsync(request, ct, SyncTimeout(sync.Endpoint, duration, wavAudio.Length));
         var root = response.RootElement;
         if (!root.TryGetProperty("text", out var textField) || textField.ValueKind is not (JsonValueKind.String or JsonValueKind.Null))
             throw InvalidResponse();
-        var segments = SyncSegments(root);
         var seconds = Number(root, "audio_duration_ms") is { } ms ? ms / 1000 : duration?.TotalSeconds ?? 0;
+        if (dictation)
+        {
+            // The Dictation API returns the verbatim transcript in `text` and the cleaned-up text in `llm_response`, which is
+            // null when the rewrite failed; the transcript is then still usable. Its words carry no times.
+            var cleaned = OptionalString(root, "llm_response");
+            var rewritten = !string.IsNullOrWhiteSpace(cleaned);
+            _host?.Log(rewritten ? PluginLogLevel.Info : PluginLogLevel.Warning, rewritten
+                ? $"AssemblyAI Dictation API returned the cleaned-up transcript after {started.ElapsedMilliseconds} ms."
+                : $"AssemblyAI Dictation API returned the transcript without cleanup ({OptionalString(root, "llm_error") ?? "no rewrite"}) after {started.ElapsedMilliseconds} ms.");
+            return new(rewritten ? cleaned!.Trim() : textField.GetString() ?? "", sync.Language, seconds, NoSpeechProbability: null);
+        }
+        var segments = SyncSegments(root);
         if (segments.Count > 0) seconds = Math.Max(seconds, segments.Max(s => s.End));
         _host?.Log(PluginLogLevel.Info, $"AssemblyAI Sync API returned the transcript after {started.ElapsedMilliseconds} ms.");
         // The Sync API reports no detected language.
@@ -284,8 +343,10 @@ public sealed partial class AssemblyAiPlugin : ITranscriptionEnginePlugin, IApiK
         var audio = new ByteArrayContent(wavAudio);
         audio.Headers.ContentType = new MediaTypeHeaderValue("audio/wav");
         content.Add(audio, "audio", "audio.wav");
-        // Word timestamps cost 0 to 0.2 s and keep subtitles of files possible, as with the async API.
-        var config = new Dictionary<string, object> { ["timestamps"] = true };
+        var config = new Dictionary<string, object>();
+        // Word timestamps cost 0 to 0.2 s and keep subtitles of files possible, as with the async API. The Dictation API
+        // has no timestamps and rejects unknown fields with a 400.
+        if (sync.Endpoint == SyncEndpoint.Sync) config["timestamps"] = true;
         if (sync.Language is { } language) config["language_codes"] = new[] { language };
         if (sync.Keyterms.Count > 0) config["keyterms_prompt"] = sync.Keyterms;
         var json = new StringContent(JsonSerializer.Serialize(config), Encoding.UTF8);
@@ -315,15 +376,21 @@ public sealed partial class AssemblyAiPlugin : ITranscriptionEnginePlugin, IApiK
 
     internal static Dictionary<string, object> SubmitBody(string url, AssemblyAiModel model, string? language, string? prompt, bool diarization)
     {
-        var body = new Dictionary<string, object> { ["audio_url"] = url, ["speech_models"] = new[] { model.Id } };
+        var body = new Dictionary<string, object>
+        {
+            ["audio_url"] = url, ["speech_models"] = model.AsyncModels,
+            // AssemblyAI-STT-3.7 keeps filler words and false starts by default, unlike the models before it; Universal-2
+            // already leaves them out.
+            ["disfluencies"] = false
+        };
         if (AssemblyAiModels.Language(language) is { } code) body["language_code"] = code;
         else body["language_detection"] = true;
         if (diarization) body["speaker_labels"] = true;
         var terms = AssemblyAiModels.Terms(prompt, model);
         if (terms.Count > 0)
         {
-            body[model.IsPro ? "keyterms_prompt" : "word_boost"] = terms;
-            if (!model.IsPro) body["boost_param"] = "high";
+            body[model.UsesKeyterms ? "keyterms_prompt" : "word_boost"] = terms;
+            if (!model.UsesKeyterms) body["boost_param"] = "high";
         }
         return body;
     }
@@ -335,11 +402,16 @@ public sealed partial class AssemblyAiPlugin : ITranscriptionEnginePlugin, IApiK
         return request;
     }
 
-    private async Task<JsonDocument> ReadAsync(HttpRequestMessage request, CancellationToken ct)
+    private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(120);
+
+    /// <summary>Sends <paramref name="request"/> with a deadline of <paramref name="timeout"/>, 120 s by default; a missed deadline is a timeout failure.</summary>
+    private async Task<JsonDocument> ReadAsync(HttpRequestMessage request, CancellationToken ct, TimeSpan? timeout = null)
     {
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        deadline.CancelAfter(timeout ?? RequestTimeout);
         try
         {
-            using var response = await _http.SendAsync(request, ct);
+            using var response = await _http.SendAsync(request, deadline.Token);
             if (!response.IsSuccessStatusCode)
             {
                 var status = (int)response.StatusCode;
@@ -352,8 +424,8 @@ public sealed partial class AssemblyAiPlugin : ITranscriptionEnginePlugin, IApiK
                 };
                 throw new PluginRequestException("AssemblyAI rejected the request.", kind, status, response.Headers.RetryAfter?.Delta);
             }
-            var json = await response.Content.ReadAsStringAsync(ct);
-            ct.ThrowIfCancellationRequested();
+            var json = await response.Content.ReadAsStringAsync(deadline.Token);
+            deadline.Token.ThrowIfCancellationRequested();
             var doc = JsonDocument.Parse(json);
             if (doc.RootElement.ValueKind != JsonValueKind.Object) { doc.Dispose(); throw InvalidResponse(); }
             return doc;

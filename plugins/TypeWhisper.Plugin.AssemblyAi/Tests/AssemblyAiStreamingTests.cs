@@ -8,26 +8,29 @@ using TypeWhisper.PluginSDK;
 public sealed class AssemblyAiStreamingTests
 {
     [Theory]
-    [InlineData("universal-3-5-pro", "de", "universal-3-5-pro")]
-    [InlineData("universal-2", "en", "universal-streaming-english")]
-    [InlineData("universal-2", "de", "universal-streaming-multilingual")]
-    [InlineData("universal-2", null, "universal-streaming-multilingual")]
-    [InlineData("universal-2", "auto", "universal-streaming-multilingual")]
-    public void ConnectionPreservesModelLanguageAndDictionary(string model, string? language, string streamingModel)
+    [InlineData("assemblyai-stt-3-7-realtime-agent", "de", "assemblyai-stt-3-7-realtime-agent", "de")]
+    [InlineData("assemblyai-stt-3-7-realtime", "ko", "assemblyai-stt-3-7-realtime", "ko")]
+    [InlineData("assemblyai-stt-3-7-realtime", null, "assemblyai-stt-3-7-realtime", null)]
+    [InlineData("stale", " auto ", "assemblyai-stt-3-7-realtime-agent", null)]
+    public void ConnectionPreservesLiveModelLanguageAndDictionary(string liveModel, string? language, string streamingModel, string? languageCode)
     {
-        var uri = AssemblyAiStreamingSession.BuildUri(AssemblyAiModels.Require(model), language, "Grüße, ACME & Sons");
+        var uri = AssemblyAiStreamingSession.BuildUri(AssemblyAiModels.Require("assemblyai-stt-3-7"), liveModel, language, "Grüße, ACME & Sons");
         Assert.Equal("wss", uri.Scheme); Assert.Equal("streaming.assemblyai.com", uri.Host);
-        Assert.Contains("speech_model=" + streamingModel, uri.Query); Assert.DoesNotContain("api-key", uri.Query);
+        Assert.Contains("speech_model=" + streamingModel + "&", uri.Query); Assert.DoesNotContain("api-key", uri.Query);
         Assert.Contains("keyterms_prompt=", uri.Query); Assert.Contains("ACME%20", uri.Query);
-        if (model == AssemblyAiModels.DefaultId) { Assert.Contains("language_codes=", uri.Query); Assert.DoesNotContain("format_turns", uri.Query); }
-        else { Assert.Contains("format_turns=true", uri.Query); Assert.DoesNotContain("language_codes=", uri.Query); }
+        Assert.DoesNotContain("format_turns", uri.Query); Assert.Contains("&language_detection=true", uri.Query);
+        if (languageCode is null) Assert.DoesNotContain("language_codes=", uri.Query);
+        else Assert.Contains("language_codes=" + Uri.EscapeDataString($"[\"{languageCode}\"]"), uri.Query);
     }
 
     [Fact]
-    public void UnsupportedLiveLanguageAndOversizedDictionaryRequireBatch()
+    public void UnsupportedLiveLanguageOversizedDictionaryAndUniversal2RequireBatch()
     {
-        Assert.Throws<NotSupportedException>(() => AssemblyAiStreamingSession.BuildUri(AssemblyAiModels.All[1], "ja", null));
-        Assert.Throws<NotSupportedException>(() => AssemblyAiStreamingSession.BuildUri(AssemblyAiModels.All[0], "de", new string('x', 51)));
+        var stt37 = AssemblyAiModels.All[0];
+        Assert.Throws<NotSupportedException>(() => AssemblyAiStreamingSession.BuildUri(stt37, AssemblyAiLiveModels.RealtimeAgent, "pl", null));
+        Assert.Throws<NotSupportedException>(() => AssemblyAiStreamingSession.BuildUri(stt37, AssemblyAiLiveModels.RealtimeAgent, "de", new string('x', 51)));
+        // Universal-2 has no live sessions; Universal-Streaming English and Multilingual retire on February 1, 2027.
+        Assert.Throws<NotSupportedException>(() => AssemblyAiStreamingSession.BuildUri(AssemblyAiModels.All[1], AssemblyAiLiveModels.RealtimeAgent, "en", null));
     }
 
     [Theory]

@@ -25,35 +25,63 @@ public sealed partial class AssemblyAiPlugin
         new(ProfileSelectorId, "AssemblyAI", "", ProviderId)
         { Choices = [new(ProviderId, "AssemblyAI")], Section = PluginSettingsSection.Connection },
         new("selectedModel", L("Transcription model", "Transkriptionsmodell"),
-            L("Universal-3.5 Pro supports 18 languages. Universal-2 offers wider recorded-audio language support.",
-              "Universal-3.5 Pro unterstützt 18 Sprachen. Universal-2 bietet bei Aufnahmen eine größere Sprachauswahl."), _configuration.Model)
+            L("AssemblyAI-STT-3.7 supports 32 languages; with automatic language detection, a language it does not support goes to Universal-2. " +
+              "Universal-2 offers 37 languages and always uses the async API, at $0.15/h, without the modes below.",
+              "AssemblyAI-STT-3.7 unterstützt 32 Sprachen; mit automatischer Spracherkennung geht eine nicht unterstützte Sprache an Universal-2. " +
+              "Universal-2 bietet 37 Sprachen und nutzt immer die Async-API, für 0,15 $/h, ohne die Modi darunter."), _configuration.Model)
         { Choices = TranscriptionModels.Select(m => new PluginSettingChoice(m.Id, m.DisplayName)).ToArray(), Section = PluginSettingsSection.Transcription },
         new("transcriptionMode", L("Transcription", "Transkription"),
             L("Live streams dictations with a live preview, and the text is ready right after you stop; billed while the connection is open. " +
               "Recordings, files and dictations without a preview then use the Sync API. " +
-              "Sync uploads the recording when you stop and usually finishes in under half a second. Async costs the least but takes a few seconds. " +
-              "Only Live shows a live preview from AssemblyAI. Universal-2 has no Sync API, and speaker diarization always uses the async API. " +
-              "With more than 100 dictionary terms, Live also transcribes the recording, billed in addition. " +
-              "AssemblyAI list prices for Universal-3.5 Pro in November 2026; add-ons such as dictionary terms cost extra.",
+              "Sync uploads the recording when you stop and usually finishes in under half a second. " +
+              "Dictation uploads dictations when you stop and returns them cleaned up by Universal-3.6 Pro: filler words removed, punctuation and " +
+              "capitalization fixed. Recordings and files are not cleaned up; they use the Sync API. Dictations over 20 minutes, with more than " +
+              "100 dictionary terms or in a language it doesn't support, and failed requests use the async API without cleanup. " +
+              "Async costs the least but takes a few seconds. Only Live shows a live preview from AssemblyAI, and speaker diarization always uses " +
+              "the async API. With more than 100 dictionary terms, Live also transcribes the recording, billed in addition. " +
+              "AssemblyAI list prices in November 2026; add-ons such as dictionary terms cost extra.",
               "Live streamt Diktate mit Live-Vorschau, und der Text steht direkt nach dem Stoppen bereit; abgerechnet wird, solange die Verbindung offen ist. " +
               "Aufnahmen, Dateien und Diktate ohne Vorschau nutzen dann die Sync-API. " +
-              "Sync lädt die Aufnahme beim Stoppen hoch und ist meist in unter einer halben Sekunde fertig. Async kostet am wenigsten, braucht aber einige Sekunden. " +
-              "Nur Live zeigt eine Live-Vorschau von AssemblyAI. Universal-2 hat keine Sync-API, und die Sprechertrennung nutzt immer die Async-API. " +
-              "Mit mehr als 100 Wörterbuchbegriffen transkribiert Live zusätzlich die Aufnahme, was zusätzlich abgerechnet wird. " +
-              "Listenpreise von AssemblyAI für Universal-3.5 Pro im November 2026; Zusatzfunktionen wie Wörterbuchbegriffe kosten extra."),
+              "Sync lädt die Aufnahme beim Stoppen hoch und ist meist in unter einer halben Sekunde fertig. " +
+              "Dictation lädt Diktate beim Stoppen hoch und gibt sie von Universal-3.6 Pro bereinigt zurück: Füllwörter entfernt, Satzzeichen und " +
+              "Großschreibung korrigiert. Aufnahmen und Dateien werden nicht bereinigt; sie nutzen die Sync-API. Diktate über 20 Minuten, mit mehr " +
+              "als 100 Wörterbuchbegriffen oder in einer nicht unterstützten Sprache sowie fehlgeschlagene Anfragen nutzen die Async-API ohne Bereinigung. " +
+              "Async kostet am wenigsten, braucht aber einige Sekunden. Nur Live zeigt eine Live-Vorschau von AssemblyAI, und die Sprechertrennung " +
+              "nutzt immer die Async-API. Mit mehr als 100 Wörterbuchbegriffen transkribiert Live zusätzlich die Aufnahme, was zusätzlich abgerechnet wird. " +
+              "Listenpreise von AssemblyAI im November 2026; Zusatzfunktionen wie Wörterbuchbegriffe kosten extra."),
             Mode)
         {
             Choices =
             [
-                new(AssemblyAiModes.Live, L("Live – $0.45/h", "Live – 0,45 $/h")),
+                new(AssemblyAiModes.Live, LiveModel == AssemblyAiLiveModels.Realtime
+                    ? L("Live – $0.30/h", "Live – 0,30 $/h") : L("Live – $0.45/h", "Live – 0,45 $/h")),
                 new(AssemblyAiModes.Sync, L("Sync – $0.30/h", "Sync – 0,30 $/h")),
+                new(AssemblyAiModes.Dictation, L("Dictation – $0.62/h", "Dictation – 0,62 $/h")),
                 new(AssemblyAiModes.Async, L("Async – $0.21/h", "Async – 0,21 $/h"))
             ],
-            Section = PluginSettingsSection.Transcription
+            Section = PluginSettingsSection.Transcription,
+            VisibleWhen = new("selectedModel", [AssemblyAiModels.DefaultId])
+        },
+        new("liveModel", L("Live model", "Live-Modell"),
+            L("Realtime-Agent keeps the preview steady as you speak. Realtime costs less, but the preview changes more while you speak. " +
+              "The final text is as accurate.",
+              "Mit Realtime-Agent bleibt die Vorschau beim Sprechen ruhig. Realtime ist günstiger, aber die Vorschau ändert sich beim Sprechen " +
+              "häufiger. Der fertige Text ist genauso gut."),
+            LiveModel)
+        {
+            Choices =
+            [
+                new(AssemblyAiLiveModels.RealtimeAgent, L("Realtime-Agent – $0.45/h", "Realtime-Agent – 0,45 $/h")),
+                new(AssemblyAiLiveModels.Realtime, L("Realtime – $0.30/h", "Realtime – 0,30 $/h"))
+            ],
+            Section = PluginSettingsSection.Transcription,
+            VisibleWhen = new("transcriptionMode", [AssemblyAiModes.Live])
         },
         new("speakerDiarizationEnabled", L("Speaker diarization", "Sprechertrennung"),
-            L("Label speakers and preserve utterance timestamps. Uses the async API after the recording instead of live text.",
-              "Sprecher kennzeichnen und Zeitstempel der Äußerungen erhalten. Verwendet die Async-API nach der Aufnahme statt Live-Text."),
+            L("Label speakers in recordings, files, watch folders and the HTTP API, with utterance timestamps. Uses the async API; " +
+              "dictations are not labeled and then show no live preview from AssemblyAI.",
+              "Sprecher in Aufnahmen, Dateien, überwachten Ordnern und der HTTP-API kennzeichnen, mit Zeitstempeln der Äußerungen. Nutzt die " +
+              "Async-API; Diktate werden nicht gekennzeichnet und zeigen dann keine Live-Vorschau von AssemblyAI."),
             _configuration.SpeakerDiarizationEnabled ? "true" : "false")
         { Choices = [new("false", L("Off", "Aus")), new("true", L("On", "An"))], Section = PluginSettingsSection.Transcription }
     ];
@@ -133,6 +161,7 @@ public sealed partial class AssemblyAiPlugin
             {
                 "selectedModel" => next with { Model = AssemblyAiModels.Require(value).Id },
                 "transcriptionMode" when AssemblyAiModes.All.Contains(value) => next with { Mode = value },
+                "liveModel" when AssemblyAiLiveModels.All.Contains(value) => next with { LiveModel = value },
                 "speakerDiarizationEnabled" when value is "true" or "false" => next with { SpeakerDiarizationEnabled = value == "true" },
                 _ => throw new ArgumentException("Invalid AssemblyAI setting.")
             };
