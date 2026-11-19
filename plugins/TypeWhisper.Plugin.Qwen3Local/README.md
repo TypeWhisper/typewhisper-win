@@ -35,15 +35,12 @@ the 879 MB archive plus about 1.1 GB of extracted files for 0.6B, or 2.4 GB for
 available space.
 
 Only one model is loaded at a time; selecting the other model unloads the first
-before loading the new one. The host's removal button blocks the selected model
-and any model loaded earlier in the session, so the plugin settings offer
-**Unload and remove** for each model. This explicit action drains processing,
-unloads the model if it is loaded, deletes its files and clears the saved
-selection if it was selected.
+before loading the new one. Each downloaded model's row has a **Remove** button,
+also for the selected or loaded model. Removal drains processing, unloads the
+model if it is loaded, deletes its files and clears the saved selection if it
+was selected.
 Qwen reports ready only while a supported model is selected and its downloaded
-files pass the readiness check. After this settings action, reopen the plugin
-page before downloading again; the current host needs a fresh model view after
-rebuilding its settings controls.
+files pass the readiness check.
 
 The package contains Windows x64 and ARM64 CPU runtimes; real execution has been
 validated on x64 only.

@@ -4,7 +4,7 @@ using TypeWhisper.PluginSDK.Models;
 namespace TypeWhisper.Plugin.Qwen3Local;
 
 /// <summary>Downloads and runs Qwen3-ASR locally through the portable plugin contract.</summary>
-public sealed class Qwen3LocalPlugin : IPcmTranscriptionEnginePlugin, IPluginSettingsActions
+public sealed class Qwen3LocalPlugin : IPcmTranscriptionEnginePlugin
 {
     internal const string ModelId = "qwen3-asr-0.6b-int8";
     internal const string LargeModelId = "qwen3-asr-1.7b-int8";
@@ -50,7 +50,7 @@ public sealed class Qwen3LocalPlugin : IPcmTranscriptionEnginePlugin, IPluginSet
     /// <inheritdoc />
     public string PluginName => "Qwen3 ASR (Local)";
     /// <inheritdoc />
-    public string PluginVersion => "1.2.2";
+    public string PluginVersion => "1.2.3";
     /// <inheritdoc />
     public string ProviderId => "qwen3-local";
     /// <inheritdoc />
@@ -90,28 +90,6 @@ public sealed class Qwen3LocalPlugin : IPcmTranscriptionEnginePlugin, IPluginSet
         }
     ];
 
-    // The host blocks removing a selected model and any model it loaded before, even after the plugin has
-    // switched to another one. One action per model therefore unloads and removes exactly that model.
-    /// <inheritdoc />
-    public IReadOnlyList<PluginSettingsAction> SettingsActions => TranscriptionModels.Select(model =>
-        new PluginSettingsAction(RemoveActionPrefix + model.Id, $"Unload and remove {model.DisplayName}",
-            "Delete this model's files, unloading it and clearing the selection if needed. You can download it again.")
-        { Section = PluginSettingsSection.Transcription }).ToArray();
-
-    private const string RemoveActionPrefix = "remove-";
-
-    /// <inheritdoc />
-    public async Task<string?> ExecuteSettingsActionAsync(string id, CancellationToken cancellationToken)
-    {
-        var model = TranscriptionModels.FirstOrDefault(candidate => id == RemoveActionPrefix + candidate.Id)
-            ?? throw new ArgumentException("Unknown Qwen settings action.", nameof(id));
-        // The host runs settings actions under its configuration lease; the plugin's gate also drains native inference first.
-        // Checks the directory, not readiness, so an incomplete or damaged model can still be removed.
-        if (_host is null || !Directory.Exists(ModelDirectory(model.Id))) return $"{model.DisplayName} is not downloaded.";
-        await RemoveModelAsync(model.Id, cancellationToken).ConfigureAwait(false);
-        return $"{model.DisplayName} removed. Reopen these settings to download it again, then choose Use model.";
-    }
-
     /// <inheritdoc />
     public Task ActivateAsync(IPluginHostServices host)
     {
@@ -145,6 +123,7 @@ public sealed class Qwen3LocalPlugin : IPcmTranscriptionEnginePlugin, IPluginSet
         try { EnsureActive(); await _assets[modelId].DownloadAsync(ModelDirectory(modelId), progress, ct).ConfigureAwait(false); _host!.NotifyCapabilitiesChanged(); }
         finally { _gate.Release(); }
     }
+    // The host's Remove button calls this for any downloaded model, including the selected or loaded one.
     /// <inheritdoc />
     public async Task RemoveModelAsync(string modelId, CancellationToken ct)
     {

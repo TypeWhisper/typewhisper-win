@@ -2617,6 +2617,7 @@
   "This model does not support that language.": "このモデルはその言語に対応していません。",
   "This model does not support translation to English. Choose a compatible model first.": "このモデルは英語への翻訳に対応していません。先に対応モデルを選択してください。",
   "This model is no longer available. Refresh its provider settings.": "このモデルは利用できなくなりました。プロバイダーの設定を更新してください。",
+  "This model is selected. It will be unloaded and its downloaded files removed. Download or choose another model before dictating with this plugin. The plugin and its settings will be kept.": "このモデルは選択されています。モデルをアンロードし、ダウンロード済みファイルを削除します。このプラグインで音声入力する前に、別のモデルをダウンロードまたは選択してください。プラグインとその設定は保持されます。",
   "This model supports transcription only. Select a translation-capable model to translate audio to English.": "このモデルは文字起こしのみに対応しています。音声を英語に翻訳するには、翻訳対応のモデルを選択してください。",
   "This pack requires commercial license integration.": "このパックには商用ライセンスの連携が必要です。",
   "This package does not support your TypeWhisper version or Windows architecture.": "このパッケージは、お使いのTypeWhisperのバージョンまたはWindowsのアーキテクチャに対応していません。",

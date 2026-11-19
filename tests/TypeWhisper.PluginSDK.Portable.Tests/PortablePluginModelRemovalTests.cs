@@ -27,7 +27,6 @@ public sealed partial class PortablePluginRuntimeRegistryTests
     }
 
     [Theory]
-    [InlineData("selected")]
     [InlineData("unsupported")]
     [InlineData("unknown")]
     [InlineData("identity")]
@@ -36,14 +35,13 @@ public sealed partial class PortablePluginRuntimeRegistryTests
     {
         await using var registry = await RemovableModelRegistry();
         var model = Assert.Single(await registry.GetModelStatesAsync(Id));
-        if (reason == "selected") Host(Id).SetSetting("NoSelectedModel", false);
         if (reason == "unsupported") Host(Id).SetSetting("ModelRemoval", false);
         if (reason == "unknown") model = model with { ModelId = "missing" };
         if (reason == "identity") model = model with { EngineIdentity = Guid.NewGuid() };
         if (reason == "version") model = model with { Version = "9.0.0" };
         await Assert.ThrowsAsync<InvalidOperationException>(async () => await registry.RemoveModelAsync(model));
         Assert.True(Host(Id).GetSetting<bool>("Downloaded")); Assert.Equal(0, Host(Id).GetSetting<int>("removeCalls"));
-        if (reason is "selected" or "unsupported") Assert.NotNull(Assert.Single(await registry.GetModelStatesAsync(Id)).RemovalBlockedReason);
+        if (reason == "unsupported") Assert.NotNull(Assert.Single(await registry.GetModelStatesAsync(Id)).RemovalBlockedReason);
     }
 
     [Fact]
@@ -58,28 +56,38 @@ public sealed partial class PortablePluginRuntimeRegistryTests
         Assert.Equal(1, Host(Id).GetSetting<int>("removeCalls"));
     }
 
+    [Fact]
+    public async Task SelectedModelIsUnloadedBeforeItsFilesAreRemoved()
+    {
+        await using var registry = await RemovableModelRegistry();
+        Host(Id).SetSetting("NoSelectedModel", false);
+        var model = Assert.Single(await registry.GetModelStatesAsync(Id));
+        Assert.Null(model.RemovalBlockedReason);
+        await registry.RemoveModelAsync(model);
+        Assert.Equal(1, Host(Id).GetSetting<int>("unloadCalls"));
+        Assert.Equal(1, Host(Id).GetSetting<int>("removeCalls"));
+        Assert.False(Assert.Single(await registry.GetModelStatesAsync(Id)).Downloaded);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task SuccessfulOrFailedLoadBlocksRemovalUntilNewActivation(bool fail)
+    public async Task SuccessfulOrFailedLoadIsUnloadedBeforeRemoval(bool fail)
     {
         await using var registry = await RemovableModelRegistry();
         Host(Id).SetSetting("LoadThrows", fail);
         var model = Assert.Single(await registry.GetModelStatesAsync(Id));
         if (fail) await Assert.ThrowsAsync<IOException>(() => registry.SelectModelAsync(model));
         else await registry.SelectModelAsync(model);
-        // This fixture reports no selected model, so the separate possibly-loaded protection is exercised.
-        Assert.Contains("may still be loaded", Assert.Single(await registry.GetModelStatesAsync(Id)).RemovalBlockedReason);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => registry.RemoveModelAsync(model));
-        Assert.Equal(0, Host(Id).GetSetting<int>("removeCalls"));
-        Assert.Equal(0, Host(Id).GetSetting<int>("unloadCalls"));
-        Assert.Null(await registry.SetEnabledAsync(Id, false)); Assert.Null(await registry.SetEnabledAsync(Id, true));
-        await registry.RemoveModelAsync(Assert.Single(await registry.GetModelStatesAsync(Id)));
+        // This fixture reports no selected model, so the separate possibly-loaded path is exercised.
+        Assert.Null(Assert.Single(await registry.GetModelStatesAsync(Id)).RemovalBlockedReason);
+        await registry.RemoveModelAsync(model);
+        Assert.Equal(1, Host(Id).GetSetting<int>("unloadCalls"));
         Assert.Equal(1, Host(Id).GetSetting<int>("removeCalls"));
     }
 
     [Fact]
-    public async Task CanceledLoadAlsoBlocksRemovalOfPossiblyLoadedFiles()
+    public async Task CanceledLoadIsAlsoUnloadedBeforeRemoval()
     {
         await using var registry = await RemovableModelRegistry();
         Host(Id).SetSetting("HoldLoad", true); Host(Id).SetSetting("Hold", true);
@@ -89,8 +97,10 @@ public sealed partial class PortablePluginRuntimeRegistryTests
         await Host(Id).Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
         cancellation.Cancel(); Host(Id).Release.TrySetResult(null);
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => loading);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => registry.RemoveModelAsync(model));
-        Assert.Equal(0, Host(Id).GetSetting<int>("removeCalls"));
+        Host(Id).SetSetting("HoldLoad", false); Host(Id).SetSetting("Hold", false);
+        await registry.RemoveModelAsync(model);
+        Assert.Equal(1, Host(Id).GetSetting<int>("unloadCalls"));
+        Assert.Equal(1, Host(Id).GetSetting<int>("removeCalls"));
     }
 
     [Theory]
@@ -137,9 +147,11 @@ public sealed partial class PortablePluginRuntimeRegistryTests
         await Host(Id).Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
         var removal = registry.RemoveModelAsync(model);
         Assert.False(removal.IsCompleted); Assert.Equal(0, Host(Id).GetSetting<int>("removeCalls"));
-        Host(Id).SetSetting("NoSelectedModel", false); Host(Id).Release.TrySetResult(null);
+        // A model selected meanwhile is unloaded inside the lease before its files are removed.
+        Host(Id).SetSetting("NoSelectedModel", false); Host(Id).SetSetting("Hold", false); Host(Id).Release.TrySetResult(null);
         await download;
-        await Assert.ThrowsAsync<InvalidOperationException>(() => removal);
-        Assert.Equal(0, Host(Id).GetSetting<int>("removeCalls"));
+        await removal;
+        Assert.Equal(1, Host(Id).GetSetting<int>("unloadCalls"));
+        Assert.Equal(1, Host(Id).GetSetting<int>("removeCalls"));
     }
 }

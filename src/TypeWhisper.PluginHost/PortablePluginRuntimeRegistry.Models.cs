@@ -11,7 +11,7 @@ public sealed record PortableDownloadableModel(string PluginId, string Selection
 {
     /// <summary>Whether the engine explicitly supports removing individual downloaded models.</summary>
     public bool SupportsRemoval { get; init; }
-    /// <summary>Why removal is currently blocked, including selected or possibly loaded models.</summary>
+    /// <summary>Why removal is currently blocked: an unsupported provider or a model a request override uses.</summary>
     public string? RemovalBlockedReason { get; init; }
 }
 
@@ -24,6 +24,8 @@ public sealed partial class PortablePluginRuntimeRegistry
         internal readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> PossiblyLoaded = new(StringComparer.Ordinal);
         // The model the plugin reported before a request override replaced it; set and cleared under the package lease.
         internal string? SavedDuringOverride;
+        // Whether a request override is applied; the saved model above can be null while one is.
+        internal bool Overriding;
     }
     private readonly ConditionalWeakTable<ITranscriptionEnginePlugin, ModelEngineIdentity> _modelEngineIdentities = new();
 
@@ -95,18 +97,18 @@ public sealed partial class PortablePluginRuntimeRegistry
     private string? RemovalBlock(ITranscriptionEnginePlugin engine, string modelId)
     {
         if (!engine.SupportsModelRemoval) return "This provider does not support removing model files.";
-        if (engine.SelectedModelId == modelId
-            || _modelEngineIdentities.TryGetValue(engine, out var overridden) && overridden.SavedDuringOverride == modelId)
-            return "This model is selected. Select another model before removing it.";
-        if (_modelEngineIdentities.TryGetValue(engine, out var identity) && identity.PossiblyLoaded.ContainsKey(modelId))
-            return "This model may still be loaded. Disable and re-enable the plugin, then select another model before removing it.";
+        // A request override uses the reported model and returns to the saved one when it ends.
+        if (_modelEngineIdentities.TryGetValue(engine, out var identity) && identity.Overriding
+            && (engine.SelectedModelId == modelId || identity.SavedDuringOverride == modelId))
+            return "A request is using this model. Try again when it finishes.";
         return null;
     }
 
     /// <summary>
-    /// Removes an explicitly captured model under its exact package lease, without changing the selection or
-    /// unloading a provider. Selected and possibly loaded models are blocked. Cancellation drains the actual
-    /// plugin operation; it does not guarantee that partially removed files can be restored.
+    /// Removes an explicitly captured model under its exact package lease. A selected or possibly loaded model is
+    /// unloaded first; whether the plugin keeps it selected is up to the plugin, and without its files the provider
+    /// is no longer ready. Cancellation drains the actual plugin operation; it does not guarantee that partially
+    /// removed files can be restored.
     /// </summary>
     public Task RemoveModelAsync(PortableDownloadableModel expected, CancellationToken cancellationToken = default)
     {
@@ -131,6 +133,15 @@ public sealed partial class PortablePluginRuntimeRegistry
             if (RemovalBlock(engine, expected.ModelId) is { } blocked)
                 throw new InvalidOperationException(blocked);
             token.ThrowIfCancellationRequested();
+            // The SDK has no loaded-model query, and even a failed or canceled load can retain native resources. A
+            // selected model can also load lazily on the next transcription. Both are released before their files go.
+            var identity = _modelEngineIdentities.GetValue(engine, static _ => new());
+            if (engine.SelectedModelId == expected.ModelId || identity.PossiblyLoaded.ContainsKey(expected.ModelId))
+            {
+                await engine.UnloadModelAsync().ConfigureAwait(false);
+                identity.PossiblyLoaded.Clear();
+                token.ThrowIfCancellationRequested();
+            }
             if (engine.IsModelDownloaded(expected.ModelId))
                 await engine.RemoveModelAsync(expected.ModelId, token).ConfigureAwait(false);
             token.ThrowIfCancellationRequested();
@@ -244,7 +255,7 @@ public sealed partial class PortablePluginRuntimeRegistry
             // Engines that persist the selection asynchronously no longer block a thread here.
             await engine.SelectModelAsync(expected.ModelId, token).ConfigureAwait(false);
             // A selection ends any request override, so the model saved before it needs no protection any longer.
-            if (_modelEngineIdentities.TryGetValue(engine, out var identity)) identity.SavedDuringOverride = null;
+            if (_modelEngineIdentities.TryGetValue(engine, out var identity)) { identity.SavedDuringOverride = null; identity.Overriding = false; }
             return true;
         }, cancellationToken);
     }
@@ -295,7 +306,7 @@ public sealed partial class PortablePluginRuntimeRegistry
             var identity = _modelEngineIdentities.GetValue(engine, static _ => new());
             identity.SavedDuringOverride ??= engine.SelectedModelId;
             // Marked before the call, so a plugin that applies the override and then throws is cleared as well.
-            applied = true;
+            applied = true; identity.Overriding = true;
             // The override comes before the load: an isolated engine copies a model its worker loaded into the
             // plugin's selection, which would save it, unless the plugin already reports that model.
             await overriding.SetModelOverrideAsync(expected.ModelId, token).ConfigureAwait(false);
@@ -342,7 +353,7 @@ public sealed partial class PortablePluginRuntimeRegistry
                     && MatchesModelOwner(role, expected) && ModelOverrideOf(role.Engine) is { } overriding)
                 {
                     await overriding.SetModelOverrideAsync(null, token).ConfigureAwait(false);
-                    if (_modelEngineIdentities.TryGetValue(role.Engine, out var identity)) identity.SavedDuringOverride = null;
+                    if (_modelEngineIdentities.TryGetValue(role.Engine, out var identity)) { identity.SavedDuringOverride = null; identity.Overriding = false; }
                 }
                 return true;
             }, cancellationToken).ConfigureAwait(false);

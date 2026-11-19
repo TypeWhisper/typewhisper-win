@@ -2617,6 +2617,7 @@
   "This model does not support that language.": "此模型不支持该语言。",
   "This model does not support translation to English. Choose a compatible model first.": "此模型不支持翻译为英语。请先选择兼容的模型。",
   "This model is no longer available. Refresh its provider settings.": "此模型已不可用。请刷新其提供商设置。",
+  "This model is selected. It will be unloaded and its downloaded files removed. Download or choose another model before dictating with this plugin. The plugin and its settings will be kept.": "此模型已被选中。它将被卸载，其已下载文件将被移除。使用此插件听写前，请下载或选择其他模型。插件及其设置会保留。",
   "This model supports transcription only. Select a translation-capable model to translate audio to English.": "此模型仅支持转录。要将音频翻译为英语，请选择支持翻译的模型。",
   "This pack requires commercial license integration.": "此术语包需要商业许可证集成。",
   "This package does not support your TypeWhisper version or Windows architecture.": "此软件包不支持你的 TypeWhisper 版本或 Windows 架构。",

@@ -2617,6 +2617,7 @@
   "This model does not support that language.": "Dieses Modell unterstützt diese Sprache nicht.",
   "This model does not support translation to English. Choose a compatible model first.": "Dieses Modell unterstützt keine Übersetzung ins Englische. Wähle zuerst ein kompatibles Modell.",
   "This model is no longer available. Refresh its provider settings.": "Dieses Modell ist nicht mehr verfügbar. Aktualisiere die Einstellungen seines Anbieters.",
+  "This model is selected. It will be unloaded and its downloaded files removed. Download or choose another model before dictating with this plugin. The plugin and its settings will be kept.": "Dieses Modell ist ausgewählt. Es wird entladen und seine heruntergeladenen Dateien werden entfernt. Lade ein anderes Modell herunter oder wähle eines, bevor du mit diesem Plugin diktierst. Das Plugin und seine Einstellungen bleiben erhalten.",
   "This model supports transcription only. Select a translation-capable model to translate audio to English.": "Dieses Modell unterstützt nur Transkription. Wähle ein übersetzungsfähiges Modell, um Audio ins Englische zu übersetzen.",
   "This pack requires commercial license integration.": "Dieses Paket erfordert die Integration einer kommerziellen Lizenz.",
   "This package does not support your TypeWhisper version or Windows architecture.": "Dieses Paket unterstützt deine TypeWhisper-Version oder Windows-Architektur nicht.",

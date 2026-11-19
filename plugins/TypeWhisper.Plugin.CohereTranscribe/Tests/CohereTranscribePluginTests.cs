@@ -788,7 +788,7 @@ public sealed class CohereTranscribePluginTests
     }
 
     [WindowsFact]
-    public async Task SettingsActionRemovesTheOnlySelectedModelWithoutAnotherDownload()
+    public async Task RemovalUnloadsTheOnlySelectedModelWithoutAnotherDownload()
     {
         using var temp = new TempDirectory();
         var assets = new FakeAssetManager();
@@ -800,11 +800,11 @@ public sealed class CohereTranscribePluginTests
         await sut.DownloadModelAsync(CohereTranscribePlugin.ModelId, null, default);
         await sut.LoadModelAsync(CohereTranscribePlugin.ModelId, default);
         sut.SelectModel(CohereTranscribePlugin.ModelId);
-        await sut.ExecuteSettingsActionAsync(Assert.Single(sut.SettingsActions).Id, default);
+        Assert.Empty(sut.SettingsActions);
+        await sut.RemoveModelAsync(CohereTranscribePlugin.ModelId, default);
         Assert.Null(sut.SelectedModelId);
         Assert.False(server.IsRunning);
         Assert.False(assets.IsModelInstalled(CohereTranscribePlugin.ModelId));
-        Assert.Empty(sut.SettingsActions);
         await sut.DeactivateAsync();
         await sut.ActivateAsync(host);
         Assert.Null(sut.SelectedModelId);
@@ -1400,7 +1400,9 @@ public sealed class CohereTranscribePluginTests
         await sut.DownloadModelAsync(second, null, default);
         sut.SelectModel(first);
         await sut.LoadModelAsync(second, default);
-        await sut.ExecuteSettingsActionAsync("remove-selected-model", default);
+        // The host unloads before removing the selected model.
+        await sut.UnloadModelAsync();
+        await sut.RemoveModelAsync(first, default);
         Assert.Null(sut.SelectedModelId);
         Assert.False(server.IsRunning);
         Assert.True(assets.IsModelInstalled(second));
@@ -1435,7 +1437,7 @@ public sealed class CohereTranscribePluginTests
         await sut.DownloadModelAsync(CohereTranscribePlugin.ModelId, null, default);
         sut.SelectModel(CohereTranscribePlugin.ModelId);
         host.FailSettings = true;
-        await Assert.ThrowsAsync<IOException>(() => sut.ExecuteSettingsActionAsync("remove-selected-model", default));
+        await Assert.ThrowsAsync<IOException>(() => sut.RemoveModelAsync(CohereTranscribePlugin.ModelId, default));
         Assert.True(assets.IsModelInstalled(CohereTranscribePlugin.ModelId));
         Assert.Equal(CohereTranscribePlugin.ModelId, sut.SelectedModelId);
         Assert.True(sut.IsConfigured);
