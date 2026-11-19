@@ -34,7 +34,9 @@ internal sealed partial class LocalDictationSession
             }
             if (provider is null)
             {
-                var matches = DictationProviders.Where(item => item.Models.Any(model => model.IsNamed(modelId))).ToArray();
+                // A provider that offers the ID now wins over one that offered it before.
+                var matches = DictationProviders.Where(item => item.Models.Any(model => model.Id == modelId)).ToArray();
+                if (matches.Length == 0) matches = DictationProviders.Where(item => item.Models.Any(model => model.IsNamed(modelId))).ToArray();
                 provider = matches.FirstOrDefault(item => item.Id == _providerId)
                     ?? (matches.Length == 1 ? matches[0] : null);
                 // A qualified model whose provider the policy unloaded is judged through the package that served it.
@@ -65,7 +67,10 @@ internal sealed partial class LocalDictationSession
             throw new LocalApiRequestException(409, "The requested model is not downloaded. Set await_download to true to download it.");
 
         var previousProvider = _providerId;
-        var previousModel = provider.Id == "local" ? Models.ActiveModelId : provider.SelectedModelId;
+        // A plugin that still reports a former ID is restored to the model under its current ID.
+        var previousModel = provider.Id == "local" ? Models.ActiveModelId
+            : provider.SelectedModelId is { } selected && provider.Models.All(item => item.Id != selected)
+                ? provider.Models.FirstOrDefault(item => item.IsNamed(selected))?.Id ?? selected : provider.SelectedModelId;
         var previousLocalSelection = Models.SelectedModelId;
         // A provider that can use a model without saving it keeps the user's saved model untouched, also when the app
         // stops during the request. Other providers select the request's model and then the previous one, and the
