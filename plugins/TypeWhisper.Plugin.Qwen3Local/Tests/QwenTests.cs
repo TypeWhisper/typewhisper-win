@@ -435,17 +435,28 @@ public sealed class QwenTests : IDisposable
     public void LanguageMarkersLeakedByTheModelAreRemoved(string text, string expected) =>
         Assert.Equal(expected, QwenRecognizer.StripLanguageMarkers(text));
 
-    [Fact]
-    public void AWindowThatEndsAfterTheLanguageMarkerIsDecodedAgainWithThatLanguage()
+    [Theory]
+    [InlineData("language Chinese。", "Chinese", "打开灯。")]
+    [InlineData("language German", "German", "Es leben noch viele Menschen.")]
+    [InlineData("language German<asr_text>", "German", "Es leben noch viele Menschen.")]
+    public void AWindowThatHoldsOnlyTheLanguageMarkerIsDecodedAgainWithThatLanguage(string tagOnly, string language, string transcript)
     {
         var hints = new List<string?>();
         var text = QwenRecognizer.DecodeWithLanguageRetry(hint =>
         {
             hints.Add(hint);
-            return hint is null ? "language Chinese。" : "打开灯。";
+            return hint is null ? tagOnly : transcript;
         }, null);
-        Assert.Equal("打开灯。", text);
-        Assert.Equal([null, "Chinese"], hints);
+        Assert.Equal(transcript, text);
+        Assert.Equal([null, language], hints);
+    }
+
+    [Fact]
+    public void ATranscriptAfterTheLanguageMarkerIsNotDecodedAgain()
+    {
+        var calls = 0;
+        Assert.Equal("你好。", QwenRecognizer.DecodeWithLanguageRetry(_ => { calls++; return "language Chinese。你好。"; }, null));
+        Assert.Equal(1, calls);
     }
 
     [Fact]

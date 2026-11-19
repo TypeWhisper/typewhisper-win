@@ -70,15 +70,15 @@ internal sealed partial class QwenRecognizer : IQwenRecognizer
         return stream.Result.Text;
     }
 
-    // On short clips Rumble-2-Flash sometimes stops right after its "language X." marker when no language is set.
-    // The decode with that language as a hint is stable, so such a window is decoded once more with it.
+    // On short clips Rumble-2-Flash sometimes stops right after its language marker when no language is set,
+    // with or without punctuation ("language Chinese。", "language German"). The decode with that language as a
+    // hint is stable, so such a window is decoded once more with it.
     internal static string DecodeWithLanguageRetry(Func<string?, string> decode, string? language)
     {
         var raw = decode(language);
-        var text = StripLanguageMarkers(raw);
-        if (language is not null || text.Length > 0) return text;
-        var detected = SentenceLanguageMarker.Match(raw);
-        return detected.Success ? StripLanguageMarkers(decode(detected.Groups["name"].Value)) : text;
+        if (language is not null || LanguageOnlyMarker.Match(raw) is not { Success: true } tagOnly) return StripLanguageMarkers(raw);
+        var retried = decode(tagOnly.Groups["name"].Value);
+        return LanguageOnlyMarker.IsMatch(retried) ? "" : StripLanguageMarkers(retried);
     }
 
     // sherpa-onnx strips the "language X<asr_text>" prefix for the 0.6B model, but the 1.7B export leaves it
@@ -92,9 +92,14 @@ internal sealed partial class QwenRecognizer : IQwenRecognizer
     private static partial Regex LanguageMarker();
 
     // Only the language names the models report, so "language Python." stays text.
+    private static readonly string LanguageNames = string.Join("|", Qwen3LocalPlugin.LanguageNames.Select(Regex.Escape));
+
     private static readonly Regex SentenceLanguageMarker = new(
-        @"(?<=^\s*|[.!?]\s+|[。！？]\s*)language\s+(?<name>" + string.Join("|", Qwen3LocalPlugin.LanguageNames.Select(Regex.Escape)) + @")[.。]\s*",
-        RegexOptions.CultureInvariant);
+        @"(?<=^\s*|[.!?]\s+|[。！？]\s*)language\s+(?<name>" + LanguageNames + @")[.。]\s*", RegexOptions.CultureInvariant);
+
+    // A window that holds nothing but the marker.
+    private static readonly Regex LanguageOnlyMarker = new(
+        @"^\s*language\s+(?<name>" + LanguageNames + @")\s*(?:[.。]|<asr_text>)?\s*$", RegexOptions.CultureInvariant);
 
     public void Dispose() => _recognizer.Dispose();
 

@@ -50,7 +50,7 @@ public sealed class Qwen3LocalPlugin : IPcmTranscriptionEnginePlugin, IPluginSet
     /// <inheritdoc />
     public string PluginName => "Qwen3 ASR (Local)";
     /// <inheritdoc />
-    public string PluginVersion => "1.2.0";
+    public string PluginVersion => "1.2.2";
     /// <inheritdoc />
     public string ProviderId => "qwen3-local";
     /// <inheritdoc />
