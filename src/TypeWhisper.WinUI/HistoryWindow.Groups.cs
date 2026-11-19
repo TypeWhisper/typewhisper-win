@@ -407,9 +407,10 @@ public sealed partial class HistoryWindow
         }
         if (ReferenceEquals(group, _group)) RefilterGroup(group);
         else RenderSidebar();
-        // The row whose menu or key deleted it is gone; the keyboard stays in the sidebar. After the redraw a module's
-        // NotifyChanged from within Delete has queued, which replaces the buttons again.
-        if (deleted) DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+        // The row whose menu or key deleted it is gone; the keyboard stays in the sidebar. Queued at the priority of
+        // the redraw a module's NotifyChanged from within Delete has queued, so it runs right after it and finds the new
+        // buttons, before later input could move the focus elsewhere.
+        if (deleted) DispatcherQueue.TryEnqueue(() =>
         {
             if (_closing || FocusInDetail()) return;
             var target = (neighbor is not null ? _groupRowButtons.GetValueOrDefault((group.Id, neighbor)) : null)
