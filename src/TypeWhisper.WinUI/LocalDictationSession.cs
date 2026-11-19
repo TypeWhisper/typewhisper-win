@@ -5,6 +5,7 @@ using TypeWhisper.Core.Models;
 using TypeWhisper.Core.Services;
 using TypeWhisper.WinUI.Platform;
 using TypeWhisper.PluginSDK;
+using TypeWhisper.PluginSDK.Models;
 using TypeWhisper.PluginHost;
 
 namespace TypeWhisper.WinUI;
@@ -168,7 +169,9 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             }.Where(provider => Packages.Store.IsInstalled(provider.PluginId)).Concat(PluginRuntime.TranscriptionProviders
                 .Select(provider => new DictationProviderOption(SessionProviderId(provider.SelectionId), provider.PluginId, provider.Name, true, provider.Ready, !PackageIsLocal(provider.PluginId),
                     provider.SelectedModelId, provider.ModelStates.Select(model => new DictationModelOption(model.ModelId, model.DisplayName,
-                        model.SupportsDownload ? model.Downloaded : provider.Ready)).ToArray()) { Refusal = PluginRuntime.TranscriptionRefusal(provider.SelectionId) })).ToList();
+                        model.SupportsDownload ? model.Downloaded : provider.Ready)
+                    { FormerIds = provider.Models.FirstOrDefault(info => info.Id == model.ModelId)?.FormerIds ?? [] }).ToArray())
+                    { Refusal = PluginRuntime.TranscriptionRefusal(provider.SelectionId) })).ToList();
             // A saved selection whose package the policy unloaded stays listed, disabled, with the reason, instead
             // of vanishing from the pickers.
             if (UsesRegistryProvider && providers.All(provider => provider.Id != _providerId) && SelectedPackageRefusal() is { } refused)
@@ -1360,17 +1363,20 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     }
     private async Task<string> DecodePreviewAsync(float[] samples, CancellationToken cancellation)
     {
+        using var dictation = TranscriptionRequestContext.Begin(TranscriptionPurpose.Dictation);
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellation, _operationCancellation.Token);
         if (!UsesRegistryProvider) DenyLocalTranscriptionIfRefused();
         return (UsesRegistryProvider ? await DecodeRegistryAsync(samples, linked.Token)
             : await _transcriptionPlugin.DecodeAsync(samples, false, _taskAtStart == TranscriptionTask.Translate, linked.Token, _languageAtStart)).Text;
     }
-    private Task<(string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage, float? NoSpeechProbability)> DecodeFinalAsync(float[] samples, bool includeTimings = true)
+    // A dictation's text: the provider may clean it up and leaves speaker labels out (TranscriptionPurpose.Dictation).
+    private async Task<(string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage, float? NoSpeechProbability)> DecodeFinalAsync(float[] samples, bool includeTimings = true)
     {
-        if (UsesRegistryProvider) return DecodeRegistryAsync(samples, _operationCancellation.Token);
+        using var dictation = TranscriptionRequestContext.Begin(TranscriptionPurpose.Dictation);
+        if (UsesRegistryProvider) return await DecodeRegistryAsync(samples, _operationCancellation.Token);
         // The registry enforces policy for its roles; the local engine is checked here.
         DenyLocalTranscriptionIfRefused();
-        return _transcriptionPlugin.DecodeAsync(samples, includeTimings, _taskAtStart == TranscriptionTask.Translate, _operationCancellation.Token, _languageAtStart);
+        return await _transcriptionPlugin.DecodeAsync(samples, includeTimings, _taskAtStart == TranscriptionTask.Translate, _operationCancellation.Token, _languageAtStart);
     }
     private void StopSilenceMonitoring()
     {

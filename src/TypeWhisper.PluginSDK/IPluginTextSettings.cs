@@ -13,7 +13,10 @@ public sealed record PluginTextSetting(string Id, string Title, string Descripti
     public IReadOnlyList<PluginSettingChoice> Choices { get; init; } = [];
     /// <summary>Optional suggestions for free text. Values outside this list remain valid.</summary>
     public IReadOnlyList<string> Suggestions { get; init; } = [];
-    /// <summary>Optional display condition evaluated against current editor values, including unsaved edits.</summary>
+    /// <summary>
+    /// Optional display condition evaluated against current editor values, including unsaved edits. Since plugin API 1.3.1 a
+    /// setting is also hidden while the setting its condition reads is hidden.
+    /// </summary>
     public PluginSettingCondition? VisibleWhen { get; init; }
     /// <summary>
     /// What the setting holds, so the host can offer a matching picker beside a single-line field; the value stays

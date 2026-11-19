@@ -1,6 +1,12 @@
 namespace TypeWhisper.WinUI;
 
-internal sealed record DictationModelOption(string Id, string Name, bool Ready);
+internal sealed record DictationModelOption(string Id, string Name, bool Ready)
+{
+    /// <summary>IDs the provider used for this model before (<see cref="TypeWhisper.PluginSDK.Models.PluginModelInfo.FormerIds"/>).</summary>
+    internal IReadOnlyList<string> FormerIds { get; init; } = [];
+    /// <summary>Whether <paramref name="id"/> is this model's ID or one it had before.</summary>
+    internal bool IsNamed(string id) => Id == id || FormerIds.Contains(id);
+}
 
 // Presentation snapshot: model IDs are scoped to their provider.
 internal sealed record DictationProviderOption(string Id, string PluginId, string Name,

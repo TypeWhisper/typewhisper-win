@@ -236,21 +236,26 @@ public static class TranscriptionWorkerServer
                     return null;
                 case TranscriptionWorkerCommands.Transcribe:
                     await EnsureModelAsync(message.ModelId, ct).ConfigureAwait(false);
-                    var result = message.AudioFormat switch
-                    {
-                        TranscriptionWorkerAudioFormats.Pcm when message.Prompt is { } prompt =>
-                            await engine.TranscribePcmWithPromptAsync(ToSamples(payload), message.Language, message.Translate, prompt, ct).ConfigureAwait(false),
-                        TranscriptionWorkerAudioFormats.Pcm => await engine.TranscribePcmAsync(ToSamples(payload), message.Language, message.Translate, ct).ConfigureAwait(false),
-                        TranscriptionWorkerAudioFormats.Wav when message.LanguageHints is { } hints =>
-                            await engine.TranscribeWithLanguageHintsAsync(payload, hints, message.Translate, message.Prompt, ct).ConfigureAwait(false),
-                        TranscriptionWorkerAudioFormats.Wav => await engine.TranscribeAsync(payload, message.Language, message.Translate, message.Prompt, ct).ConfigureAwait(false),
-                        _ => throw new NotSupportedException("Unknown audio format.")
-                    };
-                    return TranscriptionWorkerProtocol.ToResult(result);
+                    // The engine reads the host's purpose of the request, as it would in the app.
+                    using (TranscriptionRequestContext.Begin(message.Purpose == TranscriptionWorkerPurposes.Dictation
+                        ? TranscriptionPurpose.Dictation : TranscriptionPurpose.Verbatim))
+                        return TranscriptionWorkerProtocol.ToResult(await TranscribeAsync(message, payload, ct).ConfigureAwait(false));
                 default:
                     throw new NotSupportedException("Unknown transcription worker command.");
             }
         }
+
+        private async Task<PluginTranscriptionResult> TranscribeAsync(TranscriptionWorkerMessage message, byte[] payload, CancellationToken ct) =>
+            message.AudioFormat switch
+            {
+                TranscriptionWorkerAudioFormats.Pcm when message.Prompt is { } prompt =>
+                    await engine.TranscribePcmWithPromptAsync(ToSamples(payload), message.Language, message.Translate, prompt, ct).ConfigureAwait(false),
+                TranscriptionWorkerAudioFormats.Pcm => await engine.TranscribePcmAsync(ToSamples(payload), message.Language, message.Translate, ct).ConfigureAwait(false),
+                TranscriptionWorkerAudioFormats.Wav when message.LanguageHints is { } hints =>
+                    await engine.TranscribeWithLanguageHintsAsync(payload, hints, message.Translate, message.Prompt, ct).ConfigureAwait(false),
+                TranscriptionWorkerAudioFormats.Wav => await engine.TranscribeAsync(payload, message.Language, message.Translate, message.Prompt, ct).ConfigureAwait(false),
+                _ => throw new NotSupportedException("Unknown audio format.")
+            };
 
         // A restarted worker starts without a model. Each request names the host's selection, so it
         // loads and selects exactly that model; plugins without a selection report their own error.

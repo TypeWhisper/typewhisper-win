@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Threading.Channels;
 using TypeWhisper.PluginSDK;
+using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.PluginHost;
 
@@ -67,6 +68,8 @@ public sealed class StreamingDictation : IAsyncDisposable
         {
             var streamed = await use(async (engine, ct) =>
             {
+                // Only dictations stream.
+                using var dictation = TranscriptionRequestContext.Begin(TranscriptionPurpose.Dictation);
                 var prompt = promptAllowed?.Invoke() == false ? null : LanguageHintTranscription.CreateDictionaryPrompt(engine, dictionaryTerms);
                 if (!engine.SupportsStreaming || !engine.SupportsStreamingCompletion) throw new NotSupportedException("Live transcription is unavailable.");
                 if (!engine.SupportsStreamingForPrompt(prompt))

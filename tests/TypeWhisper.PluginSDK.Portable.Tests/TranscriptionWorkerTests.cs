@@ -152,6 +152,19 @@ public sealed class TranscriptionWorkerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task TheDictationPurposeReachesTheEngineInTheWorkerProcess()
+    {
+        Assert.Equal("Verbatim", Fields(await _engine.TranscribePcmAsync(new float[] { 0 }, null, false, default))["purpose"]);
+        using (TranscriptionRequestContext.Begin(TranscriptionPurpose.Dictation))
+        {
+            Assert.Equal("Dictation", Fields(await _engine.TranscribePcmAsync(new float[] { 0 }, null, false, default))["purpose"]);
+            Assert.Equal("Dictation", Fields(await _engine.TranscribeAsync([1, 2], null, false, null, default))["purpose"]);
+        }
+        // The worker restores the default for the next request.
+        Assert.Equal("Verbatim", Fields(await _engine.TranscribeWithLanguageHintsAsync([1, 2], ["de"], false, null, default))["purpose"]);
+    }
+
+    [Fact]
     public async Task ModelChangesInTheHostReachTheRunningWorker()
     {
         await _engine.TranscribePcmAsync(new float[] { 0 }, null, false, default);

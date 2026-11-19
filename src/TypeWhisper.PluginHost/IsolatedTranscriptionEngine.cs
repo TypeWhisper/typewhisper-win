@@ -151,7 +151,10 @@ public sealed class IsolatedTranscriptionEngine : IPcmTranscriptionEnginePlugin,
 
     private async Task<PluginTranscriptionResult> TranscribeCoreAsync(TranscriptionWorkerMessage request, byte[] audio, CancellationToken ct)
     {
-        var response = await RunAsync(request with { Command = TranscriptionWorkerCommands.Transcribe, ModelId = _inner.SelectedModelId }, audio, ct).ConfigureAwait(false);
+        // The worker sets the request's purpose again for the engine; Verbatim stays out of the message.
+        var purpose = TranscriptionRequestContext.Purpose == TranscriptionPurpose.Dictation ? TranscriptionWorkerPurposes.Dictation : null;
+        var response = await RunAsync(request with { Command = TranscriptionWorkerCommands.Transcribe, ModelId = _inner.SelectedModelId, Purpose = purpose },
+            audio, ct).ConfigureAwait(false);
         return TranscriptionWorkerProtocol.FromResult(response.Result ?? throw new InvalidDataException("The transcription worker returned no result."));
     }
 
