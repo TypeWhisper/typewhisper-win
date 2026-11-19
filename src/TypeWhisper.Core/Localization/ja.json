@@ -2049,7 +2049,6 @@
   "See the current state at a glance and open only the settings you need.": "現在の状態をひと目で確認し、必要な設定だけを開けます。",
   "Select a WAV file from the recording library.": "録音ライブラリからWAVファイルを選択してください。",
   "Select a date below or type it above.": "下から日付を選ぶか、上に入力してください。",
-  "Select a different model in this plugin before removing this one.": "このモデルを削除する前に、このプラグインで別のモデルを選択してください。",
   "Select a ready model and finish the current operation first.": "先に準備のできたモデルを選択し、現在の操作を完了してください。",
   "Select a ready model in Dictation before training a word.": "単語を学習させる前に、「ディクテーション」で準備のできたモデルを選択してください。",
   "Select a ready model in plugin settings before finishing.": "完了する前に、プラグイン設定で準備済みのモデルを選択してください。",

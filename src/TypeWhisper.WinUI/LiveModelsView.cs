@@ -110,9 +110,9 @@ internal sealed class LiveModelsView : UserControl
             if (downloadRefusal is not null) { row.Action.IsEnabled = false; row.Status.Text = downloadRefusal; row.Status.Visibility = Visibility.Visible; }
             ToolTipService.SetToolTip(row.Action, downloadRefusal);
             row.Remove.Visibility = !_setup && models.SupportsModelRemoval && state.Downloaded ? Visibility.Visible : Visibility.Collapsed;
+            // The active model is unloaded before its files are removed.
             row.Remove.IsEnabled = !_confirmingRemoval && !models.Busy && _session.CanChangeProvider && models.CanRemoveModel(row.Model.Id);
-            ToolTipService.SetToolTip(row.Remove, models.CanRemoveModel(row.Model.Id)
-                ? Loc.T("Remove downloaded files for this model.") : Loc.T("Select a different model in this plugin before removing this one."));
+            ToolTipService.SetToolTip(row.Remove, Loc.T("Remove downloaded files for this model."));
             row.Cancel.Visibility = downloading || removing ? Visibility.Visible : Visibility.Collapsed;
             AutomationProperties.SetName(row.Cancel, removing ? Loc.T("Cancel {0} removal", row.Model.DisplayName) : Loc.T("Cancel {0} download", row.Model.DisplayName));
             row.Progress.Visibility = downloading ? Visibility.Visible : Visibility.Collapsed;
@@ -252,8 +252,11 @@ internal sealed class LiveModelsView : UserControl
             _confirmingRemoval = true; Update();
             try
             {
-                if (!await Dialogs.ConfirmAsync(this, Loc.T("Remove {0}?", model.DisplayName),
-                    Loc.T("Downloaded files for this model will be removed. You will need to download it again before using it. The plugin and its settings will be kept."), Loc.T("Remove model"), destructive: true) || !IsLoaded) return;
+                var message = _session.Models.IsModelInUse(model.Id)
+                    ? Loc.T("This model is selected. It will be unloaded and its downloaded files removed. Download or choose another model before dictating with this plugin. The plugin and its settings will be kept.")
+                    : Loc.T("Downloaded files for this model will be removed. You will need to download it again before using it. The plugin and its settings will be kept.");
+                if (!await Dialogs.ConfirmAsync(this, Loc.T("Remove {0}?", model.DisplayName), message, Loc.T("Remove model"), destructive: true)
+                    || !IsLoaded) return;
                 _message = await _session.RemoveLocalModelAsync(model.Id, expectedGeneration);
             }
             catch (Exception ex) when (ex is not OutOfMemoryException) { _message = ex.Message; }

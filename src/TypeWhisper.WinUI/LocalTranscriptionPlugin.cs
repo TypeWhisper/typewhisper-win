@@ -58,8 +58,10 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
     internal string? RemovingModelId { get; private set; }
     internal long Generation { get; private set; }
     internal bool SupportsModelRemoval => _lease?.Engine.SupportsModelRemoval == true;
-    internal bool CanRemoveModel(string modelId) => Enabled && SupportsModelRemoval &&
-        ActiveModelId != modelId && _lease?.Engine.SelectedModelId != modelId;
+    // The active or plugin-selected model is unloaded before its files are removed.
+    internal bool CanRemoveModel(string modelId) => Enabled && SupportsModelRemoval;
+    /// <summary>Whether removing this model leaves dictation without its loaded or saved local model.</summary>
+    internal bool IsModelInUse(string modelId) => ActiveModelId == modelId || SavedModelId == modelId;
     // A choice the plugin no longer offers reads as Automatic: NVIDIA CUDA after the switch to Vulkan, which would
     // otherwise download the graphics card files unasked at startup.
     internal TranscriptionAccelerationPreference Acceleration =>
@@ -443,13 +445,21 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
             var engine = _lease?.Engine ?? throw new InvalidOperationException(Loc.T("Enable the plugin before managing its models."));
             if (!engine.TranscriptionModels.Any(m => m.Id == modelId)) throw new ArgumentException(Loc.T("Unknown model."), nameof(modelId));
             if (!engine.SupportsModelRemoval) throw new NotSupportedException(Loc.T("This plugin does not support model removal."));
-            if (!CanRemoveModel(modelId)) throw new InvalidOperationException(Loc.T("Select a different model in this plugin before removing this one."));
             ct.ThrowIfCancellationRequested();
             RemovingModelId = modelId; Changed?.Invoke();
+            // The engine holds the active model's files open; with nothing active, its selected model would load
+            // again on the next dictation.
+            if (ActiveModelId == modelId || ActiveModelId is null && engine.SelectedModelId == modelId)
+            {
+                await engine.UnloadModelAsync();
+                ActiveModelId = null;
+            }
             if (engine.IsModelDownloaded(modelId))
                 await engine.RemoveModelAsync(modelId, ct);
             ct.ThrowIfCancellationRequested();
             if (engine.IsModelDownloaded(modelId)) throw new IOException(Loc.T("The plugin still reports this model as downloaded."));
+            // The next start then loads another downloaded model instead of looking for this one.
+            if (SavedModelId == modelId) _host.SetSetting<string?>("SelectedModelId", null);
             Feedback = Loc.T("Model removed. Download it again to use it.");
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
