@@ -10,10 +10,13 @@ internal sealed class ModulePremiumAccessReading : IPremiumAccessReading
     private readonly Action _showPremiumAccess;
     private readonly Action<Action> _post;
     private readonly Action<string, Exception> _report;
+    private readonly Func<string?> _signedAccountEntitlement;
 
-    internal ModulePremiumAccessReading(PremiumAccessState access, Action showPremiumAccess, Action<Action> post, Action<string, Exception> report)
+    internal ModulePremiumAccessReading(PremiumAccessState access, Action showPremiumAccess, Action<Action> post, Action<string, Exception> report,
+        Func<string?> signedAccountEntitlement)
     {
         _access = access;
+        _signedAccountEntitlement = signedAccountEntitlement;
         _showPremiumAccess = showPremiumAccess;
         _post = post;
         _report = report;
@@ -35,6 +38,8 @@ internal sealed class ModulePremiumAccessReading : IPremiumAccessReading
     }
 
     public void ShowPremiumAccess() => _showPremiumAccess();
+
+    public string? SignedAccountEntitlement => _signedAccountEntitlement();
 
     internal static PremiumRequirement ToHostRequirement(ModulePremiumRequirement requirement) => requirement switch
     {
