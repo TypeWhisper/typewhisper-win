@@ -61,6 +61,41 @@ public sealed class TargetAppCorrectionLearningServiceTests : IDisposable
         Assert.Empty(result.LearnedCorrections);
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("\r\n")]
+    public async Task TrackInsertionAsync_LearnsFromTheLastReadWhenEnterSendsAndEmptiesTheField(string afterSend)
+    {
+        // The poll sees the edit; Enter then sends the chat message and the field is empty when the commit is read.
+        var observer = new FakeTargetTextObserver();
+        var baseline = Observation("hello teh world");
+        observer.Recaptures.Enqueue(Observation("hello the world"));
+        observer.Recaptures.Enqueue(Observation(afterSend));
+        var service = CreateService(observer, new FakeCommitObserver([false, true]), polls: 2);
+
+        var learned = await service.TrackInsertionAsync("teh", baseline);
+
+        var correction = Assert.Single(learned);
+        Assert.Equal("teh", correction.Original);
+        Assert.Equal("the", correction.Replacement);
+    }
+
+    [Fact]
+    public async Task TrackInsertionAsync_KeepsTheVerdictOfAFieldThatStillHoldsText()
+    {
+        // A poll sees one edit, the user edits on, and the committed text is ambiguous: nothing is learned from the poll.
+        var observer = new FakeTargetTextObserver();
+        var baseline = Observation("hello teh world");
+        observer.Recaptures.Enqueue(Observation("hello ten world"));
+        observer.Recaptures.Enqueue(Observation("hello the new world"));
+        var service = CreateService(observer, new FakeCommitObserver([false, true]), polls: 2);
+
+        var learned = await service.TrackInsertionAsync("teh", baseline);
+
+        Assert.Empty(learned);
+        Assert.Empty(_dictionary.Entries);
+    }
+
     [Fact]
     public async Task TrackInsertionAsync_DoesNotQueryFocusedElementWhenCommitSignalRecaptures()
     {
@@ -535,6 +570,35 @@ public sealed class TargetAppCorrectionLearningServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task TrackInsertionAsync_ASlowTargetAppIsReadLessOftenAndOnlyForThirtySeconds()
+    {
+        // Each poll makes the target app answer for two seconds.
+        var clock = new ManualClock();
+        var observer = new FakeTargetTextObserver { OnPoll = () => clock.Advance(TimeSpan.FromSeconds(2)) };
+        var delays = new List<TimeSpan>();
+        var service = new TargetAppCorrectionLearningService(
+            _dictionary.LearnCorrections,
+            observer,
+            new FakeCommitObserver([]),
+            pollSchedule: null,
+            delayAsync: (delay, _) =>
+            {
+                delays.Add(delay);
+                clock.Advance(delay);
+                return Task.CompletedTask;
+            },
+            time: clock);
+
+        var learned = await service.TrackInsertionAsync("teh", Observation("hello teh world"));
+
+        Assert.Equal(TargetAppCorrectionLearningOutcomeKind.NoCommitBeforeTimeout, learned.Outcome);
+        Assert.All(delays.Skip(1), delay => Assert.True(delay >= TimeSpan.FromSeconds(2)));
+        Assert.True(observer.FocusedElementMatchCalls <= 8, $"{observer.FocusedElementMatchCalls} polls");
+        // No read starts after 30 seconds, and the last one ends within one poll of it.
+        Assert.True(clock.Elapsed <= TimeSpan.FromSeconds(32), $"{clock.Elapsed} observed");
+    }
+
+    [Fact]
     public async Task TrackInsertionAsync_SkipsDuplicateExistingCorrection()
     {
         _dictionary.LearnCorrection("teh", "THE");
@@ -688,11 +752,23 @@ public sealed class TargetAppCorrectionLearningServiceTests : IDisposable
             return Recaptures.Count > 0 ? Recaptures.Dequeue() : baseline;
         }
 
+        public Action? OnPoll { get; init; }
+
         public TargetAppTextElementMatch GetFocusedElementMatch(TargetAppTextObservation baseline)
         {
             FocusedElementMatchCalls++;
+            OnPoll?.Invoke();
             return Matches.Count > 0 ? Matches.Dequeue() : TargetAppTextElementMatch.Same;
         }
+    }
+
+    private sealed class ManualClock : TimeProvider
+    {
+        private long _ticks;
+        public TimeSpan Elapsed => TimeSpan.FromTicks(_ticks);
+        public void Advance(TimeSpan by) => _ticks += by.Ticks;
+        public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+        public override long GetTimestamp() => _ticks;
     }
 
     private sealed class FakeCommitObserver : ITargetAppCorrectionCommitObserver
