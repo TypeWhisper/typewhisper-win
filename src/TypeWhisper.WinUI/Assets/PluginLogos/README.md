@@ -30,3 +30,5 @@ Gemma: `gemma-color.svg` from [Lobe Icons](https://github.com/lobehub/lobe-icons
 - Linear: unchanged purple symbol reused from the TypeWhisper website brand assets.
 
 - Sber (GigaAM): the symbol of [Sberbank Logo 2020.svg](https://commons.wikimedia.org/wiki/File:Sberbank_Logo_2020.svg) from Wikimedia Commons (public domain, trademark of Sberbank), retrieved October 21, 2026. The wordmark paths are removed and the view box contains the symbol; colors are written as six-digit hex values for native rendering. Paths and gradients are unchanged.
+
+- Zoom Scribe: the official SVG website icon of [Zoom AI Services](https://www.zoom.com/en/products/ai-services/), retrieved November 20, 2026. Paths, gradient and colors are unchanged; the gradient definition moved before the paths and `white` is written as `#FFFFFF` for native rendering.

@@ -257,6 +257,7 @@ whatever endpoint the user enters.
 | Speechmatics | `eu1.asr.api.speechmatics.com`, `us1.asr.api.speechmatics.com` |
 | Voxtral (Mistral) | `api.mistral.ai` |
 | xAI | `api.x.ai` |
+| Zoom Scribe | `api.zoom.us` |
 | Authenticated CLI, Webhook, Script | the command, CLI or URL the user configures |
 | Granite Speech | `huggingface.co` and `*.hf.co` for the model; `www.python.org`, `raw.githubusercontent.com`, `pypi.org`, `files.pythonhosted.org`, `download.pytorch.org` and `download-r2.pytorch.org` for its runtime |
 | Other local plugins (Parakeet, whisper.cpp, local LLM, Gemma, Qwen, GigaAM, Voxtral (Local), Cohere Transcribe, Supertonic TTS, Nemotron Diarization) | `huggingface.co` and `*.hf.co` for models; see the runtime hosts above |

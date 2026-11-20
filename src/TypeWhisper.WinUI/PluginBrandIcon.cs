@@ -65,6 +65,7 @@ public sealed class PluginBrandIcon : UserControl
             "com.typewhisper.supertonic-tts" => "supertone",
             "com.typewhisper.reson8" => "reson8",
             "com.typewhisper.speechmatics" => "speechmatics",
+            "com.typewhisper.zoom" => "zoom",
             _ => null
         };
         if (brand is null) { ShowFallback(); return; }
