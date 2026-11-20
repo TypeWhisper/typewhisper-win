@@ -15,13 +15,15 @@ namespace TypeWhisper.WinUI;
 /// <param name="MaxValueLength">Maximum text length this observation may read on recapture.</param>
 /// <param name="Element">Captured UI Automation element used for bounded recapture after focus leaves.</param>
 /// <param name="AllowElementKeyChangeOnCommit">Whether an explicit commit may accept a same-window recapture with a changed element key.</param>
+/// <param name="Labels">The field's accessible name and help text. An emptied field can read as one of them.</param>
 public sealed record TargetAppTextObservation(
     string ElementKey,
     string Value,
     IntPtr WindowHandle,
     int MaxValueLength = 4096,
     object? Element = null,
-    bool AllowElementKeyChangeOnCommit = false);
+    bool AllowElementKeyChangeOnCommit = false,
+    IReadOnlyList<string>? Labels = null);
 
 /// <summary>
 /// Lists possible focus relationships for a previously observed text element.
@@ -435,7 +437,7 @@ public sealed class TargetAppCorrectionLearningService
         var extraction = ExtractSuggestions(insertedText, baseline.Value, current.Value);
         // A chat field empties when Enter sends it, so the field read after the commit no longer holds the edit. The
         // last read before the commit still does. A field that still holds the text keeps its own, more recent, verdict.
-        if (extraction.Outcome is not null && !ReferenceEquals(current, fallbackObservation) && WasEmptied(current.Value, fallbackObservation.Value) &&
+        if (extraction.Outcome is not null && !ReferenceEquals(current, fallbackObservation) && WasEmptied(current) &&
             !string.Equals(fallbackObservation.Value, baseline.Value, StringComparison.Ordinal) &&
             ExtractSuggestions(insertedText, baseline.Value, fallbackObservation.Value) is { Outcome: null } beforeCommit)
         {
@@ -472,19 +474,14 @@ public sealed class TargetAppCorrectionLearningService
     }
 
     /// <summary>
-    /// Whether a field no longer holds the text it had: empty, or only a placeholder. Edge reads an emptied text area
-    /// as its label, such as "Message", which shares no word of three or more letters with what the field held.
+    /// Whether a field no longer holds any text: blank, or reading exactly as its own label. Edge reads an emptied text
+    /// area as its accessible name or placeholder, such as "Message"; other text, however unrelated, is a real edit.
     /// </summary>
-    internal static bool WasEmptied(string current, string before)
+    internal static bool WasEmptied(TargetAppTextObservation current)
     {
-        if (string.IsNullOrWhiteSpace(current))
-            return true;
-
-        var held = Words(before).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        return held.Count > 0 && !Words(current).Any(held.Contains);
-
-        static IEnumerable<string> Words(string text) =>
-            System.Text.RegularExpressions.Regex.Matches(text, @"[\p{L}\p{N}]{3,}").Select(match => match.Value);
+        var value = current.Value.Trim();
+        return value.Length == 0 ||
+            current.Labels?.Any(label => string.Equals(label?.Trim(), value, StringComparison.Ordinal)) == true;
     }
 
     private static SuggestionExtraction ExtractSuggestions(

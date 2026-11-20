@@ -55,7 +55,9 @@ internal sealed class CorrectionTextObserver : ITargetAppTextObserver, IDisposab
                 if (pattern is IUIAutomationValuePattern value && value.CurrentIsReadOnly == 0) text = value.CurrentValue;
             }
             if (text is null || text.Length > limit) return null;
-            return new(string.Join(".", element.GetRuntimeId().Cast<int>()), text, target, limit);
+            // An emptied field can read as its name or placeholder; both come along to recognize that.
+            string[] labels = [element.CurrentName ?? "", element.CurrentHelpText ?? ""];
+            return new(string.Join(".", element.GetRuntimeId().Cast<int>()), text, target, limit, Labels: labels);
         }
         finally { Release(range); Release(pattern); }
     }

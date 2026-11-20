@@ -73,7 +73,7 @@ public sealed class TargetAppCorrectionLearningServiceTests : IDisposable
         var observer = new FakeTargetTextObserver();
         var baseline = Observation("hello teh world");
         observer.Recaptures.Enqueue(Observation("hello the world"));
-        observer.Recaptures.Enqueue(Observation(afterSend));
+        observer.Recaptures.Enqueue(Observation(afterSend) with { Labels = ["Message", "Type a message"] });
         var service = CreateService(observer, new FakeCommitObserver([false, true]), polls: 2);
 
         var learned = await service.TrackInsertionAsync("teh", baseline);
@@ -83,15 +83,36 @@ public sealed class TargetAppCorrectionLearningServiceTests : IDisposable
         Assert.Equal("the", correction.Replacement);
     }
 
+    [Fact]
+    public async Task TrackInsertionAsync_KeepsTheVerdictOfAFieldReplacedWithOtherText()
+    {
+        // The user replaces the observed edit with unrelated text and commits: that is an edit, not a placeholder.
+        var observer = new FakeTargetTextObserver();
+        var baseline = Observation("hello teh world");
+        observer.Recaptures.Enqueue(Observation("hello ten world"));
+        observer.Recaptures.Enqueue(Observation("Never mind") with { Labels = ["Message", ""] });
+        var service = CreateService(observer, new FakeCommitObserver([false, true]), polls: 2);
+
+        var learned = await service.TrackInsertionAsync("teh", baseline);
+
+        Assert.Empty(learned);
+        Assert.Empty(_dictionary.Entries);
+    }
+
     [Theory]
-    [InlineData("", "hello the world", true)]
-    [InlineData("Message", "This is a short tesst of the cable.", true)]
-    [InlineData("hello the new world", "hello ten world", false)]
-    [InlineData("hello the world.", "hello the world", false)]
-    // Without a word of three letters to compare, only an empty field counts as emptied.
-    [InlineData("ok", "a b", false)]
-    public void WasEmptied_TellsAnEmptiedFieldFromAnEditedOne(string current, string before, bool emptied)
-        => Assert.Equal(emptied, TargetAppCorrectionLearningService.WasEmptied(current, before));
+    [InlineData("", null, true)]
+    [InlineData(" \r\n", null, true)]
+    [InlineData("Message", "Message", true)]
+    [InlineData(" Message ", "Message", true)]
+    [InlineData("Never mind", "Message", false)]
+    [InlineData("Message", null, false)]
+    [InlineData("message", "Message", false)]
+    public void WasEmptied_NeedsABlankFieldOrItsOwnLabel(string value, string? label, bool emptied)
+    {
+        var observation = Observation(value) with { Labels = label is null ? null : [label, ""] };
+
+        Assert.Equal(emptied, TargetAppCorrectionLearningService.WasEmptied(observation));
+    }
 
     [Fact]
     public async Task TrackInsertionAsync_KeepsTheVerdictOfAFieldThatStillHoldsText()
