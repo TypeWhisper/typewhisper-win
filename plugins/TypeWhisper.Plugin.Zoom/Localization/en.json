@@ -1,0 +1,11 @@
+{
+  "Transcription model": "Transcription model",
+  "Scribe Multilingual takes English, German, Spanish, French, Italian, Portuguese, Japanese, Korean, Chinese and Arabic, and detects the language when none is set; it does not use dictionary terms. Scribe Single Language uses Zoom's model for the dictation language, with dictionary terms, in the same languages except Korean; without a dictation language, Scribe Multilingual detects it. Scribe English Pro is Zoom's most accurate English model, with dictionary terms; other languages go to Scribe Multilingual.": "Scribe Multilingual takes English, German, Spanish, French, Italian, Portuguese, Japanese, Korean, Chinese and Arabic, and detects the language when none is set; it does not use dictionary terms. Scribe Single Language uses Zoom's model for the dictation language, with dictionary terms, in the same languages except Korean; without a dictation language, Scribe Multilingual detects it. Scribe English Pro is Zoom's most accurate English model, with dictionary terms; other languages go to Scribe Multilingual.",
+  "Transcription": "Transcription",
+  "Live streams dictations to Zoom while you speak and shows a live preview; the final text is usually ready half a second after you stop. Recordings, files and dictations without a preview are sent when they end. After recording sends every recording to Zoom when you stop; the text is usually ready in about a second. No live preview from Zoom.": "Live streams dictations to Zoom while you speak and shows a live preview; the final text is usually ready half a second after you stop. Recordings, files and dictations without a preview are sent when they end. After recording sends every recording to Zoom when you stop; the text is usually ready in about a second. No live preview from Zoom.",
+  "Live": "Live",
+  "After recording": "After recording",
+  "Check connection": "Check connection",
+  "Verify the entered key without sending audio or saving changes. Create a key at zoom.ai under Configure > API Keys; Zoom bills usage in Build Credits.": "Verify the entered key without sending audio or saving changes. Create a key at zoom.ai under Configure > API Keys; Zoom bills usage in Build Credits.",
+  "Connection verified. No changes saved.": "Connection verified. No changes saved."
+}

@@ -1,0 +1,70 @@
+using System.IO.Compression;
+using System.Net;
+using System.Security.Cryptography;
+using TypeWhisper.PluginHost;
+using TypeWhisper.PluginSDK;
+
+public partial class ZoomTests
+{
+    [Fact]
+    public async Task IndependentPackageInstallsConfiguresRestartsUninstallsAndReinstalls()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "zoom-package-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var source = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "bin", new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name, "portable-host", "Plugins", "com.typewhisper.zoom"));
+            Assert.Equal(new[] { "TypeWhisper.Plugin.Zoom.deps.json", "TypeWhisper.Plugin.Zoom.dll", "manifest.json" }, Directory.GetFiles(source).Select(Path.GetFileName).Order(StringComparer.Ordinal));
+            var archive = Path.Combine(root, "zoom.zip"); ZipFile.CreateFromDirectory(source, archive);
+            var bytes = await File.ReadAllBytesAsync(archive);
+            using var http = new HttpClient(new Handler((request, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { RequestMessage = request, Content = new ByteArrayContent(bytes) })));
+            var host = new TestPluginHostServices();
+            PortablePluginStore Store() => new(Path.Join(root, "store"), new(1, 3, 0), http, _ => host);
+            var entry = new PortableCatalogEntry
+            {
+                Id = "com.typewhisper.zoom", Name = "Zoom Scribe", Version = "1.0.0", MinHostVersion = "1.3.0",
+                DownloadUrl = "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-fixture-v1.0.0/zoom.zip", Size = bytes.Length, Sha256 = Convert.ToHexString(SHA256.HashData(bytes)),
+                SupportedArchitectures = [PortablePluginCatalog.Architecture]
+            };
+            var store = Store(); await store.InitializeAsync(); await store.InstallAsync(entry);
+            var firstPath = store.Resolve(entry.Id);
+            await using (var registry = new PortablePluginRuntimeRegistry(store, new(1, 3, 0), _ => host))
+            {
+                await registry.InitializeAsync(); Assert.Empty(registry.TranscriptionProviders);
+                Assert.Null(await registry.SetEnabledAsync(entry.Id, true));
+                Assert.False(Assert.Single(registry.TranscriptionProviders).Ready);
+                await registry.UseConfigurationAsync(entry.Id, async (plugin, ct) =>
+                {
+                    Assert.Equal(entry.Version, plugin.PluginVersion);
+                    Assert.DoesNotContain(plugin.GetType().Assembly.GetReferencedAssemblies(), a => a.Name is "PresentationFramework" or "WindowsBase" or "System.Windows.Forms");
+                    Assert.IsAssignableFrom<IPluginSettingsActions>(plugin);
+                    await ((IPluginProfileSettings)plugin).SaveProfileSettingsAsync("zoom",
+                        new Dictionary<string, string> { ["selectedModel"] = "zoom-scribe-en-pro", ["transcriptionMode"] = "batch" }, "fixture-key", ct);
+                    return true;
+                });
+                await registry.RefreshCapabilitiesAsync(); Assert.True(Assert.Single(registry.TranscriptionProviders).Ready);
+                Assert.Empty(registry.LlmProviders); Assert.Empty(registry.TtsProviders);
+                await Assert.ThrowsAsync<InvalidOperationException>(() => store.InstallAsync(entry)); Assert.Equal(firstPath, store.Resolve(entry.Id));
+            }
+            var restart = Store(); await restart.InitializeAsync(); Assert.Equal(firstPath, restart.Resolve(entry.Id));
+            await using (var registry = new PortablePluginRuntimeRegistry(restart, new(1, 3, 0), _ => host))
+            {
+                await registry.InitializeAsync(); Assert.True(Assert.Single(registry.TranscriptionProviders).Ready);
+                await registry.UseConfigurationAsync(entry.Id, (plugin, _) =>
+                {
+                    var engine = (ITranscriptionEnginePlugin)plugin;
+                    Assert.Equal("zoom-scribe-en-pro", engine.SelectedModelId); Assert.False(engine.SupportsStreaming);
+                    Assert.Equal(["en"], engine.SupportedLanguages);
+                    return Task.FromResult(true);
+                });
+                Assert.Null(await registry.SetEnabledAsync(entry.Id, false)); await restart.UninstallAsync(entry.Id);
+                Assert.False(restart.IsInstalled(entry.Id)); Assert.Single(host.Secrets);
+            }
+            var reinstall = Store(); await reinstall.InitializeAsync(); await reinstall.InstallAsync(entry);
+            await using var final = new PortablePluginRuntimeRegistry(reinstall, new(1, 3, 0), _ => host);
+            Assert.Null(await final.SetEnabledAsync(entry.Id, true)); Assert.True(Assert.Single(final.TranscriptionProviders).Ready);
+            await Assert.ThrowsAsync<InvalidDataException>(() => PortablePluginPackage.LoadAsync(reinstall.Resolve(entry.Id), host, new(1, 1, 4)));
+        }
+        finally { GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect(); try { Directory.Delete(root, true); } catch (IOException) { } catch (UnauthorizedAccessException) { } }
+    }
+}
