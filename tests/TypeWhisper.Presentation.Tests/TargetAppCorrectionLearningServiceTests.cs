@@ -99,6 +99,22 @@ public sealed class TargetAppCorrectionLearningServiceTests : IDisposable
         Assert.Empty(_dictionary.Entries);
     }
 
+    [Fact]
+    public async Task TrackInsertionAsync_NeverLearnsFromTheLabelOfAnEmptiedField()
+    {
+        // Sent without an edit; the emptied field reads as a label that would look like a correction.
+        var observer = new FakeTargetTextObserver();
+        var baseline = Observation("hello teh world");
+        observer.Recaptures.Enqueue(baseline);
+        observer.Recaptures.Enqueue(Observation("hello the world") with { Labels = ["hello the world"] });
+        var service = CreateService(observer, new FakeCommitObserver([false, true]), polls: 2);
+
+        var learned = await service.TrackInsertionAsync("teh", baseline);
+
+        Assert.Equal(TargetAppCorrectionLearningOutcomeKind.NoEdit, learned.Outcome);
+        Assert.Empty(_dictionary.Entries);
+    }
+
     [Theory]
     [InlineData("", null, true)]
     [InlineData(" \r\n", null, true)]

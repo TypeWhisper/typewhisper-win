@@ -434,14 +434,20 @@ public sealed class TargetAppCorrectionLearningService
             current = fallbackObservation;
         }
 
-        var extraction = ExtractSuggestions(insertedText, baseline.Value, current.Value);
-        // A chat field empties when Enter sends it, so the field read after the commit no longer holds the edit. The
-        // last read before the commit still does. A field that still holds the text keeps its own, more recent, verdict.
-        if (extraction.Outcome is not null && !ReferenceEquals(current, fallbackObservation) && WasEmptied(current) &&
-            !string.Equals(fallbackObservation.Value, baseline.Value, StringComparison.Ordinal) &&
-            ExtractSuggestions(insertedText, baseline.Value, fallbackObservation.Value) is { Outcome: null } beforeCommit)
+        // A chat field empties when Enter sends it, so the field read after the commit no longer holds the edit; the last
+        // read before the commit still does. An emptied field's text, blank or its label, is never read as an edit. A
+        // field that still holds text keeps its own, more recent, verdict.
+        SuggestionExtraction extraction;
+        if (!ReferenceEquals(current, fallbackObservation) && WasEmptied(current))
         {
-            extraction = beforeCommit;
+            if (string.Equals(fallbackObservation.Value, baseline.Value, StringComparison.Ordinal))
+                return Result(TargetAppCorrectionLearningOutcomeKind.NoEdit);
+
+            extraction = ExtractSuggestions(insertedText, baseline.Value, fallbackObservation.Value);
+        }
+        else
+        {
+            extraction = ExtractSuggestions(insertedText, baseline.Value, current.Value);
         }
 
         return extraction.Outcome is { } outcome
@@ -476,6 +482,8 @@ public sealed class TargetAppCorrectionLearningService
     /// <summary>
     /// Whether a field no longer holds any text: blank, or reading exactly as its own label. Edge reads an emptied text
     /// area as its accessible name or placeholder, such as "Message"; other text, however unrelated, is a real edit.
+    /// A user who types exactly the field's own label is taken for an emptied field; UI Automation offers no other
+    /// sign of an empty Edge text area, and that text is no correction anyway.
     /// </summary>
     internal static bool WasEmptied(TargetAppTextObservation current)
     {
