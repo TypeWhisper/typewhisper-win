@@ -15,13 +15,15 @@ namespace TypeWhisper.WinUI;
 /// <param name="MaxValueLength">Maximum text length this observation may read on recapture.</param>
 /// <param name="Element">Captured UI Automation element used for bounded recapture after focus leaves.</param>
 /// <param name="AllowElementKeyChangeOnCommit">Whether an explicit commit may accept a same-window recapture with a changed element key.</param>
+/// <param name="Labels">The field's accessible name and help text. An emptied field can read as one of them.</param>
 public sealed record TargetAppTextObservation(
     string ElementKey,
     string Value,
     IntPtr WindowHandle,
     int MaxValueLength = 4096,
     object? Element = null,
-    bool AllowElementKeyChangeOnCommit = false);
+    bool AllowElementKeyChangeOnCommit = false,
+    IReadOnlyList<string>? Labels = null);
 
 /// <summary>
 /// Lists possible focus relationships for a previously observed text element.
@@ -345,7 +347,9 @@ public sealed class TargetAppCorrectionLearningService
                             if (commitResult is not null)
                                 return commitResult;
 
-                            lastObserved = current;
+                            // A field emptied by a send between two reads holds no edit; keep the last text it held.
+                            if (!WasEmptied(current))
+                                lastObserved = current;
                         }
 
                         continue;
@@ -358,7 +362,7 @@ public sealed class TargetAppCorrectionLearningService
                     {
                         if (baseline.AllowElementKeyChangeOnCommit)
                         {
-                            if (TryRecaptureCommittedElement(baseline) is { } current)
+                            if (TryRecaptureCommittedElement(baseline) is { } current && !WasEmptied(current))
                                 lastObserved = current;
 
                             continue;
@@ -432,14 +436,20 @@ public sealed class TargetAppCorrectionLearningService
             current = fallbackObservation;
         }
 
-        var extraction = ExtractSuggestions(insertedText, baseline.Value, current.Value);
-        // A chat field empties when Enter sends it, so the field read after the commit no longer holds the edit. The
-        // last read before the commit still does. A field that still holds text keeps its own, more recent, verdict.
-        if (extraction.Outcome is not null && !ReferenceEquals(current, fallbackObservation) && string.IsNullOrWhiteSpace(current.Value) &&
-            !string.Equals(fallbackObservation.Value, baseline.Value, StringComparison.Ordinal) &&
-            ExtractSuggestions(insertedText, baseline.Value, fallbackObservation.Value) is { Outcome: null } beforeCommit)
+        // A chat field empties when Enter sends it, so the field read after the commit no longer holds the edit; the last
+        // read before the commit still does. An emptied field's text, blank or its label, is never read as an edit. A
+        // field that still holds text keeps its own, more recent, verdict.
+        SuggestionExtraction extraction;
+        if (!ReferenceEquals(current, fallbackObservation) && WasEmptied(current))
         {
-            extraction = beforeCommit;
+            if (string.Equals(fallbackObservation.Value, baseline.Value, StringComparison.Ordinal))
+                return Result(TargetAppCorrectionLearningOutcomeKind.NoEdit);
+
+            extraction = ExtractSuggestions(insertedText, baseline.Value, fallbackObservation.Value);
+        }
+        else
+        {
+            extraction = ExtractSuggestions(insertedText, baseline.Value, current.Value);
         }
 
         return extraction.Outcome is { } outcome
@@ -469,6 +479,19 @@ public sealed class TargetAppCorrectionLearningService
             current.WindowHandle == baseline.WindowHandle
                 ? current
                 : null;
+    }
+
+    /// <summary>
+    /// Whether a field no longer holds any text: blank, or reading exactly as its own label. Edge reads an emptied text
+    /// area as its accessible name or placeholder, such as "Message"; other text, however unrelated, is a real edit.
+    /// A user who types exactly the field's own label is taken for an emptied field; UI Automation offers no other
+    /// sign of an empty Edge text area, and that text is no correction anyway.
+    /// </summary>
+    internal static bool WasEmptied(TargetAppTextObservation current)
+    {
+        var value = current.Value.Trim();
+        return value.Length == 0 ||
+            current.Labels?.Any(label => string.Equals(label?.Trim(), value, StringComparison.Ordinal)) == true;
     }
 
     private static SuggestionExtraction ExtractSuggestions(

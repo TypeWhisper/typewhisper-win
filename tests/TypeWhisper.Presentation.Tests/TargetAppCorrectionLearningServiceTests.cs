@@ -64,13 +64,16 @@ public sealed class TargetAppCorrectionLearningServiceTests : IDisposable
     [Theory]
     [InlineData("")]
     [InlineData("\r\n")]
+    // Edge reads an emptied text area as its label.
+    [InlineData("Message")]
+    [InlineData("Type a message")]
     public async Task TrackInsertionAsync_LearnsFromTheLastReadWhenEnterSendsAndEmptiesTheField(string afterSend)
     {
         // The poll sees the edit; Enter then sends the chat message and the field is empty when the commit is read.
         var observer = new FakeTargetTextObserver();
         var baseline = Observation("hello teh world");
         observer.Recaptures.Enqueue(Observation("hello the world"));
-        observer.Recaptures.Enqueue(Observation(afterSend));
+        observer.Recaptures.Enqueue(Observation(afterSend) with { Labels = ["Message", "Type a message"] });
         var service = CreateService(observer, new FakeCommitObserver([false, true]), polls: 2);
 
         var learned = await service.TrackInsertionAsync("teh", baseline);
@@ -78,6 +81,73 @@ public sealed class TargetAppCorrectionLearningServiceTests : IDisposable
         var correction = Assert.Single(learned);
         Assert.Equal("teh", correction.Original);
         Assert.Equal("the", correction.Replacement);
+    }
+
+    [Fact]
+    public async Task TrackInsertionAsync_KeepsTheVerdictOfAFieldReplacedWithOtherText()
+    {
+        // The user replaces the observed edit with unrelated text and commits: that is an edit, not a placeholder.
+        var observer = new FakeTargetTextObserver();
+        var baseline = Observation("hello teh world");
+        observer.Recaptures.Enqueue(Observation("hello ten world"));
+        observer.Recaptures.Enqueue(Observation("Never mind") with { Labels = ["Message", ""] });
+        var service = CreateService(observer, new FakeCommitObserver([false, true]), polls: 2);
+
+        var learned = await service.TrackInsertionAsync("teh", baseline);
+
+        Assert.Empty(learned);
+        Assert.Empty(_dictionary.Entries);
+    }
+
+    [Fact]
+    public async Task TrackInsertionAsync_NeverLearnsFromTheLabelOfAnEmptiedField()
+    {
+        // Sent without an edit; the emptied field reads as a label that would look like a correction.
+        var observer = new FakeTargetTextObserver();
+        var baseline = Observation("hello teh world");
+        observer.Recaptures.Enqueue(baseline);
+        observer.Recaptures.Enqueue(Observation("hello the world") with { Labels = ["hello the world"] });
+        var service = CreateService(observer, new FakeCommitObserver([false, true]), polls: 2);
+
+        var learned = await service.TrackInsertionAsync("teh", baseline);
+
+        Assert.Equal(TargetAppCorrectionLearningOutcomeKind.NoEdit, learned.Outcome);
+        Assert.Empty(_dictionary.Entries);
+    }
+
+    [Theory]
+    [InlineData("hello the world", "Message", true)]
+    // Sent without an edit: the label that looks like a correction must not become the last read.
+    [InlineData("hello teh world", "hello the world", false)]
+    public async Task TrackInsertionAsync_DoesNotKeepAnEmptiedFieldAsTheLastRead(string edited, string label, bool learns)
+    {
+        // Enter lands between a poll's commit check and its read, so that poll reads the emptied field.
+        var observer = new FakeTargetTextObserver();
+        var baseline = Observation("hello teh world");
+        observer.Recaptures.Enqueue(Observation(edited));
+        observer.Recaptures.Enqueue(Observation(label) with { Labels = [label] });
+        observer.Recaptures.Enqueue(Observation(label) with { Labels = [label] });
+        var service = CreateService(observer, new FakeCommitObserver([false, false, true]), polls: 3);
+
+        var learned = await service.TrackInsertionAsync("teh", baseline);
+
+        Assert.Equal(learns, learned.Count == 1);
+        Assert.Equal(learns ? 1 : 0, _dictionary.Entries.Count);
+    }
+
+    [Theory]
+    [InlineData("", null, true)]
+    [InlineData(" \r\n", null, true)]
+    [InlineData("Message", "Message", true)]
+    [InlineData(" Message ", "Message", true)]
+    [InlineData("Never mind", "Message", false)]
+    [InlineData("Message", null, false)]
+    [InlineData("message", "Message", false)]
+    public void WasEmptied_NeedsABlankFieldOrItsOwnLabel(string value, string? label, bool emptied)
+    {
+        var observation = Observation(value) with { Labels = label is null ? null : [label, ""] };
+
+        Assert.Equal(emptied, TargetAppCorrectionLearningService.WasEmptied(observation));
     }
 
     [Fact]
