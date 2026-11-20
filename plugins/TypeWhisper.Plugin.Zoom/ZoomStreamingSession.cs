@@ -136,21 +136,28 @@ internal sealed class ZoomStreamingSession : IStreamingSession
 
     public async Task FinalizeAsync(CancellationToken ct)
     {
-        await _sendLock.WaitAsync(ct).ConfigureAwait(false);
+        // The limit covers the whole stop: waiting for a running send, the last audio, session.close and session.closed.
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        deadline.CancelAfter(_timeout);
         try
         {
-            await EnsureOpenAsync().ConfigureAwait(false);
-            if (_finishing) throw new InvalidOperationException("Stream already finalized.");
-            _finishing = true;
-            await FlushAsync(ct).ConfigureAwait(false);
-            // Set first: the receiver may read session.closed before this send returns.
-            Volatile.Write(ref _closeSent, true);
-            await _socket.SendAsync(CloseMessage, WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
-            // The receiver ends at session.closed, which follows the last completed item; anything else is a failure.
-            try { await _receiver.WaitAsync(_timeout, ct).ConfigureAwait(false); }
-            catch (TimeoutException) { throw new IOException("Zoom Scribe did not finish the live transcript."); }
+            await _sendLock.WaitAsync(deadline.Token).ConfigureAwait(false);
+            try
+            {
+                await EnsureOpenAsync().ConfigureAwait(false);
+                if (_finishing) throw new InvalidOperationException("Stream already finalized.");
+                _finishing = true;
+                await FlushAsync(deadline.Token).ConfigureAwait(false);
+                // Set first: the receiver may read session.closed before this send returns.
+                Volatile.Write(ref _closeSent, true);
+                await _socket.SendAsync(CloseMessage, WebSocketMessageType.Text, true, deadline.Token).ConfigureAwait(false);
+                // The receiver ends at session.closed, which follows the last completed item; anything else is a failure.
+                await _receiver.WaitAsync(deadline.Token).ConfigureAwait(false);
+            }
+            finally { _sendLock.Release(); }
         }
-        finally { _sendLock.Release(); }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested && deadline.IsCancellationRequested)
+        { throw new IOException("Zoom Scribe did not finish the live transcript."); }
         var text = CurrentText;
         if (text.Length > 0) TranscriptReceived?.Invoke(new(text, true) { DetectedLanguage = _detectedLanguage ?? _pinnedLanguage });
     }

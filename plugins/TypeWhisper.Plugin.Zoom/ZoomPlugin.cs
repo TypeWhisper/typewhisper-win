@@ -173,14 +173,15 @@ public sealed partial class ZoomPlugin : ITranscriptionEnginePlugin, IApiKeyPlug
                 // A segment without times joins the one before it, or the next one at the start, so subtitles keep all text.
                 if (Number(segment, "start") is { } start && Number(segment, "end") is { } end && end >= start)
                 {
-                    segments.Add(new(string.Join(" ", leading.Append(text)), start, end));
+                    segments.Add(new(ZoomStreamingSession.JoinedText(leading.Append(text)), start, end));
                     leading.Clear();
                 }
-                else if (segments.Count > 0) segments[^1] = segments[^1] with { Text = segments[^1].Text + " " + text };
+                else if (segments.Count > 0) segments[^1] = segments[^1] with { Text = ZoomStreamingSession.JoinedText([segments[^1].Text, text]) };
                 else leading.Add(text);
             }
         }
-        var transcript = OptionalString(result, "text_display") ?? string.Join(" ", texts);
+        // Zoom writes Chinese and Japanese without spaces, so the segments join like live items.
+        var transcript = OptionalString(result, "text_display") ?? ZoomStreamingSession.JoinedText(texts);
         var language = NonEmpty(OptionalString(result, "language")) ?? segmentLanguage;
         var duration = Number(root, "duration_sec") ?? (segments.Count > 0 ? segments.Max(s => s.End) : 0);
         return new(transcript.Trim(), language is null ? transcription.LanguageCode : ZoomModels.LanguageCode(language), duration,

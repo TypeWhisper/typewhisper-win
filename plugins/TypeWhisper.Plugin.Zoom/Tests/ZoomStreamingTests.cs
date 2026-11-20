@@ -15,10 +15,25 @@ public sealed class ZoomStreamingTests
         var socket = new Socket(); var session = new ZoomStreamingSession(socket, request.LanguageCode, timeout);
         var start = session.StartAsync(request, default);
         socket.Text("""{"type":"session.created"}""");
-        await socket.Sent.Reader.ReadAsync();
+        await NextSentAsync(socket, start);
         socket.Text("""{"type":"session.updated","phrase_count":1}""");
         await start.WaitAsync(TimeSpan.FromSeconds(2));
         return (socket, session);
+    }
+
+    /// <summary>
+    /// The next text frame the session sends. <paramref name="operation"/> sends it; when it ends first, its fault is
+    /// rethrown instead of waiting for a frame that never comes.
+    /// </summary>
+    private static async Task<string> NextSentAsync(Socket socket, Task operation)
+    {
+        var sent = socket.Sent.Reader.ReadAsync().AsTask();
+        if (await Task.WhenAny(sent, operation).WaitAsync(TimeSpan.FromSeconds(2)) == operation && !sent.IsCompleted)
+        {
+            await operation;
+            throw new Xunit.Sdk.XunitException("The operation ended without sending a frame.");
+        }
+        return await sent;
     }
 
     [Fact]
@@ -45,7 +60,7 @@ public sealed class ZoomStreamingTests
         socket.Text("""{"type":"transcription.delta","item_id":"b","delta":"Wie"}""");
         socket.Text("""{"type":"error","error":{"fatal":false,"message":"private warning"}}""");
         var finish = session.FinalizeAsync(default);
-        Assert.Equal("session.close", JsonSerializer.Deserialize<JsonElement>(await socket.Sent.Reader.ReadAsync()).GetProperty("type").GetString());
+        Assert.Equal("session.close", JsonSerializer.Deserialize<JsonElement>(await NextSentAsync(socket, finish)).GetProperty("type").GetString());
         Assert.False(finish.IsCompleted);
         socket.Text("""{"type":"transcription.completed","item_id":"b","transcript":"Wie geht's?"}""");
         socket.Text("""{"type":"session.closed"}""");
@@ -70,7 +85,7 @@ public sealed class ZoomStreamingTests
         Assert.Equal("continuous", config.GetProperty("language_detection").GetProperty("mode").GetString());
         Assert.False(config.TryGetProperty("language", out _)); Assert.False(config.TryGetProperty("vocabulary", out _));
         var events = new List<StreamingTranscriptEvent>(); session.TranscriptReceived += events.Add;
-        var finish = session.FinalizeAsync(default); await socket.Sent.Reader.ReadAsync();
+        var finish = session.FinalizeAsync(default); await NextSentAsync(socket, finish);
         socket.Text("""{"type":"transcription.completed","item_id":"a","transcript":"Bonjour.","language":"fr"}""");
         socket.Text("""{"type":"session.closed"}""");
         await finish.WaitAsync(TimeSpan.FromSeconds(2));
@@ -83,7 +98,7 @@ public sealed class ZoomStreamingTests
         var (socket, session) = await StartedAsync();
         await using var owned = session;
         var events = new List<StreamingTranscriptEvent>(); session.TranscriptReceived += events.Add;
-        var finish = session.FinalizeAsync(default); await socket.Sent.Reader.ReadAsync();
+        var finish = session.FinalizeAsync(default); await NextSentAsync(socket, finish);
         socket.Text("""{"type":"transcription.completed","item_id":"a","transcript":"  "}""");
         socket.Text("""{"type":"session.closed"}""");
         await finish.WaitAsync(TimeSpan.FromSeconds(2));
@@ -101,7 +116,7 @@ public sealed class ZoomStreamingTests
     {
         var socket = new Socket(); await using var session = new ZoomStreamingSession(socket, "de");
         var start = session.StartAsync(German, default);
-        socket.Text("""{"type":"session.created"}"""); await socket.Sent.Reader.ReadAsync();
+        socket.Text("""{"type":"session.created"}"""); await NextSentAsync(socket, start);
         if (response == "close") socket.Close(); else socket.Text(response);
         var ex = await Assert.ThrowsAsync<IOException>(() => start.WaitAsync(TimeSpan.FromSeconds(2)));
         Assert.DoesNotContain("private", ex.ToString());
@@ -126,12 +141,28 @@ public sealed class ZoomStreamingTests
         await using var owned = session;
         var events = new List<StreamingTranscriptEvent>(); session.TranscriptReceived += events.Add;
         socket.Text("""{"type":"transcription.completed","item_id":"a","transcript":"Hallo."}""");
-        var finish = session.FinalizeAsync(default); await socket.Sent.Reader.ReadAsync();
+        var finish = session.FinalizeAsync(default); await NextSentAsync(socket, finish);
         if (ending == "close") socket.Close(); else if (ending != "timeout") socket.Text(ending);
         var ex = await Assert.ThrowsAsync<IOException>(() => finish.WaitAsync(TimeSpan.FromSeconds(2)));
         Assert.DoesNotContain("private", ex.ToString());
         // The host then transcribes the complete recording; a preview is not a final text.
         Assert.DoesNotContain(events, e => e.IsFinal);
+    }
+
+    [Fact]
+    public async Task FinishingFailsWithinTheLimitWhenTheCloseSendStalls()
+    {
+        var (socket, session) = await StartedAsync(timeout: TimeSpan.FromMilliseconds(300));
+        await using var owned = session;
+        socket.StallTextSends = true;
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        var ex = await Assert.ThrowsAsync<IOException>(() => session.FinalizeAsync(default).WaitAsync(TimeSpan.FromSeconds(2)));
+        Assert.Contains("did not finish", ex.Message); Assert.InRange(started.ElapsedMilliseconds, 250, 1500);
+        // Cancelling the caller's token stays a cancellation.
+        var (_, other) = await StartedAsync(timeout: TimeSpan.FromSeconds(5));
+        await using var otherOwned = other;
+        using var cancel = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => other.FinalizeAsync(cancel.Token).WaitAsync(TimeSpan.FromSeconds(2)));
     }
 
     [Fact]
@@ -171,6 +202,7 @@ public sealed class ZoomStreamingTests
         public readonly List<byte[]> Audio = [];
         public readonly List<string> Control = [];
         public bool Aborted;
+        public bool StallTextSends;
         public override WebSocketCloseStatus? CloseStatus => null;
         public override string? CloseStatusDescription => null;
         public override WebSocketState State => Aborted ? WebSocketState.Aborted : WebSocketState.Open;
@@ -196,6 +228,7 @@ public sealed class ZoomStreamingTests
         {
             ct.ThrowIfCancellationRequested();
             if (Aborted) throw new WebSocketException("aborted");
+            if (StallTextSends && type == WebSocketMessageType.Text) return Task.Delay(Timeout.Infinite, ct);
             if (type == WebSocketMessageType.Binary) Audio.Add(buffer.ToArray());
             else { var text = Encoding.UTF8.GetString(buffer); Control.Add(text); Sent.Writer.TryWrite(text); }
             return Task.CompletedTask;

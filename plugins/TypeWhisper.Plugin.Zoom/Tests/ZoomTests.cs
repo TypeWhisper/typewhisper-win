@@ -143,6 +143,13 @@ public partial class ZoomTests
         Assert.Equal(("Hola mundo. Adiós.", 1.0, 2.0), (segment.Text, segment.Start, segment.End));
         using var detected = JsonDocument.Parse("""{"result":{"text_display":"Olá.","language":"pt-BR","segments":[]}}""");
         Assert.Equal("pt", ZoomPlugin.ParseFastResult(detected.RootElement, ZoomRequest.For(ZoomModels.Multilingual, null, null)).DetectedLanguage);
+        // Chinese and Japanese segments join without spaces, also in subtitle segments.
+        using var chinese = JsonDocument.Parse("""
+            {"result":{"segments":[{"text":"你好。"},{"start":0,"end":1,"text":"世界"},{"text":"再见"},{"start":2,"end":3,"text":"OK"}]}}
+            """);
+        var cjk = ZoomPlugin.ParseFastResult(chinese.RootElement, ZoomRequest.For(ZoomModels.Multilingual, "zh", null));
+        Assert.Equal("你好。世界再见 OK", cjk.Text);
+        Assert.Equal(["你好。世界再见", "OK"], cjk.Segments.Select(s => s.Text));
         using var broken = JsonDocument.Parse("""{"text":"no result"}""");
         Assert.Throws<PluginRequestException>(() => ZoomPlugin.ParseFastResult(broken.RootElement, ZoomRequest.For(ZoomModels.Multilingual, null, null)));
     }
