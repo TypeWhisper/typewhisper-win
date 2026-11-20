@@ -750,17 +750,17 @@
     {
       "id": "com.typewhisper.voxtral-local",
       "name": "Voxtral (Local)",
-      "version": "1.0.0",
-      "minHostVersion": "1.1.6",
+      "version": "1.0.1",
+      "minHostVersion": "1.3.0",
       "author": "TypeWhisper",
       "description": "Offline speech recognition with Mistral's Voxtral Mini 4B Realtime in 13 languages, with punctuation and numbers. Needs a graphics card with Vulkan for dictation; on the processor it is slow. Downloads about 2.8 GB.",
       "categories": [
         "transcription"
       ],
       "locality": "local",
-      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-voxtral-local-v1.0.0/com.typewhisper.voxtral-local-1.0.0-win-x64.zip",
-      "sha256": "d20826305276bfb03de1c9c9da7f54e2294238a256fb1991f74237413349081e",
-      "size": 37408,
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-voxtral-local-v1.0.1/com.typewhisper.voxtral-local-1.0.1-win-x64.zip",
+      "sha256": "e4fdb605eb7831f6d9132d4e36c08ec38a2fb271039858169e08436125981f15",
+      "size": 36628,
       "platforms": [
         "windows"
       ],
