@@ -14,9 +14,9 @@ public sealed class PremiumEntitlementFreshnessTests
     private static string Encode(byte[] bytes) => Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
     private static string PublicKey(ECDsa key) { var p = key.ExportParameters(false); return Convert.ToBase64String([.. p.Q.X!, .. p.Q.Y!]); }
 
-    private static PremiumAccountEntitlement Signed(ECDsa key, DateTimeOffset verifiedAt)
+    private static PremiumAccountEntitlement Signed(ECDsa key, DateTimeOffset verifiedAt, DateTimeOffset? issuedAt = null)
     {
-        var entry = new PremiumAccountEntitlement("active", "individual", "polar", true, null, 3, verifiedAt, null);
+        var entry = new PremiumAccountEntitlement("active", "individual", "polar", true, null, 3, verifiedAt, null, issuedAt);
         var payload = JsonSerializer.SerializeToUtf8Bytes(entry, Json);
         return entry with { Signature = Encode(payload) + "." + Encode(key.SignData(payload, HashAlgorithmName.SHA256, DSASignatureFormat.IeeeP1363FixedFieldConcatenation)) };
     }
@@ -37,6 +37,49 @@ public sealed class PremiumEntitlementFreshnessTests
         Assert.False(stale.IsActiveAt(now, refreshFailed: true));
         Assert.False((fresh with { ExpiresAt = now.AddMinutes(-1) }).IsActiveAt(now, refreshFailed: false));
         Assert.False((fresh with { Status = "revoked" }).IsActiveAt(now, refreshFailed: false));
+    }
+
+    [Fact]
+    public void TheSigningTimeDecidesOnceTheServerSendsIt()
+    {
+        // A lifetime license confirmed long ago, in an envelope signed yesterday, stays active while offline.
+        var now = new DateTimeOffset(2026, 11, 20, 12, 0, 0, TimeSpan.Zero);
+        var lifetime = new PremiumAccountEntitlement("active", "individual", "polar", true, null, 3, now.AddYears(-1), null, now.AddDays(-1));
+        Assert.True(lifetime.IsActiveAt(now, refreshFailed: true));
+        Assert.False((lifetime with { IssuedAt = now.AddDays(-31) }).IsActiveAt(now, refreshFailed: true));
+        Assert.True((lifetime with { IssuedAt = now.AddDays(-31) }).IsActiveAt(now, refreshFailed: false));
+    }
+
+    [Fact]
+    public void TheServersEnvelopeWithItsSigningTimeVerifies()
+    {
+        // As the server writes it: the claims in this order, then the response adds the signature beside them.
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var claims = """{"status":"active","tier":"individual","source":"polar","isLifetime":true,"expiresAt":null,"deviceLimit":3,"verifiedAt":"2025-01-02T03:04:05.000Z","issuedAt":"2026-11-20T11:00:00.123Z"}""";
+        var bytes = System.Text.Encoding.UTF8.GetBytes(claims);
+        var signature = Encode(bytes) + "." + Encode(key.SignData(bytes, HashAlgorithmName.SHA256, DSASignatureFormat.IeeeP1363FixedFieldConcatenation));
+        var response = JsonSerializer.Deserialize<PremiumAccountEntitlement>(claims[..^1] + ",\"signature\":\"" + signature + "\"}", Json);
+        using var http = new HttpClient(new Handler(_ => throw new HttpRequestException("Offline")));
+        var client = new PremiumAccountClient(http, "device", _ => { }, null, PublicKey(key));
+
+        var verified = client.Verify(response);
+
+        Assert.Equal(new DateTimeOffset(2026, 11, 20, 11, 0, 0, 123, TimeSpan.Zero), verified?.IssuedAt);
+    }
+
+    [Fact]
+    public async Task AFailedRefreshKeepsALifetimeLicenseSignedRecently()
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using var http = new HttpClient(new Handler(_ => throw new HttpRequestException("Offline")));
+        var signed = Signed(key, DateTimeOffset.UtcNow.AddYears(-1), DateTimeOffset.UtcNow.AddDays(-2));
+        var saved = JsonSerializer.Serialize(new { accessToken = "test-token", entitlement = signed }, Json);
+        var client = new PremiumAccountClient(http, "device", _ => { }, saved, PublicKey(key));
+
+        await Assert.ThrowsAsync<HttpRequestException>(() => client.RefreshAsync(default));
+
+        Assert.True(client.HasActiveEntitlement);
+        Assert.Equal(signed.IssuedAt, client.Entitlement?.IssuedAt);
     }
 
     [Fact]

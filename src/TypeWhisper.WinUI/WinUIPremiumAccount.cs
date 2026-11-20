@@ -14,10 +14,14 @@ internal static class WinUIPremiumAccount
     private static CancellationTokenSource? _cancel;
     private static Task _operation = Task.CompletedTask;
     private static bool _closing;
+    // When the server last sent an entitlement, so a running app fetches a new one once a day.
+    private static DateTimeOffset _receivedAt = DateTimeOffset.MinValue;
+    internal static readonly TimeSpan RefreshInterval = TimeSpan.FromDays(1);
     internal static bool Busy { get; private set; }
     internal static bool SignedIn => _client?.SignedIn == true;
     internal static bool Premium => _client?.HasActiveEntitlement == true && SignedIn;
     internal static bool Waiting => _callback is not null;
+    internal static bool RefreshDue => SignedIn && !Busy && !_closing && DateTimeOffset.UtcNow - _receivedAt >= RefreshInterval;
     // The verified envelope as the server signed it, for modules that check it themselves.
     internal static string? SignedEntitlement => SignedIn ? _client?.Entitlement?.Signature : null;
     internal static string Status { get; private set; } = Loc.T("Sign in to manage your TypeWhisper Premium account.");
@@ -54,6 +58,7 @@ internal static class WinUIPremiumAccount
     internal static Task RefreshAsync() => Run(async ct =>
     {
         await Client.RefreshAsync(ct);
+        _receivedAt = DateTimeOffset.UtcNow;
         Status = SignedIn ? Premium ? Loc.T("Signed in · Premium active") : Loc.T("Signed in · No Premium entitlement") : Loc.T("Not signed in.");
     });
     internal static Task SignInAsync() => Run(async ct =>
@@ -70,6 +75,7 @@ internal static class WinUIPremiumAccount
             var callback = await _callback.Task.WaitAsync(TimeSpan.FromMinutes(10), ct);
             WinUILicensing.Service.TryGetCommercialAccountProof(out var key, out var activation);
             await Client.CompleteAsync(callback, key, activation, ct);
+            _receivedAt = DateTimeOffset.UtcNow;
             Status = Premium ? Loc.T("Signed in · Premium active") : Loc.T("Signed in · No Premium entitlement");
         }
         finally { _callback = null; Client.Cancel(); }
@@ -86,7 +92,7 @@ internal static class WinUIPremiumAccount
     internal static Task LinkAsync() => Run(async ct =>
     {
         if (!WinUILicensing.Service.TryGetCommercialAccountProof(out var key, out var activation)) throw new InvalidOperationException(Loc.T("Activate a commercial license first."));
-        await Client.LinkAsync(key!, activation!, ct); Status = Premium ? Loc.T("Commercial license linked · Premium active") : Loc.T("The license did not grant Premium access.");
+        await Client.LinkAsync(key!, activation!, ct); _receivedAt = DateTimeOffset.UtcNow; Status = Premium ? Loc.T("Commercial license linked · Premium active") : Loc.T("The license did not grant Premium access.");
     });
     internal static Task SignOutAsync() => Run(async ct => { await Client.SignOutAsync(ct); Status = Loc.T("Signed out. Your local data and license are kept."); });
     internal static void Cancel() => _cancel?.Cancel();
