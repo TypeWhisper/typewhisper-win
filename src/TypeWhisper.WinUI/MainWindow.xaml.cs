@@ -102,6 +102,8 @@ public sealed partial class MainWindow : Window
             // Registered before the fallible startup below so a failed dictation start does not leave changes unhandled.
             WinUIManagedPolicy.Changed += _ => DispatcherQueue.TryEnqueue(ApplyManagedPolicyChange);
             _ = ApplyStartupPolicyAsync();
+            // Also before the fallible startup: after a failed dictation start, the hourly check still refreshes the account.
+            StartDailyAccountRefresh();
             // A dictation can start while the model loads below, so Esc and Enter must already be handled then.
             InitializeEscapeCancel();
             await _dictation.InitializeAsync();
@@ -125,7 +127,6 @@ public sealed partial class MainWindow : Window
             // License and account checks can wait up to 30 s on the network. They run side by side
             // and no longer hold up activations such as --settings; sync still starts after them.
             _ = StartCloudSyncAfterAccessChecksAsync(Task.WhenAll(WinUILicensing.ValidateAsync(), WinUIPremiumAccount.RefreshAsync()));
-            StartDailyAccountRefresh();
             ManagedPolicyView.RuntimeIssues = _dictation.SelectionPolicyIssues;
             if ((hotkeyError ?? cancelError) is { } notice && !_closing) ShowNotice(new AppNotice(notice));
             _ = UpdatePluginsAutomaticallyAsync();
