@@ -51,6 +51,8 @@ public sealed partial class MainWindow : Window
         // Settings can open during startup; Sync & backup then waits with automatic sync for the access checks below.
         // Set before anything that can fail, so a failed start also holds sync until its license check has finished.
         WinUICloudSync.AwaitStartupChecks = true;
+        // Also before anything that can fail: after a failed start, the hourly check still refreshes the account.
+        StartDailyAccountRefresh();
         try
         {
             _dictationInput = new(
@@ -102,8 +104,6 @@ public sealed partial class MainWindow : Window
             // Registered before the fallible startup below so a failed dictation start does not leave changes unhandled.
             WinUIManagedPolicy.Changed += _ => DispatcherQueue.TryEnqueue(ApplyManagedPolicyChange);
             _ = ApplyStartupPolicyAsync();
-            // Also before the fallible startup: after a failed dictation start, the hourly check still refreshes the account.
-            StartDailyAccountRefresh();
             // A dictation can start while the model loads below, so Esc and Enter must already be handled then.
             InitializeEscapeCancel();
             await _dictation.InitializeAsync();

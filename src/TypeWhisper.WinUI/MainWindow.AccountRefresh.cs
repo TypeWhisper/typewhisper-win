@@ -13,7 +13,13 @@ public sealed partial class MainWindow
         _accountRefreshTimer = DispatcherQueue.CreateTimer();
         _accountRefreshTimer.Interval = TimeSpan.FromHours(1);
         _accountRefreshTimer.IsRepeating = true;
-        _accountRefreshTimer.Tick += (_, _) => { if (!_closing && WinUIPremiumAccount.RefreshDue) _ = WinUIPremiumAccount.RefreshAsync(); };
+        _accountRefreshTimer.Tick += (_, _) =>
+        {
+            if (_closing) return;
+            // Without the startup refresh, as after a failed start, the saved session is not loaded yet.
+            WinUIPremiumAccount.LoadSavedSession();
+            if (WinUIPremiumAccount.RefreshDue) _ = WinUIPremiumAccount.RefreshAsync();
+        };
         _accountRefreshTimer.Start();
     }
 
