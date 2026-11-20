@@ -347,7 +347,9 @@ public sealed class TargetAppCorrectionLearningService
                             if (commitResult is not null)
                                 return commitResult;
 
-                            lastObserved = current;
+                            // A field emptied by a send between two reads holds no edit; keep the last text it held.
+                            if (!WasEmptied(current))
+                                lastObserved = current;
                         }
 
                         continue;
@@ -360,7 +362,7 @@ public sealed class TargetAppCorrectionLearningService
                     {
                         if (baseline.AllowElementKeyChangeOnCommit)
                         {
-                            if (TryRecaptureCommittedElement(baseline) is { } current)
+                            if (TryRecaptureCommittedElement(baseline) is { } current && !WasEmptied(current))
                                 lastObserved = current;
 
                             continue;

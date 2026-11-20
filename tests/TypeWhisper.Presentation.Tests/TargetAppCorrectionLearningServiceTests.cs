@@ -116,6 +116,26 @@ public sealed class TargetAppCorrectionLearningServiceTests : IDisposable
     }
 
     [Theory]
+    [InlineData("hello the world", "Message", true)]
+    // Sent without an edit: the label that looks like a correction must not become the last read.
+    [InlineData("hello teh world", "hello the world", false)]
+    public async Task TrackInsertionAsync_DoesNotKeepAnEmptiedFieldAsTheLastRead(string edited, string label, bool learns)
+    {
+        // Enter lands between a poll's commit check and its read, so that poll reads the emptied field.
+        var observer = new FakeTargetTextObserver();
+        var baseline = Observation("hello teh world");
+        observer.Recaptures.Enqueue(Observation(edited));
+        observer.Recaptures.Enqueue(Observation(label) with { Labels = [label] });
+        observer.Recaptures.Enqueue(Observation(label) with { Labels = [label] });
+        var service = CreateService(observer, new FakeCommitObserver([false, false, true]), polls: 3);
+
+        var learned = await service.TrackInsertionAsync("teh", baseline);
+
+        Assert.Equal(learns, learned.Count == 1);
+        Assert.Equal(learns ? 1 : 0, _dictionary.Entries.Count);
+    }
+
+    [Theory]
     [InlineData("", null, true)]
     [InlineData(" \r\n", null, true)]
     [InlineData("Message", "Message", true)]
