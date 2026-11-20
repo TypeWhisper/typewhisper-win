@@ -24,8 +24,10 @@ internal sealed class CorrectionTextObserver : ITargetAppTextObserver, IDisposab
         if (_element.CurrentHasKeyboardFocus == 0 || !BelongsToTarget(_element, targetHwnd)) return null;
         return Read(_element, targetHwnd, maxTextLength);
     }
+    // Capture checked that the editor sits in the target window. Each poll reads it again, so walking its parents once
+    // more would make a slow target app answer dozens of extra cross-process calls a second; its process is checked.
     public TargetAppTextObservation? Recapture(TargetAppTextObservation baseline) =>
-        _element is null ? null : Read(_element, baseline.WindowHandle, baseline.MaxValueLength);
+        _element is null || _element.CurrentProcessId != _process ? null : Read(_element, baseline.WindowHandle, baseline.MaxValueLength, verified: true);
     public TargetAppTextElementMatch GetFocusedElementMatch(TargetAppTextObservation baseline)
     {
         if (NativeMethods.GetForegroundWindow() != baseline.WindowHandle) return TargetAppTextElementMatch.DifferentWindow;
@@ -33,9 +35,9 @@ internal sealed class CorrectionTextObserver : ITargetAppTextObserver, IDisposab
         try { return _element is not null && _automation.CompareElements(_element, focused) != 0 ? TargetAppTextElementMatch.Same : TargetAppTextElementMatch.Different; }
         finally { Release(focused); }
     }
-    private TargetAppTextObservation? Read(IUIAutomationElement element, IntPtr target, int limit)
+    private TargetAppTextObservation? Read(IUIAutomationElement element, IntPtr target, int limit, bool verified = false)
     {
-        if (!BelongsToTarget(element, target) || element.CurrentIsPassword != 0 || element.CurrentIsEnabled == 0 ||
+        if (!verified && !BelongsToTarget(element, target) || element.CurrentIsPassword != 0 || element.CurrentIsEnabled == 0 ||
             element.CurrentControlType is not (50004 or 50030) || element.CurrentIsOffscreen != 0) return null;
         var shortcut = element.CurrentAcceleratorKey ?? "";
         if (shortcut.Contains("Ctrl+L", StringComparison.OrdinalIgnoreCase) || shortcut.Contains("Alt+D", StringComparison.OrdinalIgnoreCase) ||

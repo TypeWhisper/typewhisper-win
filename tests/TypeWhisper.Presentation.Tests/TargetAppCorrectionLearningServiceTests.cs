@@ -535,6 +535,34 @@ public sealed class TargetAppCorrectionLearningServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task TrackInsertionAsync_ASlowTargetAppIsReadLessOftenAndOnlyForThirtySeconds()
+    {
+        // Each poll makes the target app answer for two seconds.
+        var clock = new ManualClock();
+        var observer = new FakeTargetTextObserver { OnPoll = () => clock.Advance(TimeSpan.FromSeconds(2)) };
+        var delays = new List<TimeSpan>();
+        var service = new TargetAppCorrectionLearningService(
+            _dictionary.LearnCorrections,
+            observer,
+            new FakeCommitObserver([]),
+            pollSchedule: null,
+            delayAsync: (delay, _) =>
+            {
+                delays.Add(delay);
+                clock.Advance(delay);
+                return Task.CompletedTask;
+            },
+            time: clock);
+
+        var learned = await service.TrackInsertionAsync("teh", Observation("hello teh world"));
+
+        Assert.Equal(TargetAppCorrectionLearningOutcomeKind.NoCommitBeforeTimeout, learned.Outcome);
+        Assert.All(delays.Skip(1), delay => Assert.True(delay >= TimeSpan.FromSeconds(2)));
+        Assert.True(observer.FocusedElementMatchCalls <= 8, $"{observer.FocusedElementMatchCalls} polls");
+        Assert.True(clock.Elapsed <= TimeSpan.FromSeconds(34), $"{clock.Elapsed} observed");
+    }
+
+    [Fact]
     public async Task TrackInsertionAsync_SkipsDuplicateExistingCorrection()
     {
         _dictionary.LearnCorrection("teh", "THE");
@@ -688,11 +716,23 @@ public sealed class TargetAppCorrectionLearningServiceTests : IDisposable
             return Recaptures.Count > 0 ? Recaptures.Dequeue() : baseline;
         }
 
+        public Action? OnPoll { get; init; }
+
         public TargetAppTextElementMatch GetFocusedElementMatch(TargetAppTextObservation baseline)
         {
             FocusedElementMatchCalls++;
+            OnPoll?.Invoke();
             return Matches.Count > 0 ? Matches.Dequeue() : TargetAppTextElementMatch.Same;
         }
+    }
+
+    private sealed class ManualClock : TimeProvider
+    {
+        private long _ticks;
+        public TimeSpan Elapsed => TimeSpan.FromTicks(_ticks);
+        public void Advance(TimeSpan by) => _ticks += by.Ticks;
+        public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+        public override long GetTimestamp() => _ticks;
     }
 
     private sealed class FakeCommitObserver : ITargetAppCorrectionCommitObserver

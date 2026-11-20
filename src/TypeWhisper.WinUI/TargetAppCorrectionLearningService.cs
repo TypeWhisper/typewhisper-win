@@ -185,6 +185,10 @@ public sealed class TargetAppCorrectionLearningService
     private readonly ITargetAppCorrectionCommitObserver _commitObserver;
     private readonly IReadOnlyList<TimeSpan> _pollSchedule;
     private readonly Func<TimeSpan, CancellationToken, Task> _delayAsync;
+    private readonly TimeProvider _time;
+    // The whole observation ends after the scheduled time, however long the reads of a slow target app take. A schedule
+    // without waits sets no limit.
+    private readonly TimeSpan _observationLimit;
     private readonly SemaphoreSlim _trackingGate = new(1, 1);
     private readonly object _outcomeLock = new();
     private long _currentAttemptId;
@@ -215,13 +219,16 @@ public sealed class TargetAppCorrectionLearningService
         ITargetAppTextObserver textObserver,
         ITargetAppCorrectionCommitObserver commitObserver,
         IReadOnlyList<TimeSpan>? pollSchedule = null,
-        Func<TimeSpan, CancellationToken, Task>? delayAsync = null)
+        Func<TimeSpan, CancellationToken, Task>? delayAsync = null,
+        TimeProvider? time = null)
     {
         _learn = learn;
         _textObserver = textObserver;
         _commitObserver = commitObserver;
         _pollSchedule = pollSchedule is { Count: > 0 } ? pollSchedule : DefaultPollSchedule;
         _delayAsync = delayAsync ?? Task.Delay;
+        _time = time ?? TimeProvider.System;
+        _observationLimit = _pollSchedule.Aggregate(TimeSpan.Zero, (sum, delay) => sum + delay);
     }
 
     /// <summary>
@@ -301,56 +308,71 @@ public sealed class TargetAppCorrectionLearningService
         try
         {
             var lastObserved = baseline;
+            var started = _time.GetTimestamp();
+            var pollCost = TimeSpan.Zero;
             foreach (var pollDelay in _pollSchedule)
             {
-                await _delayAsync(pollDelay, cancellationToken).ConfigureAwait(false);
+                if (_observationLimit > TimeSpan.Zero && _time.GetElapsedTime(started) >= _observationLimit)
+                    break;
+
+                // Each read makes the target app answer through UI Automation. When it answers slowly, wait at least as
+                // long as the last poll took, so the reads never take more than half of its time.
+                await _delayAsync(pollCost > pollDelay ? pollCost : pollDelay, cancellationToken).ConfigureAwait(false);
                 cancellationToken.ThrowIfCancellationRequested();
 
                 if (_commitObserver.ConsumeCommitSignal())
                     return EvaluateCurrentObservation(insertedText, baseline, lastObserved);
 
-                var focusMatch = _textObserver.GetFocusedElementMatch(baseline);
-                if (focusMatch == TargetAppTextElementMatch.Same)
+                var pollStarted = _time.GetTimestamp();
+                try
                 {
-                    var current = TryRecaptureSameElement(baseline);
-                    if (current is not null)
+                    var focusMatch = _textObserver.GetFocusedElementMatch(baseline);
+                    if (focusMatch == TargetAppTextElementMatch.Same)
                     {
-                        var commitResult = EvaluateSameElementLineBreakCommit(
-                            insertedText,
-                            baseline.Value,
-                            lastObserved.Value,
-                            current.Value);
-                        if (commitResult is not null)
-                            return commitResult;
+                        var current = TryRecaptureSameElement(baseline);
+                        if (current is not null)
+                        {
+                            var commitResult = EvaluateSameElementLineBreakCommit(
+                                insertedText,
+                                baseline.Value,
+                                lastObserved.Value,
+                                current.Value);
+                            if (commitResult is not null)
+                                return commitResult;
 
-                        lastObserved = current;
-                    }
-
-                    continue;
-                }
-
-                if (focusMatch == TargetAppTextElementMatch.Unavailable)
-                    continue;
-
-                if (focusMatch == TargetAppTextElementMatch.Different)
-                {
-                    if (baseline.AllowElementKeyChangeOnCommit)
-                    {
-                        if (TryRecaptureCommittedElement(baseline) is { } current)
                             lastObserved = current;
+                        }
 
                         continue;
                     }
 
-                    return EvaluateCurrentObservation(insertedText, baseline, lastObserved);
-                }
+                    if (focusMatch == TargetAppTextElementMatch.Unavailable)
+                        continue;
 
-                var result = EvaluateCurrentObservation(insertedText, baseline, lastObserved);
-                if (result.Outcome == TargetAppCorrectionLearningOutcomeKind.Learned ||
-                    !baseline.AllowElementKeyChangeOnCommit ||
-                    focusMatch == TargetAppTextElementMatch.DifferentWindow)
+                    if (focusMatch == TargetAppTextElementMatch.Different)
+                    {
+                        if (baseline.AllowElementKeyChangeOnCommit)
+                        {
+                            if (TryRecaptureCommittedElement(baseline) is { } current)
+                                lastObserved = current;
+
+                            continue;
+                        }
+
+                        return EvaluateCurrentObservation(insertedText, baseline, lastObserved);
+                    }
+
+                    var result = EvaluateCurrentObservation(insertedText, baseline, lastObserved);
+                    if (result.Outcome == TargetAppCorrectionLearningOutcomeKind.Learned ||
+                        !baseline.AllowElementKeyChangeOnCommit ||
+                        focusMatch == TargetAppTextElementMatch.DifferentWindow)
+                    {
+                        return result;
+                    }
+                }
+                finally
                 {
-                    return result;
+                    pollCost = _time.GetElapsedTime(pollStarted);
                 }
             }
         }
