@@ -58,7 +58,8 @@ internal sealed class WinUIModuleHost : IModuleHost
             AppDiagnostics.WriteFailure);
         _managedPolicy = new ModuleManagedPolicyReading(() => WinUIManagedPolicy.Current, WinUIManagedPolicy.RequestRefresh,
             listener => WinUIManagedPolicy.Changed += listener, listener => WinUIManagedPolicy.Changed -= listener, Post, AppDiagnostics.WriteFailure);
-        PremiumAccessReading = new ModulePremiumAccessReading(PremiumView.Access, () => ShowPremiumAccess?.Invoke(), Post, AppDiagnostics.WriteFailure);
+        PremiumAccessReading = new ModulePremiumAccessReading(PremiumView.Access, () => ShowPremiumAccess?.Invoke(), Post, AppDiagnostics.WriteFailure,
+            () => WinUIPremiumAccount.SignedEntitlement);
         UserData = new ModuleUserDataLifecycle(WinUIProfile.DataPath(ModuleUserDataLifecycle.FolderName), AppDiagnostics.WriteFailure);
         AudioDiarization = new ModuleAudioDiarization(new(
             () => plugins.DiarizationProviders.Select(ToModuleProvider).ToArray(),

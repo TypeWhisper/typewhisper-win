@@ -18,6 +18,8 @@ internal static class WinUIPremiumAccount
     internal static bool SignedIn => _client?.SignedIn == true;
     internal static bool Premium => _client?.HasActiveEntitlement == true && SignedIn;
     internal static bool Waiting => _callback is not null;
+    // The verified envelope as the server signed it, for modules that check it themselves.
+    internal static string? SignedEntitlement => SignedIn ? _client?.Entitlement?.Signature : null;
     internal static string Status { get; private set; } = Loc.T("Sign in to manage your TypeWhisper Premium account.");
     internal static event Action? Changed;
     private static string SessionPath => WinUIProfile.DataPath("premium-account.dat");

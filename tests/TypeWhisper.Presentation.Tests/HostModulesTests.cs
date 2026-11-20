@@ -88,7 +88,7 @@ public sealed class HostModulesTests
     [Theory]
     [InlineData(2, 0)]
     [InlineData(0, 9)]
-    [InlineData(1, 2)]
+    [InlineData(1, 3)]
     public void ModulesRequiringAnUnsupportedVersionAreNotCreated(int major, int minor)
     {
         var required = new ModuleKitVersion(major, minor);

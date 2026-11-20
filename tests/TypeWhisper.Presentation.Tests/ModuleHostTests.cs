@@ -624,7 +624,7 @@ public sealed class ModulePremiumAndUserDataTests
     {
         var access = new PremiumAccessState(Path.Join(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "absent.txt"),
             () => new PremiumAccess(commercial, premium, signedIn));
-        var reading = new ModulePremiumAccessReading(access, () => { }, action => action(), (stage, _) => Assert.Fail(stage));
+        var reading = new ModulePremiumAccessReading(access, () => { }, action => action(), (stage, _) => Assert.Fail(stage), () => null);
 
         Assert.Equal(any, reading.HasPremiumAccess);
         Assert.Equal(any, reading.Meets(ModulePremiumRequirement.CommercialOrPremium));
@@ -638,7 +638,7 @@ public sealed class ModulePremiumAndUserDataTests
     {
         var access = new PremiumAccessState(Path.Join(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "absent.txt"), () => new PremiumAccess());
         var shown = 0;
-        var reading = new ModulePremiumAccessReading(access, () => shown++, action => action(), (stage, _) => Assert.Fail(stage));
+        var reading = new ModulePremiumAccessReading(access, () => shown++, action => action(), (stage, _) => Assert.Fail(stage), () => null);
         var calls = 0;
 
         var subscription = reading.ObserveChanges(() => calls++);
@@ -649,6 +649,18 @@ public sealed class ModulePremiumAndUserDataTests
 
         Assert.Equal(1, calls);
         Assert.Equal(1, shown);
+    }
+
+    [Fact]
+    public void TheSignedAccountEntitlementIsReadWhenAsked()
+    {
+        var access = new PremiumAccessState(Path.Join(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "absent.txt"), () => new PremiumAccess());
+        string? signed = null;
+        var reading = new ModulePremiumAccessReading(access, () => { }, action => action(), (stage, _) => Assert.Fail(stage), () => signed);
+
+        Assert.Null(reading.SignedAccountEntitlement);
+        signed = "claims.signature";
+        Assert.Equal("claims.signature", reading.SignedAccountEntitlement);
     }
 
     [Theory]

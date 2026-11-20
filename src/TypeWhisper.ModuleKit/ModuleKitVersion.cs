@@ -10,7 +10,7 @@ namespace TypeWhisper.ModuleKit;
 public readonly record struct ModuleKitVersion(int Major, int Minor) : IComparable<ModuleKitVersion>
 {
     /// <summary>The version this assembly provides.</summary>
-    public static ModuleKitVersion Current { get; } = new(1, 1);
+    public static ModuleKitVersion Current { get; } = new(1, 2);
 
     /// <summary>Whether modules written against <paramref name="required"/> can run against this version.</summary>
     public bool Supports(ModuleKitVersion required) => Major == required.Major && Minor >= required.Minor;
