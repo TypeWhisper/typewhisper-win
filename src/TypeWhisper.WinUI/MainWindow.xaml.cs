@@ -51,6 +51,8 @@ public sealed partial class MainWindow : Window
         // Settings can open during startup; Sync & backup then waits with automatic sync for the access checks below.
         // Set before anything that can fail, so a failed start also holds sync until its license check has finished.
         WinUICloudSync.AwaitStartupChecks = true;
+        // Also before anything that can fail: after a failed start, the hourly check still refreshes the account.
+        StartDailyAccountRefresh();
         try
         {
             _dictationInput = new(
@@ -213,6 +215,7 @@ public sealed partial class MainWindow : Window
     {
         SuppressStartupWhatsNew();
         _closing = true;
+        StopDailyAccountRefresh();
         _hotkeyRecovery?.Dispose();
         await StopWorkflowShortcutsAsync();
         DisposeShortcutRegistrations();

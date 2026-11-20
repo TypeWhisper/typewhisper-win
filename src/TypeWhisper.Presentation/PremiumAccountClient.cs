@@ -14,21 +14,23 @@ namespace TypeWhisper.Presentation;
 /// <param name="IsLifetime">Whether access is lifetime.</param>
 /// <param name="ExpiresAt">Optional access expiry.</param>
 /// <param name="DeviceLimit">Optional device limit.</param>
-/// <param name="VerifiedAt">Server verification time.</param>
+/// <param name="VerifiedAt">When the server last confirmed the purchase; stays old for a lifetime license.</param>
 /// <param name="Signature">Signed payload and P256 signature in base64url.</param>
+/// <param name="IssuedAt">When the server signed these claims; missing in envelopes signed before it was added.</param>
 public sealed record PremiumAccountEntitlement(string Status, string Tier, string Source, bool IsLifetime,
-    DateTimeOffset? ExpiresAt, int? DeviceLimit, DateTimeOffset VerifiedAt, string? Signature)
+    DateTimeOffset? ExpiresAt, int? DeviceLimit, DateTimeOffset VerifiedAt, string? Signature, DateTimeOffset? IssuedAt = null)
 {
     /// <summary>Whether verified claims currently permit access.</summary>
     public bool IsActive => (Status is "active" or "granted") && (ExpiresAt is null || ExpiresAt > DateTimeOffset.UtcNow);
 
     /// <summary>
-    /// Whether the claims permit access at <paramref name="now"/>. Claims verified longer than
-    /// <see cref="PremiumAccountClient.OfflineAllowance"/> ago count only while no refresh has failed since.
+    /// Whether the claims permit access at <paramref name="now"/>. Claims signed longer than
+    /// <see cref="PremiumAccountClient.OfflineAllowance"/> ago count only while no refresh has failed since. Envelopes
+    /// without <see cref="IssuedAt"/> fall back to <see cref="VerifiedAt"/>.
     /// </summary>
     public bool IsActiveAt(DateTimeOffset now, bool refreshFailed) =>
         (Status is "active" or "granted") && (ExpiresAt is null || ExpiresAt > now) &&
-        !(refreshFailed && now - VerifiedAt > PremiumAccountClient.OfflineAllowance);
+        !(refreshFailed && now - (IssuedAt ?? VerifiedAt) > PremiumAccountClient.OfflineAllowance);
 }
 
 // The same browser/PKCE exchange and signed entitlement envelope used by macOS.
@@ -37,7 +39,7 @@ public sealed class PremiumAccountClient
 {
     /// <summary>Pinned P256 public key shared with the Mac client.</summary>
     public const string ProductionKey = "8ZwFh+yrpkZZ1VsZgjpZcOz2h3jKpGG93MTdRaCPqXFn/Loqh8u36hB9FLho+ozwuHbaNeoN1MxM2/AJKyBNvQ==";
-    /// <summary>How long verified access lasts once refreshing it fails, counted from the server's verification time.</summary>
+    /// <summary>How long verified access lasts once refreshing it fails, counted from when the server signed it.</summary>
     public static readonly TimeSpan OfflineAllowance = TimeSpan.FromDays(30);
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private readonly HttpClient _http;
@@ -51,7 +53,7 @@ public sealed class PremiumAccountClient
     public PremiumAccountEntitlement? Entitlement { get; private set; }
     /// <summary>
     /// Whether the verified entitlement grants Premium now. A copy of an old envelope, or a device that stays
-    /// offline, keeps access only until a refresh fails more than <see cref="OfflineAllowance"/> after verification.
+    /// offline, keeps access only until a refresh fails more than <see cref="OfflineAllowance"/> after it was signed.
     /// </summary>
     public bool HasActiveEntitlement => Entitlement?.IsActiveAt(DateTimeOffset.UtcNow, _refreshFailed) == true;
     /// <summary>Whether an account token is loaded.</summary>
