@@ -424,6 +424,15 @@ public sealed class TargetAppCorrectionLearningService
         }
 
         var extraction = ExtractSuggestions(insertedText, baseline.Value, current.Value);
+        // A chat field empties when Enter sends it, so the field read after the commit no longer holds the edit. The
+        // last read before the commit still does.
+        if (extraction.Outcome is not null && !ReferenceEquals(current, fallbackObservation) &&
+            !string.Equals(fallbackObservation.Value, baseline.Value, StringComparison.Ordinal) &&
+            ExtractSuggestions(insertedText, baseline.Value, fallbackObservation.Value) is { Outcome: null } beforeCommit)
+        {
+            extraction = beforeCommit;
+        }
+
         return extraction.Outcome is { } outcome
             ? Result(outcome)
             : Learn(extraction.Suggestions);

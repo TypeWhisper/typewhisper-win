@@ -61,6 +61,25 @@ public sealed class TargetAppCorrectionLearningServiceTests : IDisposable
         Assert.Empty(result.LearnedCorrections);
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("\r\n")]
+    public async Task TrackInsertionAsync_LearnsFromTheLastReadWhenEnterSendsAndEmptiesTheField(string afterSend)
+    {
+        // The poll sees the edit; Enter then sends the chat message and the field is empty when the commit is read.
+        var observer = new FakeTargetTextObserver();
+        var baseline = Observation("hello teh world");
+        observer.Recaptures.Enqueue(Observation("hello the world"));
+        observer.Recaptures.Enqueue(Observation(afterSend));
+        var service = CreateService(observer, new FakeCommitObserver([false, true]), polls: 2);
+
+        var learned = await service.TrackInsertionAsync("teh", baseline);
+
+        var correction = Assert.Single(learned);
+        Assert.Equal("teh", correction.Original);
+        Assert.Equal("the", correction.Replacement);
+    }
+
     [Fact]
     public async Task TrackInsertionAsync_DoesNotQueryFocusedElementWhenCommitSignalRecaptures()
     {
