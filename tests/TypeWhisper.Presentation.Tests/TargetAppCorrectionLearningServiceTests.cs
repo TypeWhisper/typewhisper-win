@@ -81,6 +81,22 @@ public sealed class TargetAppCorrectionLearningServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task TrackInsertionAsync_KeepsTheVerdictOfAFieldThatStillHoldsText()
+    {
+        // A poll sees one edit, the user edits on, and the committed text is ambiguous: nothing is learned from the poll.
+        var observer = new FakeTargetTextObserver();
+        var baseline = Observation("hello teh world");
+        observer.Recaptures.Enqueue(Observation("hello ten world"));
+        observer.Recaptures.Enqueue(Observation("hello the new world"));
+        var service = CreateService(observer, new FakeCommitObserver([false, true]), polls: 2);
+
+        var learned = await service.TrackInsertionAsync("teh", baseline);
+
+        Assert.Empty(learned);
+        Assert.Empty(_dictionary.Entries);
+    }
+
+    [Fact]
     public async Task TrackInsertionAsync_DoesNotQueryFocusedElementWhenCommitSignalRecaptures()
     {
         var observer = new FakeTargetTextObserver();
@@ -578,7 +594,8 @@ public sealed class TargetAppCorrectionLearningServiceTests : IDisposable
         Assert.Equal(TargetAppCorrectionLearningOutcomeKind.NoCommitBeforeTimeout, learned.Outcome);
         Assert.All(delays.Skip(1), delay => Assert.True(delay >= TimeSpan.FromSeconds(2)));
         Assert.True(observer.FocusedElementMatchCalls <= 8, $"{observer.FocusedElementMatchCalls} polls");
-        Assert.True(clock.Elapsed <= TimeSpan.FromSeconds(34), $"{clock.Elapsed} observed");
+        // No read starts after 30 seconds, and the last one ends within one poll of it.
+        Assert.True(clock.Elapsed <= TimeSpan.FromSeconds(32), $"{clock.Elapsed} observed");
     }
 
     [Fact]

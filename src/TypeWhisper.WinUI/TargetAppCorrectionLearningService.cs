@@ -186,8 +186,7 @@ public sealed class TargetAppCorrectionLearningService
     private readonly IReadOnlyList<TimeSpan> _pollSchedule;
     private readonly Func<TimeSpan, CancellationToken, Task> _delayAsync;
     private readonly TimeProvider _time;
-    // The whole observation ends after the scheduled time, however long the reads of a slow target app take. A schedule
-    // without waits sets no limit.
+    // The whole observation ends after the scheduled time, however long the reads of a slow target app take.
     private readonly TimeSpan _observationLimit;
     private readonly SemaphoreSlim _trackingGate = new(1, 1);
     private readonly object _outcomeLock = new();
@@ -312,13 +311,19 @@ public sealed class TargetAppCorrectionLearningService
             var pollCost = TimeSpan.Zero;
             foreach (var pollDelay in _pollSchedule)
             {
-                if (_observationLimit > TimeSpan.Zero && _time.GetElapsedTime(started) >= _observationLimit)
+                var remaining = RemainingObservation(started);
+                if (remaining <= TimeSpan.Zero)
                     break;
 
                 // Each read makes the target app answer through UI Automation. When it answers slowly, wait at least as
-                // long as the last poll took, so the reads never take more than half of its time.
-                await _delayAsync(pollCost > pollDelay ? pollCost : pollDelay, cancellationToken).ConfigureAwait(false);
+                // long as the last poll took, so the reads never take more than half of its time; never past the limit.
+                var delay = pollCost > pollDelay ? pollCost : pollDelay;
+                await _delayAsync(delay < remaining ? delay : remaining, cancellationToken).ConfigureAwait(false);
                 cancellationToken.ThrowIfCancellationRequested();
+
+                // An expired observation starts no further read of the target app.
+                if (RemainingObservation(started) <= TimeSpan.Zero)
+                    break;
 
                 if (_commitObserver.ConsumeCommitSignal())
                     return EvaluateCurrentObservation(insertedText, baseline, lastObserved);
@@ -388,6 +393,10 @@ public sealed class TargetAppCorrectionLearningService
         return Result(TargetAppCorrectionLearningOutcomeKind.NoCommitBeforeTimeout);
     }
 
+    // A schedule without waits, as in tests, sets no limit.
+    private TimeSpan RemainingObservation(long started) =>
+        _observationLimit > TimeSpan.Zero ? _observationLimit - _time.GetElapsedTime(started) : TimeSpan.MaxValue;
+
     /// <summary>
     /// Raises the same commit signal that an observed Enter or Tab key press would produce.
     /// </summary>
@@ -425,8 +434,8 @@ public sealed class TargetAppCorrectionLearningService
 
         var extraction = ExtractSuggestions(insertedText, baseline.Value, current.Value);
         // A chat field empties when Enter sends it, so the field read after the commit no longer holds the edit. The
-        // last read before the commit still does.
-        if (extraction.Outcome is not null && !ReferenceEquals(current, fallbackObservation) &&
+        // last read before the commit still does. A field that still holds text keeps its own, more recent, verdict.
+        if (extraction.Outcome is not null && !ReferenceEquals(current, fallbackObservation) && string.IsNullOrWhiteSpace(current.Value) &&
             !string.Equals(fallbackObservation.Value, baseline.Value, StringComparison.Ordinal) &&
             ExtractSuggestions(insertedText, baseline.Value, fallbackObservation.Value) is { Outcome: null } beforeCommit)
         {
