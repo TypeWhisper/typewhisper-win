@@ -434,8 +434,8 @@ public sealed class TargetAppCorrectionLearningService
 
         var extraction = ExtractSuggestions(insertedText, baseline.Value, current.Value);
         // A chat field empties when Enter sends it, so the field read after the commit no longer holds the edit. The
-        // last read before the commit still does. A field that still holds text keeps its own, more recent, verdict.
-        if (extraction.Outcome is not null && !ReferenceEquals(current, fallbackObservation) && string.IsNullOrWhiteSpace(current.Value) &&
+        // last read before the commit still does. A field that still holds the text keeps its own, more recent, verdict.
+        if (extraction.Outcome is not null && !ReferenceEquals(current, fallbackObservation) && WasEmptied(current.Value, fallbackObservation.Value) &&
             !string.Equals(fallbackObservation.Value, baseline.Value, StringComparison.Ordinal) &&
             ExtractSuggestions(insertedText, baseline.Value, fallbackObservation.Value) is { Outcome: null } beforeCommit)
         {
@@ -469,6 +469,22 @@ public sealed class TargetAppCorrectionLearningService
             current.WindowHandle == baseline.WindowHandle
                 ? current
                 : null;
+    }
+
+    /// <summary>
+    /// Whether a field no longer holds the text it had: empty, or only a placeholder. Edge reads an emptied text area
+    /// as its label, such as "Message", which shares no word of three or more letters with what the field held.
+    /// </summary>
+    internal static bool WasEmptied(string current, string before)
+    {
+        if (string.IsNullOrWhiteSpace(current))
+            return true;
+
+        var held = Words(before).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return held.Count > 0 && !Words(current).Any(held.Contains);
+
+        static IEnumerable<string> Words(string text) =>
+            System.Text.RegularExpressions.Regex.Matches(text, @"[\p{L}\p{N}]{3,}").Select(match => match.Value);
     }
 
     private static SuggestionExtraction ExtractSuggestions(

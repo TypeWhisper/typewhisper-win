@@ -64,6 +64,9 @@ public sealed class TargetAppCorrectionLearningServiceTests : IDisposable
     [Theory]
     [InlineData("")]
     [InlineData("\r\n")]
+    // Edge reads an emptied text area as its label.
+    [InlineData("Message")]
+    [InlineData("Type a message")]
     public async Task TrackInsertionAsync_LearnsFromTheLastReadWhenEnterSendsAndEmptiesTheField(string afterSend)
     {
         // The poll sees the edit; Enter then sends the chat message and the field is empty when the commit is read.
@@ -79,6 +82,16 @@ public sealed class TargetAppCorrectionLearningServiceTests : IDisposable
         Assert.Equal("teh", correction.Original);
         Assert.Equal("the", correction.Replacement);
     }
+
+    [Theory]
+    [InlineData("", "hello the world", true)]
+    [InlineData("Message", "This is a short tesst of the cable.", true)]
+    [InlineData("hello the new world", "hello ten world", false)]
+    [InlineData("hello the world.", "hello the world", false)]
+    // Without a word of three letters to compare, only an empty field counts as emptied.
+    [InlineData("ok", "a b", false)]
+    public void WasEmptied_TellsAnEmptiedFieldFromAnEditedOne(string current, string before, bool emptied)
+        => Assert.Equal(emptied, TargetAppCorrectionLearningService.WasEmptied(current, before));
 
     [Fact]
     public async Task TrackInsertionAsync_KeepsTheVerdictOfAFieldThatStillHoldsText()
