@@ -172,11 +172,13 @@ internal static class OpenAiRealtimeSpeech
     {
         if (ws.State != WebSocketState.Open)
             return;
+        // A stalled write must not hold the result back: give up after two seconds.
+        using var closeTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
         try
         {
-            await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
+            await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, null, closeTimeout.Token);
         }
-        catch (Exception ex) when (ex is WebSocketException or InvalidOperationException or IOException)
+        catch (Exception ex) when (ex is WebSocketException or InvalidOperationException or IOException or OperationCanceledException)
         {
             System.Diagnostics.Debug.WriteLine("OpenAI speech close failed: " + ex.GetType().Name);
         }

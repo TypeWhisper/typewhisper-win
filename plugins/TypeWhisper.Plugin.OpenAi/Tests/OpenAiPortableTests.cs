@@ -245,6 +245,16 @@ public partial class OpenAiPluginTests
     }
 
     [Fact]
+    public async Task AStalledCloseFrameDoesNotHoldBackTheAudio()
+    {
+        var socket = new SpeechSocketFixture(SpeechSocketFixture.Audio([1, 2]), SpeechSocketFixture.Done) { HangOnClose = true };
+        var pcm = await OpenAiRealtimeSpeech.SynthesizeAsync(
+            _ => Task.FromResult<System.Net.WebSockets.WebSocket>(socket), "Hallo", "marin", null, default).WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Equal(new byte[] { 1, 2 }, pcm);
+        Assert.True(socket.Disposed);
+    }
+
+    [Fact]
     public async Task SpeechRejectsMalformedEventsAndCancels()
     {
         await Assert.ThrowsAsync<InvalidDataException>(() => OpenAiRealtimeSpeech.SynthesizeAsync(

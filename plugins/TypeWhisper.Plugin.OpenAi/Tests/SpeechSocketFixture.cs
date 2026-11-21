@@ -31,8 +31,13 @@ internal sealed class SpeechSocketFixture : WebSocket
     public override void Dispose() { Disposed = true; _state = WebSocketState.Closed; }
     public override Task CloseAsync(WebSocketCloseStatus closeStatus, string? statusDescription, CancellationToken cancellationToken)
     { _state = WebSocketState.Closed; return Task.CompletedTask; }
-    public override Task CloseOutputAsync(WebSocketCloseStatus closeStatus, string? statusDescription, CancellationToken cancellationToken)
-    { _state = WebSocketState.CloseSent; return Task.CompletedTask; }
+    public bool HangOnClose { get; init; }
+
+    public override async Task CloseOutputAsync(WebSocketCloseStatus closeStatus, string? statusDescription, CancellationToken cancellationToken)
+    {
+        if (HangOnClose) await Task.Delay(Timeout.Infinite, cancellationToken);
+        _state = WebSocketState.CloseSent;
+    }
 
     public override Task SendAsync(ArraySegment<byte> buffer, WebSocketMessageType messageType, bool endOfMessage, CancellationToken cancellationToken)
     {
