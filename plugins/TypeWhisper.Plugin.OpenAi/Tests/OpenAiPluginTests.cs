@@ -97,6 +97,33 @@ public partial class OpenAiPluginTests
     }
 
     [Fact]
+    public async Task RunningPluginDropsBuiltInModelsWhenTheShutdownDatePasses()
+    {
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "sk-test";
+        host.SetSetting("selectedModel", "whisper-1");
+        var clock = new MovingClock(new(2027, 2, 25, 23, 59, 0, TimeSpan.Zero));
+
+        var sut = CreateOfflinePlugin(clock);
+        await sut.ActivateAsync(host);
+        Assert.Equal("whisper-1", sut.SelectedModelId);
+        Assert.True(sut.SupportsTranslation);
+
+        clock.Now = new(2027, 2, 26, 0, 1, 0, TimeSpan.Zero);
+
+        Assert.Equal("gpt-transcribe", sut.SelectedModelId);
+        Assert.False(sut.SupportsTranslation);
+        Assert.DoesNotContain(sut.TranscriptionModels, model => model.Id == "whisper-1");
+        Assert.Equal("whisper-1", host.GetSetting<string>("selectedModel"));
+    }
+
+    private sealed class MovingClock(DateTimeOffset now) : TimeProvider
+    {
+        public DateTimeOffset Now { get; set; } = now;
+        public override DateTimeOffset GetUtcNow() => Now;
+    }
+
+    [Fact]
     public async Task FetchedCatalogKeepsListedModelsAfterTheirShutdownDate()
     {
         var host = new TestPluginHostServices();

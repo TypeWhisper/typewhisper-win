@@ -75,8 +75,6 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
     private string? _preferredTranscriptionModelId;
     private IPluginHostServices? _host;
     private string? _apiKey;
-    private string? _selectedModelId;
-    private string? _selectedApiModelName;
     private string? _selectedVoiceId;
     private string _ttsInstructions = "";
     private string _reasoningEffort = "medium";
@@ -327,7 +325,7 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
     /// <summary>
     /// Gets the currently selected provider model identifier.
     /// </summary>
-    public string? SelectedModelId => _selectedModelId;
+    public string? SelectedModelId => SelectedModelEntry?.Id;
 
     /// <summary>
     /// Gets whether the provider supports translation requests.
@@ -389,7 +387,7 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
         string? prompt,
         CancellationToken ct)
     {
-        if (!IsConfigured || _selectedApiModelName is null || SelectedModelEntry is not { } entry)
+        if (!IsConfigured || SelectedModelEntry is not { } entry)
             throw new InvalidOperationException("Plugin not configured. API key and model required.");
 
         if (translate && !entry.SupportsTranslation)
@@ -1336,9 +1334,10 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
                 .ToList()
             : FallbackChatGptModels;
 
+    // Resolved on every use, so a built-in model that reaches its shutdown date while the app runs
+    // falls back without waiting for a catalog fetch.
     private TranscriptionModelEntry? SelectedModelEntry =>
-        AvailableTranscriptionModelEntries.FirstOrDefault(model =>
-            string.Equals(model.Id, _selectedModelId, StringComparison.OrdinalIgnoreCase));
+        AvailableTranscriptionModelEntries.Count == 0 ? null : ResolveTranscriptionModel(_preferredTranscriptionModelId);
 
     // A selection the user makes: it is saved and becomes the choice that later lists resolve.
     private void SelectModelCore(string modelId)
@@ -1346,14 +1345,12 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
         if (AvailableTranscriptionModelEntries.Count == 0)
         {
             _host?.SetSetting<string?>(SelectedModelSettingName, null);
-            _preferredTranscriptionModelId = _selectedModelId = _selectedApiModelName = null;
+            _preferredTranscriptionModelId = null;
             return;
         }
         var entry = ResolveTranscriptionModel(modelId);
         _host?.SetSetting(SelectedModelSettingName, entry.Id);
         _preferredTranscriptionModelId = entry.Id;
-        _selectedModelId = entry.Id;
-        _selectedApiModelName = entry.ApiModelName;
     }
 
     /// <summary>
@@ -1379,19 +1376,8 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
             .ThenBy(model => IsBaseTranscriptionModel(model.Id) ? 0 : 1)
             .ThenBy(model => model.Id, StringComparer.Ordinal)
             .ToList();
-        _availableTranscriptionModelEntries = _hasFetchedApiCatalog || discoveredModels.Count > 0
-            ? discoveredModels
-            : BuiltInTranscriptionModelEntries;
-
-        if (AvailableTranscriptionModelEntries.Count == 0)
-        {
-            _selectedModelId = _selectedApiModelName = null;
-            return;
-        }
-
-        var entry = ResolveTranscriptionModel(_preferredTranscriptionModelId);
-        _selectedModelId = entry.Id;
-        _selectedApiModelName = entry.ApiModelName;
+        // Without a fetched or cached list, AvailableTranscriptionModelEntries reads the dated built-in list live.
+        _availableTranscriptionModelEntries = discoveredModels;
     }
 
     private static TranscriptionModelEntry? CreateDiscoveredTranscriptionModelEntry(string modelId)
