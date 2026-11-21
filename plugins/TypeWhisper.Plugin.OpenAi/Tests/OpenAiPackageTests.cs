@@ -52,7 +52,7 @@ public partial class OpenAiPluginTests
                 });
                 await registry.RefreshCapabilitiesAsync();
                 Assert.True(Assert.Single(registry.LlmProviders).Ready);
-                Assert.Equal(13, Assert.Single(registry.TtsProviders).Voices.Count);
+                Assert.Equal(10, Assert.Single(registry.TtsProviders).Voices.Count);
                 await Assert.ThrowsAsync<InvalidOperationException>(() => store.InstallAsync(entry));
                 Assert.Equal(firstPath, store.Resolve(entry.Id));
             }

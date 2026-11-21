@@ -75,6 +75,41 @@ public partial class OpenAiPluginTests
     }
 
     [Fact]
+    public async Task BuiltInFallbacks_LeaveOutShutDownModels()
+    {
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "sk-test";
+        host.SetSetting("selectedModel", "whisper-1");
+
+        var before = CreateOfflinePlugin(new TestClock(new(2027, 2, 25, 23, 59, 0, TimeSpan.Zero)));
+        await before.ActivateAsync(host);
+        var after = CreateOfflinePlugin(new TestClock(new(2027, 2, 26, 0, 0, 0, TimeSpan.Zero)));
+        await after.ActivateAsync(host);
+
+        string[] retired = ["whisper-1", "gpt-4o-transcribe", "gpt-4o-mini-transcribe"];
+        Assert.All(retired, id => Assert.Contains(before.TranscriptionModels, model => model.Id == id));
+        Assert.Equal("whisper-1", before.SelectedModelId);
+        Assert.All(retired, id => Assert.DoesNotContain(after.TranscriptionModels, model => model.Id == id));
+        Assert.Equal("gpt-transcribe", after.SelectedModelId);
+        Assert.Equal("whisper-1", host.GetSetting<string>("selectedModel"));
+        Assert.DoesNotContain(after.SupportedModels, model => model.Id is "gpt-4.1-nano" or "o4-mini");
+        Assert.Equal("gpt-5.5", after.SupportedModels.First().Id);
+    }
+
+    [Fact]
+    public async Task FetchedCatalogKeepsListedModelsAfterTheirShutdownDate()
+    {
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "sk-test";
+        host.SetSetting("fetchedTranscriptionModels", new List<OpenAiFetchedModel> { new("whisper-1", "openai"), new("gpt-transcribe", "openai") });
+
+        var sut = CreateOfflinePlugin(new TestClock(new(2027, 3, 1, 0, 0, 0, TimeSpan.Zero)));
+        await sut.ActivateAsync(host);
+
+        Assert.Contains(sut.TranscriptionModels, model => model.Id == "whisper-1");
+    }
+
+    [Fact]
     public async Task ActivateAsync_InvalidTranscriptionModelFallsBackToGPTTranscribe()
     {
         var host = new TestPluginHostServices();
@@ -144,10 +179,10 @@ public partial class OpenAiPluginTests
         var sut = CreateOfflinePlugin();
         await sut.ActivateAsync(host);
 
-        sut.SelectVoice("nova");
+        sut.SelectVoice("coral");
         sut.SelectLlmModel("gpt-4o");
 
-        Assert.Equal("nova", host.GetSetting<string>("selectedVoice"));
+        Assert.Equal("coral", host.GetSetting<string>("selectedVoice"));
         Assert.Equal("gpt-4o", host.GetSetting<OpenAiPlugin.LlmSelectionSnapshot>("llmSelection")?.ModelId);
         Assert.Equal(0, host.NotifyCapabilitiesChangedCount);
     }
@@ -596,7 +631,7 @@ public partial class OpenAiPluginTests
         host.Secrets["api-key"] = "sk-test";
         host.SetSetting("selectedModel", "whisper-1");
         var sut = new OpenAiPlugin(client, _ => new FakeTtsPlaybackSession(),
-            _ => new OpenAiTranscriptionUpload([1, 2, 3], "audio.m4a", "audio/mp4"));
+            _ => new OpenAiTranscriptionUpload([1, 2, 3], "audio.m4a", "audio/mp4"), clock: BeforeTranscriptionShutdown);
         await sut.ActivateAsync(host);
         var result = await sut.TranscribeAsync([4, 5, 6], "de", true, "Meeting planning", default);
         Assert.Equal("Tomorrow we discuss the changes.", result.Text);
@@ -638,7 +673,8 @@ public partial class OpenAiPluginTests
         var sut = new OpenAiPlugin(
             httpClient,
             _ => new FakeTtsPlaybackSession(),
-            _ => new OpenAiTranscriptionUpload([1, 2, 3], "audio.m4a", "audio/mp4"));
+            _ => new OpenAiTranscriptionUpload([1, 2, 3], "audio.m4a", "audio/mp4"),
+            clock: BeforeTranscriptionShutdown);
         await sut.ActivateAsync(host);
 
         var result = await sut.TranscribeAsync(
@@ -715,22 +751,37 @@ public partial class OpenAiPluginTests
     }
 
     [Fact]
-    public void TtsConfiguration_UsesMiniTtsPcmAndDefaultVoice()
+    public void TtsConfiguration_UsesRealtimeMiniPcmAndDefaultVoice()
     {
+        Assert.Equal("gpt-realtime-2.1-mini", OpenAiTtsConfiguration.ModelId);
+        Assert.Equal("wss://api.openai.com/v1/realtime?model=gpt-realtime-2.1-mini", OpenAiTtsConfiguration.RealtimeUri.ToString());
         Assert.Equal("marin", OpenAiTtsConfiguration.DefaultVoiceId);
-        Assert.Equal(13, OpenAiTtsConfiguration.AvailableVoices.Count);
+        Assert.Equal(10, OpenAiTtsConfiguration.AvailableVoices.Count);
         Assert.Contains(OpenAiTtsConfiguration.AvailableVoices, voice => voice.Id == "cedar");
+        Assert.DoesNotContain(OpenAiTtsConfiguration.AvailableVoices, voice => OpenAiTtsConfiguration.RetiredVoices.ContainsKey(voice.Id));
 
-        var body = OpenAiTtsConfiguration.CreateRequestBody(
-            text: "Hallo Welt",
-            voice: null,
-            instructions: "Speak calmly.");
+        using var session = JsonDocument.Parse(OpenAiTtsConfiguration.CreateSessionUpdatePayload(voice: null, instructions: "Speak calmly."));
+        var settings = session.RootElement.GetProperty("session");
+        Assert.Equal("session.update", session.RootElement.GetProperty("type").GetString());
+        Assert.Equal("realtime", settings.GetProperty("type").GetString());
+        Assert.Equal("audio", settings.GetProperty("output_modalities")[0].GetString());
+        var instructions = settings.GetProperty("instructions").GetString()!;
+        Assert.StartsWith(OpenAiTtsConfiguration.ReadAloudInstructions, instructions);
+        Assert.EndsWith("Speak calmly.", instructions);
+        var output = settings.GetProperty("audio").GetProperty("output");
+        Assert.Equal("marin", output.GetProperty("voice").GetString());
+        Assert.Equal("audio/pcm", output.GetProperty("format").GetProperty("type").GetString());
+        Assert.Equal(24_000, output.GetProperty("format").GetProperty("rate").GetInt32());
+        Assert.Equal(JsonValueKind.Null, settings.GetProperty("audio").GetProperty("input").GetProperty("turn_detection").ValueKind);
 
-        Assert.Equal("gpt-4o-mini-tts", body["model"].GetString());
-        Assert.Equal("marin", body["voice"].GetString());
-        Assert.Equal("Hallo Welt", body["input"].GetString());
-        Assert.Equal("Speak calmly.", body["instructions"].GetString());
-        Assert.Equal("pcm", body["response_format"].GetString());
+        using var withoutStyle = JsonDocument.Parse(OpenAiTtsConfiguration.CreateSessionUpdatePayload("cedar", "  "));
+        Assert.Equal(OpenAiTtsConfiguration.ReadAloudInstructions, withoutStyle.RootElement.GetProperty("session").GetProperty("instructions").GetString());
+
+        using var item = JsonDocument.Parse(OpenAiTtsConfiguration.CreateTextItemPayload("Hallo Welt"));
+        var content = item.RootElement.GetProperty("item").GetProperty("content")[0];
+        Assert.Equal("user", item.RootElement.GetProperty("item").GetProperty("role").GetString());
+        Assert.Equal("input_text", content.GetProperty("type").GetString());
+        Assert.Equal("Hallo Welt", content.GetProperty("text").GetString());
     }
 
     [Theory]
@@ -1261,9 +1312,13 @@ public partial class OpenAiPluginTests
         }
     }
 
-    private static OpenAiPlugin CreateOfflinePlugin() =>
+    // Before the built-in Whisper and GPT-4o transcription models reach their shutdown date.
+    private static readonly TimeProvider BeforeTranscriptionShutdown = new TestClock(new(2026, 11, 21, 12, 0, 0, TimeSpan.Zero));
+
+    private static OpenAiPlugin CreateOfflinePlugin(TimeProvider? clock = null) =>
         new(new HttpClient(new CapturingHandler((request, _) =>
-            throw new InvalidOperationException($"Unexpected network request to {request.RequestUri?.Host}."))));
+            throw new InvalidOperationException($"Unexpected network request to {request.RequestUri?.Host}."))),
+            clock: clock ?? BeforeTranscriptionShutdown);
 
     private static Dictionary<string, string> ParseQuery(Uri uri)
     {

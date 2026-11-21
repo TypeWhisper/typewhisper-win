@@ -130,18 +130,81 @@ public partial class OpenAiPluginTests
     public async Task SpeechUsesRequestVoiceWithoutChangingSavedVoiceAndRejectsInvalidPcm()
     {
         var host = new TestPluginHostServices(); host.Secrets["api-key"] = "fixture-key";
-        var bytes = new byte[4];
-        using var plugin = new OpenAiPlugin(new HttpClient(new CapturingHandler((_, body) =>
-        {
-            using var json = JsonDocument.Parse(body!); Assert.Equal("cedar", json.RootElement.GetProperty("voice").GetString());
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(bytes) });
-        })), _ => new FakeTtsPlaybackSession());
+        var sockets = new Queue<SpeechSocketFixture>([
+            new(SpeechSocketFixture.Audio([1, 2]), SpeechSocketFixture.Audio([3, 4]), SpeechSocketFixture.Done),
+            new(SpeechSocketFixture.Audio([0]), SpeechSocketFixture.Done)]);
+        var used = new List<SpeechSocketFixture>();
+        string? usedKey = null;
+        byte[]? played = null;
+        using var plugin = new OpenAiPlugin(new HttpClient(new CapturingHandler((_, _) => throw new InvalidOperationException("Speech must not use HTTP."))),
+            pcm => { played = pcm; return new FakeTtsPlaybackSession(); },
+            ttsSocketFactory: (key, _) => { usedKey = key; var socket = sockets.Dequeue(); used.Add(socket); return Task.FromResult<System.Net.WebSockets.WebSocket>(socket); });
         await plugin.ActivateAsync(host);
         var playback = await plugin.SpeakAsync(new("Hello") { VoiceId = "cedar" }, default);
+        Assert.Equal("fixture-key", usedKey);
+        Assert.Equal(new byte[] { 1, 2, 3, 4 }, played);
         Assert.Equal("marin", plugin.SelectedVoiceId); playback.Stop();
-        bytes = [0];
+        Assert.Equal(3, used[0].Sent.Count);
+        using (var session = JsonDocument.Parse(used[0].Sent[0]))
+            Assert.Equal("cedar", session.RootElement.GetProperty("session").GetProperty("audio").GetProperty("output").GetProperty("voice").GetString());
+        using (var item = JsonDocument.Parse(used[0].Sent[1]))
+            Assert.Equal("Hello", item.RootElement.GetProperty("item").GetProperty("content")[0].GetProperty("text").GetString());
+        Assert.Equal("""{"type":"response.create"}""", used[0].Sent[2]);
+        Assert.True(used[0].Disposed);
         await Assert.ThrowsAsync<InvalidDataException>(() => plugin.SpeakAsync(new("Hello") { VoiceId = "cedar" }, default));
+        Assert.True(used[1].Disposed);
         await Assert.ThrowsAsync<ArgumentException>(() => plugin.SpeakAsync(new(new string('x', 4001)), default));
+    }
+
+    [Theory]
+    [InlineData("nova", "Nova")]
+    [InlineData("fable", "Fable")]
+    [InlineData("onyx", "Onyx")]
+    public async Task SpeechWithARetiredVoiceFailsWithoutSwitchingVoice(string voice, string name)
+    {
+        var host = new TestPluginHostServices(); host.Secrets["api-key"] = "fixture-key";
+        var connected = false;
+        using var plugin = new OpenAiPlugin(new HttpClient(new CapturingHandler((_, _) => Task.FromResult(JsonResponse("{}")))),
+            _ => new FakeTtsPlaybackSession(),
+            ttsSocketFactory: (_, _) => { connected = true; return Task.FromResult<System.Net.WebSockets.WebSocket>(new SpeechSocketFixture()); });
+        await plugin.ActivateAsync(host);
+        var error = await Assert.ThrowsAsync<ArgumentException>(() => plugin.SpeakAsync(new("Hallo") { VoiceId = voice }, default));
+        Assert.Equal($"OpenAI no longer offers the {name} voice. Choose another voice.", error.Message);
+        Assert.False(connected);
+        await Assert.ThrowsAsync<ArgumentException>(() => plugin.SpeakAsync(new("Hallo") { VoiceId = "unknown" }, default));
+    }
+
+    [Theory]
+    [InlineData("""{"type":"error","error":{"type":"invalid_request_error","code":"invalid_api_key","message":"private payload"}}""", PluginRequestFailureKind.Authentication)]
+    [InlineData("""{"type":"error","error":{"type":"invalid_request_error","code":"rate_limit_exceeded","message":"private payload"}}""", PluginRequestFailureKind.RateLimit)]
+    [InlineData("""{"type":"error","error":{"type":"server_error","message":"private payload"}}""", PluginRequestFailureKind.ServerError)]
+    [InlineData("""{"type":"error","error":{"type":"invalid_request_error","code":"invalid_value","message":"private payload"}}""", PluginRequestFailureKind.InvalidRequest)]
+    [InlineData("""{"type":"response.done","response":{"status":"failed","status_details":{"error":{"type":"server_error","message":"private payload"}}}}""", PluginRequestFailureKind.ServerError)]
+    [InlineData("""{"type":"response.done","response":{"status":"incomplete","status_details":{"reason":"content_filter"}}}""", PluginRequestFailureKind.InvalidRequest)]
+    [InlineData("close", PluginRequestFailureKind.Network)]
+    public async Task SpeechProviderFailuresAreClassifiedWithoutProviderText(string serverEvent, PluginRequestFailureKind kind)
+    {
+        var socket = new SpeechSocketFixture(SpeechSocketFixture.Audio([1, 2]), serverEvent);
+        var error = await Assert.ThrowsAsync<PluginRequestException>(() => OpenAiRealtimeSpeech.SynthesizeAsync(
+            _ => Task.FromResult<System.Net.WebSockets.WebSocket>(socket), "Hallo", "marin", null, default));
+        Assert.Equal(kind, error.FailureKind);
+        Assert.DoesNotContain("private payload", error.ToString());
+        Assert.True(socket.Disposed);
+    }
+
+    [Fact]
+    public async Task SpeechRejectsMalformedEventsAndCancels()
+    {
+        await Assert.ThrowsAsync<InvalidDataException>(() => OpenAiRealtimeSpeech.SynthesizeAsync(
+            _ => Task.FromResult<System.Net.WebSockets.WebSocket>(new SpeechSocketFixture("malformed")), "Hallo", "marin", null, default));
+        await Assert.ThrowsAsync<InvalidDataException>(() => OpenAiRealtimeSpeech.SynthesizeAsync(
+            _ => Task.FromResult<System.Net.WebSockets.WebSocket>(new SpeechSocketFixture("""{"type":"response.output_audio.delta","delta":"not base64!"}""")), "Hallo", "marin", null, default));
+        using var cancel = new CancellationTokenSource();
+        var waiting = new SpeechSocketFixture();
+        var pending = OpenAiRealtimeSpeech.SynthesizeAsync(_ => Task.FromResult<System.Net.WebSockets.WebSocket>(waiting), "Hallo", "marin", null, cancel.Token);
+        cancel.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending);
+        Assert.True(waiting.Disposed);
     }
 
     [Fact]

@@ -34,21 +34,27 @@ public partial class OpenAiPluginTests
     }
 
     [Fact]
-    public async Task TwoMinutesOfMonoPcmFitTheHttpBuffer()
+    public async Task TwoMinutesOfMonoPcmAreAcceptedAndOneMoreSampleIsNot()
     {
-        var pcm = new byte[24_000 * 2 * 120];
-        using var client = new HttpClient(new CapturingHandler((_, _) => Task.FromResult(
-            new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(pcm) })));
+        static string[] Seconds(int seconds, int extraBytes) =>
+        [
+            .. Enumerable.Range(0, seconds).Select(_ => SpeechSocketFixture.Audio(new byte[24_000 * 2])),
+            .. extraBytes > 0 ? [SpeechSocketFixture.Audio(new byte[extraBytes])] : Array.Empty<string>(),
+            SpeechSocketFixture.Done,
+        ];
+        var sockets = new Queue<SpeechSocketFixture>([new(Seconds(120, 0)), new(Seconds(120, 2))]);
+        using var client = new HttpClient(new CapturingHandler((_, _) => Task.FromResult(JsonResponse("{}"))));
         var host = new TestPluginHostServices();
         host.Secrets["api-key"] = "fixture-key";
         using var plugin = new OpenAiPlugin(client, bytes =>
         {
             Assert.Equal(5_760_000, bytes.Length);
             return new FakeTtsPlaybackSession();
-        });
+        }, ttsSocketFactory: (_, _) => Task.FromResult<System.Net.WebSockets.WebSocket>(sockets.Dequeue()));
         await plugin.ActivateAsync(host);
         var playback = await plugin.SpeakAsync(new("Long speech"), default);
         Assert.True(playback.IsActive);
         playback.Stop();
+        await Assert.ThrowsAsync<InvalidDataException>(() => plugin.SpeakAsync(new("Long speech"), default));
     }
 }
