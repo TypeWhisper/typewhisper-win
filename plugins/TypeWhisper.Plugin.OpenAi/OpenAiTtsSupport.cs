@@ -111,37 +111,16 @@ internal static class OpenAiRealtimeSpeech
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(TimeSpan.FromSeconds(120));
-        WebSocket? ws = null;
         try
         {
-            ws = await connect(timeout.Token);
-            await SendAsync(ws, OpenAiTtsConfiguration.CreateSessionUpdatePayload(voice, instructions), timeout.Token);
-            await SendAsync(ws, OpenAiTtsConfiguration.CreateTextItemPayload(text), timeout.Token);
-            await SendAsync(ws, OpenAiTtsConfiguration.ResponseCreatePayload, timeout.Token);
-
-            var collector = new OpenAiRealtimeSpeechCollector();
-            var buffer = new byte[16 * 1024];
-            using var message = new MemoryStream();
-            while (true)
+            using var ws = await connect(timeout.Token);
+            try
             {
-                message.SetLength(0);
-                WebSocketReceiveResult result;
-                do
-                {
-                    result = await ws.ReceiveAsync(buffer, timeout.Token);
-                    if (result.MessageType == WebSocketMessageType.Close)
-                        throw new PluginRequestException(
-                            "OpenAI closed the speech connection before the audio was complete.",
-                            PluginRequestFailureKind.Network);
-                    if (message.Length + result.Count > MaxMessageBytes)
-                        throw new InvalidDataException("OpenAI sent an oversized speech message.");
-                    message.Write(buffer, 0, result.Count);
-                } while (!result.EndOfMessage);
-
-                if (result.MessageType != WebSocketMessageType.Text)
-                    continue;
-                if (collector.Apply(Encoding.UTF8.GetString(message.GetBuffer(), 0, (int)message.Length)))
-                    return collector.ToPcm();
+                return await ExchangeAsync(ws, text, voice, instructions, timeout.Token);
+            }
+            finally
+            {
+                await CloseOutputAsync(ws);
             }
         }
         catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
@@ -153,17 +132,53 @@ internal static class OpenAiRealtimeSpeech
             ct.ThrowIfCancellationRequested();
             throw new PluginRequestException("OpenAI network request failed.", PluginRequestFailureKind.Network, innerException: ex);
         }
-        finally
+    }
+
+    private static async Task<byte[]> ExchangeAsync(WebSocket ws, string text, string voice, string? instructions, CancellationToken ct)
+    {
+        await SendAsync(ws, OpenAiTtsConfiguration.CreateSessionUpdatePayload(voice, instructions), ct);
+        await SendAsync(ws, OpenAiTtsConfiguration.CreateTextItemPayload(text), ct);
+        await SendAsync(ws, OpenAiTtsConfiguration.ResponseCreatePayload, ct);
+
+        var collector = new OpenAiRealtimeSpeechCollector();
+        var buffer = new byte[16 * 1024];
+        using var message = new MemoryStream();
+        while (true)
         {
-            if (ws is not null)
+            message.SetLength(0);
+            WebSocketReceiveResult result;
+            do
             {
-                if (ws.State == WebSocketState.Open)
-                {
-                    try { await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None); }
-                    catch (Exception ex) when (ex is WebSocketException or InvalidOperationException or IOException) { }
-                }
-                ws.Dispose();
-            }
+                result = await ws.ReceiveAsync(buffer, ct);
+                if (result.MessageType == WebSocketMessageType.Close)
+                    throw new PluginRequestException(
+                        "OpenAI closed the speech connection before the audio was complete.",
+                        PluginRequestFailureKind.Network);
+                if (message.Length + result.Count > MaxMessageBytes)
+                    throw new InvalidDataException("OpenAI sent an oversized speech message.");
+                message.Write(buffer, 0, result.Count);
+            } while (!result.EndOfMessage);
+
+            if (result.MessageType != WebSocketMessageType.Text)
+                continue;
+            if (collector.Apply(Encoding.UTF8.GetString(message.GetBuffer(), 0, (int)message.Length)))
+                return collector.ToPcm();
+        }
+    }
+
+    // The close frame is a courtesy to the server: the audio is complete, or the request has already failed,
+    // so a failed close must not replace the result. Dispose aborts the connection either way.
+    private static async Task CloseOutputAsync(WebSocket ws)
+    {
+        if (ws.State != WebSocketState.Open)
+            return;
+        try
+        {
+            await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
+        }
+        catch (Exception ex) when (ex is WebSocketException or InvalidOperationException or IOException)
+        {
+            System.Diagnostics.Debug.WriteLine("OpenAI speech close failed: " + ex.GetType().Name);
         }
     }
 
