@@ -34,9 +34,18 @@ public sealed partial class OpenAiPlugin
         new(TemperatureValueSettingName, "Custom temperature", "Number between 0 and 2.", _temperatureValue.ToString(CultureInfo.InvariantCulture), 8),
         new("transcriptionContext", "Transcription context", "Optional background for GPT Transcribe and GPT Live Transcribe. Dictionary words are sent separately. This context is sent to OpenAI with your audio.", _transcriptionContext, 8000) { IsMultiline = true },
         Choice("liveDelay", "Live transcription delay", "Lower delay shows results sooner; higher delay gives the model more context.", _liveDelay, LiveDelays.Select(v => new PluginSettingChoice(v, v)).ToArray()),
-        Choice(SelectedVoiceSettingName, "Default speech voice", "Default for speech requests without a voice selection. Choose the dictation readback voice in Audio settings.", SelectedVoiceId!, AvailableVoices.Select(v => new PluginSettingChoice(v.Id, v.DisplayName)).ToArray()),
+        Choice(SelectedVoiceSettingName, "Default speech voice", "Default for speech requests without a voice selection. Choose the dictation readback voice in Audio settings.", SelectedVoiceId!, VoiceChoices()),
         new(TtsInstructionsSettingName, "Speech instructions", "Optional tone, pace or accent instructions sent to OpenAI.", _ttsInstructions, 4000) { IsMultiline = true }
     ];
+
+    // A saved retired voice stays visible as unavailable until another voice is chosen.
+    private PluginSettingChoice[] VoiceChoices()
+    {
+        var choices = AvailableVoices.Select(v => new PluginSettingChoice(v.Id, v.DisplayName)).ToList();
+        if (SelectedVoiceId is { } id && OpenAiTtsConfiguration.RetiredVoices.TryGetValue(id, out var retired))
+            choices.Add(new(id, string.Format(CultureInfo.CurrentCulture, L("{0} (no longer available)"), retired)));
+        return [.. choices];
+    }
 
     private static PluginTextSetting Choice(string id, string title, string description, string value, params PluginSettingChoice[] choices) =>
         new(id, title, description, value) { Choices = choices };

@@ -219,7 +219,9 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
             _authMode = OpenAiAuthModeExtensions.Parse(selection.AuthMode);
             _preferredLlmModelId = selection.ModelId;
         }
-        _selectedVoiceId = NormalizeVoiceId(host.GetSetting<string>(SelectedVoiceSettingName));
+        // A saved retired voice stays, so speech asks for a new voice instead of switching silently.
+        var savedVoice = host.GetSetting<string>(SelectedVoiceSettingName);
+        _selectedVoiceId = IsRetiredVoice(savedVoice) ? savedVoice : NormalizeVoiceId(savedVoice);
         _ttsInstructions = host.GetSetting<string>(TtsInstructionsSettingName) ?? "";
         _transcriptionContext = host.GetSetting<string>("transcriptionContext") ?? "";
         var delay = host.GetSetting<string>("liveDelay");
@@ -1136,6 +1138,8 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
     {
         get
         {
+            if (SelectedVoiceId is { } retiredId && OpenAiTtsConfiguration.RetiredVoices.TryGetValue(retiredId, out var retired))
+                return $"Voice: {retired} (no longer available); OpenAI";
             var voice = AvailableVoices.FirstOrDefault(v => v.Id == SelectedVoiceId)?.DisplayName
                 ?? OpenAiTtsConfiguration.DefaultVoiceId;
             return $"Voice: {voice}; OpenAI";
@@ -1147,6 +1151,9 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
     /// </summary>
     public void SelectVoice(string? voiceId)
     {
+        // Keeping the saved retired voice is not a choice of Marin.
+        if (IsRetiredVoice(voiceId) && voiceId == _selectedVoiceId)
+            return;
         _host?.SetSetting(SelectedVoiceSettingName, NormalizeVoiceId(voiceId));
         _selectedVoiceId = NormalizeVoiceId(voiceId);
     }
@@ -1167,7 +1174,8 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
             return OpenAiInactiveTtsPlaybackSession.Instance;
 
         if (text.Length > 4000) throw new ArgumentException("Speech is limited to 4,000 characters.");
-        if (request.VoiceId is { } voice && !AvailableVoices.Any(v => v.Id == voice))
+        var voice = request.VoiceId ?? SelectedVoiceId ?? OpenAiTtsConfiguration.DefaultVoiceId;
+        if (!AvailableVoices.Any(v => v.Id == voice))
         {
             throw new ArgumentException(OpenAiTtsConfiguration.RetiredVoices.TryGetValue(voice, out var retired)
                 ? $"OpenAI no longer offers the {retired} voice. Choose another voice."
@@ -1177,7 +1185,7 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
         var pcm = await OpenAiRealtimeSpeech.SynthesizeAsync(
             token => _ttsSocketFactory(apiKey, token),
             text,
-            request.VoiceId ?? SelectedVoiceId ?? OpenAiTtsConfiguration.DefaultVoiceId,
+            voice,
             _ttsInstructions,
             ct);
         if (pcm.Length == 0 || pcm.Length > OpenAiTtsConfiguration.MaxPcmBytes || pcm.Length % 2 != 0)
@@ -1430,10 +1438,20 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
     private static async Task<WebSocket> ConnectSpeechSocketAsync(string apiKey, CancellationToken ct)
     {
         var ws = OpenAiRealtimeStreamingSession.CreateConfiguredWebSocket(apiKey);
+        // A rejected upgrade (wrong key, missing access, rate limit) only shows in the HTTP response.
+        ws.Options.CollectHttpResponseDetails = true;
         try
         {
             await ws.ConnectAsync(OpenAiTtsConfiguration.RealtimeUri, ct);
             return ws;
+        }
+        catch (WebSocketException ex) when (ws.HttpStatusCode != 0)
+        {
+            var status = (int)ws.HttpStatusCode;
+            var retryAfter = ws.HttpResponseHeaders?.TryGetValue("Retry-After", out var values) == true
+                && int.TryParse(values.FirstOrDefault(), out var seconds) ? TimeSpan.FromSeconds(seconds) : (TimeSpan?)null;
+            ws.Dispose();
+            throw OpenAiRealtimeSpeech.CreateHandshakeFailure(status, retryAfter, ex);
         }
         catch
         {
@@ -1646,6 +1664,9 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
 
     private static double NormalizeTemperatureValue(double? value) =>
         Math.Clamp(value ?? 0.3, 0.0, 2.0);
+
+    private static bool IsRetiredVoice(string? voiceId) =>
+        voiceId is not null && OpenAiTtsConfiguration.RetiredVoices.ContainsKey(voiceId);
 
     private static string NormalizeVoiceId(string? voiceId) =>
         !string.IsNullOrWhiteSpace(voiceId)

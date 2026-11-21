@@ -167,6 +167,18 @@ internal static class OpenAiRealtimeSpeech
         }
     }
 
+    /// <summary>Classifies an HTTP status that rejected the WebSocket upgrade, like the HTTP requests do.</summary>
+    internal static PluginRequestException CreateHandshakeFailure(int statusCode, TimeSpan? retryAfter, Exception innerException) =>
+        statusCode switch
+        {
+            401 => new("Invalid API key", PluginRequestFailureKind.Authentication, statusCode, innerException: innerException),
+            403 => new("OpenAI denied access to speech.", PluginRequestFailureKind.Permission, statusCode, innerException: innerException),
+            429 => new("Rate limit reached, please wait", PluginRequestFailureKind.RateLimit, statusCode, retryAfter, innerException: innerException),
+            >= 500 and <= 599 => new($"OpenAI API error {statusCode}.", PluginRequestFailureKind.ServerError, statusCode, retryAfter, innerException: innerException),
+            >= 400 and <= 499 => new($"OpenAI API error {statusCode}.", PluginRequestFailureKind.InvalidRequest, statusCode, innerException: innerException),
+            _ => new($"OpenAI API error {statusCode}.", PluginRequestFailureKind.Unknown, statusCode, innerException: innerException),
+        };
+
     private static Task SendAsync(WebSocket ws, string json, CancellationToken ct) =>
         ws.SendAsync(Encoding.UTF8.GetBytes(json), WebSocketMessageType.Text, true, ct);
 }

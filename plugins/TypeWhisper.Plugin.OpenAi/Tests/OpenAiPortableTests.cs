@@ -174,6 +174,58 @@ public partial class OpenAiPluginTests
         await Assert.ThrowsAsync<ArgumentException>(() => plugin.SpeakAsync(new("Hallo") { VoiceId = "unknown" }, default));
     }
 
+    [Fact]
+    public async Task SavedRetiredDefaultVoiceStaysAndAsksForANewVoice()
+    {
+        var host = new TestPluginHostServices(); host.Secrets["api-key"] = "fixture-key";
+        host.SetSetting("selectedVoice", "nova");
+        var connected = false;
+        using var plugin = new OpenAiPlugin(new HttpClient(new CapturingHandler((_, _) => Task.FromResult(JsonResponse("{}")))),
+            _ => new FakeTtsPlaybackSession(),
+            ttsSocketFactory: (_, _) => { connected = true; return Task.FromResult<System.Net.WebSockets.WebSocket>(new SpeechSocketFixture(SpeechSocketFixture.Audio([1, 2]), SpeechSocketFixture.Done)); });
+        await plugin.ActivateAsync(host);
+
+        Assert.Equal("nova", plugin.SelectedVoiceId);
+        Assert.Equal("Voice: Nova (no longer available); OpenAI", plugin.SettingsSummary);
+        var setting = plugin.TextSettings.Single(f => f.Id == "selectedVoice");
+        Assert.Equal("nova", setting.Value);
+        Assert.Contains(setting.Choices, choice => choice.Value == "nova" && choice.Title == "Nova (no longer available)");
+        var error = await Assert.ThrowsAsync<ArgumentException>(() => plugin.SpeakAsync(new("Hallo"), default));
+        Assert.Equal("OpenAI no longer offers the Nova voice. Choose another voice.", error.Message);
+        Assert.False(connected);
+
+        await plugin.SaveTextSettingAsync("selectedVoice", "nova", default);
+        Assert.Equal("nova", host.GetSetting<string>("selectedVoice"));
+        await plugin.SaveTextSettingAsync("selectedVoice", "cedar", default);
+        Assert.Equal("cedar", host.GetSetting<string>("selectedVoice"));
+        Assert.DoesNotContain(plugin.TextSettings.Single(f => f.Id == "selectedVoice").Choices, choice => choice.Value == "nova");
+        await plugin.SpeakAsync(new("Hallo"), default);
+        Assert.True(connected);
+    }
+
+    [Theory]
+    [InlineData(401, PluginRequestFailureKind.Authentication)]
+    [InlineData(403, PluginRequestFailureKind.Permission)]
+    [InlineData(429, PluginRequestFailureKind.RateLimit)]
+    [InlineData(503, PluginRequestFailureKind.ServerError)]
+    [InlineData(404, PluginRequestFailureKind.InvalidRequest)]
+    public void RejectedSpeechHandshakeKeepsTheHttpClassification(int status, PluginRequestFailureKind kind)
+    {
+        var error = OpenAiRealtimeSpeech.CreateHandshakeFailure(status, TimeSpan.FromSeconds(7), new System.Net.WebSockets.WebSocketException());
+        Assert.Equal(kind, error.FailureKind);
+        Assert.Equal(status, error.HttpStatusCode);
+        if (status == 429) Assert.Equal(TimeSpan.FromSeconds(7), error.RetryAfter);
+    }
+
+    [Fact]
+    public async Task HandshakeFailureFromTheConnectionIsNotReportedAsNetwork()
+    {
+        var failure = OpenAiRealtimeSpeech.CreateHandshakeFailure(401, null, new System.Net.WebSockets.WebSocketException());
+        var error = await Assert.ThrowsAsync<PluginRequestException>(() => OpenAiRealtimeSpeech.SynthesizeAsync(
+            _ => Task.FromException<System.Net.WebSockets.WebSocket>(failure), "Hallo", "marin", null, default));
+        Assert.Equal(PluginRequestFailureKind.Authentication, error.FailureKind);
+    }
+
     [Theory]
     [InlineData("""{"type":"error","error":{"type":"invalid_request_error","code":"invalid_api_key","message":"private payload"}}""", PluginRequestFailureKind.Authentication)]
     [InlineData("""{"type":"error","error":{"type":"invalid_request_error","code":"rate_limit_exceeded","message":"private payload"}}""", PluginRequestFailureKind.RateLimit)]
