@@ -81,5 +81,6 @@
   "high": "high",
   "xhigh": "xhigh",
   "max": "max",
-  "Connection method": "Connection method"
+  "Connection method": "Connection method",
+  "{0} (no longer available)": "{0} (no longer available)"
 }
