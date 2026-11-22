@@ -74,7 +74,7 @@ public partial class OpenAiPluginTests
             : """{"data":[{"id":"whisper-1"},{"id":"o3"}]}"""))));
         var host = new TestPluginHostServices();
         host.Secrets["api-key"] = "fixture-key";
-        using var plugin = new OpenAiPlugin(client, _ => new FakeTtsPlaybackSession());
+        using var plugin = new OpenAiPlugin(client, _ => new FakeTtsPlaybackSession(), clock: BeforeTranscriptionShutdown);
         await plugin.ActivateAsync(host);
         if (previouslyFetched) await plugin.RefreshAvailableLlmModelsAsync();
         var text = plugin.SupportedModels.Select(model => model.Id).ToArray();

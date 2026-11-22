@@ -2,6 +2,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Diagnostics;
 using System.IO;
+using System.Net.WebSockets;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -57,6 +58,8 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
     private readonly HttpClient _httpClient;
     private readonly SemaphoreSlim _oauthRefreshLock = new(1, 1);
     private readonly Func<byte[], ITtsPlaybackSession>? _ttsPlaybackFactory;
+    private readonly Func<string, CancellationToken, Task<WebSocket>> _ttsSocketFactory;
+    private readonly TimeProvider _clock;
     private readonly Func<byte[], OpenAiTranscriptionUpload> _compressedUploadFactory;
     // Only the API-key catalog refreshes in the background. The ChatGPT catalog can rotate the login's
     // tokens, so it refreshes only when the user asks.
@@ -72,8 +75,6 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
     private string? _preferredTranscriptionModelId;
     private IPluginHostServices? _host;
     private string? _apiKey;
-    private string? _selectedModelId;
-    private string? _selectedApiModelName;
     private string? _selectedVoiceId;
     private string _ttsInstructions = "";
     private string _reasoningEffort = "medium";
@@ -95,6 +96,9 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
     private string? _oauthPlanType;
     private DateTimeOffset? _oauthExpiresAt;
 
+    // OpenAI shuts these models down on this date and names GPT Transcribe or GPT Live Transcribe as replacements.
+    private static readonly DateOnly TranscriptionShutdown20270226 = new(2027, 2, 26);
+
     private static readonly IReadOnlyList<TranscriptionModelEntry> FallbackTranscriptionModelEntries =
     [
         new(
@@ -105,9 +109,12 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
             SupportsTranslation: false,
             LanguageFormat: TranscriptionLanguageFormat.Plural,
             SupportsDictionaryTerms: true),
-        new("whisper-1", "Whisper 1", "whisper-1", "verbose_json", SupportsTranslation: true),
-        new("gpt-4o-transcribe", "GPT-4o Transcribe", "gpt-4o-transcribe", "json", SupportsTranslation: false),
-        new("gpt-4o-mini-transcribe", "GPT-4o Mini Transcribe", "gpt-4o-mini-transcribe", "json", SupportsTranslation: false),
+        new("whisper-1", "Whisper 1", "whisper-1", "verbose_json", SupportsTranslation: true,
+            ShutdownOn: TranscriptionShutdown20270226),
+        new("gpt-4o-transcribe", "GPT-4o Transcribe", "gpt-4o-transcribe", "json", SupportsTranslation: false,
+            ShutdownOn: TranscriptionShutdown20270226),
+        new("gpt-4o-mini-transcribe", "GPT-4o Mini Transcribe", "gpt-4o-mini-transcribe", "json", SupportsTranslation: false,
+            ShutdownOn: TranscriptionShutdown20270226),
         new(
             OpenAiRealtimeStreamingSession.LiveModelId,
             "GPT Live Transcribe",
@@ -129,15 +136,14 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
     internal const string DefaultLlmModelId = "gpt-5.5";
 
     // The order is also the preference order for a default when a fetched list lacks the saved model.
+    // GPT-4.1 Nano and o4-mini are left out: OpenAI shut both down on 23 October 2026.
     private static readonly IReadOnlyList<PluginModelInfo> FallbackLlmModels =
     [
         new(DefaultLlmModelId, "GPT-5.5"),
-        new("gpt-4.1-nano", "GPT-4.1 Nano"),
         new("gpt-4.1-mini", "GPT-4.1 Mini"),
         new("gpt-4.1", "GPT-4.1"),
         new("gpt-4o", "GPT-4o"),
         new("gpt-4o-mini", "GPT-4o Mini"),
-        new("o4-mini", "o4-mini"),
     ];
 
     private static readonly IReadOnlyList<PluginModelInfo> FallbackChatGptModels =
@@ -168,10 +174,13 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
         Func<byte[], ITtsPlaybackSession>? ttsPlaybackFactory = null,
         Func<byte[], OpenAiTranscriptionUpload>? compressedUploadFactory = null,
         bool refreshApiModelsAutomatically = false,
-        TimeProvider? clock = null)
+        TimeProvider? clock = null,
+        Func<string, CancellationToken, Task<WebSocket>>? ttsSocketFactory = null)
     {
         _httpClient = httpClient;
         _ttsPlaybackFactory = ttsPlaybackFactory;
+        _ttsSocketFactory = ttsSocketFactory ?? ConnectSpeechSocketAsync;
+        _clock = clock ?? TimeProvider.System;
         _compressedUploadFactory = compressedUploadFactory ?? CreateCompressedUpload;
         _apiCatalogRefresh = new ModelCatalogAutoRefresh(refreshApiModelsAutomatically, clock);
     }
@@ -208,7 +217,9 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
             _authMode = OpenAiAuthModeExtensions.Parse(selection.AuthMode);
             _preferredLlmModelId = selection.ModelId;
         }
-        _selectedVoiceId = NormalizeVoiceId(host.GetSetting<string>(SelectedVoiceSettingName));
+        // A saved retired voice stays, so speech asks for a new voice instead of switching silently.
+        var savedVoice = host.GetSetting<string>(SelectedVoiceSettingName);
+        _selectedVoiceId = IsRetiredVoice(savedVoice) ? savedVoice : NormalizeVoiceId(savedVoice);
         _ttsInstructions = host.GetSetting<string>(TtsInstructionsSettingName) ?? "";
         _transcriptionContext = host.GetSetting<string>("transcriptionContext") ?? "";
         var delay = host.GetSetting<string>("liveDelay");
@@ -314,7 +325,7 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
     /// <summary>
     /// Gets the currently selected provider model identifier.
     /// </summary>
-    public string? SelectedModelId => _selectedModelId;
+    public string? SelectedModelId => SelectedModelEntry?.Id;
 
     /// <summary>
     /// Gets whether the provider supports translation requests.
@@ -376,7 +387,7 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
         string? prompt,
         CancellationToken ct)
     {
-        if (!IsConfigured || _selectedApiModelName is null || SelectedModelEntry is not { } entry)
+        if (!IsConfigured || SelectedModelEntry is not { } entry)
             throw new InvalidOperationException("Plugin not configured. API key and model required.");
 
         if (translate && !entry.SupportsTranslation)
@@ -1125,6 +1136,8 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
     {
         get
         {
+            if (SelectedVoiceId is { } retiredId && OpenAiTtsConfiguration.RetiredVoices.TryGetValue(retiredId, out var retired))
+                return $"Voice: {retired} (no longer available); OpenAI";
             var voice = AvailableVoices.FirstOrDefault(v => v.Id == SelectedVoiceId)?.DisplayName
                 ?? OpenAiTtsConfiguration.DefaultVoiceId;
             return $"Voice: {voice}; OpenAI";
@@ -1136,6 +1149,9 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
     /// </summary>
     public void SelectVoice(string? voiceId)
     {
+        // Keeping the saved retired voice is not a choice of Marin.
+        if (IsRetiredVoice(voiceId) && voiceId == _selectedVoiceId)
+            return;
         _host?.SetSetting(SelectedVoiceSettingName, NormalizeVoiceId(voiceId));
         _selectedVoiceId = NormalizeVoiceId(voiceId);
     }
@@ -1156,11 +1172,21 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
             return OpenAiInactiveTtsPlaybackSession.Instance;
 
         if (text.Length > 4000) throw new ArgumentException("Speech is limited to 4,000 characters.");
-        if (request.VoiceId is { } voice && !AvailableVoices.Any(v => v.Id == voice)) throw new ArgumentException("Unknown speech voice.");
-        using var httpRequest = CreateTtsRequest(text, request.VoiceId);
-        using var response = await OpenAiApiTransport.SendWithErrorHandlingAsync(_httpClient, httpRequest, ct);
-        var pcm = await response.Content.ReadAsByteArrayAsync(ct);
-        if (pcm.Length == 0 || pcm.Length > OpenAiTtsConfiguration.SampleRate * 2 * 120 || pcm.Length % 2 != 0)
+        var voice = request.VoiceId ?? SelectedVoiceId ?? OpenAiTtsConfiguration.DefaultVoiceId;
+        if (!AvailableVoices.Any(v => v.Id == voice))
+        {
+            throw new ArgumentException(OpenAiTtsConfiguration.RetiredVoices.TryGetValue(voice, out var retired)
+                ? $"OpenAI no longer offers the {retired} voice. Choose another voice."
+                : "Unknown speech voice.");
+        }
+        var apiKey = _apiKey!;
+        var pcm = await OpenAiRealtimeSpeech.SynthesizeAsync(
+            token => _ttsSocketFactory(apiKey, token),
+            text,
+            voice,
+            _ttsInstructions,
+            ct);
+        if (pcm.Length == 0 || pcm.Length > OpenAiTtsConfiguration.MaxPcmBytes || pcm.Length % 2 != 0)
             throw new InvalidDataException("Speech audio is empty, malformed, or exceeds two minutes.");
         ct.ThrowIfCancellationRequested();
         return _ttsPlaybackFactory is not null ? _ttsPlaybackFactory(pcm)
@@ -1287,7 +1313,15 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
     private IReadOnlyList<TranscriptionModelEntry> AvailableTranscriptionModelEntries =>
         _hasFetchedApiCatalog || _availableTranscriptionModelEntries.Count > 0
             ? _availableTranscriptionModelEntries
-            : FallbackTranscriptionModelEntries;
+            : BuiltInTranscriptionModelEntries;
+
+    // Built-in models past their shutdown date are left out, so the list used before the first catalog
+    // fetch never offers a model that fails. A fetched catalog is authoritative: OpenAI drops retired models.
+    private IReadOnlyList<TranscriptionModelEntry> BuiltInTranscriptionModelEntries =>
+        FallbackTranscriptionModelEntries
+            .Where(entry => entry.ShutdownOn is not { } shutdown
+                || DateOnly.FromDateTime(_clock.GetUtcNow().UtcDateTime) < shutdown)
+            .ToList();
 
     private IReadOnlyList<PluginModelInfo> AvailableChatGptModels =>
         _hasFetchedChatGptCatalog
@@ -1300,9 +1334,10 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
                 .ToList()
             : FallbackChatGptModels;
 
+    // Resolved on every use, so a built-in model that reaches its shutdown date while the app runs
+    // falls back without waiting for a catalog fetch.
     private TranscriptionModelEntry? SelectedModelEntry =>
-        AvailableTranscriptionModelEntries.FirstOrDefault(model =>
-            string.Equals(model.Id, _selectedModelId, StringComparison.OrdinalIgnoreCase));
+        AvailableTranscriptionModelEntries.Count == 0 ? null : ResolveTranscriptionModel(_preferredTranscriptionModelId);
 
     // A selection the user makes: it is saved and becomes the choice that later lists resolve.
     private void SelectModelCore(string modelId)
@@ -1310,14 +1345,12 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
         if (AvailableTranscriptionModelEntries.Count == 0)
         {
             _host?.SetSetting<string?>(SelectedModelSettingName, null);
-            _preferredTranscriptionModelId = _selectedModelId = _selectedApiModelName = null;
+            _preferredTranscriptionModelId = null;
             return;
         }
         var entry = ResolveTranscriptionModel(modelId);
         _host?.SetSetting(SelectedModelSettingName, entry.Id);
         _preferredTranscriptionModelId = entry.Id;
-        _selectedModelId = entry.Id;
-        _selectedApiModelName = entry.ApiModelName;
     }
 
     /// <summary>
@@ -1343,19 +1376,8 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
             .ThenBy(model => IsBaseTranscriptionModel(model.Id) ? 0 : 1)
             .ThenBy(model => model.Id, StringComparer.Ordinal)
             .ToList();
-        _availableTranscriptionModelEntries = _hasFetchedApiCatalog || discoveredModels.Count > 0
-            ? discoveredModels
-            : FallbackTranscriptionModelEntries;
-
-        if (AvailableTranscriptionModelEntries.Count == 0)
-        {
-            _selectedModelId = _selectedApiModelName = null;
-            return;
-        }
-
-        var entry = ResolveTranscriptionModel(_preferredTranscriptionModelId);
-        _selectedModelId = entry.Id;
-        _selectedApiModelName = entry.ApiModelName;
+        // Without a fetched or cached list, AvailableTranscriptionModelEntries reads the dated built-in list live.
+        _availableTranscriptionModelEntries = discoveredModels;
     }
 
     private static TranscriptionModelEntry? CreateDiscoveredTranscriptionModelEntry(string modelId)
@@ -1399,13 +1421,29 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
         FallbackTranscriptionModelEntries.Any(model =>
             string.Equals(model.Id, modelId, StringComparison.OrdinalIgnoreCase));
 
-    private HttpRequestMessage CreateTtsRequest(string text, string? voiceId = null)
+    private static async Task<WebSocket> ConnectSpeechSocketAsync(string apiKey, CancellationToken ct)
     {
-        var request = new HttpRequestMessage(HttpMethod.Post, $"{BaseUrl}/v1/audio/speech");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
-        request.Content = OpenAiJson.CreateJsonContent(
-            OpenAiTtsConfiguration.CreateRequestBody(text, voiceId ?? SelectedVoiceId, _ttsInstructions));
-        return request;
+        var ws = OpenAiRealtimeStreamingSession.CreateConfiguredWebSocket(apiKey);
+        // A rejected upgrade (wrong key, missing access, rate limit) only shows in the HTTP response.
+        ws.Options.CollectHttpResponseDetails = true;
+        try
+        {
+            await ws.ConnectAsync(OpenAiTtsConfiguration.RealtimeUri, ct);
+            return ws;
+        }
+        catch (WebSocketException ex) when (ws.HttpStatusCode != 0)
+        {
+            var status = (int)ws.HttpStatusCode;
+            var retryAfter = ws.HttpResponseHeaders?.TryGetValue("Retry-After", out var values) == true
+                && int.TryParse(values.FirstOrDefault(), out var seconds) ? TimeSpan.FromSeconds(seconds) : (TimeSpan?)null;
+            ws.Dispose();
+            throw OpenAiRealtimeSpeech.CreateHandshakeFailure(status, retryAfter, ex);
+        }
+        catch
+        {
+            ws.Dispose();
+            throw;
+        }
     }
 
     private async Task<string> ValidOAuthAccessTokenAsync(CancellationToken ct)
@@ -1613,6 +1651,9 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
     private static double NormalizeTemperatureValue(double? value) =>
         Math.Clamp(value ?? 0.3, 0.0, 2.0);
 
+    private static bool IsRetiredVoice(string? voiceId) =>
+        voiceId is not null && OpenAiTtsConfiguration.RetiredVoices.ContainsKey(voiceId);
+
     private static string NormalizeVoiceId(string? voiceId) =>
         !string.IsNullOrWhiteSpace(voiceId)
         && OpenAiTtsConfiguration.AvailableVoices.Any(v => v.Id == voiceId)
@@ -1627,7 +1668,8 @@ public sealed partial class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProvi
         bool SupportsTranslation,
         TranscriptionTransport Transport = TranscriptionTransport.Rest,
         TranscriptionLanguageFormat LanguageFormat = TranscriptionLanguageFormat.Singular,
-        bool SupportsDictionaryTerms = false)
+        bool SupportsDictionaryTerms = false,
+        DateOnly? ShutdownOn = null)
     {
         public bool SupportsStreaming => Transport == TranscriptionTransport.Realtime;
     }

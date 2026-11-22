@@ -81,5 +81,6 @@
   "high": "Hoch",
   "xhigh": "Sehr hoch",
   "max": "Maximal",
-  "Connection method": "Verbindungsmethode"
+  "Connection method": "Verbindungsmethode",
+  "{0} (no longer available)": "{0} (nicht mehr verfügbar)"
 }
