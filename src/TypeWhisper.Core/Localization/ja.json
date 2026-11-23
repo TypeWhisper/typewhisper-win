@@ -3310,5 +3310,6 @@
   "“{0}” is removed from this PC. This cannot be undone.": "「{0}」をこの PC から削除します。この操作は取り消せません。",
   "The entry could not be deleted.": "項目を削除できませんでした。",
   "Show more": "さらに表示",
-  "Show less": "表示を減らす"
+  "Show less": "表示を減らす",
+  "Windows blocked a file this plugin needs. Smart App Control or an App Control policy on this PC blocks unsigned code, and the plugin's native runtime is not signed. Use a cloud provider instead; on a managed PC, your administrator can allow the plugin.": "Windows がこのプラグインに必要なファイルをブロックしました。この PC のスマート アプリ コントロールまたは App Control ポリシーが署名されていないコードをブロックしており、プラグインのネイティブ ランタイムは署名されていません。代わりにクラウドプロバイダーを使用してください。管理対象の PC では、管理者がプラグインを許可できます。"
 }

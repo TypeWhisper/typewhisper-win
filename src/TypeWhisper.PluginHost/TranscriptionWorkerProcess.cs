@@ -176,7 +176,11 @@ internal sealed class TranscriptionWorkerProcess : ITranscriptionWorkerConnectio
             if (frame.Message.Type != TranscriptionWorkerMessageTypes.Hello || frame.Message.ProtocolVersion != TranscriptionWorkerProtocol.Version)
                 throw new InvalidDataException("The transcription worker does not match this TypeWhisper version.");
             // Activation errors are the plugin's own and repeat on every start; they are not crashes.
-            if (frame.Message.Error is { } error) throw TranscriptionWorkerProtocol.ToException(error);
+            if (frame.Message.Error is { } error)
+            {
+                if (error.Kind == "app-control") _log(PluginLogLevel.Warning, "Windows App Control blocked a native file while the plugin started: " + error.Message);
+                throw TranscriptionWorkerProtocol.ToException(error);
+            }
             State = frame.Message.State;
             // A worker that announces no beat (an older build) is never ended for silence.
             _heartbeats = frame.Message.HeartbeatInterval is not null;

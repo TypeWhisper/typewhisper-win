@@ -3310,5 +3310,6 @@
   "“{0}” is removed from this PC. This cannot be undone.": "“{0}”将从此电脑中删除。此操作无法撤销。",
   "The entry could not be deleted.": "无法删除该条目。",
   "Show more": "显示更多",
-  "Show less": "收起"
+  "Show less": "收起",
+  "Windows blocked a file this plugin needs. Smart App Control or an App Control policy on this PC blocks unsigned code, and the plugin's native runtime is not signed. Use a cloud provider instead; on a managed PC, your administrator can allow the plugin.": "Windows 阻止了此插件所需的文件。此电脑上的智能应用控制或应用控制策略会阻止未签名的代码，而该插件的本机运行时未签名。请改用云服务提供商；在受管理的电脑上，管理员可以允许该插件。"
 }
