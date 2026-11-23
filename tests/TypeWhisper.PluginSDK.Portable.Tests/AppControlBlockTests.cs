@@ -27,6 +27,17 @@ public sealed class AppControlBlockTests
         Assert.Same(loader, AppControlBlock.Find(new AggregateException(new TimeoutException(), wrapped)));
     }
 
+    // The loader of the current runtime gives only Windows' text for the error, in the user's language.
+    [WindowsFact]
+    public void RecognizesWindowsTextForTheErrorWithoutItsCode()
+    {
+        var loader = new DllNotFoundException("Unable to load DLL 'C:\\p\\sherpa-onnx-c-api.dll' or one of its dependencies: "
+            + new Win32Exception(4551).Message);
+
+        Assert.Same(loader, AppControlBlock.Find(new InvalidOperationException("The model could not be loaded.", loader)));
+        Assert.False(AppControlBlock.IsBlock(new DllNotFoundException("Unable to load DLL 'x.dll' or one of its dependencies: " + new Win32Exception(126).Message)));
+    }
+
     [Fact]
     public void RecognizesTheResultCodeOfAComException() =>
         Assert.True(AppControlBlock.IsBlock(new COMException("Blocked", unchecked((int)0x800711C7))));

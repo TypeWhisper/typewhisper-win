@@ -14,6 +14,12 @@ public static class AppControlBlock
     // malicious, potentially unwanted, a dangerous file from the web, and reputation service unreachable.
     private static readonly int[] ErrorCodes = [4551, 4556, 4557, 4558, 4559];
 
+    // NativeLibrary.Load in this app reports a refused DLL only by Windows' text for the error, without its code. The
+    // loader takes that text from the system in the user's language, as Win32Exception does here.
+    private static readonly Lazy<string[]> SystemMessages = new(() => OperatingSystem.IsWindows()
+        ? ErrorCodes.Select(code => new Win32Exception(code).Message.Trim()).Where(text => text.Length > 0).ToArray()
+        : []);
+
     /// <summary>The explanation shown instead of the plugin's message.</summary>
     public static string Message => Loc.T("Windows blocked a file this plugin needs. Smart App Control or an App Control policy on this PC blocks unsigned code, and the plugin's native runtime is not signed. Use a cloud provider instead; on a managed PC, your administrator can allow the plugin.");
 
@@ -34,9 +40,10 @@ public static class AppControlBlock
             foreach (var code in ErrorCodes)
             {
                 var hresult = unchecked((int)0x80070000) | code;
-                // NativeLibrary.Load reports the loader's result only in its text, as "(0x800711C7)".
+                // The 1.2 app (.NET 10) added the loader's result to that text, as "(0x800711C7)" (issue #823).
                 if (error.HResult == hresult || error.Message.Contains($"0x{hresult:X8}", StringComparison.OrdinalIgnoreCase)) return error;
             }
+            if (SystemMessages.Value.Any(text => error.Message.Contains(text, StringComparison.OrdinalIgnoreCase))) return error;
             if (error is AggregateException aggregate) return aggregate.InnerExceptions.Select(Find).FirstOrDefault(found => found is not null);
         }
         return null;
