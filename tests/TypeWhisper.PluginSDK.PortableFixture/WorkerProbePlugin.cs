@@ -108,6 +108,11 @@ public sealed class WorkerProbePlugin : IPcmTranscriptionEnginePlugin, ITranscri
                 if (!File.Exists(marker)) { File.WriteAllText(marker, ""); Environment.FailFast("Worker fixture transient crash"); }
                 break;
             case "throw": throw new NotSupportedException("Fixture engine rejected the request.");
+            // What a plugin reports when Smart App Control refuses its native runtime (issue #823): its own message
+            // names the file, the error it wraps only says that Windows blocked it.
+            case "app-control":
+                throw new DllNotFoundException("Unable to load 'fixture-native.dll'. Reinstall the plugin.",
+                    new System.ComponentModel.Win32Exception(4551));
             case "collect":
                 // A dependency the plugin loads late must still load after a full collection. Package dependencies
                 // load by path, which fails once the context has started to unload.

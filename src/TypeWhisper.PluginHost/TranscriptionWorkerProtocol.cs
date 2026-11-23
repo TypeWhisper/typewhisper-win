@@ -56,7 +56,14 @@ internal static class TranscriptionWorkerProtocol
 
     // Plugin exceptions keep their kind and message across the process boundary, because the host
     // shows the message and some callers distinguish unsupported requests from failures.
-    internal static TranscriptionWorkerError ToError(Exception exception) => new(exception switch
+    internal static TranscriptionWorkerError ToError(Exception exception) =>
+        // A file Windows blocked keeps the messages that name it, for the host's log (issue #823): the plugin's own
+        // and, when the block was found deeper in the chain, that one's too.
+        exception is not OperationCanceledException && AppControlBlock.Find(exception) is { } blocked
+            ? new("app-control", ReferenceEquals(blocked, exception) ? exception.Message : exception.Message + " " + blocked.Message)
+            : new(KindOf(exception), exception.Message);
+
+    private static string KindOf(Exception exception) => exception switch
     {
         OperationCanceledException => "canceled",
         NotSupportedException => "not-supported",
@@ -67,7 +74,7 @@ internal static class TranscriptionWorkerProtocol
         IOException => "io",
         TimeoutException => "timeout",
         _ => "invalid-operation"
-    }, exception.Message);
+    };
 
     internal static Exception ToException(TranscriptionWorkerError error) => error.Kind switch
     {
@@ -79,6 +86,8 @@ internal static class TranscriptionWorkerProtocol
         "unauthorized" => new UnauthorizedAccessException(error.Message),
         "io" => new IOException(error.Message),
         "timeout" => new TimeoutException(error.Message),
+        // The plugin's text names the blocked file for the log; the user is told why it is blocked.
+        "app-control" => new AppControlBlockedException(AppControlBlock.Message, new InvalidOperationException(error.Message)),
         _ => new InvalidOperationException(error.Message)
     };
 

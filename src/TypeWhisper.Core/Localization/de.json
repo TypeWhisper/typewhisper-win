@@ -3310,5 +3310,6 @@
   "“{0}” is removed from this PC. This cannot be undone.": "„{0}“ wird von diesem PC entfernt. Das kann nicht rückgängig gemacht werden.",
   "The entry could not be deleted.": "Der Eintrag konnte nicht gelöscht werden.",
   "Show more": "Mehr anzeigen",
-  "Show less": "Weniger anzeigen"
+  "Show less": "Weniger anzeigen",
+  "Windows blocked a file this plugin needs. Smart App Control or an App Control policy on this PC blocks unsigned code, and the plugin's native runtime is not signed. Use a cloud provider instead; on a managed PC, your administrator can allow the plugin.": "Windows hat eine Datei blockiert, die dieses Plugin benötigt. Die Intelligente App-Steuerung oder eine App-Control-Richtlinie blockiert auf diesem PC unsignierten Code, und die native Laufzeitumgebung des Plugins ist nicht signiert. Verwende stattdessen einen Cloud-Anbieter; auf einem verwalteten PC kann deine Administration das Plugin zulassen."
 }

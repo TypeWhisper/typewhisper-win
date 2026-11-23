@@ -218,6 +218,8 @@ public sealed class IsolatedTranscriptionEngine : IPcmTranscriptionEnginePlugin,
                         attempt--;
                         continue;
                     }
+                    // The user sees why Windows blocked the plugin; the log keeps which file it was.
+                    if (error.Kind == "app-control") _log(PluginLogLevel.Warning, $"{ProviderDisplayName}: Windows App Control blocked a native file: {error.Message}");
                     throw TranscriptionWorkerProtocol.ToException(error);
                 }
                 _consecutiveCrashes = 0;

@@ -244,6 +244,19 @@ public sealed class TranscriptionWorkerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task AFileBlockedByAppControlIsExplainedAndLogged()
+    {
+        await _engine.TranscribePcmAsync(new float[] { 0 }, null, false, default);
+        var worker = _engine.WorkerProcessId;
+        var error = await Assert.ThrowsAsync<AppControlBlockedException>(() => _engine.TranscribePcmAsync(new float[] { 0 }, "app-control", false, default));
+        Assert.Equal(AppControlBlock.Message, error.Message);
+        Assert.DoesNotContain("Reinstall", error.Message);
+        Assert.Equal(worker, _engine.WorkerProcessId);
+        Assert.Empty(_notices);
+        lock (_logs) Assert.Single(_logs, line => line.Contains("App Control blocked a native file") && line.Contains("fixture-native.dll"));
+    }
+
+    [Fact]
     public async Task ThePluginStillLoadsAssembliesAfterACollectionInTheWorker()
     {
         await _engine.TranscribePcmAsync(new float[] { 0 }, null, false, default);
