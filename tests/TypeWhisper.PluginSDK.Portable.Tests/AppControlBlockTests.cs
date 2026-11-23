@@ -5,10 +5,12 @@ using TypeWhisper.PluginHost;
 // Smart App Control refuses unsigned native plugin files with these codes (issue #823).
 public sealed class AppControlBlockTests
 {
-    private const string SherpaLoaderMessage =
+    // What the sherpa-onnx plugin reports: the loader names the file and ends with Windows' text for the error, in the
+    // user's language and without its code.
+    private static string SherpaLoaderMessage =>
         "Unable to load the sherpa-onnx native runtime. Expected sherpa-onnx-c-api.dll and sherpaort.dll under 'C:\\p\\runtimes\\win-x64\\native'. "
         + "Reinstall the sherpa-onnx plugin or update it from the plugin marketplace. Loader error: Unable to load DLL "
-        + "'C:\\p\\runtimes\\win-x64\\native\\sherpa-onnx-c-api.dll' or one of its dependencies: An Application Control policy has blocked this file. (0x800711C7)";
+        + "'C:\\p\\runtimes\\win-x64\\native\\sherpa-onnx-c-api.dll' or one of its dependencies: " + new Win32Exception(4551).Message;
 
     [Theory]
     [InlineData(4551)]
@@ -17,25 +19,14 @@ public sealed class AppControlBlockTests
     public void RecognizesAProcessThatWindowsRefusedToStart(int code) =>
         Assert.True(AppControlBlock.IsBlock(new InvalidOperationException("The engine could not start.", new Win32Exception(code))));
 
-    [Fact]
-    public void RecognizesTheLoaderCodeInAWrappedMessageAndKeepsTheMessageThatNamesTheFile()
+    [WindowsFact]
+    public void RecognizesWindowsTextForTheErrorAndKeepsTheMessageThatNamesTheFile()
     {
-        var loader = new DllNotFoundException("Unable to load DLL 'transcribe.dll' or one of its dependencies: Eine Anwendungssteuerungsrichtlinie hat diese Datei blockiert. (0x800711c7)");
+        var loader = new DllNotFoundException("Unable to load DLL 'C:\\p\\transcribe.dll' or one of its dependencies: " + new Win32Exception(4551).Message);
         var wrapped = new InvalidOperationException("The model could not be loaded.", loader);
 
         Assert.Same(loader, AppControlBlock.Find(wrapped));
         Assert.Same(loader, AppControlBlock.Find(new AggregateException(new TimeoutException(), wrapped)));
-    }
-
-    // The loader of the current runtime gives only Windows' text for the error, in the user's language.
-    [WindowsFact]
-    public void RecognizesWindowsTextForTheErrorWithoutItsCode()
-    {
-        var loader = new DllNotFoundException("Unable to load DLL 'C:\\p\\sherpa-onnx-c-api.dll' or one of its dependencies: "
-            + new Win32Exception(4551).Message);
-
-        Assert.Same(loader, AppControlBlock.Find(new InvalidOperationException("The model could not be loaded.", loader)));
-        Assert.False(AppControlBlock.IsBlock(new DllNotFoundException("Unable to load DLL 'x.dll' or one of its dependencies: " + new Win32Exception(126).Message)));
     }
 
     [Fact]
@@ -45,12 +36,12 @@ public sealed class AppControlBlockTests
     [Fact]
     public void LeavesOtherLoadFailuresAlone()
     {
-        Assert.False(AppControlBlock.IsBlock(new DllNotFoundException("Unable to load DLL 'whisper.dll' or one of its dependencies: The specified module could not be found. (0x8007007E)")));
+        Assert.False(AppControlBlock.IsBlock(new DllNotFoundException("Unable to load DLL 'whisper.dll' or one of its dependencies: " + new Win32Exception(126).Message)));
         Assert.False(AppControlBlock.IsBlock(new Win32Exception(2)));
         Assert.False(AppControlBlock.IsBlock(null));
     }
 
-    [Fact]
+    [WindowsFact]
     public void TheWorkerReportsABlockWithItsOwnKindAndTheHostExplainsIt()
     {
         var error = TranscriptionWorkerProtocol.ToError(new DllNotFoundException(SherpaLoaderMessage));
@@ -65,5 +56,5 @@ public sealed class AppControlBlockTests
 
     [Fact]
     public void ACanceledRequestStaysCanceled() =>
-        Assert.Equal("canceled", TranscriptionWorkerProtocol.ToError(new OperationCanceledException(SherpaLoaderMessage)).Kind);
+        Assert.Equal("canceled", TranscriptionWorkerProtocol.ToError(new OperationCanceledException("Stopped.", new Win32Exception(4551))).Kind);
 }
