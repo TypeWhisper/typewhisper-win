@@ -30,6 +30,26 @@ public sealed class AppControlBlockTests
     }
 
     [Fact]
+    public void AnAggregatesChildrenShareTheDepthLimit()
+    {
+        Exception deep = new Win32Exception(4551);
+        for (var level = 0; level < 40; level++) deep = new AggregateException(new InvalidOperationException("Wrapper", deep));
+
+        Assert.Null(AppControlBlock.Find(deep));
+        Assert.True(AppControlBlock.IsBlock(new AggregateException(new InvalidOperationException("Wrapper", new Win32Exception(4551)))));
+    }
+
+    [Fact]
+    public void TheWorkerKeepsThePluginsMessageWhenTheBlockIsFoundDeeper()
+    {
+        var error = TranscriptionWorkerProtocol.ToError(new DllNotFoundException("Unable to load 'C:\\p\\crispasr.exe'.", new Win32Exception(4551)));
+
+        Assert.Equal("app-control", error.Kind);
+        Assert.StartsWith("Unable to load 'C:\\p\\crispasr.exe'. ", error.Message);
+        Assert.EndsWith(new Win32Exception(4551).Message, error.Message);
+    }
+
+    [Fact]
     public void RecognizesTheResultCodeOfAComException() =>
         Assert.True(AppControlBlock.IsBlock(new COMException("Blocked", unchecked((int)0x800711C7))));
 

@@ -30,16 +30,22 @@ public static class AppControlBlock
     /// Returns the exception in <paramref name="error"/>'s chain that reports the block; its message names the
     /// blocked file, which a plugin's own wrapping message may leave out.
     /// </summary>
-    public static Exception? Find(Exception? error)
+    public static Exception? Find(Exception? error) => Find(error, 32);
+
+    // Bounded, as a plugin's exception chain is not trusted to end; an aggregate's children share the budget.
+    private static Exception? Find(Exception? error, int budget)
     {
-        // Bounded, as a plugin's exception chain is not trusted to end.
-        for (var depth = 0; error is not null && depth < 32; depth++, error = error.InnerException)
+        for (; error is not null && budget > 0; budget--, error = error.InnerException)
         {
             if (error is AppControlBlockedException) return error;
             if (error is Win32Exception win32 && ErrorCodes.Contains(win32.NativeErrorCode)) return error;
             if (ErrorCodes.Any(code => error.HResult == (unchecked((int)0x80070000) | code))) return error;
             if (SystemMessages.Value.Any(text => error.Message.Contains(text, StringComparison.OrdinalIgnoreCase))) return error;
-            if (error is AggregateException aggregate) return aggregate.InnerExceptions.Select(Find).FirstOrDefault(found => found is not null);
+            if (error is AggregateException aggregate)
+            {
+                var remaining = budget - 1;
+                return aggregate.InnerExceptions.Select(child => Find(child, remaining)).FirstOrDefault(found => found is not null);
+            }
         }
         return null;
     }

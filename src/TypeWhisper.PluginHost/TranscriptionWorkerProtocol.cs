@@ -57,9 +57,10 @@ internal static class TranscriptionWorkerProtocol
     // Plugin exceptions keep their kind and message across the process boundary, because the host
     // shows the message and some callers distinguish unsupported requests from failures.
     internal static TranscriptionWorkerError ToError(Exception exception) =>
-        // A file Windows blocked keeps the message that names it, for the host's log (issue #823).
+        // A file Windows blocked keeps the messages that name it, for the host's log (issue #823): the plugin's own
+        // and, when the block was found deeper in the chain, that one's too.
         exception is not OperationCanceledException && AppControlBlock.Find(exception) is { } blocked
-            ? new("app-control", blocked.Message)
+            ? new("app-control", ReferenceEquals(blocked, exception) ? exception.Message : exception.Message + " " + blocked.Message)
             : new(KindOf(exception), exception.Message);
 
     private static string KindOf(Exception exception) => exception switch
